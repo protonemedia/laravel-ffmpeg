@@ -1,4 +1,4 @@
-# Very short description of the package
+# Laravel FFMpeg
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](LICENSE.md)
@@ -6,8 +6,6 @@
 [![SensioLabsInsight](https://img.shields.io/sensiolabs/i/xxxxxxxxx.svg?style=flat-square)](https://insight.sensiolabs.com/projects/xxxxxxxxx)
 [![Quality Score](https://img.shields.io/scrutinizer/g/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/pbmedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
-
-**Note:** Replace ```Pascal Baljet``` ```pascalbaljet``` ```:author_website``` ```pascal@pascalbaljetmedia.com``` ```pbmedia/laravel-ffmpeg``` ```FFMpeg for Laravel 5.1 and higher``` with their correct values in [README.md](README.md), [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [LICENSE.md](LICENSE.md) and [composer.json](composer.json) files, then delete this line.
 
 This is where your description should go. Try and limit it to a paragraph or two, and maybe throw in a mention of what PSRs you support to avoid any confusion with users and contributors.
 
@@ -22,7 +20,11 @@ composer require pbmedia/laravel-ffmpeg
 ## Usage
 
 ``` php
+$video = FFMpeg::disk('original_videos')->open('MyMovie.avi');
 
+$format = new \FFMpeg\Format\Video\X264;
+
+FFMpeg::disk('converted_videos')->save($video, $format, 'MyMovie.mp4');
 ```
 
 ## Changelog
