@@ -1,8 +1,12 @@
 <?php
 
 return [
-    'ffmpeg.binaries'  => '/usr/local/bin/ffmpeg',
+    'default_disk' => 'local',
+
+    'ffmpeg.binaries' => '/usr/local/bin/ffmpeg',
+    'ffmpeg.threads'  => 12,
+
     'ffprobe.binaries' => '/usr/local/bin/ffprobe',
-    'ffmpeg.threads'   => 12,
-    'timeout'          => 3600,
+
+    'timeout' => 3600,
 ];

@@ -19,21 +19,21 @@ class FFMpeg
     {
         $this->filesystems = $filesystems;
 
-        $this->ffmpeg = BaseFFMpeg::create($config->get('ffmpeg'), $logger);
+        $this->ffmpeg = BaseFFMpeg::create($config->get('laravel-ffmpeg'), $logger);
 
-        $this->setDisk($config->get('filesystems.default'));
+        $this->disk($config->get('laravel-ffmpeg.default_disk') ?: $config->get('filesystems.default'));
     }
 
-    public function setDisk($diskName): self
+    public function disk(string $diskName): self
     {
-        $this->disk = new Disk($this->filesystems->disk($disk));
+        $this->disk = new Disk($this->filesystems->disk($diskName));
 
         return $this;
     }
 
-    public function open(File $file): Media
+    public function open($path): Media
     {
-        $file = $this->disk->getFile($pathfile);
+        $file = $this->disk->getFile($path);
 
         $ffmpegMedia = $this->ffmpeg->open($file->getFullPath());
 
