@@ -1,0 +1,42 @@
+{
+    "name": "pbmedia/laravel-ffmpeg",
+    "description": "FFMpeg for Laravel 5.1 and higher",
+    "keywords": [
+        "pbmedia",
+        "laravel-ffmpeg"
+    ],
+    "homepage": "https://github.com/pbmedia/laravel-ffmpeg",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Pascal Baljet",
+            "email": "pascal@pascalbaljetmedia.com",
+            "homepage": "http://www.pascalbaljetmedia.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php" : "^7.0",
+        "php-ffmpeg/php-ffmpeg": "^0.6",
+        "illuminate/filesystem": "^5.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "5.*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Pbmedia\\LaravelFFMpeg\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Pbmedia\\LaravelFFMpeg\\Test\\": "tests"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    },
+    "config": {
+        "sort-packages": true
+  }
+}
