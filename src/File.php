@@ -14,11 +14,6 @@ class File
         $this->path = $path;
     }
 
-    public function getDisk(): Disk
-    {
-        return $this->disk;
-    }
-
     public function getPath(): string
     {
         return $this->path;

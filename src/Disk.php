@@ -13,7 +13,7 @@ class Disk
         $this->disk = $disk;
     }
 
-    public function getFile(string $path): File
+    public function newFile(string $path): File
     {
         return new File($this, $path);
     }
