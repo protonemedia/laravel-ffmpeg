@@ -24,14 +24,12 @@ composer require pbmedia/laravel-ffmpeg
 Convert an audio track:
 
 ``` php
-    FFMpeg::fromDisk('songs')
-        ->open('yesterday.mp3')
-        ->export()
-        ->toDisk('converted_songs')
-        ->inFormat(new \FFMpeg\Format\Audio\Aac)
-        ->save('yesterday.aac');
-
-
+FFMpeg::fromDisk('songs')
+    ->open('yesterday.mp3')
+    ->export()
+    ->toDisk('converted_songs')
+    ->inFormat(new \FFMpeg\Format\Audio\Aac)
+    ->save('yesterday.aac');
 ```
 
 Create a frame from a video:
