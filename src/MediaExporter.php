@@ -37,9 +37,9 @@ class MediaExporter
         return $this->disk;
     }
 
-    public function toDisk(Disk $disk): self
+    public function toDisk(string $diskName): self
     {
-        $this->disk = $disk;
+        $this->disk = Disk::fromName($diskName);
 
         return $this;
     }

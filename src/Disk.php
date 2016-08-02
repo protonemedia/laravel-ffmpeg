@@ -2,6 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
+use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Illuminate\Contracts\Filesystem\Filesystem;
 
 class Disk
@@ -11,6 +12,13 @@ class Disk
     public function __construct(Filesystem $disk)
     {
         $this->disk = $disk;
+    }
+
+    public static function fromName(string $name): self
+    {
+        $adapter = app(Filesystems::class)->disk($name);
+
+        return new static($adapter);
     }
 
     public function newFile(string $path): File

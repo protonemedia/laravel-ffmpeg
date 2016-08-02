@@ -19,28 +19,28 @@ composer require pbmedia/laravel-ffmpeg
 
 ## Usage
 
-Convert a video:
+Convert an audio track:
 
 ``` php
-$x264Format = new \FFMpeg\Format\Video\X264;
+    FFMpeg::fromDisk('songs')
+        ->open('yesterday.mp3')
+        ->export()
+        ->toDisk('converted_songs')
+        ->inFormat(new \FFMpeg\Format\Audio\Aac)
+        ->save('yesterday.aac');
 
-FFMpeg::disk('uploads')
-	->open('MyMovie.avi')
-	->export()
-	->toDisk('converted_videos')
-	->inFormat($x264Format);
-	->save('MyMovie.mp4');
+
 ```
 
 Create a frame from a video:
 
 ``` php
-FFMpeg::disk('uploads')
-	->open('MyMovie.avi')
-	->getFrameFromSeconds(10)
-	->export()
-	->toDisk('thumbnails')
-	->save('FrameAt10sec.png');
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->getFrameFromSeconds(10)
+    ->export()
+    ->toDisk('thumnails')
+    ->save('FrameAt10sec.png');
 ```
 
 ## Changelog
