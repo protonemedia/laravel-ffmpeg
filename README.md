@@ -19,15 +19,28 @@ composer require pbmedia/laravel-ffmpeg
 
 ## Usage
 
-``` php
-$video = FFMpeg::disk('uploads')->open('MyMovie.avi');
+Convert a video:
 
+``` php
 $x264Format = new \FFMpeg\Format\Video\X264;
 
-$video->export()
+FFMpeg::disk('uploads')
+	->open('MyMovie.avi')
+	->export()
 	->toDisk('converted_videos')
 	->inFormat($x264Format);
 	->save('MyMovie.mp4');
+```
+
+Create a frame from a video:
+
+``` php
+FFMpeg::disk('uploads')
+	->open('MyMovie.avi')
+	->getFrameFromSeconds(10)
+	->export()
+	->toDisk('thumbnails')
+	->save('FrameAt10sec.png');
 ```
 
 ## Changelog

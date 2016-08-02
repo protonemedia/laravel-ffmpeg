@@ -2,6 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
+use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Media\Frame;
 use FFMpeg\Media\MediaTypeInterface;
 
@@ -30,6 +31,27 @@ class Media
     public function export(): MediaExporter
     {
         return new MediaExporter($this);
+    }
+
+    public function getFrameFromString(string $timecode): Media
+    {
+        return $this->getFrameFromTimecode(
+            TimeCode::fromString($timecode)
+        );
+    }
+
+    public function getFrameFromSeconds(float $quantity): Media
+    {
+        return $this->getFrameFromTimecode(
+            TimeCode::fromSeconds($seconds)
+        );
+    }
+
+    private function getFrameFromTimecode(TimeCode $timecode): Media
+    {
+        $frame = $this->media->frame($at);
+
+        return new static($this->getFile(), $frame);
     }
 
     protected function selfOrArgument($argument)
