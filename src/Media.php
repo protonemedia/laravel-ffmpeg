@@ -43,13 +43,13 @@ class Media
     public function getFrameFromSeconds(float $quantity): Media
     {
         return $this->getFrameFromTimecode(
-            TimeCode::fromSeconds($seconds)
+            TimeCode::fromSeconds($quantity)
         );
     }
 
-    private function getFrameFromTimecode(TimeCode $timecode): Media
+    public function getFrameFromTimecode(TimeCode $timecode): Media
     {
-        $frame = $this->media->frame($at);
+        $frame = $this->media->frame($timecode);
 
         return new static($this->getFile(), $frame);
     }
