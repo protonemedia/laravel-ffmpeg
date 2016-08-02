@@ -7,7 +7,7 @@
 [![Quality Score](https://img.shields.io/scrutinizer/g/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/pbmedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This is where your description should go. Try and limit it to a paragraph or two, and maybe throw in a mention of what PSRs you support to avoid any confusion with users and contributors.
+This package provides an integration with FFmpeg for Laravel 5.1 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.1/filesystem).
 
 ## Installation
 
