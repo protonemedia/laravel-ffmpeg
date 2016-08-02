@@ -7,7 +7,9 @@
 [![Quality Score](https://img.shields.io/scrutinizer/g/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/pbmedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This package provides an integration with FFmpeg for Laravel 5.1 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.1/filesystem).
+> # :warning: Under Development :construction:
+
+This package provides an integration with FFmpeg for Laravel 5.1 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.1/filesystem). Currenly only supports local drivers!
 
 ## Installation
 
