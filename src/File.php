@@ -26,6 +26,6 @@ class File
 
     public function getFullPath(): string
     {
-        return $this->getDisk()->getPath() . $this->path;
+        return $this->getDisk()->getPath() . $this->getPath();
     }
 }
