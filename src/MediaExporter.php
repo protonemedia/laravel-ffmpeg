@@ -10,6 +10,8 @@ class MediaExporter
 
     protected $disk;
 
+    protected $frameMustBeAccurate = false;
+
     protected $format;
 
     public function __construct(Media $media)
@@ -42,11 +44,34 @@ class MediaExporter
         return $this;
     }
 
+    public function accurate(): self
+    {
+        $this->frameMustBeAccurate = true;
+
+        return $this;
+    }
+
+    public function unaccurate(): self
+    {
+        $this->frameMustBeAccurate = false;
+
+        return $this;
+    }
+
+    public function getAccuracy(): bool
+    {
+        return $this->frameMustBeAccurate;
+    }
+
     public function save(string $path): Media
     {
         $file = $this->getDisk()->newFile($path);
 
-        $this->media->save($this->getFormat(), $file->getFullPath());
+        if ($this->media->isFrame()) {
+            $this->media->save($file->getFullPath(), $this->getAccuracy());
+        } else {
+            $this->media->save($this->getFormat(), $file->getFullPath());
+        }
 
         return $this->media;
     }

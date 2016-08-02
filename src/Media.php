@@ -2,6 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
+use FFMpeg\Media\Frame;
 use FFMpeg\Media\MediaTypeInterface;
 
 class Media
@@ -14,6 +15,11 @@ class Media
     {
         $this->file  = $file;
         $this->media = $media;
+    }
+
+    public function isFrame(): bool
+    {
+        return $this->media instanceof Frame;
     }
 
     public function getFile(): File
