@@ -3,7 +3,6 @@
 namespace Pbmedia\LaravelFFMpeg;
 
 use FFMpeg\FFMpeg as BaseFFMpeg;
-use FFMpeg\Format\FormatInterface;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Psr\Log\LoggerInterface;
@@ -25,10 +24,15 @@ class FFMpeg
             $logger
         );
 
-        $this->disk($config->get('laravel-ffmpeg.default_disk') ?: $config->get('filesystems.default'));
+        $this->fromDisk($config->get('laravel-ffmpeg.default_disk') ?: $config->get('filesystems.default'));
     }
 
-    public function disk(string $diskName): self
+    public function getDisk(): Disk
+    {
+        return $this->disk;
+    }
+
+    public function fromDisk(string $diskName): self
     {
         $this->disk = new Disk($this->filesystems->disk($diskName));
 
@@ -37,17 +41,10 @@ class FFMpeg
 
     public function open($path): Media
     {
-        $file = $this->disk->newFile($path);
+        $file = $this->getDisk()->newFile($path);
 
         $ffmpegMedia = $this->ffmpeg->open($file->getFullPath());
 
         return new Media($file, $ffmpegMedia);
-    }
-
-    public function save(Media $media, FormatInterface $format, string $path): Media
-    {
-        $file = $this->disk->newFile($path);
-
-        return $media->save($format, $file);
     }
 }

@@ -14,6 +14,11 @@ class File
         $this->path = $path;
     }
 
+    public function getDisk(): Disk
+    {
+        return $this->disk;
+    }
+
     public function getPath(): string
     {
         return $this->path;
@@ -21,6 +26,6 @@ class File
 
     public function getFullPath(): string
     {
-        return $this->disk->getPath() . $this->path;
+        return $this->getDisk()->getPath() . $this->path;
     }
 }

@@ -2,7 +2,6 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
-use FFMpeg\Format\FormatInterface;
 use FFMpeg\Media\MediaTypeInterface;
 
 class Media
@@ -17,16 +16,19 @@ class Media
         $this->media = $media;
     }
 
-    public function save(FormatInterface $format, File $file): self
+    public function getFile(): File
     {
-        return $this->selfOrArgument(
-            $this->media->save($format, $file->getFullPath())
-        );
+        return $this->file;
     }
 
-    protected function selfOrArgument($arg)
+    public function export(): MediaExporter
     {
-        return ($arg === $this->media) ? $this : $arg;
+        return new MediaExporter($this);
+    }
+
+    protected function selfOrArgument($argument)
+    {
+        return ($argument === $this->media) ? $this : $argument;
     }
 
     public function __call($method, $parameters)
