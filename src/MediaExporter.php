@@ -4,6 +4,9 @@ namespace Pbmedia\LaravelFFMpeg;
 
 use FFMpeg\Format\FormatInterface;
 
+/**
+ * @method mixed save(FormatInterface $format, $outputPathfile)
+ */
 class MediaExporter
 {
     protected $media;

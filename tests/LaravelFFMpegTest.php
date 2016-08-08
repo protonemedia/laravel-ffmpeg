@@ -16,39 +16,17 @@ use Pbmedia\LaravelFFMpeg\MediaExporter;
 class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
 {
     private $srcDir;
-    private $tempDir;
 
     public function setUp()
     {
-        $this->srcDir  = __DIR__ . '/src';
-        $this->tempDir = __DIR__ . '/tmp';
-
-        mkdir($this->tempDir);
-
-        copy(
-            $this->srcDir . '/guitar.m4a',
-            $this->tempDir . '/guitar.m4a'
-        );
+        $this->srcDir = __DIR__ . '/src';
     }
 
     private function getLocalAdapter(): FilesystemAdapter
     {
-        $flysystem = new Flysystem(new Local($this->tempDir));
+        $flysystem = new Flysystem(new Local($this->srcDir));
 
         return new FilesystemAdapter($flysystem);
-    }
-
-    public function tearDown()
-    {
-        if (file_exists($this->tempDir . '/guitar.m4a')) {
-            unlink($this->tempDir . '/guitar.m4a');
-        }
-
-        if (file_exists($this->tempDir . '/guitar_aac.aac')) {
-            @unlink($this->tempDir . '/guitar_aac.aac');
-        }
-
-        rmdir($this->tempDir);
     }
 
     private function getFilesystems(): Filesystems
@@ -103,7 +81,7 @@ class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
 
         $this->assertInstanceOf(File::class, $file);
         $this->assertEquals($file->getPath(), 'guitar.m4a');
-        $this->assertEquals($file->getFullPath(), $this->tempDir . '/guitar.m4a');
+        $this->assertEquals($file->getFullPath(), $this->srcDir . '/guitar.m4a');
     }
 
     public function testDiskClass()
@@ -113,7 +91,7 @@ class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
         $disk  = $file->getDisk();
 
         $this->assertInstanceOf(Disk::class, $disk);
-        $this->assertEquals($disk->getPath(), $this->tempDir . '/');
+        $this->assertEquals($disk->getPath(), $this->srcDir . '/');
     }
 
     public function testExporter()
@@ -131,7 +109,7 @@ class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
         $media->shouldReceive('getFile')->once()->andReturn($file);
         $media->shouldReceive('isFrame')->once()->andReturn(false);
         $media->shouldReceive('save')->once()->withArgs([
-            $format, $this->tempDir . '/guitar_aac.aac',
+            $format, $this->srcDir . '/guitar_aac.aac',
         ]);
 
         $exporter = new MediaExporter($media);
