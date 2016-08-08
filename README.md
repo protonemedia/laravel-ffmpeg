@@ -42,6 +42,10 @@ FFMpeg::fromDisk('videos')
     ->save('FrameAt10sec.png');
 ```
 
+## To do
+* Writing test for exporting frames
+* Handle non-local storage drivers
+
 ## Changelog
 
 Please see [CHANGELOG](CHANGELOG.md) for more information what has changed recently.
