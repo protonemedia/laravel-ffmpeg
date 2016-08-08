@@ -2,12 +2,13 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
-use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Illuminate\Contracts\Filesystem\Filesystem;
 
 class Disk
 {
     protected $disk;
+
+    protected static $filesystems;
 
     public function __construct(Filesystem $disk)
     {
@@ -16,7 +17,7 @@ class Disk
 
     public static function fromName(string $name): self
     {
-        $adapter = app(Filesystems::class)->disk($name);
+        $adapter = FFMpeg::getFilesystems()->disk($name);
 
         return new static($adapter);
     }

@@ -4,27 +4,36 @@ namespace Pbmedia\LaravelFFMpeg;
 
 use FFMpeg\FFMpeg as BaseFFMpeg;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
+use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Psr\Log\LoggerInterface;
 
 class FFMpeg
 {
+    protected static $filesystems;
+
     protected $disk;
 
     protected $ffmpeg;
 
-    public function __construct(ConfigRepository $config, LoggerInterface $logger)
+    public function __construct(Filesystems $filesystems, ConfigRepository $config, LoggerInterface $logger)
     {
-        $this->ffmpeg = BaseFFMpeg::create(
-            $config->get('laravel-ffmpeg'),
-            $logger
-        );
+        static::$filesystems = $filesystems;
 
-        $this->fromDisk($config->get('laravel-ffmpeg.default_disk') ?: $config->get('filesystems.default'));
+        $ffmpegConfig = $config->get('laravel-ffmpeg');
+
+        $this->ffmpeg = BaseFFMpeg::create($ffmpegConfig, $logger);
+        $this->fromDisk($ffmpegConfig['default_disk'] ?? $config->get('filesystems.default'));
+    }
+
+    public function getFilesystems(): Filesystems
+    {
+        return static::$filesystems;
     }
 
     public function fromDisk(string $diskName): self
     {
-        $this->disk = Disk::fromName($diskName);
+        $filesystem = static::getFilesystems()->disk($diskName);
+        $this->disk = new Disk($filesystem);
 
         return $this;
     }

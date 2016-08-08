@@ -16,11 +16,15 @@
         }
     ],
     "require": {
-        "php" : "^7.0",
-        "php-ffmpeg/php-ffmpeg": "^0.6",
-        "illuminate/filesystem": "^5.1"
+        "php": "^7.0",
+        "illuminate/config": "^5.1",
+        "illuminate/filesystem": "^5.1",
+        "illuminate/log": "^5.1",
+        "league/flysystem": "^1.0",
+        "php-ffmpeg/php-ffmpeg": "^0.6"
     },
     "require-dev": {
+        "mockery/mockery": "^0.9.5",
         "phpunit/phpunit": "5.*"
     },
     "autoload": {

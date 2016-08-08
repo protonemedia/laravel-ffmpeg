@@ -20,7 +20,7 @@ class MediaExporter
         $this->disk  = $media->getFile()->getDisk();
     }
 
-    public function getFormat(): FormatInterface
+    protected function getFormat(): FormatInterface
     {
         return $this->format;
     }
@@ -32,7 +32,7 @@ class MediaExporter
         return $this;
     }
 
-    public function getDisk(): Disk
+    protected function getDisk(): Disk
     {
         return $this->disk;
     }
