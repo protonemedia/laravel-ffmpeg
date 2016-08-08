@@ -108,12 +108,13 @@ class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
         $media = Mockery::mock(Media::class);
         $media->shouldReceive('getFile')->once()->andReturn($file);
         $media->shouldReceive('isFrame')->once()->andReturn(false);
+
         $media->shouldReceive('save')->once()->withArgs([
             $format, $this->srcDir . '/guitar_aac.aac',
         ]);
 
         $exporter = new MediaExporter($media);
-        $exporter->inFormat($format)->save('guitar_aac.aac');
+        $exporter->inFormat($format)->toDisk('local')->save('guitar_aac.aac');
     }
 
     public function testSettingTheAccuracy()

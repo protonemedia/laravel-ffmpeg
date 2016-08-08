@@ -25,7 +25,7 @@ class FFMpeg
         $this->fromDisk($ffmpegConfig['default_disk'] ?? $config->get('filesystems.default'));
     }
 
-    public function getFilesystems(): Filesystems
+    public static function getFilesystems(): Filesystems
     {
         return static::$filesystems;
     }
