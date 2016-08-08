@@ -10,7 +10,7 @@ env:
 
 before_script:
   - sudo apt-get -qq update
-  - sudo apt-get install -y ffmpeg
+  - sudo apt-get install -y ffmpeg libfaac libfdk-aac libavcodec-extra-53
   - travis_retry composer self-update
   - travis_retry composer update ${COMPOSER_FLAGS} --no-interaction --prefer-source
 
