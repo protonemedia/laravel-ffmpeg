@@ -68,14 +68,39 @@ class MediaExporter
 
     public function save(string $path): Media
     {
-        $file = $this->getDisk()->newFile($path);
+        $disk = $this->getDisk();
+        $file = $disk->newFile($path);
+
+        $destination = $file->getFullPath();
+
+        if (!$disk->isLocal()) {
+            $destination = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
+        }
 
         if ($this->media->isFrame()) {
-            $this->media->save($file->getFullPath(), $this->getAccuracy());
+            $this->saveFrame($destination);
         } else {
-            $this->media->save($this->getFormat(), $file->getFullPath());
+            $this->saveAudioOrVideo($destination);
+        }
+
+        if (!$disk->isLocal()) {
+            $file->createFromTempPath($destination);
         }
 
         return $this->media;
+    }
+
+    private function saveFrame(string $fullPath): self
+    {
+        $this->media->save($fullPath, $this->getAccuracy());
+
+        return $this;
+    }
+
+    private function saveAudioOrVideo(string $fullPath): self
+    {
+        $this->media->save($this->getFormat(), $fullPath);
+
+        return $this;
     }
 }

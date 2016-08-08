@@ -3,6 +3,7 @@
 namespace Pbmedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use League\Flysystem\Adapter\Local as LocalAdapater;
 
 class Disk
 {
@@ -22,6 +23,13 @@ class Disk
         return new static($adapter);
     }
 
+    public function isLocal(): bool
+    {
+        $adapter = $this->disk->getDriver()->getAdapter();
+
+        return $adapter instanceof LocalAdapater;
+    }
+
     public function newFile(string $path): File
     {
         return new File($this, $path);
@@ -30,5 +38,10 @@ class Disk
     public function getPath(): string
     {
         return $this->disk->getDriver()->getAdapter()->getPathPrefix();
+    }
+
+    public function __call($method, $parameters)
+    {
+        return call_user_func_array([$this->disk, $method], $parameters);
     }
 }

@@ -28,4 +28,9 @@ class File
     {
         return $this->getDisk()->getPath() . $this->getPath();
     }
+
+    public function createFromTempPath(string $path): bool
+    {
+        return $this->getDisk()->move($path, $this->getPath());
+    }
 }
