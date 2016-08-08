@@ -123,13 +123,30 @@ class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
 
         $this->assertInstanceOf(MediaExporter::class, $exporter);
 
-        $exporter->inFormat(new \FFMpeg\Format\Audio\Aac)
-            ->save('guitar_aac.aac');
+        $file = $media->getFile();
 
-        $this->assertTrue(file_exists($this->tempDir . '/guitar_aac.aac'));
-        $this->assertEquals(
-            file_get_contents($this->tempDir . '/guitar_aac.aac'),
-            file_get_contents($this->srcDir . '/guitar_aac.aac')
-        );
+        $format = new \FFMpeg\Format\Audio\Aac;
+
+        $media = Mockery::mock(Media::class);
+        $media->shouldReceive('getFile')->once()->andReturn($file);
+        $media->shouldReceive('isFrame')->once()->andReturn(false);
+        $media->shouldReceive('save')->once()->withArgs([
+            $format, $this->tempDir . '/guitar_aac.aac',
+        ]);
+
+        $exporter = new MediaExporter($media);
+        $exporter->inFormat($format)->save('guitar_aac.aac');
+    }
+
+    public function testSettingTheAccuracy()
+    {
+        $media    = $this->getGuitarMedia();
+        $exporter = $media->export();
+
+        $exporter->accurate();
+        $this->assertTrue($exporter->getAccuracy());
+
+        $exporter->unaccurate();
+        $this->assertFalse($exporter->getAccuracy());
     }
 }
