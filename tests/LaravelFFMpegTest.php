@@ -66,7 +66,7 @@ class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
         $logger = new Writer(new Logger('ffmpeg'));
         $config = Mockery::mock(ConfigRepository::class);
 
-        $defaultConfig = require __DIR__ . '/../config/laravel-ffmpeg.php';
+        $defaultConfig = require __DIR__ . '/../config/laravel-ffmpeg-ubuntu.php';
 
         $filesystems->shouldReceive('disk')->once()->with('local')->andReturn($this->getLocalAdapter());
         $config->shouldReceive('get')->once()->with('laravel-ffmpeg')->andReturn($defaultConfig);
