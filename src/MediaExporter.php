@@ -71,10 +71,12 @@ class MediaExporter
         $disk = $this->getDisk();
         $file = $disk->newFile($path);
 
-        $destination = $file->getFullPath();
+        $pathinfo = pathinfo($path);
 
         if (!$disk->isLocal()) {
-            $destination = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
+            $destination = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg') . '.' . $pathinfo['extension'];
+        } else {
+            $destination = $file->getFullPath();
         }
 
         if ($this->media->isFrame()) {
