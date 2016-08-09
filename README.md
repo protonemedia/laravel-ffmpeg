@@ -8,7 +8,7 @@
 
 > # :warning: Under Development :construction:
 
-This package provides an integration with FFmpeg for Laravel 5.1 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.1/filesystem). Currenly only supports local drivers!
+This package provides an integration with FFmpeg for Laravel 5.1 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.1/filesystem).
 
 ## Installation
 
@@ -40,6 +40,28 @@ FFMpeg::fromDisk('videos')
     ->export()
     ->toDisk('thumnails')
     ->save('FrameAt10sec.png');
+```
+
+Chain multiple convertions:
+
+``` php
+// The 'fromDisk()' method is not required, the file will now
+// be opened from the default 'disk', as specified in
+// the config file.
+
+FFMpeg::open('movie.mov')
+
+    // export to FTP, converted in WMV
+    ->export()
+    ->toDisk('ftp')
+    ->inFormat(new FFMpeg\Format\Video\WMV)
+    ->save('Excel.wmv')
+
+    // export to Amazon S3, converted in X264
+    ->export()
+    ->toDisk('s3')
+    ->inFormat(new FFMpeg\Format\Video\X264)
+    ->save('Excel.mkv');
 ```
 
 ## To do
