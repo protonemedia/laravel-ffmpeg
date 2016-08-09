@@ -94,7 +94,7 @@ class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals($disk->getPath(), $this->srcDir . '/');
     }
 
-    public function testExporter()
+    public function testExportingToLocalDisk()
     {
         $media    = $this->getGuitarMedia();
         $exporter = $media->export();
@@ -115,6 +115,15 @@ class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
 
         $exporter = new MediaExporter($media);
         $exporter->inFormat($format)->toDisk('local')->save('guitar_aac.aac');
+    }
+
+    public function testExportingToRemoteDisk()
+    {
+        $format = new \FFMpeg\Format\Audio\Aac;
+        $media  = Mockery::mock(Media::class);
+
+        $exporter = new MediaExporter($media);
+        $exporter->inFormat($format)->toDisk('s3')->save('guitar_aac.aac');
     }
 
     public function testSettingTheAccuracy()

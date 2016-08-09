@@ -5,6 +5,9 @@ namespace Pbmedia\LaravelFFMpeg;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use League\Flysystem\Adapter\Local as LocalAdapater;
 
+/**
+ * @method int put($path, $contents, $visibility = null)
+ */
 class Disk
 {
     protected $disk;

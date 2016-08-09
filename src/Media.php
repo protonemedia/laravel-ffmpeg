@@ -6,6 +6,9 @@ use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Media\Frame;
 use FFMpeg\Media\MediaTypeInterface;
 
+/**
+ * @method mixed save(FormatInterface $format, $outputPathfile)
+ */
 class Media
 {
     protected $file;

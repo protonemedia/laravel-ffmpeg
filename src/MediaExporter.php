@@ -4,9 +4,6 @@ namespace Pbmedia\LaravelFFMpeg;
 
 use FFMpeg\Format\FormatInterface;
 
-/**
- * @method mixed save(FormatInterface $format, $outputPathfile)
- */
 class MediaExporter
 {
     protected $media;
@@ -68,26 +65,37 @@ class MediaExporter
 
     public function save(string $path): Media
     {
-        $disk = $this->getDisk();
-        $file = $disk->newFile($path);
+        $file = $this->getDisk()->newFile($path);
 
-        $destination = $file->getFullPath();
+        $destinationPath = $this->getDestinationPathForSaving($file);
 
-        if (!$disk->isLocal()) {
-            $destination = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
-        }
+        $saveMethod = $this->media->isFrame() ? 'saveFrame' : 'saveAudioOrVideo';
 
-        if ($this->media->isFrame()) {
-            $this->saveFrame($destination);
-        } else {
-            $this->saveAudioOrVideo($destination);
-        }
+        $this->{$saveMethod}($destinationPath);
 
-        if (!$disk->isLocal()) {
-            $file->createFromTempPath($destination);
+        if (!$this->getDisk()->isLocal()) {
+            $this->moveSavedFileToRemoteDisk($destinationPath, $file);
         }
 
         return $this->media;
+    }
+
+    private function moveSavedFileToRemoteDisk($localSourcePath, File $fileOnRemoteDisk): bool
+    {
+        $resource = fopen($localSourcePath, 'r');
+
+        return $fileOnRemoteDisk->put($resource) && unlink($localSourcePath);
+    }
+
+    private function getDestinationPathForSaving(File $file): string
+    {
+        if (!$file->getDisk()->isLocal()) {
+            $tempName = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
+
+            return $tempName . '.' . $file->getExtension();
+        }
+
+        return $file->getFullPath();
     }
 
     private function saveFrame(string $fullPath): self

@@ -24,13 +24,18 @@ class File
         return $this->path;
     }
 
+    public function getExtension(): string
+    {
+        return pathinfo($this->getPath())['extension'];
+    }
+
     public function getFullPath(): string
     {
         return $this->getDisk()->getPath() . $this->getPath();
     }
 
-    public function createFromTempPath(string $path): bool
+    public function put($content): bool
     {
-        return $this->getDisk()->move($path, $this->getPath());
+        return $this->getDisk()->put($this->getPath(), $content);
     }
 }
