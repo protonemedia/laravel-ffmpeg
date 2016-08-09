@@ -148,14 +148,13 @@ class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
         $exporter = new MediaExporter($this->getGuitarMedia());
 
         $mockedRemoteDisk = Mockery::mock(Disk::class);
+        $remoteFile       = new File($mockedRemoteDisk, 'guitar_aac.aac');
+
         $mockedRemoteDisk->shouldReceive('isLocal')->once()->andReturn(false);
-
-        $mockedFile = Mockery::mock(File::class);
-        $mockedFile->shouldReceive('getDisk')->once()->andReturn($mockedRemoteDisk);
-        $mockedFile->shouldReceive('getExtension')->once()->andReturn('aac');
-        $mockedFile->shouldReceive('put')->once();
-
-        $mockedRemoteDisk->shouldReceive('newFile')->once()->withArgs(['guitar_aac.aac'])->andReturn($mockedFile);
+        $mockedRemoteDisk->shouldReceive('newFile')->once()->withArgs(['guitar_aac.aac'])->andReturn($remoteFile);
+        $mockedRemoteDisk->shouldReceive('put')->once()->withAnyArgs([
+            $remoteFile->getPath(),
+        ])->andReturn(true);
 
         $format = new \FFMpeg\Format\Audio\Aac;
         $exporter->inFormat($format)->toDisk($mockedRemoteDisk)->save('guitar_aac.aac');

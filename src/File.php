@@ -38,6 +38,6 @@ class File
     {
         $resource = fopen($localSourcePath, 'r');
 
-        return $this->getDisk()->put($this->getPath(), $contents);
+        return $this->getDisk()->put($this->getPath(), $resource);
     }
 }
