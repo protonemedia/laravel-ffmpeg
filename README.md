@@ -44,7 +44,6 @@ FFMpeg::fromDisk('videos')
 
 ## To do
 * Writing test for exporting frames
-* Handle non-local storage drivers
 
 ## Changelog
 

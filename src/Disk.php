@@ -6,7 +6,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use League\Flysystem\Adapter\Local as LocalAdapater;
 
 /**
- * @method int put($path, $contents, $visibility = null)
+ * @method bool put($path, $contents, $visibility = null)
  */
 class Disk
 {
@@ -19,7 +19,7 @@ class Disk
         $this->disk = $disk;
     }
 
-    public static function fromName(string $name): self
+    public static function fromName(string $name): Disk
     {
         $adapter = FFMpeg::getFilesystems()->disk($name);
 

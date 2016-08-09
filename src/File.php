@@ -34,8 +34,10 @@ class File
         return $this->getDisk()->getPath() . $this->getPath();
     }
 
-    public function put($content): bool
+    public function put(string $localSourcePath): bool
     {
-        return $this->getDisk()->put($this->getPath(), $content);
+        $resource = fopen($localSourcePath, 'r');
+
+        return $this->getDisk()->put($this->getPath(), $contents);
     }
 }

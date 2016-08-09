@@ -25,7 +25,7 @@ class MediaExporter
         return $this->format;
     }
 
-    public function inFormat(FormatInterface $format): self
+    public function inFormat(FormatInterface $format): MediaExporter
     {
         $this->format = $format;
 
@@ -37,21 +37,25 @@ class MediaExporter
         return $this->disk;
     }
 
-    public function toDisk(string $diskName): self
+    public function toDisk($diskOrName): MediaExporter
     {
-        $this->disk = Disk::fromName($diskName);
+        if ($diskOrName instanceof Disk) {
+            $this->disk = $diskOrName;
+        } else {
+            $this->disk = Disk::fromName($diskOrName);
+        }
 
         return $this;
     }
 
-    public function accurate(): self
+    public function accurate(): MediaExporter
     {
         $this->frameMustBeAccurate = true;
 
         return $this;
     }
 
-    public function unaccurate(): self
+    public function unaccurate(): MediaExporter
     {
         $this->frameMustBeAccurate = false;
 
@@ -80,11 +84,9 @@ class MediaExporter
         return $this->media;
     }
 
-    private function moveSavedFileToRemoteDisk($localSourcePath, File $fileOnRemoteDisk): bool
+    protected function moveSavedFileToRemoteDisk($localSourcePath, File $fileOnRemoteDisk): bool
     {
-        $resource = fopen($localSourcePath, 'r');
-
-        return $fileOnRemoteDisk->put($resource) && unlink($localSourcePath);
+        return $fileOnRemoteDisk->put($localSourcePath) && unlink($localSourcePath);
     }
 
     private function getDestinationPathForSaving(File $file): string
@@ -98,14 +100,14 @@ class MediaExporter
         return $file->getFullPath();
     }
 
-    private function saveFrame(string $fullPath): self
+    private function saveFrame(string $fullPath): MediaExporter
     {
         $this->media->save($fullPath, $this->getAccuracy());
 
         return $this;
     }
 
-    private function saveAudioOrVideo(string $fullPath): self
+    private function saveAudioOrVideo(string $fullPath): MediaExporter
     {
         $this->media->save($this->getFormat(), $fullPath);
 
