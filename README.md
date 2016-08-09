@@ -13,7 +13,39 @@ This package provides an integration with FFmpeg for Laravel 5.1 and higher. The
 You can install the package via composer:
 
 ``` bash
-composer require pbmedia/laravel-ffmpeg
+composer require pbmedia/laravel-ffmpeg dev-master
+```
+
+Add the service provider to your ```app.php``` config file:
+
+``` php
+
+// Laravel 5: config/app.php
+
+'providers' => [
+    ...
+    Pbmedia\LaravelFFMpeg\FFMpegServiceProvider::class,
+    ...
+];
+```
+
+Add the facade:
+
+``` php
+
+// Laravel 5: config/app.php
+
+'aliases' => [
+    ...
+    'FFMpeg' => Pbmedia\LaravelFFMpeg\FFMpegFacade::class
+    ...
+]
+```
+
+Publish the config file using the artisan CLI tool:
+
+``` bash
+php artisan vendor:publish --provider="Pbmedia\LaravelFFMpeg\FFMpegServiceProvider"
 ```
 
 ## Usage
