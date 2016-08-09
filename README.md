@@ -6,8 +6,6 @@
 [![Quality Score](https://img.shields.io/scrutinizer/g/pascalbaljetmedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/pascalbaljetmedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-> # :warning: Under Development :construction:
-
 This package provides an integration with FFmpeg for Laravel 5.1 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.1/filesystem).
 
 ## Installation
@@ -49,19 +47,19 @@ Chain multiple convertions:
 // be opened from the default 'disk', as specified in
 // the config file.
 
-FFMpeg::open('movie.mov')
+FFMpeg::open('my_movie.mov')
 
     // export to FTP, converted in WMV
     ->export()
     ->toDisk('ftp')
     ->inFormat(new FFMpeg\Format\Video\WMV)
-    ->save('Excel.wmv')
+    ->save('my_movie.wmv')
 
     // export to Amazon S3, converted in X264
     ->export()
     ->toDisk('s3')
     ->inFormat(new FFMpeg\Format\Video\X264)
-    ->save('Excel.mkv');
+    ->save('my_movie.mkv');
 ```
 
 ## To do
