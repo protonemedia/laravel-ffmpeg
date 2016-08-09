@@ -16,7 +16,7 @@ You can install the package via composer:
 composer require pbmedia/laravel-ffmpeg dev-master
 ```
 
-Add the service provider to your ```app.php``` config file:
+Add the service provider and facade to your ```app.php``` config file:
 
 ``` php
 
@@ -27,19 +27,12 @@ Add the service provider to your ```app.php``` config file:
     Pbmedia\LaravelFFMpeg\FFMpegServiceProvider::class,
     ...
 ];
-```
-
-Add the facade:
-
-``` php
-
-// Laravel 5: config/app.php
 
 'aliases' => [
     ...
     'FFMpeg' => Pbmedia\LaravelFFMpeg\FFMpegFacade::class
     ...
-]
+];
 ```
 
 Publish the config file using the artisan CLI tool:
