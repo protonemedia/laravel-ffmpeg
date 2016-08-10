@@ -2,6 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
+use Closure;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Media\MediaTypeInterface;
 
@@ -54,6 +55,19 @@ class Media
         $frame = $this->media->frame($timecode);
 
         return new Frame($this->getFile(), $frame);
+    }
+
+    public function addFilter(): Media
+    {
+        $arguments = func_get_args();
+
+        if (isset($arguments[0]) && $arguments[0] instanceof Closure) {
+            call_user_func_array($arguments[0], [$this->media->filters()]);
+        } else {
+            call_user_func_array([$this->media, 'addFilter'], $arguments);
+        }
+
+        return $this;
     }
 
     protected function selfOrArgument($argument)

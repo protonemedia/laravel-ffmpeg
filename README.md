@@ -13,7 +13,7 @@ This package provides an integration with FFmpeg for Laravel 5.1 and higher. The
 You can install the package via composer:
 
 ``` bash
-composer require pbmedia/laravel-ffmpeg dev-master
+composer require pbmedia/laravel-ffmpeg
 ```
 
 Add the service provider and facade to your ```app.php``` config file:
@@ -65,6 +65,33 @@ FFMpeg::fromDisk('videos')
     ->save('FrameAt10sec.png');
 ```
 
+You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter objects:
+
+``` php
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->addFilter(function ($filters) {
+        $filters->resize(new \FFMpeg\Coordinate\Dimension(640, 480));
+    })
+    ->export()
+    ->toDisk('converted_videos')
+    ->inFormat(new \FFMpeg\Format\Video\X264)
+    ->save('small_steve.mkv');
+
+// or
+
+$start = \FFMpeg\Coordinate\TimeCode::fromSeconds(5)
+$clipFilter = new \FFMpeg\Filters\Video\ClipFilter($start);
+
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->addFilter($clipFilter)
+    ->export()
+    ->toDisk('converted_videos')
+    ->inFormat(new \FFMpeg\Format\Video\X264)
+    ->save('short_steve.mkv');
+```
+
 Chain multiple convertions:
 
 ``` php
@@ -77,18 +104,15 @@ FFMpeg::open('my_movie.mov')
     // export to FTP, converted in WMV
     ->export()
     ->toDisk('ftp')
-    ->inFormat(new FFMpeg\Format\Video\WMV)
+    ->inFormat(new \FFMpeg\Format\Video\WMV)
     ->save('my_movie.wmv')
 
     // export to Amazon S3, converted in X264
     ->export()
     ->toDisk('s3')
-    ->inFormat(new FFMpeg\Format\Video\X264)
+    ->inFormat(new \FFMpeg\Format\Video\X264)
     ->save('my_movie.mkv');
 ```
-
-## To do
-* Writing test for exporting frames
 
 ## Changelog
 

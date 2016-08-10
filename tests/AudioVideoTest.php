@@ -2,6 +2,9 @@
 
 namespace Pbmedia\LaravelFFMpeg\Tests;
 
+use FFMpeg\Coordinate\Dimension;
+use FFMpeg\Coordinate\TimeCode;
+use FFMpeg\Filters\Video\ClipFilter;
 use FFMpeg\Media\Video;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Mockery;
@@ -46,6 +49,30 @@ class AudioVideoTest extends TestCase
 
         $this->assertInstanceOf(Disk::class, $disk);
         $this->assertEquals($disk->getPath(), $this->srcDir . '/');
+    }
+
+    public function testAddingAFilterWithAClosure()
+    {
+        $media = $this->getVideoMedia();
+
+        $this->assertCount(0, $media->getFiltersCollection());
+
+        $media->addFilter(function ($filters) {
+            $filters->resize(new Dimension(640, 480));
+        });
+
+        $this->assertCount(1, $media->getFiltersCollection());
+    }
+
+    public function testAddingAFilterWithAnObject()
+    {
+        $media = $this->getVideoMedia();
+
+        $this->assertCount(0, $media->getFiltersCollection());
+
+        $media->addFilter(new ClipFilter(TimeCode::fromSeconds(5)));
+
+        $this->assertCount(1, $media->getFiltersCollection());
     }
 
     public function testExportingToLocalDisk()
