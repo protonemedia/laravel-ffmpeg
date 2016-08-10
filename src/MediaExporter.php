@@ -10,9 +10,9 @@ class MediaExporter
 
     protected $disk;
 
-    protected $frameMustBeAccurate = false;
-
     protected $format;
+
+    protected $saveMethod = 'saveAudioOrVideo';
 
     public function __construct(Media $media)
     {
@@ -48,34 +48,13 @@ class MediaExporter
         return $this;
     }
 
-    public function accurate(): MediaExporter
-    {
-        $this->frameMustBeAccurate = true;
-
-        return $this;
-    }
-
-    public function unaccurate(): MediaExporter
-    {
-        $this->frameMustBeAccurate = false;
-
-        return $this;
-    }
-
-    public function getAccuracy(): bool
-    {
-        return $this->frameMustBeAccurate;
-    }
-
     public function save(string $path): Media
     {
         $file = $this->getDisk()->newFile($path);
 
         $destinationPath = $this->getDestinationPathForSaving($file);
 
-        $saveMethod = $this->media->isFrame() ? 'saveFrame' : 'saveAudioOrVideo';
-
-        $this->{$saveMethod}($destinationPath);
+        $this->{$this->saveMethod}($destinationPath);
 
         if (!$this->getDisk()->isLocal()) {
             $this->moveSavedFileToRemoteDisk($destinationPath, $file);
@@ -98,13 +77,6 @@ class MediaExporter
         }
 
         return $file->getFullPath();
-    }
-
-    private function saveFrame(string $fullPath): MediaExporter
-    {
-        $this->media->save($fullPath, $this->getAccuracy());
-
-        return $this;
     }
 
     private function saveAudioOrVideo(string $fullPath): MediaExporter

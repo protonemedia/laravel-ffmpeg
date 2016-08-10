@@ -14,7 +14,7 @@ use Pbmedia\LaravelFFMpeg\File;
 use Pbmedia\LaravelFFMpeg\Media;
 use Pbmedia\LaravelFFMpeg\MediaExporter;
 
-class LaravelFFMpegTest extends \PHPUnit_Framework_TestCase
+class AudioVideoTest extends \PHPUnit_Framework_TestCase
 {
     private $srcDir;
 

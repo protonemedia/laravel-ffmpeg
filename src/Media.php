@@ -33,7 +33,7 @@ class Media
 
     public function export(): MediaExporter
     {
-        return new MediaExporter($this);
+        return $this->isFrame() ? new FrameExporter($this) : new MediaExporter($this);
     }
 
     public function getFrameFromString(string $timecode): Media
