@@ -85,6 +85,13 @@ FFMpeg::open('my_movie.mov')
     ->toDisk('s3')
     ->inFormat(new FFMpeg\Format\Video\X264)
     ->save('my_movie.mkv');
+    
+    // you could even discard the 'toDisk()' method,
+    // now the converted file will be saved to 
+    // the same disk as the source!
+    ->export()
+    ->inFormat(new FFMpeg\Format\Video\WebM)
+    ->save('my_movie.webm')
 ```
 
 ## To do
