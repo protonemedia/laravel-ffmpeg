@@ -35,7 +35,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Pbmedia\\LaravelFFMpeg\\Test\\": "tests"
+            "Pbmedia\\LaravelFFMpeg\\Tests\\": "tests"
         }
     },
     "scripts": {

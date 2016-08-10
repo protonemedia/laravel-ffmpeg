@@ -1,93 +1,22 @@
 <?php
 
-use Illuminate\Config\Repository as ConfigRepository;
+namespace Pbmedia\LaravelFFMpeg\Tests;
+
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
-use Illuminate\Filesystem\FilesystemAdapter;
-use Illuminate\Log\Writer;
-use League\Flysystem\Adapter\Ftp;
-use League\Flysystem\Adapter\Local;
-use League\Flysystem\Filesystem as Flysystem;
-use Monolog\Logger;
+use Mockery;
 use Pbmedia\LaravelFFMpeg\Disk;
 use Pbmedia\LaravelFFMpeg\FFMpeg;
 use Pbmedia\LaravelFFMpeg\File;
 use Pbmedia\LaravelFFMpeg\Media;
 use Pbmedia\LaravelFFMpeg\MediaExporter;
 
-class AudioVideoTest extends \PHPUnit_Framework_TestCase
+class AudioVideoTest extends TestCase
 {
-    private $srcDir;
-
-    private $remoteFilesystem;
-
-    public function setUp()
-    {
-        $this->srcDir           = __DIR__ . '/src';
-        $this->remoteFilesystem = false;
-    }
-
-    private function getDefaultConfig()
-    {
-        if (php_uname('s') === "Darwin") {
-            return require __DIR__ . '/../config/laravel-ffmpeg-mac-brew.php';
-        }
-
-        return require __DIR__ . '/../config/laravel-ffmpeg-ubuntu.php';
-    }
-
-    private function getLocalAdapter(): FilesystemAdapter
-    {
-        $flysystem = new Flysystem(new Local($this->srcDir));
-
-        return new FilesystemAdapter($flysystem);
-    }
-
-    private function getFtpAdapter(): FilesystemAdapter
-    {
-        $flysystem = new Flysystem(new Ftp([]));
-
-        return new FilesystemAdapter($flysystem);
-    }
-
-    private function getFilesystems(): Filesystems
-    {
-        $filesystems = Mockery::mock(Filesystems::class);
-
-        if ($this->remoteFilesystem) {
-            $filesystems->shouldReceive('disk')->once()->with('s3')->andReturn($this->getFtpAdapter());
-
-        } else {
-            $filesystems->shouldReceive('disk')->once()->with('local')->andReturn($this->getLocalAdapter());
-        }
-
-        return $filesystems;
-    }
-
-    private function getService(): FFMpeg
-    {
-        $filesystems = $this->getFilesystems();
-
-        $logger = new Writer(new Logger('ffmpeg'));
-        $config = Mockery::mock(ConfigRepository::class);
-
-        $filesystems->shouldReceive('disk')->once()->with('local')->andReturn($this->getLocalAdapter());
-        $config->shouldReceive('get')->once()->with('laravel-ffmpeg')->andReturn($this->getDefaultConfig());
-        $config->shouldReceive('get')->once()->with('filesystems.default')->andReturn('local');
-
-        return new FFMpeg($filesystems, $config, $logger);
-    }
-
     public function testInstantiationOfService()
     {
         $service = $this->getService();
 
         $this->assertInstanceOf(Filesystems::class, $service->getFilesystems());
-    }
-
-    private function getGuitarMedia()
-    {
-        $service = $this->getService();
-        return $service->open('guitar.m4a');
     }
 
     public function testMediaClass()
@@ -146,6 +75,7 @@ class AudioVideoTest extends \PHPUnit_Framework_TestCase
         $this->remoteFilesystem = true;
 
         $exporter = new MediaExporter($this->getGuitarMedia());
+        $exporter->setTempDir($this->tmpDir);
 
         $mockedRemoteDisk = Mockery::mock(Disk::class);
         $remoteFile       = new File($mockedRemoteDisk, 'guitar_aac.aac');
@@ -158,17 +88,5 @@ class AudioVideoTest extends \PHPUnit_Framework_TestCase
 
         $format = new \FFMpeg\Format\Audio\Aac;
         $exporter->inFormat($format)->toDisk($mockedRemoteDisk)->save('guitar_aac.aac');
-    }
-
-    public function testSettingTheAccuracy()
-    {
-        $media    = $this->getGuitarMedia();
-        $exporter = $media->export();
-
-        $exporter->accurate();
-        $this->assertTrue($exporter->getAccuracy());
-
-        $exporter->unaccurate();
-        $this->assertFalse($exporter->getAccuracy());
     }
 }

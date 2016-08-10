@@ -27,7 +27,7 @@ class FrameExporter extends MediaExporter
         return $this->mustBeAccurate;
     }
 
-    private function saveFrame(string $fullPath): MediaExporter
+    public function saveFrame(string $fullPath): MediaExporter
     {
         $this->media->save($fullPath, $this->getAccuracy());
 

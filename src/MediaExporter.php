@@ -12,12 +12,17 @@ class MediaExporter
 
     protected $format;
 
+    protected $tmpDir;
+
     protected $saveMethod = 'saveAudioOrVideo';
 
     public function __construct(Media $media)
     {
         $this->media = $media;
-        $this->disk  = $media->getFile()->getDisk();
+
+        $this->disk = $media->getFile()->getDisk();
+
+        $this->tmpDir = sys_get_temp_dir();
     }
 
     protected function getFormat(): FormatInterface
@@ -48,6 +53,13 @@ class MediaExporter
         return $this;
     }
 
+    public function setTempDir(string $tmpDir): MediaExporter
+    {
+        $this->tmpDir = $tmpDir;
+
+        return $this;
+    }
+
     public function save(string $path): Media
     {
         $file = $this->getDisk()->newFile($path);
@@ -71,7 +83,7 @@ class MediaExporter
     private function getDestinationPathForSaving(File $file): string
     {
         if (!$file->getDisk()->isLocal()) {
-            $tempName = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
+            $tempName = tempnam($this->tmpDir, 'laravel-ffmpeg');
 
             return $tempName . '.' . $file->getExtension();
         }
