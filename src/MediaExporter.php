@@ -66,7 +66,7 @@ class MediaExporter
 
     protected function moveSavedFileToRemoteDisk($localSourcePath, File $fileOnRemoteDisk): bool
     {
-        return $fileOnRemoteDisk->put($localSourcePath) && unlink($localSourcePath);
+        return $fileOnRemoteDisk->put($localSourcePath) && @unlink($localSourcePath);
     }
 
     private function getDestinationPathForSaving(File $file): string
