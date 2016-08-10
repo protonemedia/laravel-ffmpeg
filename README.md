@@ -43,7 +43,7 @@ php artisan vendor:publish --provider="Pbmedia\LaravelFFMpeg\FFMpegServiceProvid
 
 ## Usage
 
-Convert an audio track:
+Convert an audio or video file:
 
 ``` php
 FFMpeg::fromDisk('songs')
@@ -52,17 +52,6 @@ FFMpeg::fromDisk('songs')
     ->toDisk('converted_songs')
     ->inFormat(new \FFMpeg\Format\Audio\Aac)
     ->save('yesterday.aac');
-```
-
-Create a frame from a video:
-
-``` php
-FFMpeg::fromDisk('videos')
-    ->open('steve_howe.mp4')
-    ->getFrameFromSeconds(10)
-    ->export()
-    ->toDisk('thumnails')
-    ->save('FrameAt10sec.png');
 ```
 
 Chain multiple convertions:
@@ -94,8 +83,29 @@ FFMpeg::open('my_movie.mov')
     ->save('my_movie.webm')
 ```
 
-## To do
-* Writing test for exporting frames
+Create a frame from a video:
+
+``` php
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->getFrameFromSeconds(10)
+    ->export()
+    ->toDisk('thumnails')
+    ->save('FrameAt10sec.png');
+    
+// Instead of the 'getFrameFromSeconds()' method, you could
+// also use the 'getFrameFromString()' or the 
+// 'getFrameFromTimecode()' methods:
+
+$media = FFMpeg::open('steve_howe.mp4');
+$frame = $media->getFrameFromString('00:00:13.37');
+
+// or
+
+$timecode = new FMpeg\Coordinate\TimeCode(...);
+$frame = $media->getFrameFromTimecode($timecode);
+
+```
 
 ## Changelog
 
