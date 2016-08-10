@@ -17,23 +17,13 @@ class TestCase extends \PHPUnit_Framework_TestCase
 {
     public $srcDir;
 
-    public $tmpDir;
-
     public $remoteFilesystem;
 
     public function setUp()
     {
         $this->srcDir = __DIR__ . '/src';
-        $this->tmpDir = __DIR__ . '/tmp';
-
-        @mkdir($this->tmpDir);
 
         $this->remoteFilesystem = false;
-    }
-
-    public function tearDown()
-    {
-        @unlink($this->tmpDir);
     }
 
     public function getDefaultConfig()

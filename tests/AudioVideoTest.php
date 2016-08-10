@@ -2,6 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg\Tests;
 
+use FFMpeg\Media\Video;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Mockery;
 use Pbmedia\LaravelFFMpeg\Disk;
@@ -74,17 +75,26 @@ class AudioVideoTest extends TestCase
     {
         $this->remoteFilesystem = true;
 
-        $exporter = new MediaExporter($this->getGuitarMedia());
-        $exporter->setTempDir($this->tmpDir);
+        $guitarFile = $this->getGuitarMedia()->getFile();
+
+        $baseMedia = Mockery::mock(Video::class);
+        $baseMedia->shouldReceive('save')->once();
+
+        $media = new Media($guitarFile, $baseMedia);
+
+        $exporter = new MediaExporter($media);
 
         $mockedRemoteDisk = Mockery::mock(Disk::class);
         $remoteFile       = new File($mockedRemoteDisk, 'guitar_aac.aac');
 
+        $remoteFileMocked = Mockery::mock(File::class);
+        $remoteFileMocked->shouldReceive('getPath')->once()->andReturn($remoteFile->getPath());
+        $remoteFileMocked->shouldReceive('getDisk')->once()->andReturn($remoteFile->getDisk());
+        $remoteFileMocked->shouldReceive('getExtension')->once()->andReturn($remoteFile->getExtension());
+        $remoteFileMocked->shouldReceive('put')->once()->andReturn(true);
+
         $mockedRemoteDisk->shouldReceive('isLocal')->once()->andReturn(false);
-        $mockedRemoteDisk->shouldReceive('newFile')->once()->withArgs(['guitar_aac.aac'])->andReturn($remoteFile);
-        $mockedRemoteDisk->shouldReceive('put')->once()->withAnyArgs([
-            $remoteFile->getPath(),
-        ])->andReturn(true);
+        $mockedRemoteDisk->shouldReceive('newFile')->once()->withArgs(['guitar_aac.aac'])->andReturn($remoteFileMocked);
 
         $format = new \FFMpeg\Format\Audio\Aac;
         $exporter->inFormat($format)->toDisk($mockedRemoteDisk)->save('guitar_aac.aac');
