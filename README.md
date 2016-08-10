@@ -8,6 +8,13 @@
 
 This package provides an integration with FFmpeg for Laravel 5.1 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.1/filesystem).
 
+## Features
+* Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg)
+* Still able to use advanced features like filters
+* Integration with [Laravel's Filesystem](http://laravel.com/docs/5.1/filesystem), [configuration system](https://laravel.com/docs/5.1#configuration) and [logging handling](https://laravel.com/docs/5.1/errors)
+* Compatible with Laravel 5.1 and up
+* PHP 7.0 only
+
 ## Installation
 
 You can install the package via composer:
@@ -43,7 +50,7 @@ php artisan vendor:publish --provider="Pbmedia\LaravelFFMpeg\FFMpegServiceProvid
 
 ## Usage
 
-Convert an audio track:
+Convert an audio or video file:
 
 ``` php
 FFMpeg::fromDisk('songs')
@@ -52,17 +59,6 @@ FFMpeg::fromDisk('songs')
     ->toDisk('converted_songs')
     ->inFormat(new \FFMpeg\Format\Audio\Aac)
     ->save('yesterday.aac');
-```
-
-Create a frame from a video:
-
-``` php
-FFMpeg::fromDisk('videos')
-    ->open('steve_howe.mp4')
-    ->getFrameFromSeconds(10)
-    ->export()
-    ->toDisk('thumnails')
-    ->save('FrameAt10sec.png');
 ```
 
 You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter objects:
@@ -112,8 +108,40 @@ FFMpeg::open('my_movie.mov')
     ->toDisk('s3')
     ->inFormat(new \FFMpeg\Format\Video\X264)
     ->save('my_movie.mkv');
+
+    // you could even discard the 'toDisk()' method,
+    // now the converted file will be saved to
+    // the same disk as the source!
+    ->export()
+    ->inFormat(new FFMpeg\Format\Video\WebM)
+    ->save('my_movie.webm')
 ```
 
+Create a frame from a video:
+
+``` php
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->getFrameFromSeconds(10)
+    ->export()
+    ->toDisk('thumnails')
+    ->save('FrameAt10sec.png');
+
+// Instead of the 'getFrameFromSeconds()' method, you could
+// also use the 'getFrameFromString()' or the
+// 'getFrameFromTimecode()' methods:
+
+$media = FFMpeg::open('steve_howe.mp4');
+$frame = $media->getFrameFromString('00:00:13.37');
+
+// or
+
+$timecode = new FMpeg\Coordinate\TimeCode(...);
+$frame = $media->getFrameFromTimecode($timecode);
+
+```
+
+>>>>>>> origin/master
 ## Changelog
 
 Please see [CHANGELOG](CHANGELOG.md) for more information what has changed recently.
