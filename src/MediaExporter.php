@@ -55,6 +55,8 @@ class MediaExporter
 
         $destinationPath = $this->getDestinationPathForSaving($file);
 
+        $this->createDestinationPathForSaving($file);
+
         $this->{$this->saveMethod}($destinationPath);
 
         if (!$this->getDisk()->isLocal()) {
@@ -78,6 +80,17 @@ class MediaExporter
         }
 
         return $file->getFullPath();
+    }
+
+    private function createDestinationPathForSaving(File $file)
+    {
+        if (!$file->getDisk()->isLocal()) {
+            return false;
+        }
+
+        $directory = pathinfo($file->getPath())['dirname'];
+
+        return $file->getDisk()->createDirectory($directory);
     }
 
     private function saveAudioOrVideo(string $fullPath): MediaExporter

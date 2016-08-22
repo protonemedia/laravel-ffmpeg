@@ -43,6 +43,11 @@ class Disk
         return $this->disk->getDriver()->getAdapter()->getPathPrefix();
     }
 
+    public function createDirectory(string $path)
+    {
+        return $this->disk->makeDirectory($path);
+    }
+
     public function __call($method, $parameters)
     {
         return call_user_func_array([$this->disk, $method], $parameters);
