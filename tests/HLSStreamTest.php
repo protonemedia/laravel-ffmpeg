@@ -18,7 +18,7 @@ class HLSStreamTest extends TestCase
         $exporter = new HLSStreamExporter($media);
         $exporter->setSegmentLength(20);
 
-        $filter = $exporter->getFilter($playlist);
+        $filter = $exporter->setPlaylistPath($playlist)->getFilter();
 
         $this->assertInstanceOf(HLSStreamFilter::class, $filter);
 
@@ -51,9 +51,10 @@ class HLSStreamTest extends TestCase
         ]);
 
         $exporter = new HLSStreamExporter($media);
+        $exporter->setPlaylistPath($playlist);
 
         $media->shouldReceive('addFilter')->once()->withArgs([
-            $exporter->getFilter($playlist),
+            $exporter->getFilter(),
         ]);
 
         $exporter->inFormat($format)

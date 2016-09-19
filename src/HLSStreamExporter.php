@@ -6,17 +6,29 @@ class HLSStreamExporter extends MediaExporter
 {
     protected $filter;
 
+    protected $playlistPath;
+
     protected $saveMethod = 'saveStream';
 
     protected $segmentLength = 10;
 
-    public function getFilter(string $playlistPath): HLSStreamFilter
+    public function setPlaylistPath(string $playlistPath)
+    {
+        $this->playlistPath = $playlistPath;
+
+        return $this;
+    }
+
+    public function getFilter(): HLSStreamFilter
     {
         if ($this->filter) {
             return $this->filter;
         }
 
-        return $this->filter = new HLSStreamFilter($playlistPath, $this->segmentLength);
+        return $this->filter = new HLSStreamFilter(
+            $this->playlistPath,
+            $this->segmentLength
+        );
     }
 
     public function setSegmentLength(int $segmentLength)
@@ -28,30 +40,32 @@ class HLSStreamExporter extends MediaExporter
 
     public function saveStream(string $playlistPath): MediaExporter
     {
+        $this->setPlaylistPath($playlistPath);
+
         $this->media->addFilter(
-            $this->getFilter($playlistPath)
+            $this->getFilter()
         );
 
         $this->media->save(
             $this->getFormat(),
-            $this->getFullPath($playlistPath)
+            $this->getFullPath()
         );
 
         return $this;
     }
 
-    protected function getFullPath(string $playlistPath): string
+    protected function getFullPath(): string
     {
         return implode(DIRECTORY_SEPARATOR, [
-            pathinfo($playlistPath, PATHINFO_DIRNAME),
-            $this->getFilename($playlistPath),
+            pathinfo($this->playlistPath, PATHINFO_DIRNAME),
+            $this->getFilename(),
         ]);
     }
 
-    protected function getFilename(string $playlistPath): string
+    protected function getFilename(): string
     {
         return implode('_', [
-            pathinfo($playlistPath, PATHINFO_FILENAME),
+            pathinfo($this->playlistPath, PATHINFO_FILENAME),
             $this->format->getKiloBitrate() . 'k',
             '%05d.ts',
         ]);
