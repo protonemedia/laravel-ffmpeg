@@ -62,8 +62,12 @@ class HLSPlaylistExporter extends MediaExporter
 
     public function savePlaylist(string $playlistPath): MediaExporter
     {
-        // $this->media->save($fullPath, $this->getAccuracy());
+        $this->setPlaylistPath($playlistPath);
 
-        // return $this;
+        array_map(function ($segmentedExporter) {
+            $segmentedExporter->saveStream($this->playlistPath);
+        }, $this->getSegmentedExporters());
+
+        return $this;
     }
 }

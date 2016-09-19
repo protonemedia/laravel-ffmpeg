@@ -54,7 +54,7 @@ class SegmentedExporter extends MediaExporter
         return $this;
     }
 
-    protected function getFullPath(): string
+    public function getFullPath(): string
     {
         return implode(DIRECTORY_SEPARATOR, [
             pathinfo($this->playlistPath, PATHINFO_DIRNAME),
