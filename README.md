@@ -140,6 +140,24 @@ $frame = $media->getFrameFromTimecode($timecode);
 
 ```
 
+Create a M3U8 playlist to do [HLS](https://en.wikipedia.org/wiki/HTTP_Live_Streaming):
+
+``` php
+$lowBitrate = (new X264)->setKiloBitrate(250);
+$midBitrate = (new X264)->setKiloBitrate(500);
+$highBitrate = (new X264)->setKiloBitrate(1000);
+
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->exportPlaylistForHLS()
+    ->setSegmentLength(10) // optional
+    ->addFormat($lowBitrate)
+    ->addFormat($midBitrate)
+    ->addFormat($highBitrate)
+    ->save('adaptive_steve.m3u8');
+
+```
+
 ## Changelog
 
 Please see [CHANGELOG](CHANGELOG.md) for more information what has changed recently.

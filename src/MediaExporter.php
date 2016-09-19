@@ -21,7 +21,7 @@ class MediaExporter
         $this->disk = $media->getFile()->getDisk();
     }
 
-    protected function getFormat(): FormatInterface
+    public function getFormat(): FormatInterface
     {
         return $this->format;
     }

@@ -36,6 +36,11 @@ class Media
         return new MediaExporter($this);
     }
 
+    public function exportForHLS(): HLSPlaylistExporter
+    {
+        return new HLSPlaylistExporter($this);
+    }
+
     public function getFrameFromString(string $timecode): Frame
     {
         return $this->getFrameFromTimecode(
@@ -73,6 +78,22 @@ class Media
     protected function selfOrArgument($argument)
     {
         return ($argument === $this->media) ? $this : $argument;
+    }
+
+    public function __invoke(): MediaTypeInterface
+    {
+        return $this->media;
+    }
+
+    public function __clone()
+    {
+        if ($this->media) {
+            $clonedFilters = clone $this->media->getFiltersCollection();
+
+            $this->media = clone $this->media;
+
+            $this->media->setFiltersCollection($clonedFilters);
+        }
     }
 
     public function __call($method, $parameters)
