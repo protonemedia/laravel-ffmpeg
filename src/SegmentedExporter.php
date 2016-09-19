@@ -26,7 +26,7 @@ class SegmentedExporter extends MediaExporter
         }
 
         return $this->filter = new SegmentedFilter(
-            $this->playlistPath,
+            $this->getPlaylistFullPath(),
             $this->segmentLength
         );
     }
@@ -54,6 +54,24 @@ class SegmentedExporter extends MediaExporter
         return $this;
     }
 
+    public function getPlaylistFullPath(): string
+    {
+        return implode(DIRECTORY_SEPARATOR, [
+            pathinfo($this->playlistPath, PATHINFO_DIRNAME),
+            $this->getPlaylistFilename(),
+        ]);
+    }
+
+    public function getPlaylistFilename(): string
+    {
+        return implode([
+            pathinfo($this->playlistPath, PATHINFO_FILENAME),
+            '_',
+            $this->getFormat()->getKiloBitrate(),
+            '.m3u8',
+        ]);
+    }
+
     public function getFullPath(): string
     {
         return implode(DIRECTORY_SEPARATOR, [
@@ -64,10 +82,11 @@ class SegmentedExporter extends MediaExporter
 
     protected function getFilename(): string
     {
-        return implode('_', [
+        return implode([
             pathinfo($this->playlistPath, PATHINFO_FILENAME),
-            $this->getFormat()->getKiloBitrate() . 'k',
-            '%05d.ts',
+            '_',
+            $this->getFormat()->getKiloBitrate(),
+            '_%05d.ts',
         ]);
     }
 }

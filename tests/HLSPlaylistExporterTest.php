@@ -88,12 +88,23 @@ class HLSPlaylistExporterTest extends TestCase
         $media->shouldReceive('addFilter')->once();
 
         $media->shouldReceive('save')->once()->withArgs([
-            $formatA, $this->srcDir . '/MyPlaylist_384k_%05d.ts',
+            $formatA, $this->srcDir . '/MyPlaylist_384_%05d.ts',
         ]);
+
         $media->shouldReceive('save')->once()->withArgs([
-            $formatB, $this->srcDir . '/MyPlaylist_512k_%05d.ts',
+            $formatB, $this->srcDir . '/MyPlaylist_512_%05d.ts',
         ]);
 
         $exporter->toDisk('local')->save($playlist);
+
+        $this->assertEquals(file_get_contents($this->srcDir . '/MyPlaylist.m3u8'),
+            '#EXTM3U' . PHP_EOL .
+            '#EXT-X-STREAM-INF:BANDWIDTH=384000' . PHP_EOL .
+            'MyPlaylist_384.m3u8' . PHP_EOL .
+            '#EXT-X-STREAM-INF:BANDWIDTH=512000' . PHP_EOL .
+            'MyPlaylist_512.m3u8'
+        );
+
+        @unlink($this->srcDir . '/MyPlaylist.m3u8');
     }
 }

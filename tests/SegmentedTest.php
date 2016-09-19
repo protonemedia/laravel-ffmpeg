@@ -48,7 +48,7 @@ class SegmentedTest extends TestCase
 
         $media->shouldReceive('getFile')->once()->andReturn($file);
         $media->shouldReceive('save')->once()->withArgs([
-            $format, $this->srcDir . '/MyPlaylist_1000k_%05d.ts',
+            $format, $this->srcDir . '/MyPlaylist_1000_%05d.ts',
         ]);
 
         $exporter = new SegmentedExporter($media);

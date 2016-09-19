@@ -64,9 +64,16 @@ class HLSPlaylistExporter extends MediaExporter
     {
         $this->setPlaylistPath($playlistPath);
 
-        array_map(function ($segmentedExporter) {
+        $masterPlaylistSteams = array_map(function ($segmentedExporter) {
             $segmentedExporter->saveStream($this->playlistPath);
+
+            return '#EXT-X-STREAM-INF:BANDWIDTH=' .
+            $segmentedExporter->getFormat()->getKiloBitrate() * 1000 . PHP_EOL .
+            $segmentedExporter->getPlaylistFilename();
+
         }, $this->getSegmentedExporters());
+
+        file_put_contents($playlistPath, '#EXTM3U' . PHP_EOL . implode(PHP_EOL, $masterPlaylistSteams));
 
         return $this;
     }
