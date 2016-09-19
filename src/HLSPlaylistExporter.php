@@ -9,6 +9,8 @@ class HLSPlaylistExporter extends MediaExporter
 {
     protected $formats = [];
 
+    protected $playlistPath;
+
     protected $segmentLength = 10;
 
     protected $segmentedExporters;

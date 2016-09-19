@@ -7,7 +7,7 @@ use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Media\MediaTypeInterface;
 
 /**
- * @method mixed save(FormatInterface $format, $outputPathfile)
+ * @method mixed save(\FFMpeg\Format\FormatInterface $format, $outputPathfile)
  */
 class Media
 {
