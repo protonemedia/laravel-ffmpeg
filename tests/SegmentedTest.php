@@ -3,11 +3,11 @@
 namespace Pbmedia\LaravelFFMpeg\Tests;
 
 use Mockery;
-use Pbmedia\LaravelFFMpeg\HLSStreamExporter;
-use Pbmedia\LaravelFFMpeg\HLSStreamFilter;
 use Pbmedia\LaravelFFMpeg\Media;
+use Pbmedia\LaravelFFMpeg\SegmentedExporter;
+use Pbmedia\LaravelFFMpeg\SegmentedFilter;
 
-class HLSStreamTest extends TestCase
+class SegmentedTest extends TestCase
 {
     public function testFilter()
     {
@@ -15,12 +15,12 @@ class HLSStreamTest extends TestCase
         $playlist = 'MyPlaylist.m3u8';
         $format   = new \FFMpeg\Format\Video\X264;
 
-        $exporter = new HLSStreamExporter($media);
+        $exporter = new SegmentedExporter($media);
         $exporter->setSegmentLength(20);
 
         $filter = $exporter->setPlaylistPath($playlist)->getFilter();
 
-        $this->assertInstanceOf(HLSStreamFilter::class, $filter);
+        $this->assertInstanceOf(SegmentedFilter::class, $filter);
 
         $this->assertEquals($playlist, $filter->getPlaylistPath());
         $this->assertEquals(20, $filter->getSegmentLength());
@@ -36,7 +36,7 @@ class HLSStreamTest extends TestCase
         ]);
     }
 
-    public function testExportingAHLSStream()
+    public function testExportingASegmented()
     {
         $file = $this->getVideoMedia()->getFile();
 
@@ -50,7 +50,7 @@ class HLSStreamTest extends TestCase
             $format, $this->srcDir . '/MyPlaylist_1000k_%05d.ts',
         ]);
 
-        $exporter = new HLSStreamExporter($media);
+        $exporter = new SegmentedExporter($media);
         $exporter->setPlaylistPath($playlist);
 
         $media->shouldReceive('addFilter')->once()->withArgs([

@@ -2,7 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
-class HLSStreamExporter extends MediaExporter
+class SegmentedExporter extends MediaExporter
 {
     protected $filter;
 
@@ -19,13 +19,13 @@ class HLSStreamExporter extends MediaExporter
         return $this;
     }
 
-    public function getFilter(): HLSStreamFilter
+    public function getFilter(): SegmentedFilter
     {
         if ($this->filter) {
             return $this->filter;
         }
 
-        return $this->filter = new HLSStreamFilter(
+        return $this->filter = new SegmentedFilter(
             $this->playlistPath,
             $this->segmentLength
         );

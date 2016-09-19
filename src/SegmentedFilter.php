@@ -6,7 +6,7 @@ use FFMpeg\Filters\Video\VideoFilterInterface;
 use FFMpeg\Format\VideoInterface;
 use FFMpeg\Media\Video;
 
-class HLSStreamFilter implements VideoFilterInterface
+class SegmentedFilter implements VideoFilterInterface
 {
     protected $playlistPath;
 

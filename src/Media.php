@@ -36,9 +36,9 @@ class Media
         return new MediaExporter($this);
     }
 
-    public function exportHLSStream(): HLSStreamExporter
+    public function exportInSegments(): SegmentedExporter
     {
-        return new HLSStreamExporter($this);
+        return new SegmentedExporter($this);
     }
 
     public function getFrameFromString(string $timecode): Frame
