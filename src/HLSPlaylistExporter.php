@@ -31,14 +31,14 @@ class HLSPlaylistExporter extends MediaExporter
         return $this->formats;
     }
 
-    public function setPlaylistPath(string $playlistPath)
+    public function setPlaylistPath(string $playlistPath): MediaExporter
     {
         $this->playlistPath = $playlistPath;
 
         return $this;
     }
 
-    public function setSegmentLength(int $segmentLength)
+    public function setSegmentLength(int $segmentLength): MediaExporter
     {
         $this->segmentLength = $segmentLength;
 
@@ -89,11 +89,13 @@ class HLSPlaylistExporter extends MediaExporter
 
     public function savePlaylist(string $playlistPath): MediaExporter
     {
-        $this->playlistPath = $playlistPath;
-
+        $this->setPlaylistPath($playlistPath);
         $this->exportStreams();
 
-        file_put_contents($playlistPath, $this->getMasterPlaylistContents());
+        file_put_contents(
+            $playlistPath,
+            $this->getMasterPlaylistContents()
+        );
 
         return $this;
     }

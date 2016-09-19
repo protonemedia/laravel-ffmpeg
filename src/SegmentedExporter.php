@@ -12,14 +12,14 @@ class SegmentedExporter extends MediaExporter
 
     protected $saveMethod = 'saveStream';
 
-    public function setPlaylistPath(string $playlistPath)
+    public function setPlaylistPath(string $playlistPath): MediaExporter
     {
         $this->playlistPath = $playlistPath;
 
         return $this;
     }
 
-    public function setSegmentLength(int $segmentLength)
+    public function setSegmentLength(int $segmentLength): MediaExporter
     {
         $this->segmentLength = $segmentLength;
 
