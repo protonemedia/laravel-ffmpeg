@@ -66,7 +66,7 @@ class SegmentedExporter extends MediaExporter
     {
         return implode('_', [
             pathinfo($this->playlistPath, PATHINFO_FILENAME),
-            $this->format->getKiloBitrate() . 'k',
+            $this->getFormat()->getKiloBitrate() . 'k',
             '%05d.ts',
         ]);
     }

@@ -16,9 +16,10 @@ class SegmentedTest extends TestCase
         $format   = new \FFMpeg\Format\Video\X264;
 
         $exporter = new SegmentedExporter($media);
+        $exporter->setPlaylistPath($playlist);
         $exporter->setSegmentLength(20);
 
-        $filter = $exporter->setPlaylistPath($playlist)->getFilter();
+        $filter = $exporter->getFilter();
 
         $this->assertInstanceOf(SegmentedFilter::class, $filter);
 
