@@ -36,6 +36,11 @@ class Media
         return new MediaExporter($this);
     }
 
+    public function exportHLSStream(): HLSStreamExporter
+    {
+        return new HLSStreamExporter($this);
+    }
+
     public function getFrameFromString(string $timecode): Frame
     {
         return $this->getFrameFromTimecode(
@@ -73,6 +78,11 @@ class Media
     protected function selfOrArgument($argument)
     {
         return ($argument === $this->media) ? $this : $argument;
+    }
+
+    public function __invoke(): MediaTypeInterface
+    {
+        return $this->media;
     }
 
     public function __call($method, $parameters)
