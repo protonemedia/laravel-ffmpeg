@@ -17,23 +17,29 @@ class SegmentedTest extends TestCase
 
         $exporter = new SegmentedExporter($media);
         $exporter->setPlaylistPath($playlist);
+        $exporter->inFormat($format);
         $exporter->setSegmentLength(20);
 
         $filter = $exporter->getFilter();
 
         $this->assertInstanceOf(SegmentedFilter::class, $filter);
 
-        $this->assertEquals($playlist, $filter->getPlaylistPath());
+        $this->assertEquals('MyPlaylist_1000.m3u8', $filter->getPlaylistPath());
         $this->assertEquals(20, $filter->getSegmentLength());
 
         $this->assertEquals($filter->apply($media(), $format), [
-            '-map 0',
+            '-map',
+            '0',
             '-flags',
             '-global_header',
-            '-f segment',
-            '-segment_format mpeg_ts',
-            '-segment_list ' . $playlist,
-            '-segment_time ' . 20,
+            '-f',
+            'segment',
+            '-segment_format',
+            'mpeg_ts',
+            '-segment_list',
+            'MyPlaylist_1000.m3u8',
+            '-segment_time',
+            20,
         ]);
     }
 
@@ -53,6 +59,7 @@ class SegmentedTest extends TestCase
 
         $exporter = new SegmentedExporter($media);
         $exporter->setPlaylistPath($playlist);
+        $exporter->inFormat($format);
 
         $media->shouldReceive('addFilter')->once()->withArgs([
             $exporter->getFilter(),

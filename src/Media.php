@@ -36,7 +36,7 @@ class Media
         return new MediaExporter($this);
     }
 
-    public function exportPlaylistForHLS(): HLSPlaylistExporter
+    public function exportForHLS(): HLSPlaylistExporter
     {
         return new HLSPlaylistExporter($this);
     }
@@ -87,11 +87,13 @@ class Media
 
     public function __clone()
     {
-        $clonedFilters = clone $this->media->getFiltersCollection();
+        if ($this->media) {
+            $clonedFilters = clone $this->media->getFiltersCollection();
 
-        $this->media = clone $this->media;
+            $this->media = clone $this->media;
 
-        $this->media->setFiltersCollection($clonedFilters);
+            $this->media->setFiltersCollection($clonedFilters);
+        }
     }
 
     public function __call($method, $parameters)

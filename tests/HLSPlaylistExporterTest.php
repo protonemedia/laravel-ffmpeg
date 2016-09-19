@@ -30,9 +30,9 @@ class HLSPlaylistExporterTest extends TestCase
             ->addFormat($formatB)
             ->addFormat($formatC);
 
-        $this->assertEquals($formatB, $exporter->getFormats()[0]); // 64
-        $this->assertEquals($formatC, $exporter->getFormats()[1]); // 256
-        $this->assertEquals($formatA, $exporter->getFormats()[2]); // 1024
+        $this->assertEquals($formatB, $exporter->getFormatsSorted()[0]); // 64
+        $this->assertEquals($formatC, $exporter->getFormatsSorted()[1]); // 256
+        $this->assertEquals($formatA, $exporter->getFormatsSorted()[2]); // 1024
     }
 
     public function testSegmentExporters()

@@ -9,9 +9,9 @@ class HLSPlaylistExporter extends MediaExporter
 {
     protected $formats = [];
 
-    protected $playlistPath;
-
     protected $segmentLength = 10;
+
+    protected $segmentedExporters;
 
     protected $saveMethod = 'savePlaylist';
 
@@ -22,7 +22,7 @@ class HLSPlaylistExporter extends MediaExporter
         return $this;
     }
 
-    public function getFormats(): array
+    public function getFormatsSorted(): array
     {
         usort($this->formats, function ($formatA, $formatB) {
             return $formatA->getKiloBitrate() <=> $formatB->getKiloBitrate();
@@ -57,25 +57,43 @@ class HLSPlaylistExporter extends MediaExporter
 
     public function getSegmentedExporters(): array
     {
-        return array_map(function ($format) {
+        if ($this->segmentedExporters) {
+            return $this->segmentedExporters;
+        }
+
+        return $this->segmentedExporters = array_map(function ($format) {
             return $this->getSegmentedExporterFromFormat($format);
-        }, $this->getFormats());
+        }, $this->getFormatsSorted());
+    }
+
+    protected function exportStreams()
+    {
+        foreach ($this->getSegmentedExporters() as $segmentedExporter) {
+            $segmentedExporter->saveStream($this->playlistPath);
+        }
+    }
+
+    protected function getMasterPlaylistContents(): string
+    {
+        $lines = ['#EXTM3U'];
+
+        foreach ($this->getSegmentedExporters() as $segmentedExporter) {
+            $bitrate = $segmentedExporter->getFormat()->getKiloBitrate() * 1000;
+
+            $lines[] = '#EXT-X-STREAM-INF:BANDWIDTH=' . $bitrate;
+            $lines[] = $segmentedExporter->getPlaylistFilename();
+        }
+
+        return implode(PHP_EOL, $lines);
     }
 
     public function savePlaylist(string $playlistPath): MediaExporter
     {
-        $this->setPlaylistPath($playlistPath);
+        $this->playlistPath = $playlistPath;
 
-        $masterPlaylistSteams = array_map(function ($segmentedExporter) {
-            $segmentedExporter->saveStream($this->playlistPath);
+        $this->exportStreams();
 
-            return '#EXT-X-STREAM-INF:BANDWIDTH=' .
-            $segmentedExporter->getFormat()->getKiloBitrate() * 1000 . PHP_EOL .
-            $segmentedExporter->getPlaylistFilename();
-
-        }, $this->getSegmentedExporters());
-
-        file_put_contents($playlistPath, '#EXTM3U' . PHP_EOL . implode(PHP_EOL, $masterPlaylistSteams));
+        file_put_contents($playlistPath, $this->getMasterPlaylistContents());
 
         return $this;
     }
