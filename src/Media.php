@@ -85,6 +85,15 @@ class Media
         return $this->media;
     }
 
+    public function __clone()
+    {
+        $clonedFilters = clone $this->media->getFiltersCollection();
+
+        $this->media = clone $this->media;
+
+        $this->media->setFiltersCollection($clonedFilters);
+    }
+
     public function __call($method, $parameters)
     {
         return $this->selfOrArgument(

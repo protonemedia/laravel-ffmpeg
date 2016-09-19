@@ -47,7 +47,9 @@ class HLSPlaylistExporter extends MediaExporter
 
     protected function getSegmentedExporterFromFormat(VideoInterface $format): SegmentedExporter
     {
-        return (new SegmentedExporter($this->media))
+        $media = clone $this->media;
+
+        return (new SegmentedExporter($media))
             ->inFormat($format)
             ->setPlaylistPath($this->playlistPath)
             ->setSegmentLength($this->segmentLength);

@@ -39,13 +39,18 @@ class SegmentedFilter implements VideoFilterInterface
     public function apply(Video $video, VideoInterface $format)
     {
         return [
-            '-map 0',
+            '-map',
+            '0',
             '-flags',
             '-global_header',
-            '-f segment',
-            '-segment_format mpeg_ts',
-            '-segment_list ' . $this->getPlaylistPath(),
-            '-segment_time ' . $this->getSegmentLength(),
+            '-f',
+            'segment',
+            '-segment_format',
+            'mpeg_ts',
+            '-segment_list',
+            $this->getPlaylistPath(),
+            '-segment_time',
+            $this->getSegmentLength(),
         ];
     }
 }
