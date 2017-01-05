@@ -41,6 +41,13 @@ class AudioVideoTest extends TestCase
         $this->assertEquals($file->getFullPath(), $this->srcDir . '/guitar.m4a');
     }
 
+    public function testDurationInSeconds()
+    {
+        $media = $this->getGuitarMedia();
+
+        $this->assertEquals(4, $media->getDurationInSeconds());
+    }
+
     public function testDiskClass()
     {
         $media = $this->getGuitarMedia();

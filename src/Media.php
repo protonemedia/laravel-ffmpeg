@@ -31,6 +31,11 @@ class Media
         return $this->file;
     }
 
+    public function getDurationInSeconds(): int
+    {
+        return $this->media->getStreams()->first()->get('duration');
+    }
+
     public function export(): MediaExporter
     {
         return new MediaExporter($this);
