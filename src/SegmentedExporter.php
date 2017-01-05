@@ -33,7 +33,7 @@ class SegmentedExporter extends MediaExporter
         }
 
         return $this->filter = new SegmentedFilter(
-            $this->getPlaylistFilename(),
+            $this->getPlaylistFullPath(),
             $this->segmentLength
         );
     }
@@ -52,6 +52,14 @@ class SegmentedExporter extends MediaExporter
         );
 
         return $this;
+    }
+
+    public function getPlaylistFullPath(): string
+    {
+        return implode(DIRECTORY_SEPARATOR, [
+            pathinfo($this->playlistPath, PATHINFO_DIRNAME),
+            $this->getPlaylistFilename(),
+        ]);
     }
 
     public function getSegmentFullPath(): string

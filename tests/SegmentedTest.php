@@ -24,7 +24,7 @@ class SegmentedTest extends TestCase
 
         $this->assertInstanceOf(SegmentedFilter::class, $filter);
 
-        $this->assertEquals('MyPlaylist_1000.m3u8', $filter->getPlaylistPath());
+        $this->assertEquals('./MyPlaylist_1000.m3u8', $filter->getPlaylistPath());
         $this->assertEquals(20, $filter->getSegmentLength());
 
         $this->assertEquals($filter->apply($media(), $format), [
@@ -37,7 +37,7 @@ class SegmentedTest extends TestCase
             '-segment_format',
             'mpeg_ts',
             '-segment_list',
-            'MyPlaylist_1000.m3u8',
+            './MyPlaylist_1000.m3u8',
             '-segment_time',
             20,
         ]);
