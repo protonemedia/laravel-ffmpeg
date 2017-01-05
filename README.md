@@ -149,7 +149,7 @@ $highBitrate = (new X264)->setKiloBitrate(1000);
 
 FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
-    ->exportPlaylistForHLS()
+    ->exportForHLS()
     ->setSegmentLength(10) // optional
     ->addFormat($lowBitrate)
     ->addFormat($midBitrate)
