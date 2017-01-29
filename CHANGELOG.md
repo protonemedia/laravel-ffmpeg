@@ -2,6 +2,23 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 1.1.4 - 2017-01-29
+
+### Added
+- Nothing
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Support for php-ffmpeg 0.8.0
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
 ## 1.1.3 - 2017-01-05
 
 ### Added
