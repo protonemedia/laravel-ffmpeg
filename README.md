@@ -12,7 +12,7 @@ This package provides an integration with FFmpeg for Laravel 5.1 and higher. The
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/5.1/filesystem), [configuration system](https://laravel.com/docs/5.1#configuration) and [logging handling](https://laravel.com/docs/5.1/errors).
 * Compatible with Laravel 5.1 and up.
-* PHP 7.0 only.
+* PHP 7.0 and 7.1 only.
 
 ## Installation
 
