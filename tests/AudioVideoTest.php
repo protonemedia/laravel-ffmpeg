@@ -6,8 +6,14 @@ use FFMpeg\Coordinate\Dimension;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Filters\Video\ClipFilter;
 use FFMpeg\Media\Video;
+use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
+use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Log\Writer;
+use League\Flysystem\AdapterInterface;
+use League\Flysystem\FilesystemInterface;
 use Mockery;
+use Monolog\Logger;
 use Pbmedia\LaravelFFMpeg\Disk;
 use Pbmedia\LaravelFFMpeg\FFMpeg;
 use Pbmedia\LaravelFFMpeg\File;
@@ -103,6 +109,46 @@ class AudioVideoTest extends TestCase
 
         $exporter = new MediaExporter($media);
         $exporter->inFormat($format)->toDisk('local')->save('guitar_aac.aac');
+    }
+
+    public function testOpeningFromRemoteDisk()
+    {
+        $filesystems = Mockery::mock(Filesystems::class);
+        $config      = Mockery::mock(ConfigRepository::class);
+        $logger      = new Writer(new Logger('ffmpeg'));
+
+        $adapter = Mockery::mock(AdapterInterface::class);
+
+        $driver = Mockery::mock(FilesystemInterface::class);
+        $driver->shouldReceive('getAdapter')->andReturn($adapter);
+
+        $remoteDisk = Mockery::mock(FilesystemAdapter::class);
+        $remoteDisk->shouldReceive('getDriver')->andReturn($driver);
+        $remoteDisk->shouldReceive('read')->with('remote_guitar.m4a')->andReturn(
+            $videoContents = file_get_contents(__DIR__ . '/src/guitar.m4a')
+        );
+
+        $localDisk = $this->getLocalAdapter();
+
+        $filesystems->shouldReceive('disk')->once()->with('s3')->andReturn($remoteDisk);
+        $filesystems->shouldReceive('disk')->once()->with('local')->andReturn($localDisk);
+
+        $config->shouldReceive('get')->once()->with('laravel-ffmpeg')->andReturn(array_merge($this->getDefaultConfig(), ['default_disk' => 's3']));
+        $config->shouldReceive('get')->once()->with('filesystems.default')->andReturn('s3');
+
+        $service = new FFMpeg($filesystems, $config, $logger);
+        $media   = $service->open('remote_guitar.m4a');
+
+        $format = new \FFMpeg\Format\Audio\Aac;
+
+        $media->export()
+            ->inFormat($format)
+            ->toDisk('local')
+            ->save('local_guitar.m4a');
+
+        $this->assertFileExists(__DIR__ . '/src/local_guitar.m4a');
+
+        @unlink($this->srcDir . '/local_guitar.m4a');
     }
 
     public function testExportingToRemoteDisk()

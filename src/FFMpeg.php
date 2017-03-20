@@ -42,7 +42,14 @@ class FFMpeg
     {
         $file = $this->disk->newFile($path);
 
-        $ffmpegMedia = $this->ffmpeg->open($file->getFullPath());
+        if ($this->disk->isLocal()) {
+            $ffmpegPathFile = $file->getFullPath();
+        } else {
+            $ffmpegPathFile = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
+            file_put_contents($ffmpegPathFile, $this->disk->read($path));
+        }
+
+        $ffmpegMedia = $this->ffmpeg->open($ffmpegPathFile);
 
         return new Media($file, $ffmpegMedia);
     }
