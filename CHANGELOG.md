@@ -2,6 +2,40 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 1.1.6 - 2017-05-11
+
+### Added
+- ```cleanupTemporaryFiles``` method
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Nothing
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
+## 1.1.5 - 2017-03-20
+
+### Added
+- Nothing
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Bugfix for saving on remote disks
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
 ## 1.1.4 - 2017-01-29
 
 ### Added
