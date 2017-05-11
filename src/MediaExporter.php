@@ -74,7 +74,7 @@ class MediaExporter
     private function getDestinationPathForSaving(File $file): string
     {
         if (!$file->getDisk()->isLocal()) {
-            $tempName = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
+            $tempName = FFMpeg::newTemporaryFile();
 
             return $tempName . '.' . $file->getExtension();
         }

@@ -179,4 +179,16 @@ class AudioVideoTest extends TestCase
         $format = new \FFMpeg\Format\Audio\Aac;
         $exporter->inFormat($format)->toDisk($mockedRemoteDisk)->save('guitar_aac.aac');
     }
+
+    public function testCreatingAndUnlinkingOfTemporaryFiles()
+    {
+        $newTemporaryFile = FFMpeg::newTemporaryFile();
+        file_put_contents($newTemporaryFile, 'test');
+
+        $this->assertTrue(file_exists($newTemporaryFile));
+        $this->assertEquals('test', file_get_contents($newTemporaryFile));
+
+        $service = $this->getService()->cleanupTemporaryFiles();
+        $this->assertFalse(file_exists($newTemporaryFile));
+    }
 }

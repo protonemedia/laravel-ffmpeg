@@ -11,6 +11,8 @@ class FFMpeg
 {
     protected static $filesystems;
 
+    private static $temporaryFiles = [];
+
     protected $disk;
 
     protected $ffmpeg;
@@ -30,6 +32,18 @@ class FFMpeg
         return static::$filesystems;
     }
 
+    public static function newTemporaryFile(): string
+    {
+        return static::$temporaryFiles[] = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
+    }
+
+    public function cleanupTemporaryFiles()
+    {
+        foreach (static::$temporaryFiles as $path) {
+            @unlink($path);
+        }
+    }
+
     public function fromDisk(string $diskName): FFMpeg
     {
         $filesystem = static::getFilesystems()->disk($diskName);
@@ -45,7 +59,7 @@ class FFMpeg
         if ($this->disk->isLocal()) {
             $ffmpegPathFile = $file->getFullPath();
         } else {
-            $ffmpegPathFile = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
+            $ffmpegPathFile = static::newTemporaryFile();
             file_put_contents($ffmpegPathFile, $this->disk->read($path));
         }
 
