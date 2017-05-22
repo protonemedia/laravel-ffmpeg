@@ -164,7 +164,7 @@ FFMpeg::fromDisk('videos')
 
 ```
 
-When opening or saving files from or to a remote disk, temporary files will be created on your server. After you're done with exporting or processing you could cleanup these files by calling the ```cleanupTemporaryFiles()``` method:
+When opening or saving files from or to a remote disk, temporary files will be created on your server. After you're done exporting or processing these files, you could clean them up by calling the ```cleanupTemporaryFiles()``` method:
 
 ``` php
 FFMpeg::cleanupTemporaryFiles();
