@@ -33,7 +33,17 @@ class Media
 
     public function getDurationInSeconds(): int
     {
-        return $this->media->getStreams()->first()->get('duration');
+        $stream = $this->media->getStreams()->first();
+
+        if ($stream->has('duration')) {
+            return $stream->get('duration');
+        }
+
+        $format = $this->media->getFormat();
+
+        if ($format->has('duration')) {
+            return $format->get('duration');
+        }
     }
 
     public function export(): MediaExporter

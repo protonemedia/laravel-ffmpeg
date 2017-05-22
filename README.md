@@ -60,6 +60,12 @@ FFMpeg::fromDisk('songs')
     ->save('yesterday.aac');
 ```
 
+Instead of the ```fromDisk()``` method you can also use the ```fromFilesystem()``` method, where ```$filesystem``` is an instance of ```Illuminate\Contracts\Filesystem\Filesystem```.
+
+``` php
+$media = FFMpeg::fromFilesystem($filesystem)->open('yesterday.mp3');
+```
+
 You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter objects:
 
 ``` php
@@ -156,6 +162,12 @@ FFMpeg::fromDisk('videos')
     ->addFormat($highBitrate)
     ->save('adaptive_steve.m3u8');
 
+```
+
+When opening or saving files from or to a remote disk, temporary files will be created on your server. After you're done with exporting or processing you could cleanup these files by calling the ```cleanupTemporaryFiles()``` method:
+
+``` php
+FFMpeg::cleanupTemporaryFiles();
 ```
 
 ## Changelog

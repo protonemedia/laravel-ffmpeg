@@ -5,6 +5,7 @@ namespace Pbmedia\LaravelFFMpeg;
 use FFMpeg\FFMpeg as BaseFFMpeg;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Psr\Log\LoggerInterface;
 
 class FFMpeg
@@ -42,6 +43,13 @@ class FFMpeg
         foreach (static::$temporaryFiles as $path) {
             @unlink($path);
         }
+    }
+
+    public function fromFilesystem(Filesystem $filesystem): FFMpeg
+    {
+        $this->disk = new Disk($filesystem);
+
+        return $this;
     }
 
     public function fromDisk(string $diskName): FFMpeg

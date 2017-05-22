@@ -2,6 +2,23 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 1.1.7 - 2017-05-22
+
+### Added
+- ```fromFilesystem``` method in FFMpeg class
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Fallback to format properties in ```getDurationInSeconds``` method (Media class)
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
 ## 1.1.6 - 2017-05-11
 
 ### Added
