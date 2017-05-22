@@ -146,6 +146,15 @@ $frame = $media->getFrameFromTimecode($timecode);
 
 ```
 
+With the ```Media``` class you can determinate the duration of a file:
+
+``` php
+$media = FFMpeg::open('wwdc_2006.mp4');
+
+$durationInSeconds = $media->getDurationInSeconds(); // returns an int
+$durationInMiliseconds = $media->getDurationInMiliseconds(); // returns a float
+```
+
 Create a M3U8 playlist to do [HLS](https://en.wikipedia.org/wiki/HTTP_Live_Streaming):
 
 ``` php

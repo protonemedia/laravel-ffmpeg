@@ -46,6 +46,21 @@ class Media
         }
     }
 
+    public function getDurationInMiliseconds(): float
+    {
+        $stream = $this->media->getStreams()->first();
+
+        if ($stream->has('duration')) {
+            return $stream->get('duration') * 1000;
+        }
+
+        $format = $this->media->getFormat();
+
+        if ($format->has('duration')) {
+            return $format->get('duration') * 1000;
+        }
+    }
+
     public function export(): MediaExporter
     {
         return new MediaExporter($this);

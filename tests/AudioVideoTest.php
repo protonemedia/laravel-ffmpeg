@@ -54,6 +54,13 @@ class AudioVideoTest extends TestCase
         $this->assertEquals(4, $media->getDurationInSeconds());
     }
 
+    public function testDurationInMiliseconds()
+    {
+        $media = $this->getGuitarMedia();
+
+        $this->assertEquals(4053.3330000000001, $media->getDurationInMiliseconds());
+    }
+
     public function testDiskClass()
     {
         $media = $this->getGuitarMedia();

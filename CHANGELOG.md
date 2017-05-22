@@ -2,6 +2,23 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 1.1.8 - 2017-05-22
+
+### Added
+- ```getDurationInMiliseconds``` method in Media class
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Nothing
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
 ## 1.1.7 - 2017-05-22
 
 ### Added
