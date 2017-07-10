@@ -93,6 +93,20 @@ FFMpeg::fromDisk('videos')
     ->save('short_steve.mkv');
 ```
 
+Sometimes you don't want to use the built-in filters. You can apply your own filter by providing a set of options. This can be an array or multiple strings as arguments:
+
+``` php
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->addFilter(['-itsoffset', 1);
+
+// or
+
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->addFilter('-itsoffset', 1);
+```
+
 Chain multiple convertions:
 
 ``` php
