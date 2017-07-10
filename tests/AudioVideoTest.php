@@ -4,7 +4,10 @@ namespace Pbmedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Coordinate\Dimension;
 use FFMpeg\Coordinate\TimeCode;
+use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\Video\ClipFilter;
+use FFMpeg\Format\AudioInterface;
+use FFMpeg\Media\Audio;
 use FFMpeg\Media\Video;
 use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
@@ -93,6 +96,46 @@ class AudioVideoTest extends TestCase
         $media->addFilter(new ClipFilter(TimeCode::fromSeconds(5)));
 
         $this->assertCount(1, $media->getFiltersCollection());
+    }
+
+    public function testAddingASimpleFilterWithStringArguments()
+    {
+        $media = $this->getVideoMedia();
+
+        $this->assertCount(0, $media->getFiltersCollection());
+
+        $media->addFilter('-i', '0');
+
+        $this->assertCount(1, $media->getFiltersCollection());
+
+        $filter = $media->getFiltersCollection()->getIterator()[0];
+
+        $this->assertInstanceOf(SimpleFilter::class, $filter);
+
+        $this->assertEquals(['-i', 0], $filter->apply(
+            Mockery::mock(Audio::class),
+            Mockery::mock(AudioInterface::class)
+        ));
+    }
+
+    public function testAddingASimpleFilterWithArrayArgument()
+    {
+        $media = $this->getVideoMedia();
+
+        $this->assertCount(0, $media->getFiltersCollection());
+
+        $media->addFilter(['-i', '0']);
+
+        $this->assertCount(1, $media->getFiltersCollection());
+
+        $filter = $media->getFiltersCollection()->getIterator()[0];
+
+        $this->assertInstanceOf(SimpleFilter::class, $filter);
+
+        $this->assertEquals(['-i', 0], $filter->apply(
+            Mockery::mock(Audio::class),
+            Mockery::mock(AudioInterface::class)
+        ));
     }
 
     public function testExportingToLocalDisk()

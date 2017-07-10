@@ -4,6 +4,8 @@ namespace Pbmedia\LaravelFFMpeg;
 
 use Closure;
 use FFMpeg\Coordinate\TimeCode;
+use FFMpeg\Filters\Audio\SimpleFilter;
+use FFMpeg\Filters\FilterInterface;
 use FFMpeg\Media\MediaTypeInterface;
 
 /**
@@ -98,8 +100,12 @@ class Media
 
         if (isset($arguments[0]) && $arguments[0] instanceof Closure) {
             call_user_func_array($arguments[0], [$this->media->filters()]);
-        } else {
+        } else if (isset($arguments[0]) && $arguments[0] instanceof FilterInterface) {
             call_user_func_array([$this->media, 'addFilter'], $arguments);
+        } else if (isset($arguments[0]) && is_array($arguments[0])) {
+            $this->media->addFilter(new SimpleFilter($arguments[0]));
+        } else {
+            $this->media->addFilter(new SimpleFilter($arguments));
         }
 
         return $this;
