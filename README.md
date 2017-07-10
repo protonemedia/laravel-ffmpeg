@@ -98,7 +98,7 @@ Sometimes you don't want to use the built-in filters. You can apply your own fil
 ``` php
 FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
-    ->addFilter(['-itsoffset', 1);
+    ->addFilter(['-itsoffset', 1]);
 
 // or
 
