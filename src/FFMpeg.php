@@ -40,7 +40,7 @@ class FFMpeg
 
     public function cleanupTemporaryFiles()
     {
-        foreach (static::$temporaryFiles as $path) {
+        foreach (self::$temporaryFiles as $path) {
             @unlink($path);
         }
     }

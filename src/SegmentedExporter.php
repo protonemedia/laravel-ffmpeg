@@ -54,30 +54,30 @@ class SegmentedExporter extends MediaExporter
         return $this;
     }
 
-    public function getPlaylistFullPath(): string
+    private function getFullPathForFilename(string $filename)
     {
         return implode(DIRECTORY_SEPARATOR, [
-            pathinfo($this->playlistPath, PATHINFO_DIRNAME),
-            $this->getPlaylistFilename(),
+            pathinfo($this->playlistPath, PATHINFO_DIRNAME), $filename,
         ]);
+    }
+
+    public function getPlaylistFullPath(): string
+    {
+        return $this->getFullPathForFilename(
+            $this->getPlaylistFilename()
+        );
     }
 
     public function getSegmentFullPath(): string
     {
-        return implode(DIRECTORY_SEPARATOR, [
-            pathinfo($this->playlistPath, PATHINFO_DIRNAME),
-            $this->getSegmentFilename(),
-        ]);
-    }
-
-    public function getPlaylistPath(): string
-    {
-        return $this->playlistPath;
+        return $this->getFullPathForFilename(
+            $this->getSegmentFilename()
+        );
     }
 
     public function getPlaylistName(): string
     {
-        return pathinfo($this->getPlaylistPath(), PATHINFO_FILENAME);
+        return pathinfo($this->playlistPath, PATHINFO_FILENAME);
     }
 
     public function getPlaylistFilename(): string
