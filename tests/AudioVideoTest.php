@@ -4,6 +4,7 @@ namespace Pbmedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Coordinate\Dimension;
 use FFMpeg\Coordinate\TimeCode;
+use FFMpeg\Driver\FFMpegDriver;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\Video\ClipFilter;
 use FFMpeg\Format\AudioInterface;
@@ -13,6 +14,7 @@ use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Log\Writer;
+use Illuminate\Support\Fluent;
 use League\Flysystem\AdapterInterface;
 use League\Flysystem\FilesystemInterface;
 use Mockery;
@@ -136,6 +138,33 @@ class AudioVideoTest extends TestCase
             Mockery::mock(Audio::class),
             Mockery::mock(AudioInterface::class)
         ));
+    }
+
+    public function testMultipleSimpleFiltersCanBeApplied()
+    {
+        $media = $this->getGuitarMedia()
+            ->addFilter('-some_simple')
+            ->addFilter('added_filter');
+
+        $media->setFFMpegDriver($driver = Mockery::mock(FFMpegDriver::class));
+
+        $driver->shouldReceive('getConfiguration')->andReturn(new Fluent);
+        $driver->shouldReceive('command')->with([
+            0  => '-y',
+            1  => '-i',
+            2  => $this->srcDir . '/guitar.m4a',
+            3  => '-some_simple',
+            4  => 'added_filter',
+            5  => '-threads',
+            6  => null,
+            7  => '-acodec',
+            8  => 'libfdk_aac',
+            9  => '-b:a',
+            10 => '128k',
+            11 => 'example.aac',
+        ], false, \Mockery::type('array'));
+
+        $media->save(new \FFMpeg\Format\Audio\Aac, 'example.aac');
     }
 
     public function testExportingToLocalDisk()
