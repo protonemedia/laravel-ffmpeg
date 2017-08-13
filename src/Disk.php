@@ -7,6 +7,7 @@ use League\Flysystem\Adapter\Local as LocalAdapater;
 
 /**
  * @method bool put($path, $contents, $visibility = null)
+ * @method array|false read($path)
  */
 class Disk
 {

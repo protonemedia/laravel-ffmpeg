@@ -35,7 +35,7 @@ class FFMpeg
 
     public static function newTemporaryFile(): string
     {
-        return static::$temporaryFiles[] = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
+        return self::$temporaryFiles[] = tempnam(sys_get_temp_dir(), 'laravel-ffmpeg');
     }
 
     public function cleanupTemporaryFiles()
