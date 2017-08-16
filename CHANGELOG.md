@@ -2,6 +2,23 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 1.1.10 - 2017-08-16
+
+### Added
+- Added ```getFirstStream()``` method to the ```Media``` class
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Some refactoring
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
 ## 1.1.9 - 2017-07-10
 
 ### Added

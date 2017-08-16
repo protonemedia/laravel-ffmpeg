@@ -38,9 +38,14 @@ class Media
         return $this->getDurationInMiliseconds() / 1000;
     }
 
+    public function getFirstStream()
+    {
+        return $this->media->getStreams()->first();
+    }
+
     public function getDurationInMiliseconds(): float
     {
-        $stream = $this->media->getStreams()->first();
+        $stream = $this->getFirstStream();
 
         if ($stream->has('duration')) {
             return $stream->get('duration') * 1000;
