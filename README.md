@@ -218,7 +218,8 @@ $baseMedia = $media();
 
 ## Example app
 
-Here's a blogpost that will help you get started with this page:
+Here's a blogpost that will help you get started with this package:
+
 https://pascalbaljetmedia.com/en/blog/how-to-use-ffmpeg-in-your-laravel-projects
 
 ## Changelog
