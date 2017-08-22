@@ -216,6 +216,11 @@ $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 $baseMedia = $media();
 ```
 
+## Example app
+
+Here's a blogpost that will help you get started with this page:
+https://pascalbaljetmedia.com/en/blog/how-to-use-ffmpeg-in-your-laravel-projects
+
 ## Changelog
 
 Please see [CHANGELOG](CHANGELOG.md) for more information what has changed recently.
