@@ -195,7 +195,7 @@ FFMpeg::cleanupTemporaryFiles();
 
 ## Advanced
 
-The Media object you get when you 'open' a file, actually holds the Media object that belongs to the [underlying driver](https://github.com/PHP-FFMpeg/PHP-FFMpeg). It handles dynamic method calls as you can see [here](https://github.com/pascalbaljetmedia/laravel-ffmpeg/blob/master/src/Media.php#L104-L109). This way all methods of the underlying driver are still available to you.
+The Media object you get when you 'open' a file, actually holds the Media object that belongs to the [underlying driver](https://github.com/PHP-FFMpeg/PHP-FFMpeg). It handles dynamic method calls as you can see [here](https://github.com/pascalbaljetmedia/laravel-ffmpeg/blob/master/src/Media.php#L114-L117). This way all methods of the underlying driver are still available to you.
 
 ```php
 // This gives you an instance of Pbmedia\LaravelFFMpeg\Media
