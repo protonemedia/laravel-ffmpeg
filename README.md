@@ -193,6 +193,29 @@ When opening or saving files from or to a remote disk, temporary files will be c
 FFMpeg::cleanupTemporaryFiles();
 ```
 
+## Advanced
+
+The Media object you get when you 'open' a file, actually holds the Media object that belongs to the [underlying driver](https://github.com/PHP-FFMpeg/PHP-FFMpeg). It handles dynamic method calls as you can see [here](https://github.com/pascalbaljetmedia/laravel-ffmpeg/blob/master/src/Media.php#L104-L109). This way all methods of the underlying driver are still available to you.
+
+```php
+// This gives you an instance of Pbmedia\LaravelFFMpeg\Media
+$media = FFMpeg::fromDisk('videos')->open('video.mp4');
+
+// The 'getStreams' method will be called on the underlying Media object since 
+// it doesn't exists on this object.
+$codec = $media->getStreams()->first()->get('codec_name');
+```
+
+If you want direct access to the underlying object, call the object as a function (invoke):
+
+```php
+// This gives you an instance of Pbmedia\LaravelFFMpeg\Media
+$media = FFMpeg::fromDisk('videos')->open('video.mp4');
+
+// This gives you an instance of FFMpeg\Media\MediaTypeInterface
+$baseMedia = $media();
+```
+
 ## Changelog
 
 Please see [CHANGELOG](CHANGELOG.md) for more information what has changed recently.
