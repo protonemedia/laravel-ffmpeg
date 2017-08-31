@@ -12,6 +12,7 @@ use FFMpeg\Media\Audio;
 use FFMpeg\Media\Video;
 use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Log\Writer;
 use Illuminate\Support\Fluent;
@@ -257,6 +258,40 @@ class AudioVideoTest extends TestCase
 
         $format = new \FFMpeg\Format\Audio\Aac;
         $exporter->inFormat($format)->toDisk($mockedRemoteDisk)->save('guitar_aac.aac');
+    }
+
+    public function testExportingToRemoteDiskWithPublicVisibility()
+    {
+        $this->remoteFilesystem = true;
+
+        $guitarFile = $this->getGuitarMedia()->getFile();
+
+        $baseMedia = Mockery::mock(Video::class);
+        $baseMedia->shouldReceive('save')->once();
+
+        $media = new Media($guitarFile, $baseMedia);
+
+        $exporter = new MediaExporter($media);
+
+        $mockedRemoteDisk = Mockery::mock(Disk::class);
+        $remoteFile       = new File($mockedRemoteDisk, 'guitar_aac.aac');
+
+        $remoteFileMocked = Mockery::mock(File::class);
+
+        $remoteFileMocked->shouldReceive('getPath')->once()->andReturn($remoteFile->getPath());
+        $remoteFileMocked->shouldReceive('getDisk')->once()->andReturn($remoteFile->getDisk());
+        $remoteFileMocked->shouldReceive('getExtension')->once()->andReturn($remoteFile->getExtension());
+        $remoteFileMocked->shouldReceive('put')->once()->andReturn(true);
+
+        $mockedRemoteDisk->shouldReceive('isLocal')->once()->andReturn(false);
+        $mockedRemoteDisk->shouldReceive('newFile')->once()->withArgs(['guitar_aac.aac'])->andReturn($remoteFileMocked);
+        $mockedRemoteDisk->shouldReceive('setVisibility')->once()->withArgs(['guitar_aac.aac', Filesystem::VISIBILITY_PUBLIC]);
+
+        $format = new \FFMpeg\Format\Audio\Aac;
+        $exporter->inFormat($format)
+            ->toDisk($mockedRemoteDisk)
+            ->withVisibility(Filesystem::VISIBILITY_PUBLIC)
+            ->save('guitar_aac.aac');
     }
 
     public function testCreatingAndUnlinkingOfTemporaryFiles()

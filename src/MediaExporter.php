@@ -12,6 +12,8 @@ class MediaExporter
 
     protected $format;
 
+    protected $visibility;
+
     protected $saveMethod = 'saveAudioOrVideo';
 
     public function __construct(Media $media)
@@ -49,9 +51,17 @@ class MediaExporter
         return $this;
     }
 
+    public function withVisibility(string $visibility = null)
+    {
+        $this->visibility = $visibility;
+
+        return $this;
+    }
+
     public function save(string $path): Media
     {
-        $file = $this->getDisk()->newFile($path);
+        $disk = $this->getDisk();
+        $file = $disk->newFile($path);
 
         $destinationPath = $this->getDestinationPathForSaving($file);
 
@@ -59,8 +69,12 @@ class MediaExporter
 
         $this->{$this->saveMethod}($destinationPath);
 
-        if (!$this->getDisk()->isLocal()) {
+        if (!$disk->isLocal()) {
             $this->moveSavedFileToRemoteDisk($destinationPath, $file);
+        }
+
+        if ($this->visibility) {
+            $disk->setVisibility($path, $this->visibility);
         }
 
         return $this->media;
