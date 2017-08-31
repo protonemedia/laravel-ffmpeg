@@ -134,6 +134,13 @@ FFMpeg::open('my_movie.mov')
     ->export()
     ->inFormat(new FFMpeg\Format\Video\WebM)
     ->save('my_movie.webm')
+
+    // optionally you could set the visibility
+    // of the exported file
+    ->export()
+    ->inFormat(new FFMpeg\Format\Video\WebM)
+    ->withVisibility('public')
+    ->save('my_movie.webm')
 ```
 
 Create a frame from a video:
@@ -169,7 +176,7 @@ $durationInSeconds = $media->getDurationInSeconds(); // returns an int
 $durationInMiliseconds = $media->getDurationInMiliseconds(); // returns a float
 ```
 
-Create a M3U8 playlist to do [HLS](https://en.wikipedia.org/wiki/HTTP_Live_Streaming):
+You can create a M3U8 playlist to do [HLS](https://en.wikipedia.org/wiki/HTTP_Live_Streaming). Exporting is currently only supported on local disks.
 
 ``` php
 $lowBitrate = (new X264)->setKiloBitrate(250);
@@ -201,7 +208,7 @@ The Media object you get when you 'open' a file, actually holds the Media object
 // This gives you an instance of Pbmedia\LaravelFFMpeg\Media
 $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
-// The 'getStreams' method will be called on the underlying Media object since 
+// The 'getStreams' method will be called on the underlying Media object since
 // it doesn't exists on this object.
 $codec = $media->getStreams()->first()->get('codec_name');
 ```

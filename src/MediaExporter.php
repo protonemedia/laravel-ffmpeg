@@ -73,7 +73,7 @@ class MediaExporter
             $this->moveSavedFileToRemoteDisk($destinationPath, $file);
         }
 
-        if ($this->visibility) {
+        if ($this->visibility !== null) {
             $disk->setVisibility($path, $this->visibility);
         }
 
