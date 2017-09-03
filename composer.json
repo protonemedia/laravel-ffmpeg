@@ -44,5 +44,15 @@
     },
     "config": {
         "sort-packages": true
-  }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Pbmedia\\LaravelFFMpeg\\FFMpegServiceProvider"
+            ],
+            "aliases": {
+                "FFMpeg": "Pbmedia\\LaravelFFMpeg\\FFMpegFacade"
+            }
+        }
+    }
 }
