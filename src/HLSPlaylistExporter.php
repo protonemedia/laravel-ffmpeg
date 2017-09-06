@@ -17,9 +17,9 @@ class HLSPlaylistExporter extends MediaExporter
 
     protected $saveMethod = 'savePlaylist';
 
-    public function addFormat(VideoInterface $format): MediaExporter
+    public function addFormat(VideoInterface $format, ...$streamFilters): MediaExporter
     {
-        $this->formats[] = $format;
+        $this->formats[] = [$format, $streamFilters];
 
         return $this;
     }
@@ -27,7 +27,7 @@ class HLSPlaylistExporter extends MediaExporter
     public function getFormatsSorted(): array
     {
         usort($this->formats, function ($formatA, $formatB) {
-            return $formatA->getKiloBitrate() <=> $formatB->getKiloBitrate();
+            return $formatA[0]->getKiloBitrate() <=> $formatB[0]->getKiloBitrate();
         });
 
         return $this->formats;
@@ -47,12 +47,18 @@ class HLSPlaylistExporter extends MediaExporter
         return $this;
     }
 
-    protected function getSegmentedExporterFromFormat(VideoInterface $format): SegmentedExporter
+    protected function getSegmentedExporterFromFormat(array $format): SegmentedExporter
     {
         $media = clone $this->media;
 
+        if (!empty($format[1])) {
+            foreach($format[1] as $streamFormat) {
+                $media->addFilter($streamFormat);
+            }
+        }
+
         return (new SegmentedExporter($media))
-            ->inFormat($format)
+            ->inFormat($format[0])
             ->setPlaylistPath($this->playlistPath)
             ->setSegmentLength($this->segmentLength);
     }
