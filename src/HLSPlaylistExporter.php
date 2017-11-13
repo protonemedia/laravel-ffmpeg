@@ -15,6 +15,8 @@ class HLSPlaylistExporter extends MediaExporter
 
     protected $saveMethod = 'savePlaylist';
 
+    protected $progressCallback;
+
     public function addFormat(VideoInterface $format, callable $callback = null): MediaExporter
     {
         $segmentedExporter = $this->getSegmentedExporterFromFormat($format);
@@ -75,11 +77,43 @@ class HLSPlaylistExporter extends MediaExporter
         return $this->segmentedExporters;
     }
 
+    public function onProgress(callable $callback)
+    {
+        $this->progressCallback = $callback;
+
+        return $this;
+    }
+
+    private function getSegmentedProgressCallback($key): callable
+    {
+        return function ($video, $format, $percentage) use ($key) {
+            $previousCompletedSegments = $key / count($this->segmentedExporters) * 100;
+
+            call_user_func($this->progressCallback,
+                $previousCompletedSegments + ($percentage / count($this->segmentedExporters))
+            );
+        };
+    }
+
+    public function prepareSegmentedExporters()
+    {
+        foreach ($this->segmentedExporters as $key => $segmentedExporter) {
+            if ($this->progressCallback) {
+                $segmentedExporter->getFormat()->on('progress', $this->getSegmentedProgressCallback($key));
+            }
+
+            $segmentedExporter->setSegmentLength($this->segmentLength);
+        }
+
+        return $this;
+    }
+
     protected function exportStreams()
     {
-        foreach ($this->segmentedExporters as $segmentedExporter) {
-            $segmentedExporter->setSegmentLength($this->segmentLength)
-                ->saveStream($this->playlistPath);
+        $this->prepareSegmentedExporters();
+
+        foreach ($this->segmentedExporters as $key => $segmentedExporter) {
+            $segmentedExporter->saveStream($this->playlistPath);
         }
     }
 

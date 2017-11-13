@@ -2,6 +2,23 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 1.3.0 - 2017-11-13
+
+### Added
+- Support for monitoring the progress of a HLS Export.
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Some refactoring
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
 ## 1.2.0 - 2017-11-13
 
 ### Added

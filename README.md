@@ -177,6 +177,14 @@ $durationInSeconds = $media->getDurationInSeconds(); // returns an int
 $durationInMiliseconds = $media->getDurationInMiliseconds(); // returns a float
 ```
 
+When opening or saving files from or to a remote disk, temporary files will be created on your server. After you're done exporting or processing these files, you could clean them up by calling the ```cleanupTemporaryFiles()``` method:
+
+``` php
+FFMpeg::cleanupTemporaryFiles();
+```
+
+## HLS
+
 You can create a M3U8 playlist to do [HLS](https://en.wikipedia.org/wiki/HTTP_Live_Streaming). Exporting is currently only supported on local disks.
 
 ``` php
@@ -215,11 +223,14 @@ FFMpeg::open('steve_howe.mp4')
     ->save('adaptive_steve.m3u8');
 ```
 
-
-When opening or saving files from or to a remote disk, temporary files will be created on your server. After you're done exporting or processing these files, you could clean them up by calling the ```cleanupTemporaryFiles()``` method:
+As of version 1.3.0 you can monitor the transcoding progress of a HLS export. Use the ```onProgress``` method to provide a callback which gives you the completed percentage.
 
 ``` php
-FFMpeg::cleanupTemporaryFiles();
+$exporter = FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->onProgress(function ($percentage) {
+        echo "$percentage % transcoded";
+    });
 ```
 
 ## Advanced

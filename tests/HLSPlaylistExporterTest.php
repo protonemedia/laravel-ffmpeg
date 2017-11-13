@@ -69,6 +69,43 @@ class HLSPlaylistExporterTest extends TestCase
         $this->assertEquals(15, $segmentedExporters[1]->getFilter()->getSegmentLength());
     }
 
+    public function testProgressCallbackOfSegmentExporters()
+    {
+        $file = $this->getVideoMedia()->getFile();
+
+        $media = Mockery::mock(Media::class);
+        $media->shouldReceive('getFile')->once()->andReturn($file);
+
+        $playlist = 'MyPlaylist.m3u8';
+
+        $formatA = (new \FFMpeg\Format\Video\X264)->setKiloBitrate(384);
+        $formatB = (new \FFMpeg\Format\Video\X264)->setKiloBitrate(512);
+
+        $totalPercentage = 0;
+        $HLSExporter     = new HLSPlaylistExporter($media);
+
+        $segmentedExporters = $HLSExporter->addFormat($formatA)
+            ->addFormat($formatB)
+            ->onProgress(function ($percentage) use (&$totalPercentage) {
+                $totalPercentage = $percentage;
+            })
+            ->prepareSegmentedExporters()
+            ->getSegmentedExporters();
+
+        $segmentedExporters[0]->getFormat()->emit('progress', [
+            $file, $formatA, 30,
+        ]);
+
+        $this->assertEquals(15, $totalPercentage);
+
+        $segmentedExporters[1]->getFormat()->emit('progress', [
+            $file, $formatA, 60,
+        ]);
+
+        $this->assertEquals(80, $totalPercentage);
+
+    }
+
     public function testSegmentExportersWithCallback()
     {
         $media = $this->getVideoMedia();
