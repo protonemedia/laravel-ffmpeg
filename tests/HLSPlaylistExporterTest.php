@@ -2,6 +2,9 @@
 
 namespace Pbmedia\LaravelFFMpeg\Tests;
 
+use FFMpeg\Filters\Audio\SimpleFilter;
+use FFMpeg\Format\AudioInterface;
+use FFMpeg\Media\Audio;
 use Mockery;
 use Pbmedia\LaravelFFMpeg\HLSPlaylistExporter;
 use Pbmedia\LaravelFFMpeg\Media;
@@ -66,6 +69,39 @@ class HLSPlaylistExporterTest extends TestCase
         $this->assertEquals(15, $segmentedExporters[1]->getFilter()->getSegmentLength());
     }
 
+    public function testSegmentExportersWithCallback()
+    {
+        $media = $this->getVideoMedia();
+
+        $formatA = (new \FFMpeg\Format\Video\X264)->setKiloBitrate(384);
+        $formatB = (new \FFMpeg\Format\Video\X264)->setKiloBitrate(512);
+
+        $exporter = new HLSPlaylistExporter($media);
+
+        $exporter->addFormat($formatA)
+            ->addFormat($formatB, function ($media) {
+                $this->assertInstanceOf(Media::class, $media);
+                $media->addFilter(['-i', '0']);
+            });
+
+        $segmentedExporters = $exporter->getSegmentedExporters();
+
+        $this->assertEquals($formatA, $segmentedExporters[0]->getFormat());
+        $this->assertEquals($formatB, $segmentedExporters[1]->getFormat());
+
+        $this->assertCount(0, $segmentedExporters[0]->getMedia()->getFiltersCollection());
+        $this->assertCount(1, $segmentedExporters[1]->getMedia()->getFiltersCollection());
+
+        $filter = $segmentedExporters[1]->getMedia()->getFiltersCollection()->getIterator()[0];
+
+        $this->assertInstanceOf(SimpleFilter::class, $filter);
+
+        $this->assertEquals(['-i', 0], $filter->apply(
+            Mockery::mock(Audio::class),
+            Mockery::mock(AudioInterface::class)
+        ));
+    }
+
     public function testCreationOfPlaylist()
     {
         $file = $this->getVideoMedia()->getFile();
@@ -78,13 +114,6 @@ class HLSPlaylistExporterTest extends TestCase
         $formatA = (new \FFMpeg\Format\Video\X264)->setKiloBitrate(384);
         $formatB = (new \FFMpeg\Format\Video\X264)->setKiloBitrate(512);
 
-        $exporter = new HLSPlaylistExporter($media);
-
-        $exporter->addFormat($formatA)
-            ->addFormat($formatB)
-            ->setPlaylistPath($playlist)
-            ->setSegmentLength(15);
-
         $media->shouldReceive('addFilter')->once();
 
         $media->shouldReceive('save')->once()->withArgs([
@@ -94,6 +123,13 @@ class HLSPlaylistExporterTest extends TestCase
         $media->shouldReceive('save')->once()->withArgs([
             $formatB, $this->srcDir . '/MyPlaylist_512_%05d.ts',
         ]);
+
+        $exporter = new HLSPlaylistExporter($media);
+
+        $exporter->addFormat($formatA)
+            ->addFormat($formatB)
+            ->setPlaylistPath($playlist)
+            ->setSegmentLength(15);
 
         $exporter->toDisk('local')->save($playlist);
 

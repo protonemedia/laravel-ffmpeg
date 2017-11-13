@@ -2,6 +2,57 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 1.2.0 - 2017-08-16
+
+### Added
+- Support for adding filters per format in the ```HLSPlaylistExporter``` class by giving access to the ```Media``` object through a callback.
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Some refactoring
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
+## 1.1.12 - 2017-08-16
+
+### Added
+- Support for Package Discovery in Laravel 5.5.
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Some refactoring
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
+## 1.1.11 - 2017-08-16
+
+### Added
+- Added ```withVisibility``` method to the MediaExporter
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Some refactoring
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
 ## 1.1.10 - 2017-08-16
 
 ### Added

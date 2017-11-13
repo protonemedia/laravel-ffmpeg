@@ -7,30 +7,41 @@ use Pbmedia\LaravelFFMpeg\SegmentedExporter;
 
 class HLSPlaylistExporter extends MediaExporter
 {
-    protected $formats = [];
+    protected $segmentedExporters = [];
 
     protected $playlistPath;
 
     protected $segmentLength = 10;
 
-    protected $segmentedExporters;
-
     protected $saveMethod = 'savePlaylist';
 
-    public function addFormat(VideoInterface $format): MediaExporter
+    public function addFormat(VideoInterface $format, callable $callback = null): MediaExporter
     {
-        $this->formats[] = $format;
+        $segmentedExporter = $this->getSegmentedExporterFromFormat($format);
+
+        if ($callback) {
+            $callback($segmentedExporter->getMedia());
+        }
+
+        $this->segmentedExporters[] = $segmentedExporter;
 
         return $this;
     }
 
     public function getFormatsSorted(): array
     {
-        usort($this->formats, function ($formatA, $formatB) {
-            return $formatA->getKiloBitrate() <=> $formatB->getKiloBitrate();
+        return array_map(function ($exporter) {
+            return $exporter->getFormat();
+        }, $this->getSegmentedExportersSorted());
+    }
+
+    public function getSegmentedExportersSorted(): array
+    {
+        usort($this->segmentedExporters, function ($exportedA, $exportedB) {
+            return $exportedA->getFormat()->getKiloBitrate() <=> $exportedB->getFormat()->getKiloBitrate();
         });
 
-        return $this->formats;
+        return $this->segmentedExporters;
     }
 
     public function setPlaylistPath(string $playlistPath): MediaExporter
@@ -44,6 +55,10 @@ class HLSPlaylistExporter extends MediaExporter
     {
         $this->segmentLength = $segmentLength;
 
+        foreach ($this->segmentedExporters as $segmentedExporter) {
+            $segmentedExporter->setSegmentLength($segmentLength);
+        }
+
         return $this;
     }
 
@@ -52,26 +67,19 @@ class HLSPlaylistExporter extends MediaExporter
         $media = clone $this->media;
 
         return (new SegmentedExporter($media))
-            ->inFormat($format)
-            ->setPlaylistPath($this->playlistPath)
-            ->setSegmentLength($this->segmentLength);
+            ->inFormat($format);
     }
 
     public function getSegmentedExporters(): array
     {
-        if ($this->segmentedExporters) {
-            return $this->segmentedExporters;
-        }
-
-        return $this->segmentedExporters = array_map(function ($format) {
-            return $this->getSegmentedExporterFromFormat($format);
-        }, $this->getFormatsSorted());
+        return $this->segmentedExporters;
     }
 
     protected function exportStreams()
     {
-        foreach ($this->getSegmentedExporters() as $segmentedExporter) {
-            $segmentedExporter->saveStream($this->playlistPath);
+        foreach ($this->segmentedExporters as $segmentedExporter) {
+            $segmentedExporter->setSegmentLength($this->segmentLength)
+                ->saveStream($this->playlistPath);
         }
     }
 
@@ -79,7 +87,7 @@ class HLSPlaylistExporter extends MediaExporter
     {
         $lines = ['#EXTM3U'];
 
-        foreach ($this->getSegmentedExporters() as $segmentedExporter) {
+        foreach ($this->getSegmentedExportersSorted() as $segmentedExporter) {
             $bitrate = $segmentedExporter->getFormat()->getKiloBitrate() * 1000;
 
             $lines[] = '#EXT-X-STREAM-INF:BANDWIDTH=' . $bitrate;

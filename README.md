@@ -192,8 +192,29 @@ FFMpeg::fromDisk('videos')
     ->addFormat($midBitrate)
     ->addFormat($highBitrate)
     ->save('adaptive_steve.m3u8');
-
 ```
+
+As of version 1.2.0 the ```addFormat``` method of the HLS exporter takes an optional second parameter which can be a callback method. This allows you to add different filters per format:
+
+``` php
+$lowBitrate = (new X264)->setKiloBitrate(250);
+$highBitrate = (new X264)->setKiloBitrate(1000);
+
+FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->addFormat($lowBitrate, function($media) {
+        $media->addFilter(function ($filters) {
+            $filters->resize(new \FFMpeg\Coordinate\Dimension(640, 480));
+        });
+    })
+    ->addFormat($highBitrate, function($media) {
+        $media->addFilter(function ($filters) {
+            $filters->resize(new \FFMpeg\Coordinate\Dimension(1280, 960));
+        });
+    })
+    ->save('adaptive_steve.m3u8');
+```
+
 
 When opening or saving files from or to a remote disk, temporary files will be created on your server. After you're done exporting or processing these files, you could clean them up by calling the ```cleanupTemporaryFiles()``` method:
 
