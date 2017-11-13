@@ -12,8 +12,9 @@ use League\Flysystem\Filesystem as Flysystem;
 use Mockery;
 use Monolog\Logger;
 use Pbmedia\LaravelFFMpeg\FFMpeg;
+use PHPUnit\Framework\TestCase as PHPUnitTestCase;
 
-class TestCase extends \PHPUnit_Framework_TestCase
+class TestCase extends PHPUnitTestCase
 {
     public $srcDir;
 
