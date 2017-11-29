@@ -299,10 +299,10 @@ class AudioVideoTest extends TestCase
         $newTemporaryFile = FFMpeg::newTemporaryFile();
         file_put_contents($newTemporaryFile, 'test');
 
-        $this->assertTrue(file_exists($newTemporaryFile));
+        $this->assertFileExists($newTemporaryFile);
         $this->assertEquals('test', file_get_contents($newTemporaryFile));
 
         $service = $this->getService()->cleanupTemporaryFiles();
-        $this->assertFalse(file_exists($newTemporaryFile));
+        $this->assertFileNotExists($newTemporaryFile);
     }
 }
