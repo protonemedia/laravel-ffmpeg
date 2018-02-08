@@ -5,7 +5,7 @@ namespace Pbmedia\LaravelFFMpeg\Tests;
 use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Illuminate\Filesystem\FilesystemAdapter;
-use Illuminate\Log\Writer;
+use Illuminate\Log\Logger as Writer;
 use League\Flysystem\Adapter\Ftp;
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\Filesystem as Flysystem;
