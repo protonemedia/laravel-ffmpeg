@@ -14,7 +14,7 @@ use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
-use Illuminate\Log\Writer;
+use Illuminate\Log\Logger as Writer;
 use Illuminate\Support\Fluent;
 use League\Flysystem\AdapterInterface;
 use League\Flysystem\FilesystemInterface;
