@@ -6,16 +6,18 @@
 [![Quality Score](https://img.shields.io/scrutinizer/g/pascalbaljetmedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/pascalbaljetmedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This package provides an integration with FFmpeg for Laravel 5.1 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.5/filesystem).
+This package provides an integration with FFmpeg for Laravel 5.6. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.6/filesystem).
 
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
-* Integration with [Laravel's Filesystem](http://laravel.com/docs/5.55,1/filesystem), [configuration system](https://laravel.com/docs/5.5/configuration) and [logging handling](https://laravel.com/docs/5.5/errors).
-* Compatible with Laravel 5.1 and up.
-* Support for [Package Discovery](https://laravel.com/docs/5.5/packages#package-discovery) in Laravel 5.5.
-* PHP 7.0 and 7.1 only.
+* Integration with [Laravel's Filesystem](http://laravel.com/docs/5.6/filesystem), [configuration system](https://laravel.com/docs/5.6/configuration) and [logging handling](https://laravel.com/docs/5.6/errors).
+* Compatible with Laravel 5.6.
+* Support for [Package Discovery](https://laravel.com/docs/5.6/packages#package-discovery).
+* PHP 7.1 and 7.2 only.
 
 ## Installation
+
+This version of the package is only compatible with Laravel 5.6. If you're still using Laravel 5.1 - 5.5, please use version 1.3 (which is not maintained anymore).
 
 You can install the package via composer:
 
@@ -23,7 +25,7 @@ You can install the package via composer:
 composer require pbmedia/laravel-ffmpeg
 ```
 
-Add the service provider and facade to your ```app.php``` config file:
+Add the Service Provider and Facade to your ```app.php``` config file if you're not using Package Discovery.
 
 ``` php
 
