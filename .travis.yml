@@ -1,26 +1,23 @@
 language: php
 
 php:
-  - 7.0
   - 7.1
+  - 7.2
 
 env:
   matrix:
     - COMPOSER_FLAGS="--prefer-lowest"
     - COMPOSER_FLAGS=""
 
-before_script:
-  - sudo apt-get -qq update
-  - sudo apt-get install -y software-properties-common
+before_install:
+  - sudo apt-get update
+  - travis_retry composer self-update
+
+install:
+  - travis_retry composer update ${COMPOSER_FLAGS} --no-interaction
   - sudo add-apt-repository -y ppa:mc3man/trusty-media
   - sudo apt-get -qq update
-  - sudo apt-get install -y ffmpeg
-  - travis_retry composer self-update
-  - travis_retry composer global require "hirak/prestissimo:^0.3"
-  - travis_retry composer update ${COMPOSER_FLAGS} --no-interaction
+  - sudo apt-get install -y software-properties-common ffmpeg
 
 script:
-  - phpunit --coverage-text --coverage-clover=coverage.clover
-
-after_script:
-  - php vendor/bin/ocular code-coverage:upload --format=php-clover coverage.clover
+  - phpunit
