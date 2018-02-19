@@ -1,6 +1,6 @@
 {
     "name": "pbmedia/laravel-ffmpeg",
-    "description": "FFMpeg for Laravel 5.1 and higher",
+    "description": "FFMpeg for Laravel",
     "keywords": [
         "pbmedia",
         "laravel-ffmpeg"
