@@ -12,6 +12,7 @@ env:
 before_install:
   - sudo apt-get update
   - travis_retry composer self-update
+  - if [ -n "$GH_TOKEN" ]; then composer config github-oauth.github.com ${GH_TOKEN}; fi;
 
 install:
   - travis_retry composer update ${COMPOSER_FLAGS} --no-interaction
