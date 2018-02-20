@@ -15,6 +15,13 @@
             "role": "Developer"
         }
     ],
+    
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/pascalbaljetmedia/PHP-FFMpeg"
+        }
+    ],
     "require": {
         "php": "^7.1",
         "illuminate/config": "5.6.*",
