@@ -2,6 +2,57 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 2.1.0 - 2018-04-10
+
+### Added
+- Option to disable format sorting in HLS exporter.
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Nothing
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
+## 2.0.1 - 2018-02-30
+
+### Added
+- Nothing
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Symfony 4.0 workaround
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
+## 2.0.0 - 2018-02-19
+
+### Added
+- Support for Laravel 5.6.
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Nothing
+
+### Removed
+- Support for Laravel 5.5 and earlier.
+
+### Security
+- Nothing
+
 ## 1.3.0 - 2017-11-13
 
 ### Added

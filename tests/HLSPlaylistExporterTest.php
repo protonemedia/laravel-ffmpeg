@@ -180,4 +180,47 @@ class HLSPlaylistExporterTest extends TestCase
 
         @unlink($this->srcDir . '/MyPlaylist.m3u8');
     }
+
+    public function testDisableSortingOfFormats()
+    {
+        $file = $this->getVideoMedia()->getFile();
+
+        $media = Mockery::mock(Media::class);
+        $media->shouldReceive('getFile')->once()->andReturn($file);
+
+        $playlist = 'MyPlaylist.m3u8';
+
+        $formatA = (new \FFMpeg\Format\Video\X264)->setKiloBitrate(384);
+        $formatB = (new \FFMpeg\Format\Video\X264)->setKiloBitrate(512);
+
+        $media->shouldReceive('addFilter')->once();
+
+        $media->shouldReceive('save')->once()->withArgs([
+            $formatA, $this->srcDir . '/MyPlaylist_384_%05d.ts',
+        ]);
+
+        $media->shouldReceive('save')->once()->withArgs([
+            $formatB, $this->srcDir . '/MyPlaylist_512_%05d.ts',
+        ]);
+
+        $exporter = new HLSPlaylistExporter($media);
+
+        $exporter->addFormat($formatB)
+            ->addFormat($formatA)
+            ->dontSortFormats()
+            ->setPlaylistPath($playlist)
+            ->setSegmentLength(15);
+
+        $exporter->toDisk('local')->save($playlist);
+
+        $this->assertEquals(file_get_contents($this->srcDir . '/MyPlaylist.m3u8'),
+            '#EXTM3U' . PHP_EOL .
+            '#EXT-X-STREAM-INF:BANDWIDTH=512000' . PHP_EOL .
+            'MyPlaylist_512.m3u8' . PHP_EOL .
+            '#EXT-X-STREAM-INF:BANDWIDTH=384000' . PHP_EOL .
+            'MyPlaylist_384.m3u8'
+        );
+
+        @unlink($this->srcDir . '/MyPlaylist.m3u8');
+    }
 }

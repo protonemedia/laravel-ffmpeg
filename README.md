@@ -235,6 +235,14 @@ $exporter = FFMpeg::open('steve_howe.mp4')
     });
 ```
 
+As of version 2.1.0 you can disable the sorting of the added formats as most players choose the first format as the default one.
+
+``` php
+$exporter = FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->dontSortFormats();
+```
+
 ## Advanced
 
 The Media object you get when you 'open' a file, actually holds the Media object that belongs to the [underlying driver](https://github.com/PHP-FFMpeg/PHP-FFMpeg). It handles dynamic method calls as you can see [here](https://github.com/pascalbaljetmedia/laravel-ffmpeg/blob/master/src/Media.php#L114-L117). This way all methods of the underlying driver are still available to you.

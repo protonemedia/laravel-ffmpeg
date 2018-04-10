@@ -17,6 +17,8 @@ class HLSPlaylistExporter extends MediaExporter
 
     protected $progressCallback;
 
+    protected $sortFormats = true;
+
     public function addFormat(VideoInterface $format, callable $callback = null): MediaExporter
     {
         $segmentedExporter = $this->getSegmentedExporterFromFormat($format);
@@ -30,6 +32,13 @@ class HLSPlaylistExporter extends MediaExporter
         return $this;
     }
 
+    public function dontSortFormats()
+    {
+        $this->sortFormats = false;
+
+        return $this;
+    }
+
     public function getFormatsSorted(): array
     {
         return array_map(function ($exporter) {
@@ -39,9 +48,11 @@ class HLSPlaylistExporter extends MediaExporter
 
     public function getSegmentedExportersSorted(): array
     {
-        usort($this->segmentedExporters, function ($exportedA, $exportedB) {
-            return $exportedA->getFormat()->getKiloBitrate() <=> $exportedB->getFormat()->getKiloBitrate();
-        });
+        if ($this->sortFormats) {
+            usort($this->segmentedExporters, function ($exportedA, $exportedB) {
+                return $exportedA->getFormat()->getKiloBitrate() <=> $exportedB->getFormat()->getKiloBitrate();
+            });
+        }
 
         return $this->segmentedExporters;
     }
@@ -121,7 +132,9 @@ class HLSPlaylistExporter extends MediaExporter
     {
         $lines = ['#EXTM3U'];
 
-        foreach ($this->getSegmentedExportersSorted() as $segmentedExporter) {
+        $segmentedExporters = $this->sortFormats ? $this->getSegmentedExportersSorted() : $this->getSegmentedExporters();
+
+        foreach ($segmentedExporters as $segmentedExporter) {
             $bitrate = $segmentedExporter->getFormat()->getKiloBitrate() * 1000;
 
             $lines[] = '#EXT-X-STREAM-INF:BANDWIDTH=' . $bitrate;
