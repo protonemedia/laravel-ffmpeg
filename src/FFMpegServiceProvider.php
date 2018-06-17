@@ -8,6 +8,13 @@ use Pbmedia\LaravelFFMpeg\FFMpeg;
 class FFMpegServiceProvider extends ServiceProvider
 {
     /**
+     * Indicates if loading of the provider is deferred.
+     *
+     * @var bool
+     */
+    protected $defer = true;
+    
+    /**
      * Bootstrap the application services.
      */
     public function boot()
@@ -27,5 +34,15 @@ class FFMpegServiceProvider extends ServiceProvider
         $this->app->singleton('laravel-ffmpeg', function ($app) {
             return $app->make(FFMpeg::class);
         });
+    }
+    
+    /**
+     * Get the services provided by the provider.
+     *
+     * @return array
+     */
+    public function provides()
+    {
+        return ['laravel-ffmpeg'];
     }
 }
