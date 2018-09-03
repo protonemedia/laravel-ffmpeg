@@ -2,6 +2,23 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 3.0.0 - 2018-09-03
+
+### Added
+- Support for Laravel 5.7.
+
+### Deprecated
+- Nothing
+
+### Fixed
+- Nothing
+
+### Removed
+- Nothing
+
+### Security
+- Nothing
+
 ## 2.1.0 - 2018-04-10
 
 ### Added
