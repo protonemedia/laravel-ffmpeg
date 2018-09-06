@@ -17,16 +17,16 @@
     ],
     "require": {
         "php": "^7.1",
-        "illuminate/config": "5.6.*",
-        "illuminate/filesystem": "5.6.*",
-        "illuminate/log": "5.6.*",
+        "illuminate/config": "5.7.*",
+        "illuminate/filesystem": "5.7.*",
+        "illuminate/log": "5.7.*",
         "league/flysystem": "~1.0",
-        "pbmedia/php-ffmpeg": "~0.14.0",
+        "php-ffmpeg/php-ffmpeg": "dev-master#c11b79ab5b0174aa1a56c54c67491169e78a4c17",
         "symfony/process": "~4.0"
     },
     "require-dev": {
         "mockery/mockery": "^1.0",
-        "phpunit/phpunit": "^6.0|^7.0"
+        "phpunit/phpunit": "^7.0"
     },
     "autoload": {
         "psr-4": {
