@@ -6,6 +6,7 @@ use FFMpeg\FFMpeg as BaseFFMpeg;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Arr;
 use Psr\Log\LoggerInterface;
 
 class FFMpeg
@@ -24,8 +25,16 @@ class FFMpeg
 
         $ffmpegConfig = $config->get('laravel-ffmpeg');
 
-        $this->ffmpeg = BaseFFMpeg::create($ffmpegConfig, $logger);
-        $this->fromDisk($ffmpegConfig['default_disk'] ?? $config->get('filesystems.default'));
+        $this->ffmpeg = BaseFFMpeg::create([
+            'ffmpeg.binaries'  => Arr::get($ffmpegConfig, 'ffmpeg.binaries'),
+            'ffmpeg.threads'   => Arr::get($ffmpegConfig, 'ffmpeg.threads'),
+            'ffprobe.binaries' => Arr::get($ffmpegConfig, 'ffprobe.binaries'),
+            'timeout'          => Arr::get($ffmpegConfig, 'timeout'),
+        ], $logger);
+
+        $this->fromDisk(
+            Arr::get($ffmpegConfig, 'default_disk', $config->get('filesystems.default'))
+        );
     }
 
     public static function getFilesystems(): Filesystems
