@@ -13,7 +13,7 @@ This package provides an integration with FFmpeg for Laravel 5.8. The storage of
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/5.8/filesystem), [configuration system](https://laravel.com/docs/5.8/configuration) and [logging handling](https://laravel.com/docs/5.8/errors).
 * Compatible with Laravel 5.8.
 * Support for [Package Discovery](https://laravel.com/docs/5.8/packages#package-discovery).
-* PHP 7.1 and 7.2 only.
+* PHP 7.1, 7.2 and 7.3 only.
 
 ## Installation
 
