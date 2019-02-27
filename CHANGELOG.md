@@ -7,6 +7,7 @@ All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 ### Added
 
 -   Support for Laravel 5.8.
+-   Support for PHP 7.3.
 
 ### Deprecated
 
@@ -18,7 +19,7 @@ All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
 ### Removed
 
--   Nothing
+-   Support for PHP 7.1.
 
 ### Security
 

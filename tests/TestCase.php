@@ -20,7 +20,7 @@ class TestCase extends PHPUnitTestCase
 
     public $remoteFilesystem;
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->srcDir = __DIR__ . '/src';
 
