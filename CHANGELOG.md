@@ -19,7 +19,7 @@ All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
 ### Removed
 
--   Support for PHP 7.1.
+-   Nothing
 
 ### Security
 
