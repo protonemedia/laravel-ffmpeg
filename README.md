@@ -17,7 +17,7 @@ This package provides an integration with FFmpeg for Laravel 5.8. The storage of
 
 ## Installation
 
-The master branch and version 4.0 of this package is only compatible with Laravel 5.8. If you're still using previous versions of Laravel, please use the chart below to determine which version of this package you should use. Mind that older versions are no longer supported.
+Only the master branch and version 4.0 of this package are compatible with Laravel 5.8. If you're still using an older version of Laravel, please use the chart below to find out which version you should use. Mind that older versions are no longer supported.
 
 | Laravel Version | Package Version |
 |-----------------|-----------------|
