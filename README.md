@@ -6,21 +6,22 @@
 [![Quality Score](https://img.shields.io/scrutinizer/g/pascalbaljetmedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/pascalbaljetmedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This package provides an integration with FFmpeg for Laravel 5.8. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/5.8/filesystem).
+This package provides an integration with FFmpeg for Laravel 6.0. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/6.0/filesystem).
 
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
-* Integration with [Laravel's Filesystem](http://laravel.com/docs/5.8/filesystem), [configuration system](https://laravel.com/docs/5.8/configuration) and [logging handling](https://laravel.com/docs/5.8/errors).
-* Compatible with Laravel 5.8.
-* Support for [Package Discovery](https://laravel.com/docs/5.8/packages#package-discovery).
-* PHP 7.1, 7.2 and 7.3 only.
+* Integration with [Laravel's Filesystem](http://laravel.com/docs/6.0/filesystem), [configuration system](https://laravel.com/docs/6.0/configuration) and [logging handling](https://laravel.com/docs/6.0/errors).
+* Compatible with Laravel 6.0.
+* Support for [Package Discovery](https://laravel.com/docs/6.0/packages#package-discovery).
+* PHP 7.2 and 7.3 only.
 
 ## Installation
 
-Only the master branch and version 4.0 of this package are compatible with Laravel 5.8. If you're still using an older version of Laravel, please use the chart below to find out which version you should use. Mind that older versions are no longer supported.
+Only the master branch and version 5.0 of this package are compatible with Laravel 6.0. If you're still using an older version of Laravel (or PHP < 7.2), please use the chart below to find out which version you should use. Mind that older versions are no longer supported.
 
 | Laravel Version | Package Version |
 |-----------------|-----------------|
+| 6.0             | 5.0             |
 | 5.8             | 4.0             |
 | 5.7             | 3.0             |
 | 5.6             | 2.1             |
