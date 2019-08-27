@@ -6,6 +6,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use League\Flysystem\Adapter\Local as LocalAdapater;
 
 /**
+ * @method \League\Flysystem\FilesystemInterface getDriver()
  * @method bool put($path, $contents, $visibility = null)
  * @method array|false read($path)
  * @method void setVisibility($path, $visibility)

@@ -77,7 +77,11 @@ class FFMpeg
             $ffmpegPathFile = $file->getFullPath();
         } else {
             $ffmpegPathFile = static::newTemporaryFile();
-            file_put_contents($ffmpegPathFile, $this->disk->read($path));
+
+            stream_copy_to_stream(
+                $this->disk->getDriver()->readStream($path),
+                fopen($ffmpegPathFile, 'w')
+            );
         }
 
         $ffmpegMedia = $this->ffmpeg->open($ffmpegPathFile);
