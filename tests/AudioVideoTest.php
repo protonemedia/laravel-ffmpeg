@@ -25,6 +25,7 @@ use Pbmedia\LaravelFFMpeg\FFMpeg;
 use Pbmedia\LaravelFFMpeg\File;
 use Pbmedia\LaravelFFMpeg\Media;
 use Pbmedia\LaravelFFMpeg\MediaExporter;
+use Twistor\Flysystem\Http\HttpAdapter;
 
 class AudioVideoTest extends TestCase
 {
@@ -197,16 +198,10 @@ class AudioVideoTest extends TestCase
         $config      = Mockery::mock(ConfigRepository::class);
         $logger      = new Writer(new Logger('ffmpeg'));
 
-        $adapter = Mockery::mock(AdapterInterface::class);
+        $adapter = new HttpAdapter("https://raw.githubusercontent.com/pascalbaljetmedia/laravel-ffmpeg/master/tests/src/");
+        $driver  = new \League\Flysystem\Filesystem($adapter);
 
-        $driver = Mockery::mock(FilesystemInterface::class);
-        $driver->shouldReceive('getAdapter')->andReturn($adapter);
-
-        $remoteDisk = Mockery::mock(FilesystemAdapter::class);
-        $remoteDisk->shouldReceive('getDriver')->andReturn($driver);
-        $remoteDisk->shouldReceive('read')->with('remote_guitar.m4a')->andReturn(
-            $videoContents = file_get_contents(__DIR__ . '/src/guitar.m4a')
-        );
+        $remoteDisk = new FilesystemAdapter($driver);
 
         $localDisk = $this->getLocalAdapter();
 
@@ -217,7 +212,7 @@ class AudioVideoTest extends TestCase
         $config->shouldReceive('get')->once()->with('filesystems.default')->andReturn('s3');
 
         $service = new FFMpeg($filesystems, $config, $logger);
-        $media   = $service->open('remote_guitar.m4a');
+        $media   = $service->open('guitar.m4a');
 
         $format = new \FFMpeg\Format\Audio\Aac;
 
