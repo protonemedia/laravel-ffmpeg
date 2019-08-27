@@ -22,4 +22,4 @@ install:
   - sudo apt-get install -y --allow-unauthenticated software-properties-common ffmpeg
 
 script:
-  - phpunit
+  - ./vendor/bin/phpunit
