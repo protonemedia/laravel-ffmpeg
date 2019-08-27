@@ -27,7 +27,8 @@
     },
     "require-dev": {
         "mockery/mockery": "^1.0",
-        "phpunit/phpunit": "7.5"
+        "phpunit/phpunit": "7.5",
+        "twistor/flysystem-http": "^0.2.0"
     },
     "autoload": {
         "psr-4": {

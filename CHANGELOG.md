@@ -2,6 +2,50 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 4.1.0 - 2019-08-28
+
+### Added
+
+-   Nothing
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Lower memory usage when opening remote files
+
+### Removed
+
+-   Nothing
+
+### Security
+
+-   Nothing
+
+## 4.0.1 - 2019-06-17
+
+### Added
+
+-   Nothing
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Support for php-ffmpeg 0.14
+
+### Removed
+
+-   Nothing
+
+### Security
+
+-   Nothing
+
 ## 4.0.0 - 2019-02-26
 
 ### Added
