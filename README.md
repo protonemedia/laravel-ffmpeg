@@ -15,6 +15,9 @@ This package provides an integration with FFmpeg for Laravel 6.0. The storage of
 * Support for [Package Discovery](https://laravel.com/docs/6.0/packages#package-discovery).
 * PHP 7.2 and 7.3 only.
 
+## We are looking for beta testers!
+We are currently building a *sophisticated health checker for your Laravel applications* called [Upserver.online](https://upserver.online). We will launch a private beta in the coming weeks so please join the mailing list to get **early access**! If you want to know more, you can also read the [official announcement](https://mailchi.mp/upserver/this-is-upserver-online) or follow us on [Twitter](https://twitter.com/UpserverOnline).
+
 ## Installation
 
 Only the master branch and version 5.0 of this package are compatible with Laravel 6.0. If you're still using an older version of Laravel (or PHP < 7.2), please use the chart below to find out which version you should use. Mind that older versions are no longer supported.
