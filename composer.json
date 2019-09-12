@@ -22,8 +22,7 @@
         "illuminate/log": "^6.0",
         "illuminate/support": "^6.0",
         "league/flysystem": "^1.0.8",
-        "alchemy/binary-driver": "dev-master as 5.1.0",
-        "php-ffmpeg/php-ffmpeg": "~0.13",
+        "pbmedia/php-ffmpeg": "^0.14.1",
         "symfony/process": "^4.3.4"
     },
     "require-dev": {
@@ -31,12 +30,6 @@
         "phpunit/phpunit": "^8.3",
         "twistor/flysystem-http": "^0.2.0"
     },
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/pascalbaljet/BinaryDriver"
-        }
-    ],
     "autoload": {
         "psr-4": {
             "Pbmedia\\LaravelFFMpeg\\": "src"
