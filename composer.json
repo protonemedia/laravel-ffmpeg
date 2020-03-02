@@ -17,13 +17,13 @@
     ],
     "require": {
         "php": "^7.2",
-        "illuminate/config": "^6.0",
-        "illuminate/filesystem": "^6.0",
-        "illuminate/log": "^6.0",
-        "illuminate/support": "^6.0",
+        "illuminate/config": "^7.0",
+        "illuminate/filesystem": "^7.0",
+        "illuminate/log": "^7.0",
+        "illuminate/support": "^7.0",
         "league/flysystem": "^1.0.8",
-        "pbmedia/php-ffmpeg": "^0.14.1",
-        "symfony/process": "^4.3.4"
+        "php-ffmpeg/php-ffmpeg": "^0.14",
+        "symfony/process": "^5.0"
     },
     "require-dev": {
         "mockery/mockery": "^1.2.3",
@@ -46,6 +46,8 @@
     "config": {
         "sort-packages": true
     },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
     "extra": {
         "laravel": {
             "providers": [
