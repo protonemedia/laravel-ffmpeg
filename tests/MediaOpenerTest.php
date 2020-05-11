@@ -25,6 +25,17 @@ class MediaOpenerTest extends TestCase
     }
 
     /** @test */
+    public function it_knows_the_duration_of_a_file()
+    {
+        $this->fakeLocalVideoFile();
+
+        $media = (new MediaOpener)->open('video.mp4');
+
+        $this->assertEquals(5, $media->getDurationInSeconds());
+        $this->assertEquals(4720, $media->getDurationInMiliseconds());
+    }
+
+    /** @test */
     public function it_can_open_multiple_files_from_the_same_disk()
     {
         $mediaCollection = (new MediaOpener)->open(

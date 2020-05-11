@@ -73,6 +73,16 @@ class MediaOpener
         return $this->getDriver()->getFilters();
     }
 
+    public function getDurationInSeconds(): int
+    {
+        return round($this->getDurationInMiliseconds() / 1000);
+    }
+
+    public function getDurationInMiliseconds(): int
+    {
+        return $this->getDriver()->getDurationInMiliseconds();
+    }
+
     public function export(): MediaExporter
     {
         return new MediaExporter($this->getDriver());

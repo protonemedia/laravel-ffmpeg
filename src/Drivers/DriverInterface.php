@@ -17,4 +17,6 @@ interface DriverInterface
     public function addFilter(): self;
 
     public function getFilters(): array;
+
+    public function getDurationInMiliseconds(): int;
 }

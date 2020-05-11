@@ -4,6 +4,7 @@ namespace Pbmedia\LaravelFFMpeg\Drivers;
 
 use Closure;
 use FFMpeg\FFMpeg;
+use FFMpeg\FFProbe\DataMapping\Format;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\FilterInterface;
 use FFMpeg\Media\AbstractMediaType;
@@ -52,6 +53,31 @@ class PHPFFMpeg implements DriverInterface
         $this->forceAdvanced = true;
 
         return $this->open($mediaCollection);
+    }
+
+    private function getStreams(): array
+    {
+        return iterator_to_array($this->media->getStreams());
+    }
+
+    private function getFormat(): Format
+    {
+        return $this->media->getFormat();
+    }
+
+    public function getDurationInMiliseconds(): int
+    {
+        $stream = Arr::first($this->getStreams());
+
+        if ($stream->has('duration')) {
+            return $stream->get('duration') * 1000;
+        }
+
+        $format = $this->getFormat();
+
+        if ($format->has('duration')) {
+            return $format->get('duration') * 1000;
+        }
     }
 
     public function addFilter(): self
