@@ -3,119 +3,72 @@
 namespace Pbmedia\LaravelFFMpeg;
 
 use FFMpeg\Format\FormatInterface;
+use Pbmedia\LaravelFFMpeg\Drivers\DriverInterface;
 
 class MediaExporter
 {
-    protected $media;
+    private DriverInterface $driver;
 
-    protected $disk;
+    private FormatInterface $format;
 
-    protected $format;
+    protected ?string $visibility = null;
 
-    protected $visibility;
+    private ?Disk $toDisk = null;
 
-    protected $saveMethod = 'saveAudioOrVideo';
-
-    public function __construct(Media $media)
+    public function __construct(DriverInterface $driver)
     {
-        $this->media = $media;
-
-        $this->disk = $media->getFile()->getDisk();
+        $this->driver = $driver;
     }
 
-    public function getMedia(): Media
+    private function getDisk(): Disk
     {
-        return $this->media;
+        if ($this->toDisk) {
+            return $this->toDisk;
+        }
+
+        $media = $this->driver->getMediaCollection();
+
+        if ($media->count() === 1) {
+            return $media->first()->getDisk();
+        }
     }
 
-    public function getFormat(): FormatInterface
-    {
-        return $this->format;
-    }
-
-    public function inFormat(FormatInterface $format): MediaExporter
+    public function inFormat(FormatInterface $format): self
     {
         $this->format = $format;
 
         return $this;
     }
 
-    protected function getDisk(): Disk
+    public function toDisk($disk)
     {
-        return $this->disk;
-    }
-
-    public function toDisk($diskOrName): MediaExporter
-    {
-        if ($diskOrName instanceof Disk) {
-            $this->disk = $diskOrName;
-        } else {
-            $this->disk = Disk::fromName($diskOrName);
-        }
+        $this->toDisk = Disk::create($disk);
 
         return $this;
     }
 
-    public function withVisibility(string $visibility = null)
+    public function withVisibility(string $visibility)
     {
         $this->visibility = $visibility;
 
         return $this;
     }
 
-    public function save(string $path): Media
+    public function save(string $path = null)
     {
         $disk = $this->getDisk();
-        $file = $disk->newFile($path);
 
-        $destinationPath = $this->getDestinationPathForSaving($file);
+        $this->driver->save(
+            $this->format,
+            $path ? $disk->getLocalPath($path) : null
+        );
 
-        $this->createDestinationPathForSaving($file);
-
-        $this->{$this->saveMethod}($destinationPath);
-
-        if (!$disk->isLocal()) {
-            $this->moveSavedFileToRemoteDisk($destinationPath, $file);
+        if ($path && $disk && !$disk->isLocalDisk()) {
+            $disk->copyAllFromTemporaryDirectory($this->visibility);
         }
 
-        if ($this->visibility !== null) {
+        if ($this->visibility) {
             $disk->setVisibility($path, $this->visibility);
         }
-
-        return $this->media;
-    }
-
-    protected function moveSavedFileToRemoteDisk($localSourcePath, File $fileOnRemoteDisk): bool
-    {
-        return $fileOnRemoteDisk->put($localSourcePath) && @unlink($localSourcePath);
-    }
-
-    private function getDestinationPathForSaving(File $file): string
-    {
-        if (!$file->getDisk()->isLocal()) {
-            $tempName = FFMpeg::newTemporaryFile();
-
-            return $tempName . '.' . $file->getExtension();
-        }
-
-        return $file->getFullPath();
-    }
-
-    private function createDestinationPathForSaving(File $file)
-    {
-        if (!$file->getDisk()->isLocal()) {
-            return false;
-        }
-
-        $directory = pathinfo($file->getPath())['dirname'];
-
-        return $file->getDisk()->createDirectory($directory);
-    }
-
-    private function saveAudioOrVideo(string $fullPath): MediaExporter
-    {
-        $this->media->save($this->getFormat(), $fullPath);
-
-        return $this;
     }
 }

@@ -7,27 +7,30 @@
     ],
     "homepage": "https://github.com/pbmedia/laravel-ffmpeg",
     "license": "MIT",
+    "type": "library",
     "authors": [
         {
             "name": "Pascal Baljet",
-            "email": "pascal@pascalbaljetmedia.com",
-            "homepage": "http://www.pascalbaljetmedia.com",
+            "email": "pascal@protone.media",
+            "homepage": "https://protone.media",
             "role": "Developer"
         }
     ],
     "require": {
-        "php": "^7.2",
-        "illuminate/config": "^7.0",
-        "illuminate/filesystem": "^7.0",
-        "illuminate/log": "^7.0",
-        "illuminate/support": "^7.0",
-        "league/flysystem": "^1.0.8",
-        "php-ffmpeg/php-ffmpeg": "^0.14",
-        "symfony/process": "^5.0"
+        "php": "^7.4",
+        "illuminate/bus": "^6.0|^7.0",
+        "illuminate/config": "^6.0|^7.0",
+        "illuminate/filesystem": "^6.0|^7.0",
+        "illuminate/log": "^6.0|^7.0",
+        "illuminate/support": "^6.0|^7.0",
+        "php-ffmpeg/php-ffmpeg": "^0.16.0",
+        "spatie/temporary-directory": "^1.2"
     },
     "require-dev": {
-        "mockery/mockery": "^1.2.3",
-        "phpunit/phpunit": "^8.3",
+        "league/flysystem-memory": "^1.0",
+        "mockery/mockery": "^1.3",
+        "orchestra/testbench": "^4.0|^5.0",
+        "phpunit/phpunit": "^8.0",
         "twistor/flysystem-http": "^0.2.0"
     },
     "autoload": {
@@ -41,7 +44,8 @@
         }
     },
     "scripts": {
-        "test": "vendor/bin/phpunit"
+        "test": "vendor/bin/phpunit",
+        "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
     },
     "config": {
         "sort-packages": true
@@ -49,10 +53,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Pbmedia\\LaravelFFMpeg\\FFMpegServiceProvider"
+                "Pbmedia\\LaravelFFMpeg\\Support\\FFMpegServiceProvider"
             ],
             "aliases": {
-                "FFMpeg": "Pbmedia\\LaravelFFMpeg\\FFMpegFacade"
+                "FFMpeg": "Pbmedia\\LaravelFFMpeg\\Support\\FFMpegFacade"
             }
         }
     }

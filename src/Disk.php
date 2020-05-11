@@ -2,57 +2,93 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
-use Illuminate\Contracts\Filesystem\Filesystem;
-use League\Flysystem\Adapter\Local as LocalAdapater;
+use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Support\Facades\Storage;
+use League\Flysystem\Adapter\Local;
+use Spatie\TemporaryDirectory\TemporaryDirectory;
 
-/**
- * @method \League\Flysystem\FilesystemInterface getDriver()
- * @method bool put($path, $contents, $visibility = null)
- * @method array|false read($path)
- * @method void setVisibility($path, $visibility)
- */
 class Disk
 {
-    protected $disk;
+    private $disk;
+    private ?TemporaryDirectory $temporaryDirectory = null;
 
-    protected static $filesystems;
-
-    public function __construct(Filesystem $disk)
+    public function __construct($disk)
     {
         $this->disk = $disk;
     }
 
-    public static function fromName(string $name): Disk
+    public static function create($disk): self
     {
-        $adapter = FFMpeg::getFilesystems()->disk($name);
-
-        return new static($adapter);
+        if (is_string($disk)) {
+            return new static($disk);
+        }
     }
 
-    public function isLocal(): bool
+    public function getName(): string
     {
-        $adapter = $this->disk->getDriver()->getAdapter();
-
-        return $adapter instanceof LocalAdapater;
+        return $this->disk;
     }
 
-    public function newFile(string $path): File
+    private function adapter(): FilesystemAdapter
     {
-        return new File($this, $path);
+        return Storage::disk($this->disk);
     }
 
-    public function getPath(): string
+    public function setVisibility(string $path, string $visibility): self
     {
-        return $this->disk->getDriver()->getAdapter()->getPathPrefix();
+        $this->adapter()->setVisibility($path, $visibility);
+
+        return $this;
     }
 
-    public function createDirectory(string $path)
+    public function isLocalDisk(): bool
     {
-        return $this->disk->makeDirectory($path);
+        return $this->adapter()->getDriver()->getAdapter() instanceof Local;
     }
 
-    public function __call($method, $parameters)
+    public function getLocalPath(string $path): string
     {
-        return call_user_func_array([$this->disk, $method], $parameters);
+        if ($this->isLocalDisk()) {
+            return $this->adapter()->path($path);
+        }
+
+        if (!$this->temporaryDirectory) {
+            $this->temporaryDirectory = (new TemporaryDirectory)->create();
+
+            if ($this->adapter()->exists($path)) {
+                $this->temporaryDirectoryAdapter()->writeStream($path, $this->adapter()->readStream($path));
+            }
+        }
+
+        return $this->temporaryDirectoryAdapter()->path($path);
+    }
+
+    public function copyAllFromTemporaryDirectory(string $visibility = null)
+    {
+        $temporaryDirectoryAdapter = $this->temporaryDirectoryAdapter();
+
+        $destinationAdapater = $this->adapter();
+
+        foreach ($temporaryDirectoryAdapter->allFiles() as $path) {
+            $destinationAdapater->writeStream($path, $temporaryDirectoryAdapter->readStream($path));
+
+            if ($visibility) {
+                $destinationAdapater->setVisibility($path, $visibility);
+            }
+        }
+    }
+
+    private function temporaryDirectoryAdapter(): FilesystemAdapter
+    {
+        return app('filesystem')->createLocalDriver(
+            ['root' => $this->temporaryDirectory->path()]
+        );
+    }
+
+    public function __destruct()
+    {
+        if ($this->temporaryDirectory) {
+            $this->temporaryDirectory->delete();
+        }
     }
 }

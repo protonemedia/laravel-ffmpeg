@@ -1,10 +1,10 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg;
+namespace Pbmedia\LaravelFFMpeg\Support;
 
 use Illuminate\Support\Facades\Facade;
 
-class FFMpegFacade extends Facade
+class FFMpeg extends Facade
 {
     /**
      * Get the registered name of the component.
