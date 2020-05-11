@@ -90,6 +90,6 @@ class MediaOpener
 
     public function exportForHLS(): HLSExporter
     {
-        return new MediaExporter($this->getAdvancedDriver());
+        return new HLSExporter($this->getAdvancedDriver());
     }
 }

@@ -11,11 +11,11 @@ use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 
 class MediaExporter
 {
-    private DriverInterface $driver;
+    protected DriverInterface $driver;
 
     private ?FormatInterface $format = null;
 
-    private Collection $maps;
+    protected Collection $maps;
 
     protected ?string $visibility = null;
 
@@ -27,7 +27,7 @@ class MediaExporter
         $this->maps   = new Collection;
     }
 
-    private function getDisk(): Disk
+    protected function getDisk(): Disk
     {
         if ($this->toDisk) {
             return $this->toDisk;

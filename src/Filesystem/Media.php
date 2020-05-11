@@ -96,7 +96,7 @@ class Media
         return $this;
     }
 
-    public function __destruct()
+    public function cleanup()
     {
         if ($this->temporaryDirectory) {
             $this->temporaryDirectory->delete();

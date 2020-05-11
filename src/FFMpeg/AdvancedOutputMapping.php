@@ -3,6 +3,7 @@
 namespace Pbmedia\LaravelFFMpeg\FFMpeg;
 
 use FFMpeg\Format\FormatInterface;
+use FFMpeg\Format\VideoInterface;
 use FFMpeg\Media\AdvancedMedia;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 
@@ -30,7 +31,19 @@ class AdvancedOutputMapping
 
     public function apply(AdvancedMedia $advancedMedia): self
     {
-        $advancedMedia->map($this->outs, $this->format, $this->output->getLocalPath(), $this->forceDisableAudio, $this->forceDisableVideo);
+        $format = clone $this->format;
+
+        if ($format instanceof VideoInterface) {
+            $parameters = $format->getAdditionalParameters();
+
+            if ($parameters && !in_array('-b:v', $parameters)) {
+                $parameters = ['-b:v', $format->getKiloBitrate() . 'k'] + $parameters;
+            }
+
+            $parameters ? $format->setAdditionalParameters($parameters) : null;
+        }
+
+        $advancedMedia->map($this->outs, $format, $this->output->getLocalPath(), $this->forceDisableAudio, $this->forceDisableVideo);
 
         return $this;
     }
