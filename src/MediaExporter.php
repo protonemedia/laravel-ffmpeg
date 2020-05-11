@@ -3,9 +3,11 @@
 namespace Pbmedia\LaravelFFMpeg;
 
 use FFMpeg\Format\FormatInterface;
-use FFMpeg\Media\AdvancedMedia;
 use Illuminate\Support\Collection;
 use Pbmedia\LaravelFFMpeg\Drivers\DriverInterface;
+use Pbmedia\LaravelFFMpeg\FFMpeg\AdvancedOutputMapping;
+use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
+use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 
 class MediaExporter
 {
@@ -33,7 +35,7 @@ class MediaExporter
 
         $media = $this->driver->getMediaCollection();
 
-        return $media->first()->getDisk();
+        return $this->toDisk = $media->first()->getDisk();
     }
 
     public function inFormat(FormatInterface $format): self
@@ -43,16 +45,22 @@ class MediaExporter
         return $this;
     }
 
-    public function addFormatOutputMapping(FormatInterface $format, $outputPath, array $outs, $forceDisableAudio = false, $forceDisableVideo = false)
+    public function addFormatOutputMapping(FormatInterface $format, Media $output, array $outs, $forceDisableAudio = false, $forceDisableVideo = false)
     {
-        $this->maps->push([$outs, $format, $outputPath, $forceDisableAudio, $forceDisableVideo]);
+        $this->maps->push(new AdvancedOutputMapping(
+            $outs,
+            $format,
+            $output,
+            $forceDisableAudio,
+            $forceDisableVideo,
+        ));
 
         return $this;
     }
 
     public function toDisk($disk)
     {
-        $this->toDisk = Disk::create($disk);
+        $this->toDisk = Disk::make($disk);
 
         return $this;
     }
@@ -64,30 +72,26 @@ class MediaExporter
         return $this;
     }
 
-    public function getAdvancedMedia(): AdvancedMedia
-    {
-        return $this->driver->get();
-    }
-
     public function save(string $path = null)
     {
-        $disk = $this->getDisk();
-
-        $this->maps->each(function ($map) {
-            return $this->getAdvancedMedia()->map(...$map);
-        });
-
-        $this->driver->save(
-            $this->format,
-            $path ? $disk->getLocalPath($path) : null
-        );
-
-        if ($path && $disk && !$disk->isLocalDisk()) {
-            $disk->copyAllFromTemporaryDirectory($this->visibility);
+        if ($this->maps->isNotEmpty()) {
+            return $this->saveWithMappings();
         }
 
-        if ($this->visibility) {
-            $disk->setVisibility($path, $this->visibility);
-        }
+        $outputMedia = Media::make($this->getDisk(), $path);
+
+        $this->driver->save($this->format, $outputMedia->getLocalPath());
+
+        $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
+        $outputMedia->setVisibility($this->visibility);
+    }
+
+    private function saveWithMappings()
+    {
+        $this->maps->each->apply($this->driver->get());
+
+        $this->driver->save();
+
+        $this->maps->map->getOutputMedia()->each->copyAllFromTemporaryDirectory($this->visibility);
     }
 }

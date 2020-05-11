@@ -2,9 +2,9 @@
 
 namespace Pbmedia\LaravelFFMpeg\Tests;
 
-use Pbmedia\LaravelFFMpeg\Disk;
-use Pbmedia\LaravelFFMpeg\Media;
-use Pbmedia\LaravelFFMpeg\MediaCollection;
+use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
+use Pbmedia\LaravelFFMpeg\Filesystem\Media;
+use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 use Pbmedia\LaravelFFMpeg\MediaOpener;
 
 class MediaOpenerTest extends TestCase

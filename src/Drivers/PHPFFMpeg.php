@@ -9,7 +9,7 @@ use FFMpeg\Filters\FilterInterface;
 use FFMpeg\Media\AbstractMediaType;
 use FFMpeg\Media\Audio;
 use Illuminate\Support\Arr;
-use Pbmedia\LaravelFFMpeg\MediaCollection;
+use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class PHPFFMpeg implements DriverInterface
 {
@@ -83,10 +83,8 @@ class PHPFFMpeg implements DriverInterface
 
     public function save($format = null, $path = null)
     {
-        if ($this->media instanceof Audio) {
-            $this->media->save($format, $path);
-        } else {
-            $this->media->save();
-        }
+        $this->media instanceof Audio
+            ? $this->media->save($format, $path)
+            : $this->media->save();
     }
 }

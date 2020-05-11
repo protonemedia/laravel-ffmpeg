@@ -2,7 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg\Drivers;
 
-use Pbmedia\LaravelFFMpeg\MediaCollection;
+use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 interface DriverInterface
 {

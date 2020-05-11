@@ -1,6 +1,6 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg;
+namespace Pbmedia\LaravelFFMpeg\Filesystem;
 
 use Illuminate\Support\Collection;
 

@@ -4,6 +4,9 @@ namespace Pbmedia\LaravelFFMpeg;
 
 use Illuminate\Support\Arr;
 use Pbmedia\LaravelFFMpeg\Drivers\DriverInterface;
+use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
+use Pbmedia\LaravelFFMpeg\Filesystem\Media;
+use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class MediaOpener
 {
@@ -25,11 +28,6 @@ class MediaOpener
         return new Disk($this->disk);
     }
 
-    public function toDisk(string $disk): self
-    {
-        return $this->fromDisk($disk);
-    }
-
     public function fromDisk(string $disk): self
     {
         $this->disk = $disk;
@@ -37,25 +35,15 @@ class MediaOpener
         return $this;
     }
 
-    private function media(string $path): Media
-    {
-        return new Media($this->disk(), $path);
-    }
-
     public function open($path): self
     {
         $paths = Arr::wrap($path);
 
         foreach ($paths as $path) {
-            $this->collection->add($this->media($path));
+            $this->collection->add(Media::make($this->disk(), $path));
         }
 
         return $this;
-    }
-
-    public function path($path): string
-    {
-        return $this->media($path)->getLocalPath();
     }
 
     public function get(): MediaCollection
