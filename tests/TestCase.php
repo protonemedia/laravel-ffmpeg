@@ -53,4 +53,11 @@ abstract class TestCase extends BaseTestCase
 
         Storage::disk('local')->put('video.mp4', file_get_contents(__DIR__ . '/src/video.mp4'));
     }
+
+    protected function fakeLocalVideoFiles()
+    {
+        $this->fakeLocalVideoFile();
+
+        Storage::disk('local')->put('video2.mp4', file_get_contents(__DIR__ . '/src/video2.mp4'));
+    }
 }

@@ -25,6 +25,11 @@ class MediaOpener
         return new Disk($this->disk);
     }
 
+    public function toDisk(string $disk): self
+    {
+        return $this->fromDisk($disk);
+    }
+
     public function fromDisk(string $disk): self
     {
         $this->disk = $disk;
@@ -32,15 +37,25 @@ class MediaOpener
         return $this;
     }
 
+    private function media(string $path): Media
+    {
+        return new Media($this->disk(), $path);
+    }
+
     public function open($path): self
     {
         $paths = Arr::wrap($path);
 
         foreach ($paths as $path) {
-            $this->collection->add(new Media($this->disk(), $path));
+            $this->collection->add($this->media($path));
         }
 
         return $this;
+    }
+
+    public function path($path): string
+    {
+        return $this->media($path)->getLocalPath();
     }
 
     public function get(): MediaCollection
@@ -53,9 +68,16 @@ class MediaOpener
         return $this->driver->open($this->collection);
     }
 
-    public function addFilter(): DriverInterface
+    public function getAdvancedDriver(): DriverInterface
     {
-        return $this->getDriver()->addFilter(...func_get_args());
+        return $this->driver->openAdvanced($this->collection);
+    }
+
+    public function addFilter(): self
+    {
+        $this->getDriver()->addFilter(...func_get_args());
+
+        return $this;
     }
 
     public function getFilters(): array
@@ -66,5 +88,10 @@ class MediaOpener
     public function export(): MediaExporter
     {
         return new MediaExporter($this->getDriver());
+    }
+
+    public function exportForHLS(): HLSExporter
+    {
+        return new MediaExporter($this->getAdvancedDriver());
     }
 }

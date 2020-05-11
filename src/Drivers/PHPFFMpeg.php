@@ -14,6 +14,7 @@ use Pbmedia\LaravelFFMpeg\MediaCollection;
 class PHPFFMpeg implements DriverInterface
 {
     private FFMpeg $ffmpeg;
+    private bool $forceAdvanced = false;
     private MediaCollection $mediaCollection;
     private ?AbstractMediaType $media = null;
 
@@ -37,13 +38,20 @@ class PHPFFMpeg implements DriverInterface
 
         $localPaths = $mediaCollection->getLocalPaths();
 
-        if (count($localPaths) === 1) {
+        if (count($localPaths) === 1 && !$this->forceAdvanced) {
             $this->media = $this->ffmpeg->open(Arr::first($localPaths));
         } else {
             $this->media = $this->ffmpeg->openAdvanced($localPaths);
         }
 
         return $this;
+    }
+
+    public function openAdvanced(MediaCollection $mediaCollection): self
+    {
+        $this->forceAdvanced = true;
+
+        return $this->open($mediaCollection);
     }
 
     public function addFilter(): self
@@ -66,6 +74,11 @@ class PHPFFMpeg implements DriverInterface
     public function getFilters(): array
     {
         return iterator_to_array($this->media->getFiltersCollection());
+    }
+
+    public function get()
+    {
+        return $this->media;
     }
 
     public function save($format = null, $path = null)
