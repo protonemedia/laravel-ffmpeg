@@ -22,11 +22,6 @@ class Media
         return new static(Disk::make($disk), $path);
     }
 
-    public function isSingleFile(): bool
-    {
-        return is_string($this->path);
-    }
-
     public function getDisk(): Disk
     {
         return $this->disk;
