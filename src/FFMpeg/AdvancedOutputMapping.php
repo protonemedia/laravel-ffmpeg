@@ -34,13 +34,13 @@ class AdvancedOutputMapping
         $format = clone $this->format;
 
         if ($format instanceof VideoInterface) {
-            $parameters = $format->getAdditionalParameters();
+            $parameters = $format->getAdditionalParameters() ?: [];
 
-            if ($parameters && !in_array('-b:v', $parameters)) {
+            if (!in_array('-b:v', $parameters)) {
                 $parameters = ['-b:v', $format->getKiloBitrate() . 'k'] + $parameters;
             }
 
-            $parameters ? $format->setAdditionalParameters($parameters) : null;
+            $format->setAdditionalParameters($parameters);
         }
 
         $advancedMedia->map($this->outs, $format, $this->output->getLocalPath(), $this->forceDisableAudio, $this->forceDisableVideo);

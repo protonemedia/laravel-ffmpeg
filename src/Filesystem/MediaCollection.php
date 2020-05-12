@@ -8,9 +8,14 @@ class MediaCollection
 {
     private Collection $items;
 
-    public function __construct()
+    public function __construct(array $items = [])
     {
-        $this->items = new Collection;
+        $this->items = new Collection($items);
+    }
+
+    public static function make(array $items = []): self
+    {
+        return new static($items);
     }
 
     public function add(Media $media): self

@@ -7,9 +7,11 @@ use FFMpeg\FFMpeg;
 use FFMpeg\FFProbe\DataMapping\Format;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\FilterInterface;
+use FFMpeg\Format\Video\X264;
 use FFMpeg\Media\AbstractMediaType;
-use FFMpeg\Media\Audio;
+use FFMpeg\Media\AdvancedMedia;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class PHPFFMpeg implements DriverInterface
@@ -22,6 +24,11 @@ class PHPFFMpeg implements DriverInterface
     public function __construct(FFMpeg $ffmpeg)
     {
         $this->ffmpeg = $ffmpeg;
+    }
+
+    public function fresh(): self
+    {
+        return new static($this->ffmpeg);
     }
 
     public function getMediaCollection(): MediaCollection
@@ -65,6 +72,16 @@ class PHPFFMpeg implements DriverInterface
         return $this->media->getFormat();
     }
 
+    public function getWidth(): int
+    {
+        return Arr::first($this->getStreams())->get('width');
+    }
+
+    public function getHeight(): int
+    {
+        return Arr::first($this->getStreams())->get('height');
+    }
+
     public function getDurationInMiliseconds(): int
     {
         $stream = Arr::first($this->getStreams());
@@ -84,7 +101,9 @@ class PHPFFMpeg implements DriverInterface
     {
         $arguments = func_get_args();
 
-        if (isset($arguments[0]) && $arguments[0] instanceof Closure) {
+        if ($this->isAdvancedMedia() && count($arguments) === 3) {
+            $this->media->filters()->custom(...$arguments);
+        } elseif (isset($arguments[0]) && $arguments[0] instanceof Closure) {
             call_user_func_array($arguments[0], [$this->media->filters()]);
         } elseif (isset($arguments[0]) && $arguments[0] instanceof FilterInterface) {
             call_user_func_array([$this->media, 'addFilter'], $arguments);
@@ -97,6 +116,36 @@ class PHPFFMpeg implements DriverInterface
         return $this;
     }
 
+    public function addBasicFilter($in, $out, ...$arguments): self
+    {
+        $freshDriver = $this->fresh()->open(
+            MediaCollection::make([$this->getMediaCollection()->first()])
+        );
+
+        $freshDriver->addFilter(...$arguments);
+
+        Collection::make($freshDriver->getFilters())->map(function ($filter) use ($freshDriver) {
+            $parameters = $filter->apply($freshDriver->get(), new X264);
+
+            foreach ($parameters as $index => $command) {
+                if ($command === '-vf' || $command === '-filter:v' || $command === '-filter_complex') {
+                    unset($parameters[$index]);
+                }
+            }
+
+            return implode(' ', $parameters);
+        })->each(function ($customCompiledFilter) use ($in, $out) {
+            $this->addFilter($in, $customCompiledFilter, $out);
+        });
+
+        return $this;
+    }
+
+    public function getCommand($format = null, $path = null): string
+    {
+        return $this->media->getFinalCommand($format, $path);
+    }
+
     public function getFilters(): array
     {
         return iterator_to_array($this->media->getFiltersCollection());
@@ -107,10 +156,15 @@ class PHPFFMpeg implements DriverInterface
         return $this->media;
     }
 
+    private function isAdvancedMedia(): bool
+    {
+        return $this->get() instanceof AdvancedMedia;
+    }
+
     public function save($format = null, $path = null)
     {
-        $this->media instanceof Audio
-            ? $this->media->save($format, $path)
-            : $this->media->save();
+        $this->isAdvancedMedia()
+         ? $this->media->save()
+         : $this->media->save($format, $path);
     }
 }

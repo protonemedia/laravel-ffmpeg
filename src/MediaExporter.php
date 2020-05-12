@@ -72,13 +72,23 @@ class MediaExporter
         return $this;
     }
 
+    public function getCommand(string $path = null): string
+    {
+        $this->maps->each->apply($this->driver->get());
+
+        return $this->driver->getCommand(
+            $this->format,
+            $path ? $this->getDisk()->makeMedia($path)->getLocalPath() : null
+        );
+    }
+
     public function save(string $path = null)
     {
         if ($this->maps->isNotEmpty()) {
             return $this->saveWithMappings();
         }
 
-        $outputMedia = Media::make($this->getDisk(), $path);
+        $outputMedia = $this->getDisk()->makeMedia($path);
 
         $this->driver->save($this->format, $outputMedia->getLocalPath());
 

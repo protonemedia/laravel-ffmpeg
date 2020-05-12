@@ -37,6 +37,11 @@ class Disk
         }
     }
 
+    public function makeMedia(string $path): Media
+    {
+        return Media::make($this, $path);
+    }
+
     public function getName(): string
     {
         return $this->disk;

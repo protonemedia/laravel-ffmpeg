@@ -32,6 +32,11 @@ class Media
         return $this->path;
     }
 
+    public function getFilenameWithoutExtension(): string
+    {
+        return pathinfo($this->getPath())['filename'];
+    }
+
     private function temporaryDirectoryAdapter(): FilesystemAdapter
     {
         return app('filesystem')->createLocalDriver(

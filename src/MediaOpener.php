@@ -68,6 +68,13 @@ class MediaOpener
         return $this;
     }
 
+    public function addBasicFilter(): self
+    {
+        $this->getDriver()->addBasicFilter(...func_get_args());
+
+        return $this;
+    }
+
     public function getFilters(): array
     {
         return $this->getDriver()->getFilters();
@@ -81,6 +88,11 @@ class MediaOpener
     public function getDurationInMiliseconds(): int
     {
         return $this->getDriver()->getDurationInMiliseconds();
+    }
+
+    public function getWidth(): int
+    {
+        return $this->getDriver()->getWidth();
     }
 
     public function export(): MediaExporter
