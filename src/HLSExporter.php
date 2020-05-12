@@ -25,6 +25,43 @@ class HLSExporter extends MediaExporter
         return $this;
     }
 
+    private function addHLSParametersToFormat($format, string $baseName)
+    {
+        $format->setAdditionalParameters([
+            '-sc_threshold',
+            '0',
+            '-g',
+            $this->keyFrameInterval,
+            '-hls_playlist_type',
+            'vod',
+            '-hls_time',
+            $this->segmentLength,
+            '-hls_segment_filename',
+            $this->getDisk()->makeMedia("{$baseName}_%05d.ts")->getLocalPath(),
+        ]);
+    }
+
+    private function applyFiltersCallback(callable $filtersCallback, $key)
+    {
+        $mediaMock = new class($this->driver, $key) {
+            private $driver;
+            private $key;
+
+            public function __construct($driver, $key)
+            {
+                $this->driver = $driver;
+                $this->key    = $key;
+            }
+
+            public function addFilter(...$arguments)
+            {
+                $this->driver->addBasicFilter('[0]', "[v{$this->key}]", ...$arguments);
+            }
+        };
+
+        $filtersCallback($mediaMock);
+    }
+
     public function save(string $path = null)
     {
         $disk = $this->getDisk();
@@ -34,40 +71,14 @@ class HLSExporter extends MediaExporter
         $this->pendingFormats->each(function ($formatAndCallback, $key) use ($baseName, $disk) {
             [$format, $filtersCallback] = $formatAndCallback;
 
-            $keysWithFilters = [];
-
             $baseName = "{$baseName}_{$key}_{$format->getKiloBitrate()}";
 
-            $format->setAdditionalParameters([
-                '-sc_threshold',
-                '0',
-                '-g',
-                $this->keyFrameInterval,
-                '-hls_playlist_type',
-                'vod',
-                '-hls_time',
-                $this->segmentLength,
-                '-hls_segment_filename',
-                $disk->makeMedia("{$baseName}_%05d.ts")->getLocalPath(),
-            ]);
+            $this->addHLSParametersToFormat($format, $baseName);
+
+            $keysWithFilters = [];
 
             if ($filtersCallback) {
-                $filtersCallback(new class($this->driver, $key) {
-                    private $driver;
-                    private $key;
-
-                    public function __construct($driver, $key)
-                    {
-                        $this->driver = $driver;
-                        $this->key = $key;
-                    }
-
-                    public function addFilter(...$arguments)
-                    {
-                        $this->driver->addBasicFilter('[0]', "[v{$this->key}]", ...$arguments);
-                    }
-                });
-
+                $this->applyFiltersCallback($filtersCallback, $key);
                 $keysWithFilters[$key] = "[v{$key}]";
             }
 
