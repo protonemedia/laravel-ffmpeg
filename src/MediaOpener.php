@@ -3,6 +3,7 @@
 namespace Pbmedia\LaravelFFMpeg;
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Traits\ForwardsCalls;
 use Pbmedia\LaravelFFMpeg\Drivers\DriverInterface;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
@@ -10,6 +11,8 @@ use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class MediaOpener
 {
+    use ForwardsCalls;
+
     private string $disk;
     private DriverInterface $driver;
     private MediaCollection $collection;
@@ -61,40 +64,6 @@ class MediaOpener
         return $this->driver->openAdvanced($this->collection);
     }
 
-    public function addFilter(): self
-    {
-        $this->getDriver()->addFilter(...func_get_args());
-
-        return $this;
-    }
-
-    public function addBasicFilter(): self
-    {
-        $this->getDriver()->addBasicFilter(...func_get_args());
-
-        return $this;
-    }
-
-    public function getFilters(): array
-    {
-        return $this->getDriver()->getFilters();
-    }
-
-    public function getDurationInSeconds(): int
-    {
-        return round($this->getDurationInMiliseconds() / 1000);
-    }
-
-    public function getDurationInMiliseconds(): int
-    {
-        return $this->getDriver()->getDurationInMiliseconds();
-    }
-
-    public function getWidth(): int
-    {
-        return $this->getDriver()->getWidth();
-    }
-
     public function export(): MediaExporter
     {
         return new MediaExporter($this->getDriver());
@@ -103,5 +72,12 @@ class MediaOpener
     public function exportForHLS(): HLSExporter
     {
         return new HLSExporter($this->getAdvancedDriver());
+    }
+
+    public function __call($method, $arguments)
+    {
+        $result = $this->forwardCallTo($driver = $this->getDriver(), $method, $arguments);
+
+        return ($result === $driver) ? $this : $result;
     }
 }

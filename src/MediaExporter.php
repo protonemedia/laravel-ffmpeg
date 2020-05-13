@@ -77,7 +77,7 @@ class MediaExporter
     {
         $this->maps->each->apply($this->driver->get());
 
-        return $this->driver->getCommand(
+        return $this->driver->getFinalCommand(
             $this->format,
             $path ? $this->getDisk()->makeMedia($path)->getLocalPath() : null
         );

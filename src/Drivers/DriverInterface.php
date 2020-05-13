@@ -17,8 +17,6 @@ interface DriverInterface
 
     public function getMediaCollection(): MediaCollection;
 
-    public function getCommand($format = null, $path = null): string;
-
     public function addFilter(): self;
 
     public function addBasicFilter($in, $out, ...$arguments): self;

@@ -11,11 +11,14 @@ use FFMpeg\Media\AbstractMediaType;
 use FFMpeg\Media\AdvancedMedia;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Traits\ForwardsCalls;
 use Pbmedia\LaravelFFMpeg\FFMpeg\BasicFilterMapping;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class PHPFFMpeg implements DriverInterface
 {
+    use ForwardsCalls;
+
     private FFMpeg $ffmpeg;
     private bool $forceAdvanced = false;
     private MediaCollection $mediaCollection;
@@ -84,6 +87,11 @@ class PHPFFMpeg implements DriverInterface
         return Arr::first($this->getStreams())->get('height');
     }
 
+    public function getDurationInSeconds(): int
+    {
+        return round($this->getDurationInMiliseconds() / 1000);
+    }
+
     public function getDurationInMiliseconds(): int
     {
         $stream = Arr::first($this->getStreams());
@@ -134,11 +142,6 @@ class PHPFFMpeg implements DriverInterface
         return $this;
     }
 
-    public function getCommand($format = null, $path = null): string
-    {
-        return $this->media->getFinalCommand($format, $path);
-    }
-
     public function getFilters(): array
     {
         return iterator_to_array($this->media->getFiltersCollection());
@@ -159,5 +162,12 @@ class PHPFFMpeg implements DriverInterface
         $this->isAdvancedMedia()
          ? $this->media->save()
          : $this->media->save($format, $path);
+    }
+
+    public function __call($method, $arguments)
+    {
+        $result = $this->forwardCallTo($media = $this->get(), $method, $arguments);
+
+        return ($result === $media) ? $this : $result;
     }
 }
