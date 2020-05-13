@@ -14,27 +14,22 @@ class MediaOpener
 {
     use ForwardsCalls;
 
-    private string $disk;
+    private Disk $disk;
     private PHPFFMpeg $driver;
     private MediaCollection $collection;
 
-    public function __construct(string $disk = null, PHPFFMpeg $driver = null)
+    public function __construct($disk = null, PHPFFMpeg $driver = null, MediaCollection $mediaCollection = null)
     {
-        $this->disk = $disk ?: config('filesystems.default');
+        $this->disk = Disk::make($disk ?: config('filesystems.default'));
 
         $this->driver = $driver ?: app(PHPFFMpeg::class);
 
-        $this->collection = new MediaCollection;
+        $this->collection = $mediaCollection ?: new MediaCollection;
     }
 
-    private function disk(): Disk
+    public function fromDisk($disk): self
     {
-        return new Disk($this->disk);
-    }
-
-    public function fromDisk(string $disk): self
-    {
-        $this->disk = $disk;
+        $this->disk = Disk::make($disk);
 
         return $this;
     }
@@ -44,7 +39,7 @@ class MediaOpener
         $paths = Arr::wrap($path);
 
         foreach ($paths as $path) {
-            $this->collection->add(Media::make($this->disk(), $path));
+            $this->collection->add(Media::make($this->disk, $path));
         }
 
         return $this;

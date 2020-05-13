@@ -30,9 +30,22 @@ class PHPFFMpeg
         $this->pendingBasicFilters = new Collection;
     }
 
+    /**
+     * Returns a fresh instance of itself with only the underlying FFMpeg instance.
+     */
     public function fresh(): self
     {
         return new static($this->ffmpeg);
+    }
+
+    public function get(): AbstractMediaType
+    {
+        return $this->media;
+    }
+
+    private function isAdvancedMedia(): bool
+    {
+        return $this->get() instanceof AdvancedMedia;
     }
 
     public function getMediaCollection(): MediaCollection
@@ -40,6 +53,9 @@ class PHPFFMpeg
         return $this->mediaCollection;
     }
 
+    /**
+     * Opens the MediaCollection if it's not been instanciated yet.
+     */
     public function open(MediaCollection $mediaCollection): self
     {
         if ($this->media) {
@@ -59,6 +75,9 @@ class PHPFFMpeg
         return $this;
     }
 
+    /**
+     * Force 'openAdvanced' when opening the MediaCollection
+     */
     public function openAdvanced(MediaCollection $mediaCollection): self
     {
         $this->forceAdvanced = true;
@@ -71,11 +90,21 @@ class PHPFFMpeg
         return iterator_to_array($this->media->getStreams());
     }
 
+    public function getFilters(): array
+    {
+        return iterator_to_array($this->media->getFiltersCollection());
+    }
+
+    //
+
     public function getDurationInSeconds(): int
     {
         return round($this->getDurationInMiliseconds() / 1000);
     }
 
+    /**
+     * Gets the duration of the media from the first stream or from the format.
+     */
     public function getDurationInMiliseconds(): int
     {
         $stream = Arr::first($this->getStreams());
@@ -91,30 +120,57 @@ class PHPFFMpeg
         }
     }
 
+    //
+
+    /**
+     * Helper method to provide multiple ways to add a filter to the underlying
+     * media object.
+     *
+     * @return self
+     */
     public function addFilter(): self
     {
         $arguments = func_get_args();
 
+        // to support '[in]filter[out]' complex filters
         if ($this->isAdvancedMedia() && count($arguments) === 3) {
             $this->media->filters()->custom(...$arguments);
-        } elseif (isset($arguments[0]) && $arguments[0] instanceof Closure) {
-            call_user_func_array($arguments[0], [$this->media->filters()]);
-        } elseif (isset($arguments[0]) && $arguments[0] instanceof FilterInterface) {
-            call_user_func_array([$this->media, 'addFilter'], $arguments);
-        } elseif (isset($arguments[0]) && is_array($arguments[0])) {
-            $this->media->addFilter(new SimpleFilter($arguments[0]));
-        } else {
-            $this->media->addFilter(new SimpleFilter($arguments));
+
+            return $this;
         }
+
+        // use a callback to add a filter
+        if ($arguments[0] instanceof Closure) {
+            call_user_func_array($arguments[0], [$this->media->filters()]);
+
+            return $this;
+        }
+
+        // use an object to add a filter
+        if ($arguments[0] instanceof FilterInterface) {
+            call_user_func_array([$this->media, 'addFilter'], $arguments);
+
+            return $this;
+        }
+
+        // use a single array with parameters to define a filter
+        if (is_array($arguments[0])) {
+            $this->media->addFilter(new SimpleFilter($arguments[0]));
+
+            return $this;
+        }
+
+        // use all function arguments as a filter
+        $this->media->addFilter(new SimpleFilter($arguments));
 
         return $this;
     }
 
-    public function getBasicFilters(): Collection
-    {
-        return $this->pendingBasicFilters;
-    }
-
+    /**
+     * Maps the arguments into a 'BasicFilterMapping' instance and
+     * pushed it to the 'pendingBasicFilters' collection. These
+     * filters will be applied later on by the MediaExporter.
+     */
     public function addBasicFilter($in, $out, ...$arguments): self
     {
         $this->pendingBasicFilters->push(new BasicFilterMapping(
@@ -126,33 +182,28 @@ class PHPFFMpeg
         return $this;
     }
 
-    public function getFilters(): array
+    public function getBasicFilters(): Collection
     {
-        return iterator_to_array($this->media->getFiltersCollection());
-    }
-
-    public function get(): AbstractMediaType
-    {
-        return $this->media;
-    }
-
-    private function isAdvancedMedia(): bool
-    {
-        return $this->get() instanceof AdvancedMedia;
+        return $this->pendingBasicFilters;
     }
 
     public function save($format = null, $path = null)
     {
-        $this->isAdvancedMedia()
-         ? $this->media->save()
-         : $this->media->save($format, $path);
+        $this->media->save($format, $path);
     }
 
+    /**
+     * Returns the underlying media object itself.
+     */
     public function __invoke(): AbstractMediaType
     {
         return $this->get();
     }
 
+    /**
+     * Forwards the call to the underling media object and returns the result
+     * if it's something different than the media object itself.
+     */
     public function __call($method, $arguments)
     {
         $result = $this->forwardCallTo($media = $this->get(), $method, $arguments);

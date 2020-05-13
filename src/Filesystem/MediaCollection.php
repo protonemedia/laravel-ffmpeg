@@ -4,6 +4,9 @@ namespace Pbmedia\LaravelFFMpeg\Filesystem;
 
 use Illuminate\Support\Collection;
 
+/**
+ * Mostly a wrapper around the Collection class.
+ */
 class MediaCollection
 {
     private Collection $items;

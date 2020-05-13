@@ -12,14 +12,10 @@ use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 class MediaExporter
 {
     protected PHPFFMpeg $driver;
-
     private ?FormatInterface $format = null;
-
     protected Collection $maps;
-
     protected ?string $visibility = null;
-
-    private ?Disk $toDisk = null;
+    private ?Disk $toDisk         = null;
 
     public function __construct(PHPFFMpeg $driver)
     {
@@ -48,13 +44,9 @@ class MediaExporter
 
     public function addFormatOutputMapping(FormatInterface $format, Media $output, array $outs, $forceDisableAudio = false, $forceDisableVideo = false)
     {
-        $this->maps->push(new AdvancedOutputMapping(
-            $outs,
-            $format,
-            $output,
-            $forceDisableAudio,
-            $forceDisableVideo,
-        ));
+        $this->maps->push(
+            new AdvancedOutputMapping($outs, $format, $output, $forceDisableAudio, $forceDisableVideo)
+        );
 
         return $this;
     }
@@ -75,6 +67,8 @@ class MediaExporter
 
     public function getCommand(string $path = null): string
     {
+        $this->driver->getBasicFilters()->each->apply($this->driver, $this->maps);
+
         $this->maps->each->apply($this->driver->get());
 
         return $this->driver->getFinalCommand(
@@ -83,7 +77,7 @@ class MediaExporter
         );
     }
 
-    public function save(string $path = null)
+    public function save(string $path = null): MediaOpener
     {
         if ($this->maps->isNotEmpty()) {
             return $this->saveWithMappings();
@@ -95,9 +89,11 @@ class MediaExporter
 
         $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
         $outputMedia->setVisibility($this->visibility);
+
+        return $this->getMediaOpener();
     }
 
-    private function saveWithMappings()
+    private function saveWithMappings(): MediaOpener
     {
         $this->driver->getBasicFilters()->each->apply($this->driver, $this->maps);
 
@@ -106,5 +102,16 @@ class MediaExporter
         $this->driver->save();
 
         $this->maps->map->getOutputMedia()->each->copyAllFromTemporaryDirectory($this->visibility);
+
+        return $this->getMediaOpener();
+    }
+
+    private function getMediaOpener(): MediaOpener
+    {
+        return new MediaOpener(
+            $this->driver->getMediaCollection()->last()->getDisk(),
+            $this->driver->fresh(),
+            $this->driver->getMediaCollection()
+        );
     }
 }

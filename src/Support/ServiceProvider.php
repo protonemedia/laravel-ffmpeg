@@ -65,8 +65,11 @@ class ServiceProvider extends BaseServiceProvider
         });
 
         // Register the main class to use with the facade
-        $this->app->singleton('laravel-ffmpeg', function () {
-            return new MediaOpener;
+        $this->app->bind('laravel-ffmpeg', function () {
+            return new MediaOpener(
+                $this->app['config']->get('filesystems.default'),
+                $this->app->make(PHPFFMpeg::class)
+            );
         });
     }
 }

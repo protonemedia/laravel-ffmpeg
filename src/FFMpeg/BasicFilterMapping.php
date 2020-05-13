@@ -20,11 +20,18 @@ class BasicFilterMapping
         $this->arguments = $arguments;
     }
 
+    /**
+     * Removes all non-numeric characters from the 'in' attribute.
+     */
     public function normalizeIn(): int
     {
         return preg_replace("/[^0-9]/", "", $this->in);
     }
 
+    /**
+     * Filters the given MediaCollection down to one item by
+     * guessing the key by the 'in' attribute.
+     */
     private function singleMediaCollection(MediaCollection $mediaCollection): MediaCollection
     {
         $media = $mediaCollection->get($this->normalizeIn()) ?: $mediaCollection->first();
@@ -32,7 +39,10 @@ class BasicFilterMapping
         return MediaCollection::make([$media]);
     }
 
-    public function apply(PHPFFMpeg $driver, Collection $maps)
+    /**
+     * Applies the filter to the FFMpeg driver.
+     */
+    public function apply(PHPFFMpeg $driver, Collection $maps): void
     {
         $freshDriver = $driver->fresh()
             ->open($this->singleMediaCollection($driver->getMediaCollection()))

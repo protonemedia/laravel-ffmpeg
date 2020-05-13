@@ -15,13 +15,8 @@ class AdvancedOutputMapping
     private bool $forceDisableAudio = false;
     private bool $forceDisableVideo = false;
 
-    public function __construct(
-        array $outs,
-        FormatInterface $format,
-        Media $output,
-        $forceDisableAudio = false,
-        $forceDisableVideo = false
-    ) {
+    public function __construct(array $outs, FormatInterface $format, Media $output, $forceDisableAudio = false, $forceDisableVideo = false)
+    {
         $this->outs              = $outs;
         $this->format            = $format;
         $this->output            = $output;
@@ -29,7 +24,11 @@ class AdvancedOutputMapping
         $this->forceDisableVideo = $forceDisableVideo;
     }
 
-    public function apply(AdvancedMedia $advancedMedia): self
+    /**
+     * Applies the attributes to the format and specifies the video
+     * bitrate if it's missing.
+     */
+    public function apply(AdvancedMedia $advancedMedia): void
     {
         $format = clone $this->format;
 
@@ -44,8 +43,6 @@ class AdvancedOutputMapping
         }
 
         $advancedMedia->map($this->outs, $format, $this->output->getLocalPath(), $this->forceDisableAudio, $this->forceDisableVideo);
-
-        return $this;
     }
 
     public function getFormat(): FormatInterface
