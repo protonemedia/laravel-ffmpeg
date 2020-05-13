@@ -2,12 +2,13 @@
 
 namespace Pbmedia\LaravelFFMpeg\Filesystem;
 
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Traits\ForwardsCalls;
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\AdapterInterface;
-use League\Flysystem\Filesystem;
+use League\Flysystem\Filesystem as LeagueFilesystem;
 use Spatie\TemporaryDirectory\TemporaryDirectory;
 
 /**
@@ -35,6 +36,10 @@ class Disk
         if (is_string($disk)) {
             return new static($disk);
         }
+
+        if ($disk instanceof Filesystem) {
+            return new static($disk);
+        }
     }
 
     public function makeMedia(string $path): Media
@@ -44,7 +49,11 @@ class Disk
 
     public function getName(): string
     {
-        return $this->disk;
+        if (is_string($this->disk)) {
+            return $this->disk;
+        }
+
+        return get_class($this->getFlysystemAdapter()) . "_" . md5(json_encode(serialize($this->getFlysystemAdapter())));
     }
 
     public function getFilesystemAdapter(): FilesystemAdapter
@@ -53,10 +62,14 @@ class Disk
             return $this->filesystemAdapter;
         }
 
+        if ($this->disk instanceof Filesystem) {
+            return $this->filesystemAdapter = $this->disk;
+        }
+
         return $this->filesystemAdapter = Storage::disk($this->disk);
     }
 
-    private function getFlysystemDriver(): Filesystem
+    private function getFlysystemDriver(): LeagueFilesystem
     {
         return $this->getFilesystemAdapter()->getDriver();
     }

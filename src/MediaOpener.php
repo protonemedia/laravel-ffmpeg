@@ -3,6 +3,7 @@
 namespace Pbmedia\LaravelFFMpeg;
 
 use FFMpeg\Media\AbstractMediaType;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Traits\ForwardsCalls;
 use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
@@ -32,6 +33,11 @@ class MediaOpener
         $this->disk = Disk::make($disk);
 
         return $this;
+    }
+
+    public function fromFilesystem(Filesystem $filesystem): self
+    {
+        return $this->fromDisk($filesystem);
     }
 
     public function open($path): self

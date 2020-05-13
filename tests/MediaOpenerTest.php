@@ -4,6 +4,7 @@ namespace Pbmedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Media\Video;
 use FFMpeg\Media\Waveform;
+use Illuminate\Support\Facades\Storage;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
@@ -89,6 +90,19 @@ class MediaOpenerTest extends TestCase
 
         $this->assertEquals('guitar.m4a', $media->getPath());
         $this->assertEquals('http', $media->getDisk()->getName());
+    }
+
+    /** @test */
+    public function it_can_open_a_file_from_a_filesystem_instance()
+    {
+        $this->fakeLocalVideoFile();
+
+        $media = (new MediaOpener)
+            ->fromFilesystem(Storage::disk('local'))
+            ->open('video.mp4');
+
+        $this->assertEquals(5, $media->getDurationInSeconds());
+        $this->assertStringContainsString('League\Flysystem\Adapter\Local_', $media->get()->first()->getDisk()->getName());
     }
 
     /** @test */
