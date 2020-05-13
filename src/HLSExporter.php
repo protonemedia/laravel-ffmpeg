@@ -68,6 +68,11 @@ class HLSExporter extends MediaExporter
                 $this->called['called'] = true;
             }
 
+            public function scale($width, $height)
+            {
+                $this->addFilter("scale={$width}:{$height}");
+            }
+
             public function addFilter(...$arguments)
             {
                 $in  = '[0]';
