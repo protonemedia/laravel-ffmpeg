@@ -4,7 +4,7 @@ namespace Pbmedia\LaravelFFMpeg\FFMpeg;
 
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
-use Pbmedia\LaravelFFMpeg\Drivers\DriverInterface;
+use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class BasicFilterMapping
@@ -32,7 +32,7 @@ class BasicFilterMapping
         return MediaCollection::make([$media]);
     }
 
-    public function apply(DriverInterface $driver, Collection $maps)
+    public function apply(PHPFFMpeg $driver, Collection $maps)
     {
         $freshDriver = $driver->fresh()
             ->open($this->singleMediaCollection($driver->getMediaCollection()))

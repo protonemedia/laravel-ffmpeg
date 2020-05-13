@@ -2,6 +2,8 @@
 
 namespace Pbmedia\LaravelFFMpeg\Tests;
 
+use FFMpeg\Media\Video;
+use FFMpeg\Media\Waveform;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
@@ -87,5 +89,19 @@ class MediaOpenerTest extends TestCase
 
         $this->assertEquals('guitar.m4a', $media->getPath());
         $this->assertEquals('http', $media->getDisk()->getName());
+    }
+
+    /** @test */
+    public function it_can_access_the_underlying_library_object()
+    {
+        $this->fakeLocalVideoFile();
+
+        $media = (new MediaOpener)->open('video.mp4');
+
+        $this->assertInstanceOf(Video::class, $media());
+        $this->assertInstanceOf(Video::class, $media->getDriver()());
+
+        $this->assertInstanceOf(Waveform::class, $media->waveform());
+        $this->assertInstanceOf(Waveform::class, $media->getDriver()->waveform());
     }
 }

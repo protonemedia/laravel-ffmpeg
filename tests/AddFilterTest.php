@@ -154,7 +154,7 @@ class AddFilter extends TestCase
 
         $this->assertEquals(
             640,
-            (new MediaOpener)->fromDisk('local')->open('output.mp4')->getWidth()
+            (new MediaOpener)->fromDisk('local')->open('output.mp4')->getStreams()[0]->get('width')
         );
     }
 
@@ -174,7 +174,7 @@ class AddFilter extends TestCase
 
         $this->assertEquals(
             1280,
-            (new MediaOpener)->fromDisk('local')->open('output.mp4')->getWidth()
+            (new MediaOpener)->fromDisk('local')->open('output.mp4')->getStreams()[0]->get('width')
         );
     }
 }

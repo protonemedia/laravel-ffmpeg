@@ -4,7 +4,6 @@ namespace Pbmedia\LaravelFFMpeg\Support;
 
 use FFMpeg\FFMpeg;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
-use Pbmedia\LaravelFFMpeg\Drivers\DriverInterface;
 use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use Pbmedia\LaravelFFMpeg\MediaOpener;
 use Psr\Log\LoggerInterface;
@@ -56,8 +55,6 @@ class ServiceProvider extends BaseServiceProvider
     {
         // Automatically apply the package configuration
         $this->mergeConfigFrom(__DIR__ . '/../../config/config.php', 'laravel-ffmpeg');
-
-        $this->app->bind(DriverInterface::class, PHPFFMpeg::class);
 
         $this->app->bind(PHPFFMpeg::class, function () {
             $config = [];

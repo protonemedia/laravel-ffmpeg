@@ -4,14 +4,14 @@ namespace Pbmedia\LaravelFFMpeg;
 
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
-use Pbmedia\LaravelFFMpeg\Drivers\DriverInterface;
+use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use Pbmedia\LaravelFFMpeg\FFMpeg\AdvancedOutputMapping;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 
 class MediaExporter
 {
-    protected DriverInterface $driver;
+    protected PHPFFMpeg $driver;
 
     private ?FormatInterface $format = null;
 
@@ -21,7 +21,7 @@ class MediaExporter
 
     private ?Disk $toDisk = null;
 
-    public function __construct(DriverInterface $driver)
+    public function __construct(PHPFFMpeg $driver)
     {
         $this->driver = $driver;
 

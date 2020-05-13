@@ -4,7 +4,6 @@ namespace Pbmedia\LaravelFFMpeg\Drivers;
 
 use Closure;
 use FFMpeg\FFMpeg;
-use FFMpeg\FFProbe\DataMapping\Format;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\FilterInterface;
 use FFMpeg\Media\AbstractMediaType;
@@ -15,7 +14,7 @@ use Illuminate\Support\Traits\ForwardsCalls;
 use Pbmedia\LaravelFFMpeg\FFMpeg\BasicFilterMapping;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
-class PHPFFMpeg implements DriverInterface
+class PHPFFMpeg
 {
     use ForwardsCalls;
 
@@ -67,24 +66,9 @@ class PHPFFMpeg implements DriverInterface
         return $this->open($mediaCollection);
     }
 
-    private function getStreams(): array
+    public function getStreams(): array
     {
         return iterator_to_array($this->media->getStreams());
-    }
-
-    private function getFormat(): Format
-    {
-        return $this->media->getFormat();
-    }
-
-    public function getWidth(): int
-    {
-        return Arr::first($this->getStreams())->get('width');
-    }
-
-    public function getHeight(): int
-    {
-        return Arr::first($this->getStreams())->get('height');
     }
 
     public function getDurationInSeconds(): int
@@ -147,7 +131,7 @@ class PHPFFMpeg implements DriverInterface
         return iterator_to_array($this->media->getFiltersCollection());
     }
 
-    public function get()
+    public function get(): AbstractMediaType
     {
         return $this->media;
     }
@@ -162,6 +146,11 @@ class PHPFFMpeg implements DriverInterface
         $this->isAdvancedMedia()
          ? $this->media->save()
          : $this->media->save($format, $path);
+    }
+
+    public function __invoke(): AbstractMediaType
+    {
+        return $this->get();
     }
 
     public function __call($method, $arguments)
