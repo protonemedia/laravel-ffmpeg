@@ -35,6 +35,11 @@ class MediaCollection
         return $this->items->count();
     }
 
+    public function get($key): Media
+    {
+        return $this->items->get($key);
+    }
+
     public function first(): Media
     {
         return $this->items->first();

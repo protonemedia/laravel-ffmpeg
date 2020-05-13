@@ -24,7 +24,8 @@ class MediaExporter
     public function __construct(DriverInterface $driver)
     {
         $this->driver = $driver;
-        $this->maps   = new Collection;
+
+        $this->maps = new Collection;
     }
 
     protected function getDisk(): Disk
@@ -98,6 +99,8 @@ class MediaExporter
 
     private function saveWithMappings()
     {
+        $this->driver->getBasicFilters()->each->apply($this->driver, $this->maps);
+
         $this->maps->each->apply($this->driver->get());
 
         $this->driver->save();

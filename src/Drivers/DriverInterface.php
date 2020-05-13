@@ -2,6 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg\Drivers;
 
+use Illuminate\Support\Collection;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 interface DriverInterface
@@ -21,6 +22,8 @@ interface DriverInterface
     public function addFilter(): self;
 
     public function addBasicFilter($in, $out, ...$arguments): self;
+
+    public function getBasicFilters(): Collection;
 
     public function getFilters(): array;
 

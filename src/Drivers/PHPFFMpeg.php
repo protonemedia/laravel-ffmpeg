@@ -7,11 +7,11 @@ use FFMpeg\FFMpeg;
 use FFMpeg\FFProbe\DataMapping\Format;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\FilterInterface;
-use FFMpeg\Format\Video\X264;
 use FFMpeg\Media\AbstractMediaType;
 use FFMpeg\Media\AdvancedMedia;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Pbmedia\LaravelFFMpeg\FFMpeg\BasicFilterMapping;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class PHPFFMpeg implements DriverInterface
@@ -19,11 +19,13 @@ class PHPFFMpeg implements DriverInterface
     private FFMpeg $ffmpeg;
     private bool $forceAdvanced = false;
     private MediaCollection $mediaCollection;
+    private Collection $pendingBasicFilters;
     private ?AbstractMediaType $media = null;
 
     public function __construct(FFMpeg $ffmpeg)
     {
-        $this->ffmpeg = $ffmpeg;
+        $this->ffmpeg              = $ffmpeg;
+        $this->pendingBasicFilters = new Collection;
     }
 
     public function fresh(): self
@@ -116,27 +118,18 @@ class PHPFFMpeg implements DriverInterface
         return $this;
     }
 
+    public function getBasicFilters(): Collection
+    {
+        return $this->pendingBasicFilters;
+    }
+
     public function addBasicFilter($in, $out, ...$arguments): self
     {
-        $freshDriver = $this->fresh()->open(
-            MediaCollection::make([$this->getMediaCollection()->first()])
-        );
-
-        $freshDriver->addFilter(...$arguments);
-
-        Collection::make($freshDriver->getFilters())->map(function ($filter) use ($freshDriver) {
-            $parameters = $filter->apply($freshDriver->get(), new X264);
-
-            foreach ($parameters as $index => $command) {
-                if ($command === '-vf' || $command === '-filter:v' || $command === '-filter_complex') {
-                    unset($parameters[$index]);
-                }
-            }
-
-            return implode(' ', $parameters);
-        })->each(function ($customCompiledFilter) use ($in, $out) {
-            $this->addFilter($in, $customCompiledFilter, $out);
-        });
+        $this->pendingBasicFilters->push(new BasicFilterMapping(
+            $in,
+            $out,
+            ...$arguments,
+        ));
 
         return $this;
     }

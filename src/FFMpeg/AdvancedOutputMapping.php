@@ -9,11 +9,11 @@ use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 
 class AdvancedOutputMapping
 {
-    public array $outs;
-    public FormatInterface $format;
-    public Media $output;
-    public bool $forceDisableAudio = false;
-    public bool $forceDisableVideo = false;
+    private array $outs;
+    private FormatInterface $format;
+    private Media $output;
+    private bool $forceDisableAudio = false;
+    private bool $forceDisableVideo = false;
 
     public function __construct(
         array $outs,
@@ -48,8 +48,18 @@ class AdvancedOutputMapping
         return $this;
     }
 
+    public function getFormat(): FormatInterface
+    {
+        return $this->format;
+    }
+
     public function getOutputMedia(): Media
     {
         return $this->output;
+    }
+
+    public function hasOut(string $out): bool
+    {
+        return in_array($out, $this->outs);
     }
 }
