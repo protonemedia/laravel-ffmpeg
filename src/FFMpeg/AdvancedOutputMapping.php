@@ -30,19 +30,17 @@ class AdvancedOutputMapping
      */
     public function apply(AdvancedMedia $advancedMedia): void
     {
-        $format = clone $this->format;
-
-        if ($format instanceof VideoInterface) {
-            $parameters = $format->getAdditionalParameters() ?: [];
+        if ($this->format instanceof VideoInterface) {
+            $parameters = $this->format->getAdditionalParameters() ?: [];
 
             if (!in_array('-b:v', $parameters)) {
-                $parameters = ['-b:v', $format->getKiloBitrate() . 'k'] + $parameters;
+                $parameters = ['-b:v', $this->format->getKiloBitrate() . 'k'] + $parameters;
             }
 
-            $format->setAdditionalParameters($parameters);
+            $this->format->setAdditionalParameters($parameters);
         }
 
-        $advancedMedia->map($this->outs, $format, $this->output->getLocalPath(), $this->forceDisableAudio, $this->forceDisableVideo);
+        $advancedMedia->map($this->outs, $this->format, $this->output->getLocalPath(), $this->forceDisableAudio, $this->forceDisableVideo);
     }
 
     public function getFormat(): FormatInterface

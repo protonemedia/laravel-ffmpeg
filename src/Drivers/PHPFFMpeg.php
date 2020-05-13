@@ -11,7 +11,7 @@ use FFMpeg\Media\AdvancedMedia;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
-use Pbmedia\LaravelFFMpeg\FFMpeg\BasicFilterMapping;
+use Pbmedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class PHPFFMpeg
@@ -21,13 +21,13 @@ class PHPFFMpeg
     private FFMpeg $ffmpeg;
     private bool $forceAdvanced = false;
     private MediaCollection $mediaCollection;
-    private Collection $pendingBasicFilters;
+    private Collection $pendingComplexFilters;
     private ?AbstractMediaType $media = null;
 
     public function __construct(FFMpeg $ffmpeg)
     {
-        $this->ffmpeg              = $ffmpeg;
-        $this->pendingBasicFilters = new Collection;
+        $this->ffmpeg               = $ffmpeg;
+        $this->pendingComplexFilters = new Collection;
     }
 
     /**
@@ -167,13 +167,13 @@ class PHPFFMpeg
     }
 
     /**
-     * Maps the arguments into a 'BasicFilterMapping' instance and
-     * pushed it to the 'pendingBasicFilters' collection. These
+     * Maps the arguments into a 'LegacyFilterMapping' instance and
+     * pushed it to the 'pendingComplexFilters' collection. These
      * filters will be applied later on by the MediaExporter.
      */
-    public function addBasicFilter($in, $out, ...$arguments): self
+    public function addFilterAsComplexFilter($in, $out, ...$arguments): self
     {
-        $this->pendingBasicFilters->push(new BasicFilterMapping(
+        $this->pendingComplexFilters->push(new LegacyFilterMapping(
             $in,
             $out,
             ...$arguments,
@@ -182,9 +182,9 @@ class PHPFFMpeg
         return $this;
     }
 
-    public function getBasicFilters(): Collection
+    public function getPendingComplexFilters(): Collection
     {
-        return $this->pendingBasicFilters;
+        return $this->pendingComplexFilters;
     }
 
     public function save($format = null, $path = null)

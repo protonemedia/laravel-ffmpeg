@@ -26,6 +26,46 @@ class ExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_bind_a_progress_listener_to_the_format()
+    {
+        $this->fakeLocalVideoFile();
+
+        $percentages = [];
+
+        $format = new X264;
+        $format->on('progress', function ($video, $format, $percentage) use (&$percentages) {
+            $percentages[] = $percentage;
+        });
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->export()
+            ->inFormat($format)
+            ->save('new_video.mp4');
+
+        $this->assertNotEmpty($percentages);
+    }
+
+    /** @test */
+    public function it_can_bind_a_dedicated_progress_listener_to_the_exporter()
+    {
+        $this->fakeLocalVideoFile();
+
+        $percentages = [];
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->export()
+            ->onProgress(function ($percentage) use (&$percentages) {
+                $percentages[] = $percentage;
+            })
+            ->inFormat(new X264)
+            ->save('new_video.mp4');
+
+        $this->assertNotEmpty($percentages);
+    }
+
+    /** @test */
     public function it_can_chain_multiple_exports()
     {
         $this->fakeLocalVideoFile();
@@ -44,16 +84,23 @@ class ExportTest extends TestCase
     }
 
     /** @test */
-    public function it_can_export_two_files_into_a_single_file_with_filters()
+    public function it_can_export_two_files_into_a_two_files_with_filters_and_a_progress_listener()
     {
         $this->fakeLocalVideoFiles();
+
+        $percentages = [];
 
         FFMpeg::fromDisk('local')
             ->open(['video.mp4', 'video2.mp4'])
             ->export()
+            ->onProgress(function ($percentage) use (&$percentages) {
+                $percentages[] = $percentage;
+            })
             ->addFormatOutputMapping(new X264, Media::make('local', 'new_video1.mp4'), ['0:v', '1:v'])
             ->addFormatOutputMapping(new WMV, Media::make('memory', 'new_video2.wmv'), ['0:v', '1:v'])
             ->save();
+
+        $this->assertNotEmpty($percentages);
 
         $this->assertTrue(Storage::disk('local')->has('new_video1.mp4'));
         $this->assertTrue(Storage::disk('memory')->has('new_video2.wmv'));

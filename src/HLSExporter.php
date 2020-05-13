@@ -2,8 +2,10 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
+use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Fluent;
 
 class HLSExporter extends MediaExporter
 {
@@ -27,7 +29,7 @@ class HLSExporter extends MediaExporter
 
     private function addHLSParametersToFormat($format, string $baseName)
     {
-        $format->setAdditionalParameters([
+        $parameters = [
             '-sc_threshold',
             '0',
             '-g',
@@ -38,31 +40,57 @@ class HLSExporter extends MediaExporter
             $this->segmentLength,
             '-hls_segment_filename',
             $this->getDisk()->makeMedia("{$baseName}_%05d.ts")->getLocalPath(),
-        ]);
+        ];
+
+        $format->setAdditionalParameters($parameters);
     }
 
-    private function applyFiltersCallback(callable $filtersCallback, $key)
+    private function applyFiltersCallback(callable $filtersCallback, $key): bool
     {
-        $mediaMock = new class($this->driver, $key) {
+        $called = new Fluent(['called' => false]);
+
+        $mediaMock = new class($this->driver, $key, $called) {
             private $driver;
             private $key;
+            private $called;
 
-            public function __construct($driver, $key)
+            public function __construct($driver, $key, $called)
             {
                 $this->driver = $driver;
                 $this->key    = $key;
+                $this->called = $called;
+            }
+
+            public function addLegacyFilter(...$arguments)
+            {
+                $this->driver->addFilterAsComplexFilter('[0]', "[v{$this->key}]", ...$arguments);
+
+                $this->called['called'] = true;
             }
 
             public function addFilter(...$arguments)
             {
-                $this->driver->addBasicFilter('[0]', "[v{$this->key}]", ...$arguments);
+                $in  = '[0]';
+                $out = "[v{$this->key}]";
+
+                if (count($arguments) === 1 && !is_callable($arguments[0])) {
+                    $this->driver->addFilter($in, $arguments[0], $out);
+                } else {
+                    $this->driver->addFilter(function (ComplexFilters $filters) use ($arguments, $in,$out) {
+                        $arguments[0]($filters, $in, $out);
+                    });
+                }
+
+                $this->called['called'] = true;
             }
         };
 
         $filtersCallback($mediaMock);
+
+        return $called['called'];
     }
 
-    public function save(string $path = null)
+    public function save(string $path = null): MediaOpener
     {
         $disk = $this->getDisk();
 
@@ -78,8 +106,9 @@ class HLSExporter extends MediaExporter
             $keysWithFilters = [];
 
             if ($filtersCallback) {
-                $this->applyFiltersCallback($filtersCallback, $key);
-                $keysWithFilters[$key] = "[v{$key}]";
+                if ($this->applyFiltersCallback($filtersCallback, $key)) {
+                    $keysWithFilters[$key] = "[v{$key}]";
+                }
             }
 
             $this->addFormatOutputMapping($format, $disk->makeMedia("{$baseName}.m3u8"), [$keysWithFilters[$key] ?? '0']);

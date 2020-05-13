@@ -2,6 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg\Tests;
 
+use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Video\VideoFilters;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Facades\Storage;
@@ -33,7 +34,7 @@ class HlsExportTest extends TestCase
     }
 
     /** @test */
-    public function it_cna_export_to_hls_with_seperate_filters_for_each_format()
+    public function it_can_export_to_hls_with_legacy_filters_for_each_format()
     {
         $this->fakeLocalVideoFile();
 
@@ -45,12 +46,12 @@ class HlsExportTest extends TestCase
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate, function ($media) {
-                $media->addFilter(function (VideoFilters $filters) {
+                $media->addLegacyFilter(function (VideoFilters $filters) {
                     $filters->resize(new \FFMpeg\Coordinate\Dimension(640, 480));
                 });
             })
             ->addFormat($midBitrate, function ($media) {
-                $media->addFilter(function ($filters) {
+                $media->addLegacyFilter(function ($filters) {
                     $filters->resize(new \FFMpeg\Coordinate\Dimension(1280, 960));
                 });
             })
@@ -61,5 +62,73 @@ class HlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_1_500.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_2_1000.m3u8'));
+
+        $this->assertEquals(
+            640,
+            (new MediaOpener)->fromDisk('local')->open('adaptive_0_250_00000.ts')->getStreams()[0]->get('width')
+        );
+
+        $this->assertEquals(
+            1280,
+            (new MediaOpener)->fromDisk('local')->open('adaptive_1_500_00000.ts')->getStreams()[0]->get('width')
+        );
+
+        $this->assertEquals(
+            1920,
+            (new MediaOpener)->fromDisk('local')->open('adaptive_2_1000_00000.ts')->getStreams()[0]->get('width')
+        );
+    }
+
+    /** @test */
+    public function it_can_export_to_hls_with_complex_filters_for_each_format()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate   = (new X264)->setKiloBitrate(250);
+        $midBitrate   = (new X264)->setKiloBitrate(500);
+        $highBitrate  = (new X264)->setKiloBitrate(1000);
+        $superBitrate = (new X264)->setKiloBitrate(1500);
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->addFormat($lowBitrate, function ($media) {
+            })
+            ->addFormat($midBitrate, function ($media) {
+                $media->addFilter('scale=1280:960');
+            })
+            ->addFormat($highBitrate)
+            ->addFormat($superBitrate, function ($media) {
+                $media->addFilter(function (ComplexFilters $filters, $in, $out) {
+                    $filters->custom($in, 'scale=2560:1920', $out);
+                });
+            })
+            ->toDisk('local')
+            ->save('complex.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('complex_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('complex_1_500.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('complex_2_1000.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('complex_3_1500.m3u8'));
+
+        $this->assertEquals(
+            1920,
+            (new MediaOpener)->fromDisk('local')->open('complex_0_250_00000.ts')->getStreams()[0]->get('width')
+        );
+
+        $this->assertEquals(
+            1280,
+            (new MediaOpener)->fromDisk('local')->open('complex_1_500_00000.ts')->getStreams()[0]->get('width')
+        );
+
+        $this->assertEquals(
+            1920,
+            (new MediaOpener)->fromDisk('local')->open('complex_2_1000_00000.ts')->getStreams()[0]->get('width')
+        );
+
+        $this->assertEquals(
+            2560,
+            (new MediaOpener)->fromDisk('local')->open('complex_3_1500_00000.ts')->getStreams()[0]->get('width')
+        );
     }
 }

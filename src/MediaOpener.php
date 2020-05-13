@@ -10,6 +10,7 @@ use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use Pbmedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 
 class MediaOpener
 {
@@ -74,6 +75,13 @@ class MediaOpener
     public function exportForHLS(): HLSExporter
     {
         return new HLSExporter($this->getAdvancedDriver());
+    }
+
+    public function cleanupTemporaryFiles(): self
+    {
+        TemporaryDirectories::deleteAll();
+
+        return $this;
     }
 
     public function __invoke(): AbstractMediaType

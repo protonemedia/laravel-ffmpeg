@@ -2,6 +2,8 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
+use Closure;
+use Evenement\EventEmitterInterface;
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
 use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
@@ -14,8 +16,10 @@ class MediaExporter
     protected PHPFFMpeg $driver;
     private ?FormatInterface $format = null;
     protected Collection $maps;
-    protected ?string $visibility = null;
-    private ?Disk $toDisk         = null;
+    protected ?string $visibility        = null;
+    private ?Disk $toDisk                = null;
+    private ?Closure $onProgressCallback = null;
+    private ?float $lastPercentage       = null;
 
     public function __construct(PHPFFMpeg $driver)
     {
@@ -38,6 +42,13 @@ class MediaExporter
     public function inFormat(FormatInterface $format): self
     {
         $this->format = $format;
+
+        return $this;
+    }
+
+    public function onProgress(Closure $callback): self
+    {
+        $this->onProgressCallback = $callback;
 
         return $this;
     }
@@ -67,7 +78,7 @@ class MediaExporter
 
     public function getCommand(string $path = null): string
     {
-        $this->driver->getBasicFilters()->each->apply($this->driver, $this->maps);
+        $this->driver->getPendingComplexFilters()->each->apply($this->driver, $this->maps);
 
         $this->maps->each->apply($this->driver->get());
 
@@ -75,6 +86,16 @@ class MediaExporter
             $this->format,
             $path ? $this->getDisk()->makeMedia($path)->getLocalPath() : null
         );
+    }
+
+    private function applyProgressListenerToFormat(EventEmitterInterface $format)
+    {
+        $format->on('progress', function ($video, $format, $percentage) {
+            if ($percentage !== $this->lastPercentage && $percentage < 100) {
+                $this->lastPercentage = $percentage;
+                call_user_func($this->onProgressCallback, $percentage);
+            }
+        });
     }
 
     public function save(string $path = null): MediaOpener
@@ -85,21 +106,37 @@ class MediaExporter
 
         $outputMedia = $this->getDisk()->makeMedia($path);
 
+        if ($this->format && $this->onProgressCallback) {
+            $this->applyProgressListenerToFormat($this->format);
+        }
+
         $this->driver->save($this->format, $outputMedia->getLocalPath());
 
         $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
         $outputMedia->setVisibility($this->visibility);
+
+        if ($this->onProgressCallback) {
+            call_user_func($this->onProgressCallback, 100);
+        }
 
         return $this->getMediaOpener();
     }
 
     private function saveWithMappings(): MediaOpener
     {
-        $this->driver->getBasicFilters()->each->apply($this->driver, $this->maps);
+        $this->driver->getPendingComplexFilters()->each->apply($this->driver, $this->maps);
 
-        $this->maps->each->apply($this->driver->get());
+        $this->maps->map->apply($this->driver->get());
+
+        if ($this->onProgressCallback) {
+            $this->applyProgressListenerToFormat($this->maps->last()->getFormat());
+        }
 
         $this->driver->save();
+
+        if ($this->onProgressCallback) {
+            call_user_func($this->onProgressCallback, 100);
+        }
 
         $this->maps->map->getOutputMedia()->each->copyAllFromTemporaryDirectory($this->visibility);
 

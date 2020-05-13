@@ -7,11 +7,19 @@ use Illuminate\Support\Facades\Storage;
 use League\Flysystem\Filesystem as FlysystemFilesystem;
 use League\Flysystem\Memory\MemoryAdapter;
 use Orchestra\Testbench\TestCase as BaseTestCase;
+use Pbmedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 use Pbmedia\LaravelFFMpeg\Support\ServiceProvider;
 use Twistor\Flysystem\Http\HttpAdapter;
 
 abstract class TestCase extends BaseTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        TemporaryDirectories::deleteAll();
+    }
+
     protected function getEnvironmentSetUp($app)
     {
         $app['config']->set('filesystems.default', 'local');

@@ -9,7 +9,7 @@ use FFMpeg\Format\AudioInterface;
 use FFMpeg\Format\Video\X264;
 use FFMpeg\Media\Audio;
 use Illuminate\Support\Arr;
-use Pbmedia\LaravelFFMpeg\FFMpeg\BasicFilterMapping;
+use Pbmedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 use Pbmedia\LaravelFFMpeg\MediaOpener;
 
@@ -90,22 +90,22 @@ class AddFilter extends TestCase
     /** @test */
     public function it_can_parse_a_complex_filter_input_to_a_integer()
     {
-        $mapping = new BasicFilterMapping('0', '[out]', '');
+        $mapping = new LegacyFilterMapping('0', '[out]', '');
         $this->assertEquals(0, $mapping->normalizeIn());
 
-        $mapping = new BasicFilterMapping('[0]', '[out]', '');
+        $mapping = new LegacyFilterMapping('[0]', '[out]', '');
         $this->assertEquals(0, $mapping->normalizeIn());
 
-        $mapping = new BasicFilterMapping('[0v]', '[out]', '');
+        $mapping = new LegacyFilterMapping('[0v]', '[out]', '');
         $this->assertEquals(0, $mapping->normalizeIn());
 
-        $mapping = new BasicFilterMapping('2', '[out]', '');
+        $mapping = new LegacyFilterMapping('2', '[out]', '');
         $this->assertEquals(2, $mapping->normalizeIn());
 
-        $mapping = new BasicFilterMapping('[2]', '[out]', '');
+        $mapping = new LegacyFilterMapping('[2]', '[out]', '');
         $this->assertEquals(2, $mapping->normalizeIn());
 
-        $mapping = new BasicFilterMapping('[2v]', '[out]', '');
+        $mapping = new LegacyFilterMapping('[2v]', '[out]', '');
         $this->assertEquals(2, $mapping->normalizeIn());
     }
 
@@ -147,7 +147,7 @@ class AddFilter extends TestCase
 
         (new MediaOpener)->fromDisk('local')
             ->open(['video.mp4', 'video2.mp4'])
-            ->addBasicFilter('[0]', '[v0]', $resizeFilter)
+            ->addFilterAsComplexFilter('[0]', '[v0]', $resizeFilter)
             ->export()
             ->addFormatOutputMapping(new X264, Media::make('local', 'output.mp4'), ['[v0]'])
             ->save();
@@ -165,7 +165,7 @@ class AddFilter extends TestCase
 
         (new MediaOpener)->fromDisk('local')
             ->open(['video.mp4', 'video2.mp4'])
-            ->addBasicFilter('[0]', '[v0]', function ($filters) {
+            ->addFilterAsComplexFilter('[0]', '[v0]', function ($filters) {
                 $filters->resize(new \FFMpeg\Coordinate\Dimension(1280, 960));
             })
             ->export()

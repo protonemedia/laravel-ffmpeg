@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use Pbmedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 use Pbmedia\LaravelFFMpeg\MediaOpener;
 
 class MediaOpenerTest extends TestCase
@@ -90,6 +91,12 @@ class MediaOpenerTest extends TestCase
 
         $this->assertEquals('guitar.m4a', $media->getPath());
         $this->assertEquals('http', $media->getDisk()->getName());
+
+        $this->assertFileExists($tempPath = $media->getLocalPath());
+
+        TemporaryDirectories::deleteAll();
+
+        $this->assertFileNotExists($tempPath);
     }
 
     /** @test */

@@ -7,7 +7,7 @@ use Illuminate\Support\Collection;
 use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
-class BasicFilterMapping
+class LegacyFilterMapping
 {
     private $in;
     private $out;
