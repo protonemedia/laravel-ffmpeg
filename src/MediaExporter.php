@@ -6,6 +6,7 @@ use Closure;
 use Evenement\EventEmitterInterface;
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Traits\ForwardsCalls;
 use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use Pbmedia\LaravelFFMpeg\FFMpeg\AdvancedOutputMapping;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
@@ -13,6 +14,8 @@ use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 
 class MediaExporter
 {
+    use ForwardsCalls;
+
     protected PHPFFMpeg $driver;
     private ?FormatInterface $format = null;
     protected Collection $maps;
@@ -143,12 +146,31 @@ class MediaExporter
         return $this->getMediaOpener();
     }
 
-    private function getMediaOpener(): MediaOpener
+    protected function getMediaOpener(): MediaOpener
     {
         return new MediaOpener(
             $this->driver->getMediaCollection()->last()->getDisk(),
             $this->driver->fresh(),
             $this->driver->getMediaCollection()
         );
+    }
+
+    protected function getEmptyMediaOpener($disk = null): MediaOpener
+    {
+        return new MediaOpener(
+            $disk,
+            $this->driver->fresh(),
+        );
+    }
+
+    /**
+     * Forwards the call to the driver object and returns the result
+     * if it's something different than the driver object itself.
+     */
+    public function __call($method, $arguments)
+    {
+        $result = $this->forwardCallTo($driver = $this->driver, $method, $arguments);
+
+        return ($result === $driver) ? $this : $result;
     }
 }

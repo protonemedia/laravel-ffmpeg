@@ -4,8 +4,11 @@ namespace Pbmedia\LaravelFFMpeg;
 
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Format\FormatInterface;
+use FFMpeg\Format\Video\DefaultVideo;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Fluent;
+use Illuminate\Support\Str;
+use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 
 class HLSExporter extends MediaExporter
 {
@@ -27,7 +30,7 @@ class HLSExporter extends MediaExporter
         return $this;
     }
 
-    private function addHLSParametersToFormat($format, string $baseName)
+    private function addHLSParametersToFormat(DefaultVideo $format, string $baseName, Media $playlistMedia, int $key)
     {
         $parameters = [
             '-sc_threshold',
@@ -99,14 +102,16 @@ class HLSExporter extends MediaExporter
     {
         $disk = $this->getDisk();
 
-        $baseName = $disk->makeMedia($path)->getFilenameWithoutExtension();
+        $playlistMedia = $disk->makeMedia($path);
 
-        $this->pendingFormats->each(function ($formatAndCallback, $key) use ($baseName, $disk) {
+        $baseName = $playlistMedia->getFilenameWithoutExtension();
+
+        $playlist = $this->pendingFormats->map(function ($formatAndCallback, $key) use ($baseName, $disk, $playlistMedia) {
             [$format, $filtersCallback] = $formatAndCallback;
 
             $baseName = "{$baseName}_{$key}_{$format->getKiloBitrate()}";
 
-            $this->addHLSParametersToFormat($format, $baseName);
+            $this->addHLSParametersToFormat($format, $baseName, $playlistMedia, $key);
 
             $keysWithFilters = [];
 
@@ -116,10 +121,47 @@ class HLSExporter extends MediaExporter
                 }
             }
 
-            $this->addFormatOutputMapping($format, $disk->makeMedia("{$baseName}.m3u8"), [$keysWithFilters[$key] ?? '0']);
+            $this->addFormatOutputMapping($format, $formatPlaylist = $disk->makeMedia("{$baseName}.m3u8"), [$keysWithFilters[$key] ?? '0']);
+
+            return [
+                '#EXT-X-STREAM-INF',
+                $formatPlaylist->getPath(),
+            ];
         });
 
-        return parent::save();
+        $result = parent::save();
+
+        $this->generatePlaylist($playlist);
+
+        return $result;
+    }
+
+    private function generatePlaylist(Collection $streams)
+    {
+        $playlist = $streams->map(function ($stream, $key) {
+            $playlistContent = file_get_contents(
+                $this->getDisk()->makeMedia($stream[1])->getLocalPath()
+            );
+
+            $file = Collection::make(explode(PHP_EOL, $playlistContent))->first(function ($line) {
+                return substr($line, 0, 1) !== '#';
+            });
+
+            $mediaStream = $this->getEmptyMediaOpener($this->getDisk())->open($file)->getStreams()[0];
+            $mediaFormat = $this->getEmptyMediaOpener($this->getDisk())->open($file)->getFormat();
+
+            $frameRate = trim(Str::before($mediaStream->get('avg_frame_rate'), "/1"));
+
+            $stream[0] .= ":BANDWIDTH={$mediaFormat->get('bit_rate')}";
+            $stream[0] .= ",RESOLUTION={$mediaStream->get('width')}x{$mediaStream->get('height')}";
+
+            if ($frameRate) {
+                $frameRate = number_format($frameRate, 3, '.', '');
+                $stream[0] .= ",FRAME-RATE={$frameRate}";
+            }
+
+            return $stream;
+        })->collapse()->prepend('#EXTM3U')->implode(PHP_EOL);
     }
 
     public function addFormat(FormatInterface $format, callable $filtersCallback = null)
