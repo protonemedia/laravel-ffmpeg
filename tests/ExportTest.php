@@ -195,9 +195,9 @@ class ExportTest extends TestCase
         FFMpeg::fromDisk('local')
             ->open(['video.mp4', 'video2.mp4'])
             ->export()
-            ->addFilter('[0][1]', 'concat=n=2:v=1:a=0', '[v]')
-            ->addFormatOutputMapping(new X264, Media::make('local', 'concat.mp4'), ['[v]'])
-            ->save();
+            ->concatWithTranscoding(true, false)
+            ->inFormat(new X264)
+            ->save('concat.mp4');
 
         $this->assertTrue(Storage::disk('local')->has('concat.mp4'));
 

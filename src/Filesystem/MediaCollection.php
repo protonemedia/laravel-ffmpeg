@@ -52,4 +52,9 @@ class MediaCollection
     {
         return $this->items->last();
     }
+
+    public function collection(): Collection
+    {
+        return $this->items;
+    }
 }

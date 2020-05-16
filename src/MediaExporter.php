@@ -24,6 +24,9 @@ class MediaExporter
     private ?Closure $onProgressCallback = null;
     private ?float $lastPercentage       = null;
     private ?float $timelapseFramerate   = null;
+    private bool $concatWithTranscoding  = false;
+    private bool $concatWithVideo        = false;
+    private bool $concatWithAudio        = false;
 
     public function __construct(PHPFFMpeg $driver)
     {
@@ -109,13 +112,37 @@ class MediaExporter
         return $this;
     }
 
+    public function concatWithTranscoding($hasVideo = true, $hasAudio = true): self
+    {
+        $this->concatWithTranscoding = true;
+        $this->concatWithVideo       = $hasVideo;
+        $this->concatWithAudio       = $hasAudio;
+
+        return $this;
+    }
+
     public function save(string $path = null): MediaOpener
     {
+        $outputMedia = $this->getDisk()->makeMedia($path);
+
+        if ($this->concatWithTranscoding) {
+            $sources = $this->driver->getMediaCollection()->collection()->map(function ($media, $key) {
+                return "[{$key}]";
+            });
+
+            $concatWithVideo = $this->concatWithVideo ? 1 : 0;
+            $concatWithAudio = $this->concatWithAudio ? 1 : 0;
+
+            $this->addFilter(
+                $sources->implode(''),
+                "concat=n={$sources->count()}:v={$concatWithVideo}:a={$concatWithAudio}",
+                '[concat]'
+            )->addFormatOutputMapping($this->format, $outputMedia, ['[concat]']);
+        }
+
         if ($this->maps->isNotEmpty()) {
             return $this->saveWithMappings();
         }
-
-        $outputMedia = $this->getDisk()->makeMedia($path);
 
         if ($this->format && $this->onProgressCallback) {
             $this->applyProgressListenerToFormat($this->format);
