@@ -123,7 +123,7 @@ class MediaExporter
 
     public function save(string $path = null): MediaOpener
     {
-        $outputMedia = $this->getDisk()->makeMedia($path);
+        $outputMedia = $path ? $this->getDisk()->makeMedia($path) : null;
 
         if ($this->concatWithTranscoding) {
             $sources = $this->driver->getMediaCollection()->collection()->map(function ($media, $key) {
