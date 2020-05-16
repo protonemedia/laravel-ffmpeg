@@ -107,9 +107,11 @@ You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter obje
 ```php
 <?php
 
+use FFMpeg\Filters\Video\VideoFilters;
+
 FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
-    ->addFilter(function ($filters) {
+    ->addFilter(function (VideoFilters $filters) {
         $filters->resize(new \FFMpeg\Coordinate\Dimension(640, 480));
     })
     ->export()
@@ -255,9 +257,11 @@ Just like single inputs, you can also pass a callback to the `addFilter` method.
 ```php
 <?php
 
+use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
+
 FFMpeg::open(['video.mp4', 'video2.mp4'])
     ->export()
-    ->addFilter(function($filters) {
+    ->addFilter(function(ComplexFilters $filters) {
         // $filters->watermark(...);
     });
 ```
