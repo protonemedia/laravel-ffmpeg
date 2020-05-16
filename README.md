@@ -295,37 +295,39 @@ FFMpeg::fromDisk('videos')
     ->save('adaptive_steve.m3u8');
 ```
 
-The ```addFormat``` method of the HLS exporter takes an optional second parameter which can be a callback method. This allows you to add different filters per format:
+The ```addFormat``` method of the HLS exporter takes an optional second parameter which can be a callback method. This allows you to add different filters per format.
+
+You can use the `addFilter` method to add a complex filter (see `$lowBitrate` example). Since the `scale` filter is used a lot, there is a helper method (see `$midBitrate` example). You can also use a callable to get access to the `ComplexFilters` instance. The package provides the `$in` and `$out` arguments so you don't have to worry about it (see `$highBitrate` example).
+
+As of version 7.0, HLS export is built using FFMpeg's `map` and `filter_complex` features. This is a breaking change from previous versions which performed a single export for each format. If you're upgrading, replace the `addFilter` calls with `addLegacyFilter` calls and verify the result (see `$superBitrate` example). Not all filters will work this way and some need to be upgraded manually.
 
 ```php
 <?php
 
 $lowBitrate = (new X264)->setKiloBitrate(250);
+$midBitrate = (new X264)->setKiloBitrate(500);
 $highBitrate = (new X264)->setKiloBitrate(1000);
+$superBitrate = (new X264)->setKiloBitrate(1500);
 
 FFMpeg::open('steve_howe.mp4')
     ->exportForHLS()
     ->addFormat($lowBitrate, function($media) {
-        $media->addFilter(function ($filters) {
-            $filters->resize(new \FFMpeg\Coordinate\Dimension(640, 480));
+        $media->addFilter('scale=640:480');
+    })
+    ->addFormat($midBitrate, function($media) {
+        $media->scale(960, 720);
+    })
+    ->addFormat($highBitrate, function ($media) {
+        $media->addFilter(function ($filters, $in, $out) {
+            $filters->custom($in, 'scale=1920:1200', $out); // $in, $parameters, $out
         });
     })
-    ->addFormat($highBitrate, function($media) {
-        $media->addFilter(function ($filters) {
-            $filters->resize(new \FFMpeg\Coordinate\Dimension(1280, 960));
+    ->addFormat($superBitrate, function($media) {
+        $media->addLegacyFilter(function ($filters) {
+            $filters->resize(new \FFMpeg\Coordinate\Dimension(2560, 1920));
         });
     })
     ->save('adaptive_steve.m3u8');
-```
-
-As of version 2.1.0 you can disable the sorting of the added formats as most players choose the first format as the default one.
-
-```php
-<?php
-
-$exporter = FFMpeg::open('steve_howe.mp4')
-    ->exportForHLS()
-    ->dontSortFormats();
 ```
 
 ## Advanced
