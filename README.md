@@ -210,7 +210,7 @@ $frame = $media->getFrameFromString('00:00:13.37');
 
 // or
 
-$timecode = new FMpeg\Coordinate\TimeCode(...);
+$timecode = new FFMpeg\Coordinate\TimeCode(...);
 $frame = $media->getFrameFromTimecode($timecode);
 ```
 

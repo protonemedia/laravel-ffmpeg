@@ -2,6 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg;
 
+use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Media\AbstractMediaType;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
@@ -19,6 +20,7 @@ class MediaOpener
     private Disk $disk;
     private PHPFFMpeg $driver;
     private MediaCollection $collection;
+    private ?TimeCode $timecode = null;
 
     public function __construct($disk = null, PHPFFMpeg $driver = null, MediaCollection $mediaCollection = null)
     {
@@ -67,9 +69,34 @@ class MediaOpener
         return $this->driver->openAdvanced($this->collection);
     }
 
+    public function getFrameFromString(string $timecode): self
+    {
+        return $this->getFrameFromTimecode(
+            TimeCode::fromString($timecode)
+        );
+    }
+
+    public function getFrameFromSeconds(float $quantity): self
+    {
+        return $this->getFrameFromTimecode(
+            TimeCode::fromSeconds($quantity)
+        );
+    }
+
+    public function getFrameFromTimecode(TimeCode $timecode): self
+    {
+        $this->timecode = $timecode;
+
+        return $this;
+    }
+
     public function export(): MediaExporter
     {
-        return new MediaExporter($this->getDriver());
+        return tap(new MediaExporter($this->getDriver()), function (MediaExporter $mediaExporter) {
+            if ($this->timecode) {
+                $mediaExporter->frame($this->timecode);
+            }
+        });
     }
 
     public function exportForHLS(): HLSExporter

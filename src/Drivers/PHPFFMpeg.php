@@ -3,11 +3,13 @@
 namespace Pbmedia\LaravelFFMpeg\Drivers;
 
 use Closure;
+use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\FFMpeg;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\FilterInterface;
 use FFMpeg\Media\AbstractMediaType;
 use FFMpeg\Media\AdvancedMedia;
+use FFMpeg\Media\Frame;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
@@ -26,7 +28,7 @@ class PHPFFMpeg
 
     public function __construct(FFMpeg $ffmpeg)
     {
-        $this->ffmpeg               = $ffmpeg;
+        $this->ffmpeg                = $ffmpeg;
         $this->pendingComplexFilters = new Collection;
     }
 
@@ -46,6 +48,11 @@ class PHPFFMpeg
     private function isAdvancedMedia(): bool
     {
         return $this->get() instanceof AdvancedMedia;
+    }
+
+    public function isFrame(): bool
+    {
+        return $this->get() instanceof Frame;
     }
 
     public function getMediaCollection(): MediaCollection
@@ -71,6 +78,13 @@ class PHPFFMpeg
         } else {
             $this->media = $this->ffmpeg->openAdvanced($localPaths);
         }
+
+        return $this;
+    }
+
+    public function frame(TimeCode $timecode)
+    {
+        $this->media = $this->media->frame($timecode);
 
         return $this;
     }

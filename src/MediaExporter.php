@@ -113,7 +113,9 @@ class MediaExporter
             $this->applyProgressListenerToFormat($this->format);
         }
 
-        $this->driver->save($this->format, $outputMedia->getLocalPath());
+        $this->driver->isFrame()
+            ? $this->driver->save($outputMedia->getLocalPath())
+            : $this->driver->save($this->format, $outputMedia->getLocalPath());
 
         $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
         $outputMedia->setVisibility($this->visibility);
