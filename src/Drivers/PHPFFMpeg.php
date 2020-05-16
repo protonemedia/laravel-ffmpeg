@@ -9,6 +9,7 @@ use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\FilterInterface;
 use FFMpeg\Media\AbstractMediaType;
 use FFMpeg\Media\AdvancedMedia;
+use FFMpeg\Media\Concat;
 use FFMpeg\Media\Frame;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -55,6 +56,11 @@ class PHPFFMpeg
         return $this->get() instanceof Frame;
     }
 
+    public function isConcat(): bool
+    {
+        return $this->get() instanceof Concat;
+    }
+
     public function getMediaCollection(): MediaCollection
     {
         return $this->mediaCollection;
@@ -85,6 +91,16 @@ class PHPFFMpeg
     public function frame(TimeCode $timecode)
     {
         $this->media = $this->media->frame($timecode);
+
+        return $this;
+    }
+
+    public function concatWithoutTranscoding()
+    {
+        $localPaths = $this->mediaCollection->getLocalPaths();
+
+        $this->media = $this->ffmpeg->open(Arr::first($localPaths))
+            ->concat($localPaths);
 
         return $this;
     }

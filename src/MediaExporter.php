@@ -128,9 +128,13 @@ class MediaExporter
             ));
         }
 
-        $this->driver->isFrame()
-            ? $this->driver->save($outputMedia->getLocalPath())
-            : $this->driver->save($this->format, $outputMedia->getLocalPath());
+        if ($this->driver->isConcat()) {
+            $this->driver->saveFromSameCodecs($outputMedia->getLocalPath());
+        } elseif ($this->driver->isFrame()) {
+            $this->driver->save($outputMedia->getLocalPath());
+        } else {
+            $this->driver->save($this->format, $outputMedia->getLocalPath());
+        }
 
         $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
         $outputMedia->setVisibility($this->visibility);

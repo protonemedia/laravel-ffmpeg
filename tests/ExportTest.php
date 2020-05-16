@@ -160,4 +160,57 @@ class ExportTest extends TestCase
             (new MediaOpener)->fromDisk('local')->open('timelapse.mp4')->getDurationInSeconds()
         );
     }
+
+    /** @test */
+    public function it_can_concatenate_two_videos_using_the_concat_method()
+    {
+        $this->fakeLocalVideoFiles();
+
+        FFMpeg::fromDisk('local')
+            ->open(['video.mp4', 'video2.mp4'])
+            ->export()
+            ->concatWithoutTranscoding()
+            ->save('concat.mp4');
+
+        $this->assertTrue(Storage::disk('local')->has('concat.mp4'));
+
+        $media = (new MediaOpener)->fromDisk('local')->open('concat.mp4');
+
+        $this->assertEquals(
+            7,
+            $media->getDurationInSeconds()
+        );
+
+        $this->assertEquals(
+            1920,
+            $media->getStreams()[0]->get('width')
+        );
+    }
+
+    /** @test */
+    public function it_can_concatenate_two_videos_using_a_complex_filter()
+    {
+        $this->fakeLocalVideoFiles();
+
+        FFMpeg::fromDisk('local')
+            ->open(['video.mp4', 'video2.mp4'])
+            ->export()
+            ->addFilter('[0][1]', 'concat=n=2:v=1:a=0', '[v]')
+            ->addFormatOutputMapping(new X264, Media::make('local', 'concat.mp4'), ['[v]'])
+            ->save();
+
+        $this->assertTrue(Storage::disk('local')->has('concat.mp4'));
+
+        $media = (new MediaOpener)->fromDisk('local')->open('concat.mp4');
+
+        $this->assertEquals(
+            7,
+            $media->getDurationInSeconds()
+        );
+
+        $this->assertEquals(
+            1920,
+            $media->getStreams()[0]->get('width')
+        );
+    }
 }

@@ -214,6 +214,18 @@ $timecode = new FFMpeg\Coordinate\TimeCode(...);
 $frame = $media->getFrameFromTimecode($timecode);
 ```
 
+### Concat files without transcoding
+
+```php
+<?php
+
+FFMpeg::fromDisk('local')
+    ->open(['video.mp4', 'video2.mp4'])
+    ->export()
+    ->concatWithoutTranscoding()
+    ->save('concat.mp4');
+```
+
 ### Create a timelapse
 
 You can create a timelapse from a sequence of images by using the `asTimelapseWithFramerate` method on the exporter
