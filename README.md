@@ -32,13 +32,13 @@ If you're still using an older version of Laravel (or PHP < 7.2), please use the
 
 You can install the package via composer:
 
-``` bash
+```bash
 composer require pbmedia/laravel-ffmpeg
 ```
 
 Add the Service Provider and Facade to your ```app.php``` config file if you're not using Package Discovery.
 
-``` php
+```php
 
 // Laravel 5: config/app.php
 
@@ -57,15 +57,15 @@ Add the Service Provider and Facade to your ```app.php``` config file if you're 
 
 Publish the config file using the artisan CLI tool:
 
-``` bash
-php artisan vendor:publish --provider="Pbmedia\LaravelFFMpeg\FFMpegServiceProvider"
+```bash
+php artisan vendor:publish --provider="Pbmedia\LaravelFFMpeg\Support\ServiceProvider"
 ```
 
 ## Usage
 
 Convert an audio or video file:
 
-``` php
+```php
 FFMpeg::fromDisk('songs')
     ->open('yesterday.mp3')
     ->export()
@@ -76,13 +76,13 @@ FFMpeg::fromDisk('songs')
 
 Instead of the ```fromDisk()``` method you can also use the ```fromFilesystem()``` method, where ```$filesystem``` is an instance of ```Illuminate\Contracts\Filesystem\Filesystem```.
 
-``` php
+```php
 $media = FFMpeg::fromFilesystem($filesystem)->open('yesterday.mp3');
 ```
 
 You can monitor the transcoding progress. Use the ```onProgress``` method to provide a callback which gives you the completed percentage. In previous versions of this package you had to pass the callback to the format object.
 
-``` php
+```php
 FFMpeg::open('steve_howe.mp4')
     ->export()
     ->onProgress(function ($percentage) {
@@ -92,7 +92,7 @@ FFMpeg::open('steve_howe.mp4')
 
 You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter objects:
 
-``` php
+```php
 FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->addFilter(function ($filters) {
@@ -119,7 +119,7 @@ FFMpeg::fromDisk('videos')
 
 Sometimes you don't want to use the built-in filters. You can apply your own filter by providing a set of options. This can be an array or multiple strings as arguments:
 
-``` php
+```php
 FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->addFilter(['-itsoffset', 1]);
@@ -133,7 +133,7 @@ FFMpeg::fromDisk('videos')
 
 Chain multiple convertions:
 
-``` php
+```php
 // The 'fromDisk()' method is not required, the file will now
 // be opened from the default 'disk', as specified in
 // the config file.
@@ -167,47 +167,9 @@ FFMpeg::open('my_movie.mov')
     ->save('my_movie.webm')
 ```
 
-As of version 7.0 you can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method of by using an array. You can mix inputs from different disks.
-
-```php
-FFMpeg::open('video1.mp4')->open('video2.mp4');
-
-FFMpeg::open(['video1.mp4', 'video2.mp4']);
-
-FFMpeg::fromDisk('uploads')
-    ->open('video1.mp4')
-    ->fromDisk('archive')
-    ->open('video2.mp4');
-```
-
-When you open multple inputs, you have to add mappings so FFMpeg knows how to handle them. This package provides a `addFormatOutputMapping` method which takes three parameters: the format, the output, and the output labels of the -filter_complex part. The output (2nd argument) should be an instanceof `\Pbmedia\LaravelFFMpeg\Filesystem\Media`. You can instantiate with the `make` method, call it with the name of the disk and the path.
-
-This is an example [from the underlying library](https://github.com/PHP-FFMpeg/PHP-FFMpeg#base-usage).
-
-*This code takes 2 input videos, stacks they horizontally in 1 output video and adds to this new video the audio from the first video. (It is impossible with simple filtergraph that has only 1 input and only 1 output).*
-
-```php
-FFMpeg::fromDisk('local')
-    ->open(['video.mp4', 'video2.mp4'])
-    ->export()
-    ->addFilter('[0:v][1:v]', 'hstack', '[v]')  // $in, $parameters, $out
-    ->addFormatOutputMapping(new X264, Media::make('local', 'stacked_video.mp4'), ['0:a', '[v]'])
-    ->save();
-```
-
-Just like single inputs, you can also pass a callback to the `addFilter` method. This will give you an instance of `\FFMpeg\Filters\AdvancedMedia\ComplexFilters`:
-
-```php
-FFMpeg::open(['video.mp4', 'video2.mp4'])
-    ->export()
-    ->addFilter(function($filters) {
-        // $filters->watermark(...);
-    });
-```
-
 Create a frame from a video:
 
-``` php
+```php
 FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->getFrameFromSeconds(10)
@@ -226,12 +188,51 @@ $frame = $media->getFrameFromString('00:00:13.37');
 
 $timecode = new FMpeg\Coordinate\TimeCode(...);
 $frame = $media->getFrameFromTimecode($timecode);
+```
 
+As of version 7.0 you can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method of by using an array. You can mix inputs from different disks.
+
+```php
+FFMpeg::open('video1.mp4')->open('video2.mp4');
+
+FFMpeg::open(['video1.mp4', 'video2.mp4']);
+
+FFMpeg::fromDisk('uploads')
+    ->open('video1.mp4')
+    ->fromDisk('archive')
+    ->open('video2.mp4');
+```
+
+When you open multple inputs, you have to add mappings so FFMpeg knows how to route them. This package provides a `addFormatOutputMapping` method which takes three parameters: the format, the output, and the output labels of the `-filter_complex` part.
+
+The output (2nd argument) should be an instanceof `\Pbmedia\LaravelFFMpeg\Filesystem\Media`. You can instantiate with the `make` method, call it with the name of the disk and the path (see example).
+
+This is an example [from the underlying library](https://github.com/PHP-FFMpeg/PHP-FFMpeg#base-usage):
+
+```php
+// This code takes 2 input videos, stacks they horizontally in 1 output video and adds to this new video the audio from the first video. (It is impossible with simple filtergraph that has only 1 input and only 1 output).
+
+FFMpeg::fromDisk('local')
+    ->open(['video.mp4', 'video2.mp4'])
+    ->export()
+    ->addFilter('[0:v][1:v]', 'hstack', '[v]')  // $in, $parameters, $out
+    ->addFormatOutputMapping(new X264, Media::make('local', 'stacked_video.mp4'), ['0:a', '[v]'])
+    ->save();
+```
+
+Just like single inputs, you can also pass a callback to the `addFilter` method. This will give you an instance of `\FFMpeg\Filters\AdvancedMedia\ComplexFilters`:
+
+```php
+FFMpeg::open(['video.mp4', 'video2.mp4'])
+    ->export()
+    ->addFilter(function($filters) {
+        // $filters->watermark(...);
+    });
 ```
 
 With the ```Media``` class you can determinate the duration of a file:
 
-``` php
+```php
 $media = FFMpeg::open('wwdc_2006.mp4');
 
 $durationInSeconds = $media->getDurationInSeconds(); // returns an int
@@ -240,7 +241,7 @@ $durationInMiliseconds = $media->getDurationInMiliseconds(); // returns a float
 
 When opening or saving files from or to a remote disk, temporary files will be created on your server. After you're done exporting or processing these files, you could clean them up by calling the ```cleanupTemporaryFiles()``` method:
 
-``` php
+```php
 FFMpeg::cleanupTemporaryFiles();
 ```
 
@@ -248,7 +249,7 @@ FFMpeg::cleanupTemporaryFiles();
 
 You can create a M3U8 playlist to do [HLS](https://en.wikipedia.org/wiki/HTTP_Live_Streaming).
 
-``` php
+```php
 $lowBitrate = (new X264)->setKiloBitrate(250);
 $midBitrate = (new X264)->setKiloBitrate(500);
 $highBitrate = (new X264)->setKiloBitrate(1000);
@@ -266,7 +267,7 @@ FFMpeg::fromDisk('videos')
 
 The ```addFormat``` method of the HLS exporter takes an optional second parameter which can be a callback method. This allows you to add different filters per format:
 
-``` php
+```php
 $lowBitrate = (new X264)->setKiloBitrate(250);
 $highBitrate = (new X264)->setKiloBitrate(1000);
 
@@ -287,7 +288,7 @@ FFMpeg::open('steve_howe.mp4')
 
 As of version 2.1.0 you can disable the sorting of the added formats as most players choose the first format as the default one.
 
-``` php
+```php
 $exporter = FFMpeg::open('steve_howe.mp4')
     ->exportForHLS()
     ->dontSortFormats();
@@ -336,7 +337,7 @@ Please see [CHANGELOG](CHANGELOG.md) for more information what has changed recen
 
 ## Testing
 
-``` bash
+```bash
 $ composer test
 ```
 
