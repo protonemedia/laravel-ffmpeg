@@ -53,10 +53,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Pbmedia\\LaravelFFMpeg\\Support\\FFMpegServiceProvider"
+                "Pbmedia\\LaravelFFMpeg\\Support\\ServiceProvider"
             ],
             "aliases": {
-                "FFMpeg": "Pbmedia\\LaravelFFMpeg\\Support\\FFMpegFacade"
+                "FFMpeg": "Pbmedia\\LaravelFFMpeg\\Support\\FFMpeg"
             }
         }
     }
