@@ -42,6 +42,20 @@ class Disk
         }
     }
 
+    public function clone(): self
+    {
+        return new Disk($this->disk);
+    }
+
+    public function getTemporaryDirectory(): TemporaryDirectory
+    {
+        if ($this->temporaryDirectory) {
+            return $this->temporaryDirectory;
+        }
+
+        return  $this->temporaryDirectory = TemporaryDirectories::create();
+    }
+
     public function makeMedia(string $path): Media
     {
         return Media::make($this, $path);

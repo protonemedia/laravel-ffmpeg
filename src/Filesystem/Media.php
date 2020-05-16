@@ -3,7 +3,6 @@
 namespace Pbmedia\LaravelFFMpeg\Filesystem;
 
 use Illuminate\Filesystem\FilesystemAdapter;
-use Pbmedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 use Spatie\TemporaryDirectory\TemporaryDirectory;
 
 class Media
@@ -55,7 +54,7 @@ class Media
         }
 
         if (!$this->temporaryDirectory) {
-            $this->temporaryDirectory = TemporaryDirectories::create();
+            $this->temporaryDirectory = $disk->getTemporaryDirectory();
 
             if ($disk->exists($path)) {
                 $this->temporaryDirectoryAdapter()->writeStream($path, $disk->readStream($path));
