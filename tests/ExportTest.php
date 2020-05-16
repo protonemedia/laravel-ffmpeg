@@ -140,4 +140,24 @@ class ExportTest extends TestCase
 
         $this->assertTrue(Storage::disk('memory')->has('new_video.mp4'));
     }
+
+    /** @test */
+    public function it_can_create_a_timelapse_from_images()
+    {
+        $this->fakeLocalImageFiles();
+
+        (new MediaOpener)
+            ->open('feature_%04d.png')
+            ->export()
+            ->asTimelapseWithFramerate(1)
+            ->inFormat(new X264)
+            ->save('timelapse.mp4');
+
+        $this->assertTrue(Storage::disk('local')->has('timelapse.mp4'));
+
+        $this->assertEquals(
+            9,
+            (new MediaOpener)->fromDisk('local')->open('timelapse.mp4')->getDurationInSeconds()
+        );
+    }
 }

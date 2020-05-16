@@ -62,6 +62,22 @@ abstract class TestCase extends BaseTestCase
         Storage::disk('local')->put('video.mp4', file_get_contents(__DIR__ . '/src/video.mp4'));
     }
 
+    protected function fakeLocalImageFiles()
+    {
+        Storage::fake('local');
+
+        $disk = Storage::disk('local');
+        $disk->put('feature_0001.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
+        $disk->put('feature_0002.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
+        $disk->put('feature_0003.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
+        $disk->put('feature_0004.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
+        $disk->put('feature_0005.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
+        $disk->put('feature_0006.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
+        $disk->put('feature_0007.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
+        $disk->put('feature_0008.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
+        $disk->put('feature_0009.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
+    }
+
     protected function fakeLocalVideoFiles()
     {
         $this->fakeLocalVideoFile();

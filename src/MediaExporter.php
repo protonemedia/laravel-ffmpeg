@@ -23,6 +23,7 @@ class MediaExporter
     private ?Disk $toDisk                = null;
     private ?Closure $onProgressCallback = null;
     private ?float $lastPercentage       = null;
+    private ?float $timelapseFramerate   = null;
 
     public function __construct(PHPFFMpeg $driver)
     {
@@ -79,7 +80,7 @@ class MediaExporter
         return $this;
     }
 
-    public function getCommand(string $path = null): string
+    public function getCommand(string $path = null)
     {
         $this->driver->getPendingComplexFilters()->each->apply($this->driver, $this->maps);
 
@@ -101,6 +102,13 @@ class MediaExporter
         });
     }
 
+    public function asTimelapseWithFramerate(float $framerate): self
+    {
+        $this->timelapseFramerate = $framerate;
+
+        return $this;
+    }
+
     public function save(string $path = null): MediaOpener
     {
         if ($this->maps->isNotEmpty()) {
@@ -111,6 +119,13 @@ class MediaExporter
 
         if ($this->format && $this->onProgressCallback) {
             $this->applyProgressListenerToFormat($this->format);
+        }
+
+        if ($this->timelapseFramerate > 0) {
+            $this->format->setInitialParameters(array_merge(
+                $this->format->getInitialParameters() ?: [],
+                ['-framerate', $this->timelapseFramerate, '-f', 'image2']
+            ));
         }
 
         $this->driver->isFrame()

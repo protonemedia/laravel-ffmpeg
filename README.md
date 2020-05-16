@@ -214,6 +214,20 @@ $timecode = new FFMpeg\Coordinate\TimeCode(...);
 $frame = $media->getFrameFromTimecode($timecode);
 ```
 
+### Create a timelapse
+
+You can create a timelapse from a sequence of images by using the `asTimelapseWithFramerate` method on the exporter
+
+```php
+<?php
+
+FFMpeg::open('feature_%04d.png')
+    ->export()
+    ->asTimelapseWithFramerate(1)
+    ->inFormat(new X264)
+    ->save('timelapse.mp4');
+```
+
 ### Multiple inputs
 
 As of version 7.0 you can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method of by using an array. You can mix inputs from different disks.
