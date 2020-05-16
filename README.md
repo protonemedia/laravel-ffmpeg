@@ -86,6 +86,8 @@ Instead of the ```fromDisk()``` method you can also use the ```fromFilesystem()`
 $media = FFMpeg::fromFilesystem($filesystem)->open('yesterday.mp3');
 ```
 
+### Progress monitoring
+
 You can monitor the transcoding progress. Use the ```onProgress``` method to provide a callback which gives you the completed percentage. In previous versions of this package you had to pass the callback to the format object.
 
 ```php
@@ -97,6 +99,8 @@ FFMpeg::open('steve_howe.mp4')
         echo "$percentage % transcoded";
     });
 ```
+
+### Filters
 
 You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter objects:
 
@@ -127,6 +131,8 @@ FFMpeg::fromDisk('videos')
     ->save('short_steve.mkv');
 ```
 
+### Custom filters
+
 Sometimes you don't want to use the built-in filters. You can apply your own filter by providing a set of options. This can be an array or multiple strings as arguments:
 
 ```php
@@ -143,7 +149,7 @@ FFMpeg::fromDisk('videos')
     ->addFilter('-itsoffset', 1);
 ```
 
-Chain multiple convertions:
+### Chain multiple convertions
 
 ```php
 <?php
@@ -181,7 +187,7 @@ FFMpeg::open('my_movie.mov')
     ->save('my_movie.webm')
 ```
 
-Create a frame from a video:
+### Create a frame from a video
 
 ```php
 <?php
@@ -205,6 +211,8 @@ $frame = $media->getFrameFromString('00:00:13.37');
 $timecode = new FMpeg\Coordinate\TimeCode(...);
 $frame = $media->getFrameFromTimecode($timecode);
 ```
+
+### Multiple inputs
 
 As of version 7.0 you can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method of by using an array. You can mix inputs from different disks.
 
@@ -254,6 +262,8 @@ FFMpeg::open(['video.mp4', 'video2.mp4'])
     });
 ```
 
+### Determinate duration
+
 With the ```Media``` class you can determinate the duration of a file:
 
 ```php
@@ -264,6 +274,8 @@ $media = FFMpeg::open('wwdc_2006.mp4');
 $durationInSeconds = $media->getDurationInSeconds(); // returns an int
 $durationInMiliseconds = $media->getDurationInMiliseconds(); // returns a float
 ```
+
+### Handling remote disks
 
 When opening or saving files from or to a remote disk, temporary files will be created on your server. After you're done exporting or processing these files, you could clean them up by calling the ```cleanupTemporaryFiles()``` method:
 
@@ -295,7 +307,7 @@ FFMpeg::fromDisk('videos')
     ->save('adaptive_steve.m3u8');
 ```
 
-The ```addFormat``` method of the HLS exporter takes an optional second parameter which can be a callback method. This allows you to add different filters per format.
+The ```addFormat``` method of the HLS exporter takes an optional second parameter which can be a callback method. This allows you to add different filters per format. First, check out the *Multiple inputs* section to understand how complex filters are handled.
 
 You can use the `addFilter` method to add a complex filter (see `$lowBitrate` example). Since the `scale` filter is used a lot, there is a helper method (see `$midBitrate` example). You can also use a callable to get access to the `ComplexFilters` instance. The package provides the `$in` and `$out` arguments so you don't have to worry about it (see `$highBitrate` example).
 
