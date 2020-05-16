@@ -27,24 +27,6 @@ class ServiceProvider extends BaseServiceProvider
             $this->publishes([
                 __DIR__ . '/../../config/config.php' => config_path('laravel-ffmpeg.php'),
             ], 'config');
-
-            // Publishing the views.
-            /*$this->publishes([
-                __DIR__.'/../resources/views' => resource_path('views/vendor/laravel-ffmpeg'),
-            ], 'views');*/
-
-            // Publishing assets.
-            /*$this->publishes([
-                __DIR__.'/../resources/assets' => public_path('vendor/laravel-ffmpeg'),
-            ], 'assets');*/
-
-            // Publishing the translation files.
-            /*$this->publishes([
-                __DIR__.'/../resources/lang' => resource_path('lang/vendor/laravel-ffmpeg'),
-            ], 'lang');*/
-
-            // Registering package commands.
-            // $this->commands([]);
         }
     }
 
@@ -57,11 +39,18 @@ class ServiceProvider extends BaseServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../../config/config.php', 'laravel-ffmpeg');
 
         $this->app->bind(PHPFFMpeg::class, function () {
-            $config = [];
+            $config = $this->app['config'];
 
-            $logger = app(LoggerInterface::class);
+            $logger = $config->get('laravel-ffmpeg.enable_logging', true)
+                ?app(LoggerInterface::class)
+                 :null;
 
-            return new PHPFFMpeg(FFMpeg::create($config, $logger));
+            return new PHPFFMpeg(FFMpeg::create([
+                'ffmpeg.binaries'  => $config->get('laravel-ffmpeg.ffmpeg.binaries'),
+                'ffmpeg.threads'   => $config->get('laravel-ffmpeg.ffmpeg.threads'),
+                'ffprobe.binaries' =>  $config->get('laravel-ffmpeg.ffprobe.threads'),
+                'timeout'          =>  $config->get('laravel-ffmpeg.timeout'),
+            ], $logger));
         });
 
         // Register the main class to use with the facade

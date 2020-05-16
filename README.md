@@ -6,24 +6,23 @@
 [![Quality Score](https://img.shields.io/scrutinizer/g/pascalbaljetmedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/pascalbaljetmedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This package provides an integration with FFmpeg for Laravel 7.0. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem).
+This package provides an integration with FFmpeg for Laravel 6.0 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem).
 
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
-* Compatible with Laravel 7.0.
+* Compatible with Laravel 6.0 and higher.
 * Support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
-* PHP 7.2 and 7.3 only.
-
-## We are looking for beta testers!
-We are currently building a *sophisticated health checker for your Laravel applications* called [Upserver.online](https://upserver.online). We will launch a private beta in the coming weeks so please join the mailing list to get **early access**! If you want to know more, you can also read the [official announcement](https://mailchi.mp/upserver/this-is-upserver-online) or follow us on [Twitter](https://twitter.com/UpserverOnline).
+* Built-in support for HLS.
+* PHP 7.4 only.
 
 ## Installation
 
-Only the master branch and version 6.0 of this package are compatible with Laravel 7.0. If you're still using an older version of Laravel (or PHP < 7.2), please use the chart below to find out which version you should use. Mind that older versions are no longer supported.
+If you're still using an older version of Laravel (or PHP < 7.2), please use the chart below to find out which version you should use. Mind that older versions are no longer supported.
 
 | Laravel Version | Package Version |
 |-----------------|-----------------|
+| 6.0 + 7.0       | 7.0             |
 | 7.0             | 6.0             |
 | 6.0             | 5.0             |
 | 5.8             | 4.0             |
@@ -45,13 +44,13 @@ Add the Service Provider and Facade to your ```app.php``` config file if you're 
 
 'providers' => [
     ...
-    Pbmedia\LaravelFFMpeg\FFMpegServiceProvider::class,
+    Pbmedia\LaravelFFMpeg\Support\ServiceProvider::class,
     ...
 ];
 
 'aliases' => [
     ...
-    'FFMpeg' => Pbmedia\LaravelFFMpeg\FFMpegFacade::class
+    'FFMpeg' => Pbmedia\LaravelFFMpeg\Support\FFMpeg::class
     ...
 ];
 ```
@@ -79,6 +78,16 @@ Instead of the ```fromDisk()``` method you can also use the ```fromFilesystem()`
 
 ``` php
 $media = FFMpeg::fromFilesystem($filesystem)->open('yesterday.mp3');
+```
+
+You can monitor the transcoding progress. Use the ```onProgress``` method to provide a callback which gives you the completed percentage. In previous versions of this package you had to pass the callback to the format object.
+
+``` php
+FFMpeg::open('steve_howe.mp4')
+    ->export()
+    ->onProgress(function ($percentage) {
+        echo "$percentage % transcoded";
+    });
 ```
 
 You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter objects:
@@ -158,6 +167,44 @@ FFMpeg::open('my_movie.mov')
     ->save('my_movie.webm')
 ```
 
+As of version 7.0 you can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method of by using an array. You can mix inputs from different disks.
+
+```php
+FFMpeg::open('video1.mp4')->open('video2.mp4');
+
+FFMpeg::open(['video1.mp4', 'video2.mp4']);
+
+FFMpeg::fromDisk('uploads')
+    ->open('video1.mp4')
+    ->fromDisk('archive')
+    ->open('video2.mp4');
+```
+
+When you open multple inputs, you have to add mappings so FFMpeg knows how to handle them. This package provides a `addFormatOutputMapping` method which takes three parameters: the format, the output, and the output labels of the -filter_complex part. The output (2nd argument) should be an instanceof `\Pbmedia\LaravelFFMpeg\Filesystem\Media`. You can instantiate with the `make` method, call it with the name of the disk and the path.
+
+This is an example [from the underlying library](https://github.com/PHP-FFMpeg/PHP-FFMpeg#base-usage).
+
+*This code takes 2 input videos, stacks they horizontally in 1 output video and adds to this new video the audio from the first video. (It is impossible with simple filtergraph that has only 1 input and only 1 output).*
+
+```php
+FFMpeg::fromDisk('local')
+    ->open(['video.mp4', 'video2.mp4'])
+    ->export()
+    ->addFilter('[0:v][1:v]', 'hstack', '[v]')  // $in, $parameters, $out
+    ->addFormatOutputMapping(new X264, Media::make('local', 'stacked_video.mp4'), ['0:a', '[v]'])
+    ->save();
+```
+
+Just like single inputs, you can also pass a callback to the `addFilter` method. This will give you an instance of `\FFMpeg\Filters\AdvancedMedia\ComplexFilters`:
+
+```php
+FFMpeg::open(['video.mp4', 'video2.mp4'])
+    ->export()
+    ->addFilter(function($filters) {
+        // $filters->watermark(...);
+    });
+```
+
 Create a frame from a video:
 
 ``` php
@@ -199,7 +246,7 @@ FFMpeg::cleanupTemporaryFiles();
 
 ## HLS
 
-You can create a M3U8 playlist to do [HLS](https://en.wikipedia.org/wiki/HTTP_Live_Streaming). Exporting is currently only supported on local disks.
+You can create a M3U8 playlist to do [HLS](https://en.wikipedia.org/wiki/HTTP_Live_Streaming).
 
 ``` php
 $lowBitrate = (new X264)->setKiloBitrate(250);
@@ -210,13 +257,14 @@ FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->exportForHLS()
     ->setSegmentLength(10) // optional
+    ->setKeyFrameInterval(48) // optional
     ->addFormat($lowBitrate)
     ->addFormat($midBitrate)
     ->addFormat($highBitrate)
     ->save('adaptive_steve.m3u8');
 ```
 
-As of version 1.2.0 the ```addFormat``` method of the HLS exporter takes an optional second parameter which can be a callback method. This allows you to add different filters per format:
+The ```addFormat``` method of the HLS exporter takes an optional second parameter which can be a callback method. This allows you to add different filters per format:
 
 ``` php
 $lowBitrate = (new X264)->setKiloBitrate(250);
@@ -235,16 +283,6 @@ FFMpeg::open('steve_howe.mp4')
         });
     })
     ->save('adaptive_steve.m3u8');
-```
-
-As of version 1.3.0 you can monitor the transcoding progress of a HLS export. Use the ```onProgress``` method to provide a callback which gives you the completed percentage.
-
-``` php
-$exporter = FFMpeg::open('steve_howe.mp4')
-    ->exportForHLS()
-    ->onProgress(function ($percentage) {
-        echo "$percentage % transcoded";
-    });
 ```
 
 As of version 2.1.0 you can disable the sorting of the added formats as most players choose the first format as the default one.

@@ -4,3 +4,4 @@ docs
 vendor
 .phpunit.result.cache
 src/EncryptedHLSExporter.php
+.DS_Store
