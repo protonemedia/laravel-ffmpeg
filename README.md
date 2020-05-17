@@ -15,8 +15,11 @@ This package provides an integration with FFmpeg for Laravel 7.0. The storage of
 * Support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
 * PHP 7.2 and 7.3 only.
 
-## We are looking for beta testers!
-We are currently building a *sophisticated health checker for your Laravel applications* called [Upserver.online](https://upserver.online). We will launch a private beta in the coming weeks so please join the mailing list to get **early access**! If you want to know more, you can also read the [official announcement](https://mailchi.mp/upserver/this-is-upserver-online) or follow us on [Twitter](https://twitter.com/UpserverOnline).
+## Rewrite of the package
+A full rewrite of this package will be released in May 2020. It has support for multiple inputs/outputs, concatenation, timelapses, improved HLS export, better handling of remote inputs/outputs, complex filters (and mapping) and many more improvements. Chech out the `v7` branch or install the development version!
+
+https://github.com/pascalbaljetmedia/laravel-ffmpeg/tree/v7
+`composer require "pbmedia/laravel-ffmpeg:v7.x-dev"`
 
 ## Installation
 
