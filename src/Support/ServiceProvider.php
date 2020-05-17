@@ -15,14 +15,6 @@ class ServiceProvider extends BaseServiceProvider
      */
     public function boot()
     {
-        /*
-         * Optional methods to load your package assets
-         */
-        // $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'laravel-ffmpeg');
-        // $this->loadViewsFrom(__DIR__.'/../resources/views', 'laravel-ffmpeg');
-        // $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-        // $this->loadRoutesFrom(__DIR__.'/routes.php');
-
         if ($this->app->runningInConsole()) {
             $this->publishes([
                 __DIR__ . '/../../config/config.php' => config_path('laravel-ffmpeg.php'),
@@ -42,14 +34,14 @@ class ServiceProvider extends BaseServiceProvider
             $config = $this->app['config'];
 
             $logger = $config->get('laravel-ffmpeg.enable_logging', true)
-                ?app(LoggerInterface::class)
-                 :null;
+                ? app(LoggerInterface::class)
+                 : null;
 
             return new PHPFFMpeg(FFMpeg::create([
                 'ffmpeg.binaries'  => $config->get('laravel-ffmpeg.ffmpeg.binaries'),
-                'ffmpeg.threads'   => $config->get('laravel-ffmpeg.ffmpeg.threads'),
-                'ffprobe.binaries' =>  $config->get('laravel-ffmpeg.ffprobe.threads'),
-                'timeout'          =>  $config->get('laravel-ffmpeg.timeout'),
+                'ffmpeg.threads'   => $config->get('laravel-ffmpeg.ffmpeg.threads', 12),
+                'ffprobe.binaries' => $config->get('laravel-ffmpeg.ffprobe.binaries'),
+                'timeout'          => $config->get('laravel-ffmpeg.timeout'),
             ], $logger));
         });
 
