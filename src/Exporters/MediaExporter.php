@@ -141,19 +141,13 @@ class MediaExporter
         return $this->getMediaOpener();
     }
 
-    protected function getEmptyMediaOpener($disk = null): MediaOpener
-    {
-        return new MediaOpener(
-            $disk,
-            $this->driver->fresh(),
-        );
-    }
-
     protected function getMediaOpener(): MediaOpener
     {
-        return $this->getEmptyMediaOpener(
+        return new MediaOpener(
             $this->driver->getMediaCollection()->last()->getDisk(),
-        )->open($this->driver->getMediaCollection()->all());
+            $this->driver->fresh(),
+            $this->driver->getMediaCollection()
+        );
     }
 
     /**
