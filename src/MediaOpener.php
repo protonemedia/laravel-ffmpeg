@@ -8,6 +8,8 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Traits\ForwardsCalls;
 use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
+use Pbmedia\LaravelFFMpeg\Exporters\HLSExporter;
+use Pbmedia\LaravelFFMpeg\Exporters\MediaExporter;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;

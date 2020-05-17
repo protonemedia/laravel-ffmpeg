@@ -1,36 +1,75 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg;
+namespace Pbmedia\LaravelFFMpeg\Exporters;
 
+use Closure;
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Format\FormatInterface;
 use FFMpeg\Format\Video\DefaultVideo;
+use FFMpeg\Format\VideoInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Fluent;
-use Illuminate\Support\Str;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
+use Pbmedia\LaravelFFMpeg\MediaOpener;
 
 class HLSExporter extends MediaExporter
 {
-    private ?Collection $pendingFormats = null;
-    private int $segmentLength          = 10;
-    private int $keyFrameInterval       = 48;
+    private int $segmentLength                    = 10;
+    private int $keyFrameInterval                 = 48;
+    private ?Collection $pendingFormats           = null;
+    private ?PlaylistGenerator $playlistGenerator = null;
+    private ?Closure $segmentFilenameGenerator    = null;
 
-    public function setSegmentLength(int $length)
+    public function setSegmentLength(int $length): self
     {
         $this->segmentLength = $length;
 
         return $this;
     }
 
-    public function setKeyFrameInterval(int $interval)
+    public function setKeyFrameInterval(int $interval): self
     {
         $this->keyFrameInterval = $interval;
 
         return $this;
     }
 
-    private function addHLSParametersToFormat(DefaultVideo $format, string $baseName, Disk $disk)
+    public function withPlaylistGenerator(PlaylistGenerator $playlistGenerator): self
+    {
+        $this->playlistGenerator = $playlistGenerator;
+
+        return $this;
+    }
+
+    public function useSegmentFilenameGenerator(Closure $callback): self
+    {
+        $this->segmentFilenameGenerator = $callback;
+
+        return $this;
+    }
+
+    private function getSegmentPatternAndFormatPlaylistPath(string $baseName, VideoInterface $format, int $key): array
+    {
+        $segmentsPattern    = null;
+        $formatPlaylistPath = null;
+
+        call_user_func(
+            $this->segmentFilenameGenerator,
+            $baseName,
+            $format,
+            $key,
+            function ($path) use (&$segmentsPattern) {
+                $segmentsPattern = $path;
+            },
+            function ($path) use (&$formatPlaylistPath) {
+                $formatPlaylistPath = $path;
+            },
+        );
+
+        return [$segmentsPattern, $formatPlaylistPath];
+    }
+
+    private function addHLSParametersToFormat(DefaultVideo $format, string $segmentsPattern, Disk $disk)
     {
         $parameters = [
             '-sc_threshold',
@@ -42,7 +81,7 @@ class HLSExporter extends MediaExporter
             '-hls_time',
             $this->segmentLength,
             '-hls_segment_filename',
-            $disk->makeMedia("{$baseName}_%05d.ts")->getLocalPath(),
+            $disk->makeMedia($segmentsPattern)->getLocalPath(),
         ];
 
         $format->setAdditionalParameters($parameters);
@@ -102,14 +141,26 @@ class HLSExporter extends MediaExporter
     {
         $baseName = $this->getDisk()->makeMedia($path)->getFilenameWithoutExtension();
 
+        if (!$this->segmentFilenameGenerator) {
+            $this->segmentFilenameGenerator = function ($name, $format, $key, $segments, $playlist) {
+                $pattern = "{$name}_{$key}_{$format->getKiloBitrate()}";
+                $segments("{$pattern}_%05d.ts");
+                $playlist("{$pattern}.m3u8");
+            };
+        }
+
         return $this->pendingFormats->map(function ($formatAndCallback, $key) use ($baseName) {
             $disk = $this->getDisk()->clone();
 
             [$format, $filtersCallback] = $formatAndCallback;
 
-            $baseName = "{$baseName}_{$key}_{$format->getKiloBitrate()}";
+            [$segmentsPattern, $formatPlaylistPath] = $this->getSegmentPatternAndFormatPlaylistPath(
+                $baseName,
+                $format,
+                $key,
+            );
 
-            $this->addHLSParametersToFormat($format, $baseName, $disk);
+            $this->addHLSParametersToFormat($format, $segmentsPattern, $disk);
 
             $keysWithFilters = [];
 
@@ -119,45 +170,25 @@ class HLSExporter extends MediaExporter
                 }
             }
 
-            $this->addFormatOutputMapping($format, $formatPlaylist = $disk->makeMedia("{$baseName}.m3u8"), [$keysWithFilters[$key] ?? '0']);
+            $this->addFormatOutputMapping($format, $disk->makeMedia($formatPlaylistPath), [$keysWithFilters[$key] ?? '0']);
 
-            return $formatPlaylist->getPath();
-        })->pipe(function ($playlistPaths) use ($path) {
+            return $this->getDisk()->makeMedia($formatPlaylistPath);
+        })->pipe(function ($playlistMedia) use ($path) {
             $result = parent::save();
 
-            $this->getDisk()->put($path, $this->makePlaylist($playlistPaths));
+            $this->getDisk()->put($path, $this->makePlaylist($playlistMedia->all()));
 
             return $result;
         });
     }
 
-    private function makePlaylist(Collection $playlistPaths): string
+    private function makePlaylist(array $playlistMedia): string
     {
-        return $playlistPaths->map(function ($playlistPath, $key) {
-            $playlistContent = file_get_contents(
-                $this->getDisk()->makeMedia($playlistPath)->getLocalPath()
-            );
+        if (!$this->playlistGenerator) {
+            $this->withPlaylistGenerator(new HLSPlaylistGenerator);
+        }
 
-            $file = Collection::make(explode(PHP_EOL, $playlistContent))->first(function ($line) {
-                return substr($line, 0, 1) !== '#' && Str::endsWith($line, '.ts');
-            });
-
-            $media = $this->getEmptyMediaOpener($this->getDisk())->open($file);
-
-            $mediaStream = $media->getStreams()[0];
-            $mediaFormat = $media->getFormat();
-            $frameRate = trim(Str::before($mediaStream->get('avg_frame_rate'), "/1"));
-
-            $info = "#EXT-X-STREAM-INF:BANDWIDTH={$mediaFormat->get('bit_rate')}";
-            $info .= ",RESOLUTION={$mediaStream->get('width')}x{$mediaStream->get('height')}";
-
-            if ($frameRate) {
-                $frameRate = number_format($frameRate, 3, '.', '');
-                $info .= ",FRAME-RATE={$frameRate}";
-            }
-
-            return [$info, $playlistPath];
-        })->collapse()->prepend('#EXTM3U')->push('#EXT-X-ENDLIST')->implode(PHP_EOL);
+        return $this->playlistGenerator->get($playlistMedia, $this->driver->fresh());
     }
 
     public function addFormat(FormatInterface $format, callable $filtersCallback = null)

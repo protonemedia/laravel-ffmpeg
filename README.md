@@ -385,6 +385,22 @@ FFMpeg::open('steve_howe.mp4')
     ->save('adaptive_steve.m3u8');
 ```
 
+### Using custom segment patterns
+
+You can use a custom pattern to name the segments and playlists. The `useSegmentFilenameGenerator` gives you 5 arguments. The first, second and third argument provide information about the basename of the export, the format of the current iteration and the key of the current iteration. The fourth argument is a callback you should call with your *segments* pattern. The fifth argument is a callback you should call with your *playlist* pattern. Note that this is not the name of the master playlist, but the name of the playlist of each format.
+
+```php
+<?php
+
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->exportForHLS()
+    ->useSegmentFilenameGenerator(function ($name, $format, $key, callable $segments, callable $playlist) {
+        $segments("{$name}-{$format}-{$key}-%03d.ts");
+        $playlist("{$name}-{$format}-{$key}.m3u8");
+    });
+```
+
 ## Advanced
 
 The Media object you get when you 'open' a file, actually holds the Media object that belongs to the [underlying driver](https://github.com/PHP-FFMpeg/PHP-FFMpeg). It handles dynamic method calls as you can see [here](https://github.com/pascalbaljetmedia/laravel-ffmpeg/blob/master/src/Media.php#L114-L117). This way all methods of the underlying driver are still available to you.

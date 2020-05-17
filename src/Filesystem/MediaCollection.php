@@ -3,12 +3,15 @@
 namespace Pbmedia\LaravelFFMpeg\Filesystem;
 
 use Illuminate\Support\Collection;
+use Illuminate\Support\Traits\ForwardsCalls;
 
 /**
  * Mostly a wrapper around the Collection class.
  */
 class MediaCollection
 {
+    use ForwardsCalls;
+
     private Collection $items;
 
     public function __construct(array $items = [])
@@ -33,28 +36,13 @@ class MediaCollection
         return $this->items->map->getLocalPath()->all();
     }
 
-    public function count(): int
-    {
-        return $this->items->count();
-    }
-
-    public function get($key): Media
-    {
-        return $this->items->get($key);
-    }
-
-    public function first(): Media
-    {
-        return $this->items->first();
-    }
-
-    public function last(): Media
-    {
-        return $this->items->last();
-    }
-
     public function collection(): Collection
     {
         return $this->items;
+    }
+
+    public function __call($method, $parameters)
+    {
+        return $this->forwardCallTo($this->collection(), $method, $parameters);
     }
 }

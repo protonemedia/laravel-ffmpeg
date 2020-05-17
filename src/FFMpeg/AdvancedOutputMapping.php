@@ -3,7 +3,7 @@
 namespace Pbmedia\LaravelFFMpeg\FFMpeg;
 
 use FFMpeg\Format\FormatInterface;
-use FFMpeg\Format\VideoInterface;
+use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Media\AdvancedMedia;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 
@@ -30,7 +30,7 @@ class AdvancedOutputMapping
      */
     public function apply(AdvancedMedia $advancedMedia): void
     {
-        if ($this->format instanceof VideoInterface) {
+        if ($this->format instanceof DefaultVideo) {
             $parameters = $this->format->getAdditionalParameters() ?: [];
 
             if (!in_array('-b:v', $parameters)) {

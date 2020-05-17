@@ -63,6 +63,44 @@ class HlsExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_use_a_custom_format_for_the_segment_naming()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate = (new X264)->setKiloBitrate(250);
+        $midBitrate = (new X264)->setKiloBitrate(1000);
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->addFormat($midBitrate)
+            ->useSegmentFilenameGenerator(function ($name, $format, $key, callable $segments, callable $playlist) {
+                $segments("N{$name}B{$format->getKiloBitrate()}K{$key}_%02d.ts");
+                $playlist("N{$name}B{$format->getKiloBitrate()}K{$key}.m3u8");
+            })
+            ->toDisk('memory')
+            ->save('adaptive.m3u8');
+
+        $this->assertTrue(Storage::disk('memory')->has('adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('memory')->has('NadaptiveB250K0.m3u8'));
+        $this->assertTrue(Storage::disk('memory')->has('NadaptiveB250K0_00.ts'));
+        $this->assertTrue(Storage::disk('memory')->has('NadaptiveB1000K1.m3u8'));
+        $this->assertTrue(Storage::disk('memory')->has('NadaptiveB1000K1_00.ts'));
+
+        $playlist = Storage::disk('memory')->get('adaptive.m3u8');
+
+        $this->assertEquals(implode(PHP_EOL, [
+            '#EXTM3U',
+            '#EXT-X-STREAM-INF:BANDWIDTH=287416,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            'NadaptiveB250K0.m3u8',
+            '#EXT-X-STREAM-INF:BANDWIDTH=1141383,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            'NadaptiveB1000K1.m3u8',
+            '#EXT-X-ENDLIST',
+        ]), $playlist);
+    }
+
+    /** @test */
     public function it_can_export_to_hls_with_legacy_filters_for_each_format()
     {
         $this->fakeLocalVideoFile();

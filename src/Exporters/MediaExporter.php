@@ -1,32 +1,26 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg;
+namespace Pbmedia\LaravelFFMpeg\Exporters;
 
-use Closure;
-use Evenement\EventEmitterInterface;
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
 use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
-use Pbmedia\LaravelFFMpeg\FFMpeg\AdvancedOutputMapping;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
-use Pbmedia\LaravelFFMpeg\Filesystem\Media;
+use Pbmedia\LaravelFFMpeg\MediaOpener;
 
 class MediaExporter
 {
-    use ForwardsCalls;
+    use ForwardsCalls,
+        HandlesAdvancedMedia,
+        HandlesConcatenation,
+        HandlesTimelapse,
+        HasProgressListener;
 
     protected PHPFFMpeg $driver;
     private ?FormatInterface $format = null;
-    protected Collection $maps;
-    protected ?string $visibility        = null;
-    private ?Disk $toDisk                = null;
-    private ?Closure $onProgressCallback = null;
-    private ?float $lastPercentage       = null;
-    private ?float $timelapseFramerate   = null;
-    private bool $concatWithTranscoding  = false;
-    private bool $concatWithVideo        = false;
-    private bool $concatWithAudio        = false;
+    protected ?string $visibility    = null;
+    private ?Disk $toDisk            = null;
 
     public function __construct(PHPFFMpeg $driver)
     {
@@ -49,22 +43,6 @@ class MediaExporter
     public function inFormat(FormatInterface $format): self
     {
         $this->format = $format;
-
-        return $this;
-    }
-
-    public function onProgress(Closure $callback): self
-    {
-        $this->onProgressCallback = $callback;
-
-        return $this;
-    }
-
-    public function addFormatOutputMapping(FormatInterface $format, Media $output, array $outs, $forceDisableAudio = false, $forceDisableVideo = false)
-    {
-        $this->maps->push(
-            new AdvancedOutputMapping($outs, $format, $output, $forceDisableAudio, $forceDisableVideo)
-        );
 
         return $this;
     }
@@ -95,49 +73,12 @@ class MediaExporter
         );
     }
 
-    private function applyProgressListenerToFormat(EventEmitterInterface $format)
-    {
-        $format->on('progress', function ($video, $format, $percentage) {
-            if ($percentage !== $this->lastPercentage && $percentage < 100) {
-                $this->lastPercentage = $percentage;
-                call_user_func($this->onProgressCallback, $percentage);
-            }
-        });
-    }
-
-    public function asTimelapseWithFramerate(float $framerate): self
-    {
-        $this->timelapseFramerate = $framerate;
-
-        return $this;
-    }
-
-    public function concatWithTranscoding($hasVideo = true, $hasAudio = true): self
-    {
-        $this->concatWithTranscoding = true;
-        $this->concatWithVideo       = $hasVideo;
-        $this->concatWithAudio       = $hasAudio;
-
-        return $this;
-    }
-
     public function save(string $path = null): MediaOpener
     {
         $outputMedia = $path ? $this->getDisk()->makeMedia($path) : null;
 
         if ($this->concatWithTranscoding) {
-            $sources = $this->driver->getMediaCollection()->collection()->map(function ($media, $key) {
-                return "[{$key}]";
-            });
-
-            $concatWithVideo = $this->concatWithVideo ? 1 : 0;
-            $concatWithAudio = $this->concatWithAudio ? 1 : 0;
-
-            $this->addFilter(
-                $sources->implode(''),
-                "concat=n={$sources->count()}:v={$concatWithVideo}:a={$concatWithAudio}",
-                '[concat]'
-            )->addFormatOutputMapping($this->format, $outputMedia, ['[concat]']);
+            $this->addConcatFilterAndMapping($outputMedia);
         }
 
         if ($this->maps->isNotEmpty()) {
@@ -149,10 +90,7 @@ class MediaExporter
         }
 
         if ($this->timelapseFramerate > 0) {
-            $this->format->setInitialParameters(array_merge(
-                $this->format->getInitialParameters() ?: [],
-                ['-framerate', $this->timelapseFramerate, '-f', 'image2']
-            ));
+            $this->addTimelapseParametersToFormat();
         }
 
         if ($this->driver->isConcat()) {
@@ -194,21 +132,19 @@ class MediaExporter
         return $this->getMediaOpener();
     }
 
-    protected function getMediaOpener(): MediaOpener
-    {
-        return new MediaOpener(
-            $this->driver->getMediaCollection()->last()->getDisk(),
-            $this->driver->fresh(),
-            $this->driver->getMediaCollection()
-        );
-    }
-
     protected function getEmptyMediaOpener($disk = null): MediaOpener
     {
         return new MediaOpener(
             $disk,
             $this->driver->fresh(),
         );
+    }
+
+    protected function getMediaOpener(): MediaOpener
+    {
+        return $this->getEmptyMediaOpener(
+            $this->driver->getMediaCollection()->last()->getDisk(),
+        )->open($this->driver->getMediaCollection()->all());
     }
 
     /**
