@@ -35,7 +35,7 @@ class ServiceProvider extends BaseServiceProvider
 
             $logger = $config->get('laravel-ffmpeg.enable_logging', true)
                 ? app(LoggerInterface::class)
-                 : null;
+                : null;
 
             return new PHPFFMpeg(FFMpeg::create([
                 'ffmpeg.binaries'  => $config->get('laravel-ffmpeg.ffmpeg.binaries'),

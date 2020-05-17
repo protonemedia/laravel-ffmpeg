@@ -10,30 +10,60 @@ use Pbmedia\LaravelFFMpeg\MediaOpener;
 
 class HLSPlaylistGenerator implements PlaylistGenerator
 {
+    const PLAYLIST_START = '#EXTM3U';
+    const PLAYLIST_END   = '#EXT-X-ENDLIST';
+
+    private function getPathOfFirstSegment(Media $playlistMedia): string
+    {
+        $playlistContent = file_get_contents($playlistMedia->getLocalPath());
+
+        return Collection::make(explode(PHP_EOL, $playlistContent))->first(function ($line) {
+            return !Str::startsWith($line, '#') && Str::endsWith($line, '.ts');
+        });
+    }
+
+    private function getBandwidth(MediaOpener $media)
+    {
+        return $media->getFormat()->get('bit_rate');
+    }
+
+    private function getResolution(MediaOpener $media)
+    {
+        $mediaStream = $media->getStreams()[0];
+
+        return "{$mediaStream->get('width')}x{$mediaStream->get('height')}";
+    }
+
+    private function getFrameRate(MediaOpener $media)
+    {
+        $mediaStream = $media->getStreams()[0];
+        $frameRate   = trim(Str::before($mediaStream->get('avg_frame_rate'), "/1"));
+
+        if ($frameRate) {
+            return number_format($frameRate, 3, '.', '');
+        }
+    }
+
     public function get(array $playlistMedia, PHPFFMpeg $driver): string
     {
         return Collection::make($playlistMedia)->map(function (Media $playlistMedia) use ($driver) {
-            $playlistContent = file_get_contents($playlistMedia->getLocalPath());
+            $media = (new MediaOpener($playlistMedia->getDisk(), $driver->fresh()))->open(
+                $this->getPathOfFirstSegment($playlistMedia)
+            );
 
-            $file = Collection::make(explode(PHP_EOL, $playlistContent))->first(function ($line) {
-                return substr($line, 0, 1) !== '#' && Str::endsWith($line, '.ts');
-            });
+            $streamInfo = [
+                "#EXT-X-STREAM-INF:BANDWIDTH={$this->getBandwidth($media)}",
+                "RESOLUTION={$this->getResolution($media)}",
+            ];
 
-            $media = (new MediaOpener($playlistMedia->getDisk(), $driver->fresh()))->open($file);
-
-            $mediaStream = $media->getStreams()[0];
-            $mediaFormat = $media->getFormat();
-            $frameRate = trim(Str::before($mediaStream->get('avg_frame_rate'), "/1"));
-
-            $info = "#EXT-X-STREAM-INF:BANDWIDTH={$mediaFormat->get('bit_rate')}";
-            $info .= ",RESOLUTION={$mediaStream->get('width')}x{$mediaStream->get('height')}";
-
-            if ($frameRate) {
-                $frameRate = number_format($frameRate, 3, '.', '');
-                $info .= ",FRAME-RATE={$frameRate}";
+            if ($frameRate = $this->getFrameRate($media)) {
+                $streamInfo[] = "FRAME-RATE={$frameRate}";
             }
 
-            return [$info, $playlistMedia->getPath()];
-        })->collapse()->prepend('#EXTM3U')->push('#EXT-X-ENDLIST')->implode(PHP_EOL);
+            return [implode(',', $streamInfo), $playlistMedia->getPath()];
+        })->collapse()
+            ->prepend(static::PLAYLIST_START)
+            ->push(static::PLAYLIST_END)
+            ->implode(PHP_EOL);
     }
 }

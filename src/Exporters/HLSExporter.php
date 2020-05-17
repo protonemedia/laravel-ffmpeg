@@ -41,6 +41,11 @@ class HLSExporter extends MediaExporter
         return $this;
     }
 
+    private function getPlaylistGenerator(): PlaylistGenerator
+    {
+        return $this->playlistGenerator ?: new HLSPlaylistGenerator;
+    }
+
     public function useSegmentFilenameGenerator(Closure $callback): self
     {
         $this->segmentFilenameGenerator = $callback;
@@ -54,7 +59,7 @@ class HLSExporter extends MediaExporter
         $formatPlaylistPath = null;
 
         call_user_func(
-            $this->segmentFilenameGenerator,
+            $this->getSegmentFilenameGenerator(),
             $baseName,
             $format,
             $key,
@@ -137,17 +142,18 @@ class HLSExporter extends MediaExporter
         return $called['called'];
     }
 
+    private function getSegmentFilenameGenerator(): callable
+    {
+        return  $this->segmentFilenameGenerator ?: function ($name, $format, $key, $segments, $playlist) {
+            $pattern = "{$name}_{$key}_{$format->getKiloBitrate()}";
+            $segments("{$pattern}_%05d.ts");
+            $playlist("{$pattern}.m3u8");
+        };
+    }
+
     public function save(string $path = null): MediaOpener
     {
         $baseName = $this->getDisk()->makeMedia($path)->getFilenameWithoutExtension();
-
-        if (!$this->segmentFilenameGenerator) {
-            $this->segmentFilenameGenerator = function ($name, $format, $key, $segments, $playlist) {
-                $pattern = "{$name}_{$key}_{$format->getKiloBitrate()}";
-                $segments("{$pattern}_%05d.ts");
-                $playlist("{$pattern}.m3u8");
-            };
-        }
 
         return $this->pendingFormats->map(function ($formatAndCallback, $key) use ($baseName) {
             $disk = $this->getDisk()->clone();
@@ -176,19 +182,15 @@ class HLSExporter extends MediaExporter
         })->pipe(function ($playlistMedia) use ($path) {
             $result = parent::save();
 
-            $this->getDisk()->put($path, $this->makePlaylist($playlistMedia->all()));
+            $playlist = $this->getPlaylistGenerator()->get(
+                $playlistMedia->all(),
+                $this->driver->fresh()
+            );
+
+            $this->getDisk()->put($path, $playlist);
 
             return $result;
         });
-    }
-
-    private function makePlaylist(array $playlistMedia): string
-    {
-        if (!$this->playlistGenerator) {
-            $this->withPlaylistGenerator(new HLSPlaylistGenerator);
-        }
-
-        return $this->playlistGenerator->get($playlistMedia, $this->driver->fresh());
     }
 
     public function addFormat(FormatInterface $format, callable $filtersCallback = null)
