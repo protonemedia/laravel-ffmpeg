@@ -127,6 +127,21 @@ class ExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_mix_audio_and_video_files()
+    {
+        $this->fakeLocalVideoFile();
+        $this->addTestFile('guitar.m4a');
+
+        FFMpeg::fromDisk('local')
+            ->open(['video.mp4','guitar.m4a'])
+            ->export()
+            ->addFormatOutputMapping(new X264('libmp3lame'), Media::make('local', 'new_video.mp4'), ['0:v', '1:a'])
+            ->save();
+
+        $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
+    }
+
+    /** @test */
     public function it_can_export_a_single_media_file_to_an_external_location()
     {
         $this->fakeLocalVideoFile();

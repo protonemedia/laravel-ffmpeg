@@ -260,6 +260,18 @@ When you open multple inputs, you have to add mappings so FFMpeg knows how to ro
 
 The output (2nd argument) should be an instanceof `\Pbmedia\LaravelFFMpeg\Filesystem\Media`. You can instantiate with the `make` method, call it with the name of the disk and the path (see example).
 
+Check out this example which maps separate video and audio inputs into one output.
+
+```php
+<?php
+
+FFMpeg::fromDisk('local')
+    ->open(['video.mp4', 'audio.m4a'])
+    ->export()
+    ->addFormatOutputMapping(new X264, Media::make('local', 'new_video.mp4'), ['0:v', '1:a'])
+    ->save();
+```
+
 This is an example [from the underlying library](https://github.com/PHP-FFMpeg/PHP-FFMpeg#base-usage):
 
 ```php
