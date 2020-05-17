@@ -217,11 +217,6 @@ class PHPFFMpeg
         return $this->pendingComplexFilters;
     }
 
-    public function save($format = null, $path = null)
-    {
-        $this->media->save($format, $path);
-    }
-
     /**
      * Returns the underlying media object itself.
      */

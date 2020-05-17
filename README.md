@@ -214,6 +214,17 @@ $timecode = new FFMpeg\Coordinate\TimeCode(...);
 $frame = $media->getFrameFromTimecode($timecode);
 ```
 
+You can also get the raw contents of the frame instead of saving it to the filesystem:
+
+```php
+<?php
+
+FFMpeg::open('video.mp4')
+    ->getFrameFromSeconds(2)
+    ->export()
+    ->getFrameContents();
+```
+
 ### Create a timelapse
 
 You can create a timelapse from a sequence of images by using the `asTimelapseWithFramerate` method on the exporter

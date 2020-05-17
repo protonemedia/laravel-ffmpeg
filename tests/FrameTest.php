@@ -22,6 +22,20 @@ class FrameTest extends TestCase
     }
 
     /** @test */
+    public function it_can_export_a_frame_as_base64()
+    {
+        $this->fakeLocalVideoFile();
+
+        $contents = (new MediaOpener)
+            ->open('video.mp4')
+            ->getFrameFromSeconds(2)
+            ->export()
+            ->getFrameContents();
+
+        $this->assertIsString($contents);
+    }
+
+    /** @test */
     public function it_can_export_a_frame_using_a_string()
     {
         $this->fakeLocalVideoFile();

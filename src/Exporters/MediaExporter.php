@@ -14,6 +14,7 @@ class MediaExporter
     use ForwardsCalls,
         HandlesAdvancedMedia,
         HandlesConcatenation,
+        HandlesFrames,
         HandlesTimelapse,
         HasProgressListener;
 
@@ -73,7 +74,7 @@ class MediaExporter
         );
     }
 
-    public function save(string $path = null): MediaOpener
+    public function save(string $path = null)
     {
         $outputMedia = $path ? $this->getDisk()->makeMedia($path) : null;
 
@@ -96,7 +97,15 @@ class MediaExporter
         if ($this->driver->isConcat()) {
             $this->driver->saveFromSameCodecs($outputMedia->getLocalPath());
         } elseif ($this->driver->isFrame()) {
-            $this->driver->save($outputMedia->getLocalPath());
+            $data = $this->driver->save(
+                optional($outputMedia)->getLocalPath(),
+                $this->getAccuracy(),
+                $this->returnFrameContents
+            );
+
+            if ($this->returnFrameContents) {
+                return $data;
+            }
         } else {
             $this->driver->save($this->format, $outputMedia->getLocalPath());
         }
