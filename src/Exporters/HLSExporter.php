@@ -53,6 +53,14 @@ class HLSExporter extends MediaExporter
         return $this;
     }
 
+    private function getSegmentFilenameGenerator(): callable
+    {
+        return $this->segmentFilenameGenerator ?: function ($name, $format, $key, $segments, $playlist) {
+            $segments("{$name}_{$key}_{$format->getKiloBitrate()}_%05d.ts");
+            $playlist("{$name}_{$key}_{$format->getKiloBitrate()}.m3u8");
+        };
+    }
+
     private function getSegmentPatternAndFormatPlaylistPath(string $baseName, VideoInterface $format, int $key): array
     {
         $segmentsPattern    = null;
@@ -76,7 +84,7 @@ class HLSExporter extends MediaExporter
 
     private function addHLSParametersToFormat(DefaultVideo $format, string $segmentsPattern, Disk $disk)
     {
-        $parameters = [
+        $format->setAdditionalParameters([
             '-sc_threshold',
             '0',
             '-g',
@@ -87,9 +95,7 @@ class HLSExporter extends MediaExporter
             $this->segmentLength,
             '-hls_segment_filename',
             $disk->makeMedia($segmentsPattern)->getLocalPath(),
-        ];
-
-        $format->setAdditionalParameters($parameters);
+        ]);
     }
 
     private function applyFiltersCallback(callable $filtersCallback, $key): bool
@@ -142,15 +148,6 @@ class HLSExporter extends MediaExporter
         return $called['called'];
     }
 
-    private function getSegmentFilenameGenerator(): callable
-    {
-        return  $this->segmentFilenameGenerator ?: function ($name, $format, $key, $segments, $playlist) {
-            $pattern = "{$name}_{$key}_{$format->getKiloBitrate()}";
-            $segments("{$pattern}_%05d.ts");
-            $playlist("{$pattern}.m3u8");
-        };
-    }
-
     public function save(string $path = null): MediaOpener
     {
         $baseName = $this->getDisk()->makeMedia($path)->getFilenameWithoutExtension();
@@ -193,7 +190,7 @@ class HLSExporter extends MediaExporter
         });
     }
 
-    public function addFormat(FormatInterface $format, callable $filtersCallback = null)
+    public function addFormat(FormatInterface $format, callable $filtersCallback = null): self
     {
         if (!$this->pendingFormats) {
             $this->pendingFormats = new Collection;
