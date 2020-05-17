@@ -24,13 +24,6 @@ class MediaCollection
         return new static($items);
     }
 
-    public function add(Media $media): self
-    {
-        $this->items->push($media);
-
-        return $this;
-    }
-
     public function getLocalPaths(): array
     {
         return $this->items->map->getLocalPath()->all();

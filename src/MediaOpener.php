@@ -50,7 +50,7 @@ class MediaOpener
         $paths = Arr::wrap($path);
 
         foreach ($paths as $path) {
-            $this->collection->add(Media::make($this->disk, $path));
+            $this->collection->push(Media::make($this->disk, $path));
         }
 
         return $this;

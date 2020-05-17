@@ -431,7 +431,7 @@ The Media object you get when you 'open' a file, actually holds the Media object
 ```php
 <?php
 
-// This gives you an instance of Pbmedia\LaravelFFMpeg\Media
+// This gives you an instance of Pbmedia\LaravelFFMpeg\MediaOpener
 $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
 // The 'getStreams' method will be called on the underlying Media object since
@@ -444,7 +444,7 @@ If you want direct access to the underlying object, call the object as a functio
 ```php
 <?php
 
-// This gives you an instance of Pbmedia\LaravelFFMpeg\Media
+// This gives you an instance of Pbmedia\LaravelFFMpeg\MediaOpener
 $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
 // This gives you an instance of FFMpeg\Media\MediaTypeInterface
