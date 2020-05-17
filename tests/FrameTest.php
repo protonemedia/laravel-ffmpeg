@@ -16,6 +16,7 @@ class FrameTest extends TestCase
             ->open('video.mp4')
             ->getFrameFromSeconds(2)
             ->export()
+            ->accurate()
             ->save('thumb.png');
 
         $this->assertTrue(Storage::disk('local')->has('thumb.png'));
@@ -44,6 +45,7 @@ class FrameTest extends TestCase
             ->open('video.mp4')
             ->getFrameFromString('00:00:03.14')
             ->export()
+            ->unaccurate()
             ->save('thumb.png');
 
         $this->assertTrue(Storage::disk('local')->has('thumb.png'));

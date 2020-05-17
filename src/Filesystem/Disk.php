@@ -33,13 +33,7 @@ class Disk
             return $disk;
         }
 
-        if (is_string($disk)) {
-            return new static($disk);
-        }
-
-        if ($disk instanceof Filesystem) {
-            return new static($disk);
-        }
+        return new static($disk);
     }
 
     public function clone(): self

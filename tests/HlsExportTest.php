@@ -6,6 +6,7 @@ use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Video\VideoFilters;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Facades\Storage;
+use Pbmedia\LaravelFFMpeg\Exporters\HLSPlaylistGenerator;
 use Pbmedia\LaravelFFMpeg\MediaOpener;
 
 class HlsExportTest extends TestCase
@@ -75,6 +76,9 @@ class HlsExportTest extends TestCase
             ->exportForHLS()
             ->addFormat($lowBitrate)
             ->addFormat($midBitrate)
+            ->setSegmentLength(5)
+            ->setKeyFrameInterval(24)
+            ->withPlaylistGenerator(new HLSPlaylistGenerator)
             ->useSegmentFilenameGenerator(function ($name, $format, $key, callable $segments, callable $playlist) {
                 $segments("N{$name}B{$format->getKiloBitrate()}K{$key}_%02d.ts");
                 $playlist("N{$name}B{$format->getKiloBitrate()}K{$key}.m3u8");
@@ -92,9 +96,9 @@ class HlsExportTest extends TestCase
 
         $this->assertEquals(implode(PHP_EOL, [
             '#EXTM3U',
-            '#EXT-X-STREAM-INF:BANDWIDTH=287416,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            '#EXT-X-STREAM-INF:BANDWIDTH=290922,RESOLUTION=1920x1080,FRAME-RATE=25.000',
             'NadaptiveB250K0.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=1141383,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            '#EXT-X-STREAM-INF:BANDWIDTH=1142020,RESOLUTION=1920x1080,FRAME-RATE=25.000',
             'NadaptiveB1000K1.m3u8',
             '#EXT-X-ENDLIST',
         ]), $playlist);

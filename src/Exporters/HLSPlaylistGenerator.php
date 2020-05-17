@@ -39,9 +39,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
         $mediaStream = $media->getStreams()[0];
         $frameRate   = trim(Str::before($mediaStream->get('avg_frame_rate'), "/1"));
 
-        if ($frameRate) {
-            return number_format($frameRate, 3, '.', '');
-        }
+        return $frameRate ? number_format($frameRate, 3, '.', '') : null;
     }
 
     public function get(array $playlistMedia, PHPFFMpeg $driver): string
