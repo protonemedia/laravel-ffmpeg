@@ -219,7 +219,7 @@ You can also get the raw contents of the frame instead of saving it to the files
 ```php
 <?php
 
-FFMpeg::open('video.mp4')
+$contents = FFMpeg::open('video.mp4')
     ->getFrameFromSeconds(2)
     ->export()
     ->getFrameContents();
