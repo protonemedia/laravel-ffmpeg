@@ -16,11 +16,16 @@ This package provides an integration with FFmpeg for Laravel 7.0. The storage of
 * PHP 7.2 and 7.3 only.
 
 ## Rewrite of the package
+
 A full rewrite of this package will be released in May 2020. It has support for multiple inputs/outputs, concatenation, timelapses, improved HLS export, better handling of remote inputs/outputs, complex filters (and mapping) and many more improvements. Chech out the `v7` branch or install the development version!
 
 https://github.com/pascalbaljetmedia/laravel-ffmpeg/tree/v7
 
 `composer require "pbmedia/laravel-ffmpeg:v7.x-dev"`
+
+## Video Course Builder
+
+We're developing a package/app/service to quickly setup your own course platform. We have one simple question though... which solutation and pricing would you prefer? Vote at [videocoursebuilder.com](https://videocoursebuilder.com) and read all about the features!
 
 ## Installation
 
