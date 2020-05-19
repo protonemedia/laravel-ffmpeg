@@ -19,6 +19,8 @@ This package provides an integration with FFmpeg for Laravel 7.0. The storage of
 
 We're developing a package/app/service to quickly setup your own course platform. We have one simple question though... which solution and pricing would you prefer? Vote at [videocoursebuilder.com](https://videocoursebuilder.com) and read all about the features!
 
+Are there other features you want to see? Do you have ideas about pricing models? Or do you have other suggestions? Let me know [right here on GitHub](https://github.com/pascalbaljetmedia/laravel-ffmpeg/issues/187) or reach out [on Twitter](https://twitter.com/pascalbaljet).
+
 ## Rewrite of the package
 
 A full rewrite of this package will be released in May 2020. It has support for multiple inputs/outputs, concatenation, timelapses, improved HLS export, better handling of remote inputs/outputs, complex filters (and mapping) and many more improvements. Chech out the `v7` branch or install the development version!
