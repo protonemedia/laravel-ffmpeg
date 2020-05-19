@@ -5,6 +5,7 @@ namespace Pbmedia\LaravelFFMpeg\Tests;
 use FFMpeg\Format\Video\WMV;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Facades\Storage;
+use Pbmedia\LaravelFFMpeg\FFMpeg\ProgressListenerDecorator;
 use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 use Pbmedia\LaravelFFMpeg\MediaOpener;
 use Pbmedia\LaravelFFMpeg\Support\FFMpeg;
@@ -44,6 +45,29 @@ class ExportTest extends TestCase
             ->save('new_video.mp4');
 
         $this->assertNotEmpty($percentages);
+    }
+
+    /** @test */
+    public function it_can_decorate_the_format_to_get_access_to_the_progress_listener()
+    {
+        $this->fakeLocalVideoFile();
+
+        $times = [];
+
+        $decoratedFormat = ProgressListenerDecorator::decorate(new X264);
+
+        $decoratedFormat->on('progress', function () use ($decoratedFormat, &$times) {
+            $listeners = $decoratedFormat->getListeners();
+            $times[] = $listeners[0]->getCurrentTime();
+        });
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->export()
+            ->inFormat($decoratedFormat)
+            ->save('new_video.mp4');
+
+        $this->assertNotEmpty($times);
     }
 
     /** @test */
