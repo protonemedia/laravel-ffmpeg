@@ -16,6 +16,11 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. The
 * Built-in support for HLS.
 * PHP 7.4 only.
 
+## Video Course Builder
+
+We're developing a package/app/service to quickly setup your own course platform. We have one simple question though... which solution and pricing would you prefer? Vote at [videocoursebuilder.com](https://videocoursebuilder.com) and read all about the features!
+
+
 ## Installation
 
 If you're still using an older version of Laravel (or PHP < 7.2), please use the chart below to find out which version you should use. Mind that older versions are no longer supported.
