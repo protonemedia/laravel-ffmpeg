@@ -27,6 +27,9 @@ class Disk
         $this->disk = $disk;
     }
 
+    /**
+     * Little helper method to instantiate this class.
+     */
     public static function make($disk): self
     {
         if ($disk instanceof self) {
@@ -36,18 +39,25 @@ class Disk
         return new static($disk);
     }
 
+    /**
+     * Creates a fresh instance, mostly used to force a new TemporaryDirectory.
+     */
     public function clone(): self
     {
         return new Disk($this->disk);
     }
 
+    /**
+     * Creates a new TemporaryDirectory instance if none is set, otherwise
+     * it returns the current one.
+     */
     public function getTemporaryDirectory(): TemporaryDirectory
     {
         if ($this->temporaryDirectory) {
             return $this->temporaryDirectory;
         }
 
-        return  $this->temporaryDirectory = TemporaryDirectories::create();
+        return $this->temporaryDirectory = TemporaryDirectories::create();
     }
 
     public function makeMedia(string $path): Media
@@ -55,6 +65,10 @@ class Disk
         return Media::make($this, $path);
     }
 
+    /**
+     * Returns the name of the disk. It generates a name if the disk
+     * is an instance of Flysystem.
+     */
     public function getName(): string
     {
         if (is_string($this->disk)) {
@@ -92,6 +106,10 @@ class Disk
         return $this->getFlysystemAdapter() instanceof Local;
     }
 
+    /**
+     * Forwards all calls to Laravel's FilesystemAdapter which will pass
+     * dynamic methods call onto Flysystem.
+     */
     public function __call($method, $parameters)
     {
         return $this->forwardCallTo($this->getFilesystemAdapter(), $method, $parameters);

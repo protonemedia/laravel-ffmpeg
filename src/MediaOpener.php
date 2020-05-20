@@ -24,6 +24,11 @@ class MediaOpener
     private MediaCollection $collection;
     private ?TimeCode $timecode = null;
 
+    /**
+     * Uses the 'filesystems.default' disk from the config if none is given.
+     * Gets the underlying PHPFFMpeg instance from the container if none is given.
+     * Instantiates a fresh MediaCollection if none is given.
+     */
     public function __construct($disk = null, PHPFFMpeg $driver = null, MediaCollection $mediaCollection = null)
     {
         $this->disk = Disk::make($disk ?: config('filesystems.default'));
@@ -33,6 +38,9 @@ class MediaOpener
         $this->collection = $mediaCollection ?: new MediaCollection;
     }
 
+    /**
+     * Set the disk to open files from.
+     */
     public function fromDisk($disk): self
     {
         $this->disk = Disk::make($disk);
@@ -40,11 +48,17 @@ class MediaOpener
         return $this;
     }
 
+    /**
+     * Alias for 'fromDisk', mostly for backwards compatibility.
+     */
     public function fromFilesystem(Filesystem $filesystem): self
     {
         return $this->fromDisk($filesystem);
     }
 
+    /**
+     * Instantiates a Media object for each given path.
+     */
     public function open($path): self
     {
         $paths = Arr::wrap($path);
@@ -66,23 +80,28 @@ class MediaOpener
         return $this->driver->open($this->collection);
     }
 
+    /**
+     * Forces the driver to open the collection with the `openAdvanced` method.
+     */
     public function getAdvancedDriver(): PHPFFMpeg
     {
         return $this->driver->openAdvanced($this->collection);
     }
 
+    /**
+     * Shortcut to set the timecode by string.
+     */
     public function getFrameFromString(string $timecode): self
     {
-        return $this->getFrameFromTimecode(
-            TimeCode::fromString($timecode)
-        );
+        return $this->getFrameFromTimecode(TimeCode::fromString($timecode));
     }
 
+    /**
+     * Shortcut to set the timecode by seconds.
+     */
     public function getFrameFromSeconds(float $quantity): self
     {
-        return $this->getFrameFromTimecode(
-            TimeCode::fromSeconds($quantity)
-        );
+        return $this->getFrameFromTimecode(TimeCode::fromSeconds($quantity));
     }
 
     public function getFrameFromTimecode(TimeCode $timecode): self
@@ -92,6 +111,9 @@ class MediaOpener
         return $this;
     }
 
+    /**
+     * Returns an instance of MediaExporter with the driver and timecode (if set).
+     */
     public function export(): MediaExporter
     {
         return tap(new MediaExporter($this->getDriver()), function (MediaExporter $mediaExporter) {
@@ -101,6 +123,9 @@ class MediaOpener
         });
     }
 
+    /**
+     * Returns an instance of HLSExporter with the driver forced to AdvancedMedia.
+     */
     public function exportForHLS(): HLSExporter
     {
         return new HLSExporter($this->getAdvancedDriver());
@@ -113,11 +138,18 @@ class MediaOpener
         return $this;
     }
 
+    /**
+     * Returns the Media object from the driver.
+     */
     public function __invoke(): AbstractMediaType
     {
         return $this->getDriver()->get();
     }
 
+    /**
+     * Forwards all calls to the underlying driver.
+     * @return void
+     */
     public function __call($method, $arguments)
     {
         $result = $this->forwardCallTo($driver = $this->getDriver(), $method, $arguments);

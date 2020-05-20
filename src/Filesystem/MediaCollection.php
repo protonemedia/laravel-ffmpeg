@@ -24,6 +24,9 @@ class MediaCollection
         return new static($items);
     }
 
+    /**
+     * Returns an array with all locals paths of the Media items.
+     */
     public function getLocalPaths(): array
     {
         return $this->items->map->getLocalPath()->all();

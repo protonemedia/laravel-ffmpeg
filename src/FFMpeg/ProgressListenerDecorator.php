@@ -9,6 +9,10 @@ use FFMpeg\Format\VideoInterface;
 use FFMpeg\Media\MediaTypeInterface;
 use Illuminate\Support\Traits\ForwardsCalls;
 
+/**
+ * Use this decorator to get access to the AbstractProgressListeners0
+ * with the `getListeners` method.
+ */
 class ProgressListenerDecorator implements ProgressableInterface, AudioInterface
 {
     use ForwardsCalls;
