@@ -11,9 +11,9 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. The
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
-* Compatible with Laravel 6.0 and higher.
-* Support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
+* Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
 * Built-in support for HLS.
+* Built-in support for concatening, multiple inputs/outputs, timelapses, complex filters (and mapping), frame/thumbnail exports.
 * PHP 7.4 only.
 
 ## Video Course Builder
@@ -68,6 +68,14 @@ Publish the config file using the artisan CLI tool:
 ```bash
 php artisan vendor:publish --provider="Pbmedia\LaravelFFMpeg\Support\ServiceProvider"
 ```
+
+## Upgrading to v7
+
+* The Facade has been renamed to `Pbmedia\LaravelFFMpeg\Support\FFMpeg`
+* The Service Provider has been renamed to `Pbmedia\LaravelFFMpeg\Support\ServiceProvider`
+* Chaining exports is still supported but you have to reapply filters for each export.
+* HLS playlists now include bitrate, framerate and resolution data. The segments also use a new naming pattern. Please verify your exports still work in your player.
+* A HLS export is now exported as *one* job instead of exporting each format/stream separately. This uses FFMpeg's `map` and `filter_complex` features. It might be sufficient to replace all calls to `addFilter` with `addLegacyFilter`, but some filters should be migrated manually. Please read the [documentation on HLS](#hls) to find out more about adding filters.
 
 ## Usage
 

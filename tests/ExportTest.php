@@ -2,6 +2,8 @@
 
 namespace Pbmedia\LaravelFFMpeg\Tests;
 
+use FFMpeg\Coordinate\TimeCode;
+use FFMpeg\Filters\Video\ClipFilter;
 use FFMpeg\Format\Video\WMV;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Facades\Storage;
@@ -105,6 +107,61 @@ class ExportTest extends TestCase
 
         $this->assertTrue(Storage::disk('local')->has('new_video1.mp4'));
         $this->assertTrue(Storage::disk('local')->has('new_video2.mp4'));
+    }
+
+    /** @test */
+    public function it_can_export_a_with_a_single_filter()
+    {
+        $this->fakeLocalVideoFile();
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->addFilter(new ClipFilter(TimeCode::fromSeconds(1), TimeCode::fromSeconds(2)))
+            ->export()
+            ->inFormat(new X264)
+            ->save('new_video.mp4');
+
+        $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
+        $this->assertEquals(2, (new MediaOpener)->open('new_video.mp4')->getDurationInSeconds());
+    }
+
+    /** @test */
+    public function it_can_add_the_filter_after_calling_the_export_method()
+    {
+        $this->fakeLocalVideoFile();
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->export()
+            ->addFilter(new ClipFilter(TimeCode::fromSeconds(1), TimeCode::fromSeconds(2)))
+            ->inFormat(new X264)
+            ->save('new_video.mp4');
+
+        $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
+        $this->assertEquals(2, (new MediaOpener)->open('new_video.mp4')->getDurationInSeconds());
+    }
+
+    /** @test */
+    public function it_doesnt_migrate_filters_from_a_previous_export()
+    {
+        $this->fakeLocalVideoFile();
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->addFilter(new ClipFilter(TimeCode::fromSeconds(1), TimeCode::fromSeconds(2)))
+            ->export()
+            ->inFormat(new X264)
+            ->save('short_video.mp4')
+
+            ->export()
+            ->inFormat(new X264)
+            ->save('long_video.mp4');
+
+        $this->assertTrue(Storage::disk('local')->has('short_video.mp4'));
+        $this->assertEquals(2, (new MediaOpener)->open('short_video.mp4')->getDurationInSeconds());
+
+        $this->assertTrue(Storage::disk('local')->has('long_video.mp4'));
+        $this->assertEquals(5, (new MediaOpener)->open('long_video.mp4')->getDurationInSeconds());
     }
 
     /** @test */
