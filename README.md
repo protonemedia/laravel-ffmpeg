@@ -74,7 +74,7 @@ php artisan vendor:publish --provider="Pbmedia\LaravelFFMpeg\Support\ServiceProv
 * The Facade has been renamed to `Pbmedia\LaravelFFMpeg\Support\FFMpeg`
 * The Service Provider has been renamed to `Pbmedia\LaravelFFMpeg\Support\ServiceProvider`
 * Chaining exports is still supported but you have to reapply filters for each export.
-* HLS playlists now include bitrate, framerate and resolution data. The segments also use a new naming pattern. Please verify your exports still work in your player.
+* HLS playlists now include bitrate, framerate and resolution data. The segments also use a new naming pattern ([read more](#using-custom-segment-patterns)). Please verify your exports still work in your player.
 * A HLS export is now exported as *one* job instead of exporting each format/stream separately. This uses FFMpeg's `map` and `filter_complex` features. It might be sufficient to replace all calls to `addFilter` with `addLegacyFilter`, but some filters should be migrated manually. Please read the [documentation on HLS](#hls) to find out more about adding filters.
 
 ## Usage
