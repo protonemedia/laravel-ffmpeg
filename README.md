@@ -147,6 +147,24 @@ FFMpeg::fromDisk('videos')
     ->save('short_steve.mkv');
 ```
 
+As of version 7.0, you can also call the `addFilter` method *after* the `export` method:
+
+```php
+<?php
+
+use FFMpeg\Filters\Video\VideoFilters;
+
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->export()
+    ->toDisk('converted_videos')
+    ->inFormat(new \FFMpeg\Format\Video\X264)
+    ->addFilter(function (VideoFilters $filters) {
+        $filters->resize(new \FFMpeg\Coordinate\Dimension(640, 480));
+    })
+    ->save('small_steve.mkv');
+```
+
 ### Custom filters
 
 Sometimes you don't want to use the built-in filters. You can apply your own filter by providing a set of options. This can be an array or multiple strings as arguments:
