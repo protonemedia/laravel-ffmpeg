@@ -21,7 +21,7 @@ trait HandlesConcatenation
      */
     protected $concatWithAudio = false;
 
-    public function concatWithTranscoding($hasVideo = true, $hasAudio = true): self
+    public function concatWithTranscoding(bool $hasVideo = true, bool $hasAudio = true): self
     {
         $this->concatWithTranscoding = true;
         $this->concatWithVideo       = $hasVideo;
