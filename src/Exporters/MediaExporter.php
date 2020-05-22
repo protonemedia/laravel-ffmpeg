@@ -9,6 +9,9 @@ use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
 use Pbmedia\LaravelFFMpeg\MediaOpener;
 
+/**
+ * @mixin \Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg
+ */
 class MediaExporter
 {
     use ForwardsCalls,
