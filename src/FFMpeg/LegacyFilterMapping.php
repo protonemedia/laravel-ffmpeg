@@ -11,7 +11,11 @@ class LegacyFilterMapping
 {
     private $in;
     private $out;
-    private array $arguments;
+
+    /**
+     * @var array
+     */
+    private $arguments;
 
     public function __construct($in, $out, ...$arguments)
     {

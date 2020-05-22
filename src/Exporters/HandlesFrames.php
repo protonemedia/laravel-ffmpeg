@@ -4,7 +4,14 @@ namespace Pbmedia\LaravelFFMpeg\Exporters;
 
 trait HandlesFrames
 {
-    protected $mustBeAccurate      = false;
+    /**
+     * @var boolean
+     */
+    protected $mustBeAccurate = false;
+
+    /**
+     * @var boolean
+     */
     protected $returnFrameContents = false;
 
     public function accurate(): self

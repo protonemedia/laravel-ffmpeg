@@ -4,7 +4,10 @@ namespace Pbmedia\LaravelFFMpeg\Exporters;
 
 trait HandlesTimelapse
 {
-    protected ?float $timelapseFramerate = null;
+    /**
+     * @var float
+     */
+    protected $timelapseFramerate;
 
     public function asTimelapseWithFramerate(float $framerate): self
     {

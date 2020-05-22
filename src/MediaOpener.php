@@ -15,14 +15,32 @@ use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
 use Pbmedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 
+/**
+ * @mixin \Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg
+ */
 class MediaOpener
 {
     use ForwardsCalls;
 
-    private Disk $disk;
-    private PHPFFMpeg $driver;
-    private MediaCollection $collection;
-    private ?TimeCode $timecode = null;
+    /**
+     * @var \Pbmedia\LaravelFFMpeg\Filesystem\Disk
+     */
+    private $disk;
+
+    /**
+     * @var \Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg
+     */
+    private $driver;
+
+    /**
+     * @var \Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection
+     */
+    private $collection;
+
+    /**
+     * @var \FFMpeg\Coordinate\TimeCode
+     */
+    private $timecode;
 
     /**
      * Uses the 'filesystems.default' disk from the config if none is given.

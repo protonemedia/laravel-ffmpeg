@@ -18,10 +18,25 @@ class MediaExporter
         HandlesTimelapse,
         HasProgressListener;
 
-    protected PHPFFMpeg $driver;
-    private ?FormatInterface $format = null;
-    protected ?string $visibility    = null;
-    private ?Disk $toDisk            = null;
+    /**
+     * @var \Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg
+     */
+    protected $driver;
+
+    /**
+     * @var \FFMpeg\Format\FormatInterface
+     */
+    private $format;
+
+    /**
+     * @var string
+     */
+    protected $visibility;
+
+    /**
+     * @var \Pbmedia\LaravelFFMpeg\Filesystem\Disk
+     */
+    private $toDisk;
 
     public function __construct(PHPFFMpeg $driver)
     {

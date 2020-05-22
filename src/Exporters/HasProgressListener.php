@@ -7,8 +7,15 @@ use Evenement\EventEmitterInterface;
 
 trait HasProgressListener
 {
-    protected ?Closure $onProgressCallback = null;
-    protected ?float $lastPercentage       = null;
+    /**
+     * @var \Closure
+     */
+    protected $onProgressCallback;
+
+    /**
+     * @var float
+     */
+    protected $lastPercentage;
 
     public function onProgress(Closure $callback): self
     {

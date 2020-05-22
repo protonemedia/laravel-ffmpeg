@@ -14,11 +14,30 @@ use Pbmedia\LaravelFFMpeg\MediaOpener;
 
 class HLSExporter extends MediaExporter
 {
-    private int $segmentLength                    = 10;
-    private int $keyFrameInterval                 = 48;
-    private ?Collection $pendingFormats           = null;
-    private ?PlaylistGenerator $playlistGenerator = null;
-    private ?Closure $segmentFilenameGenerator    = null;
+    /**
+     * @var integer
+     */
+    private $segmentLength = 10;
+
+    /**
+    * @var integer
+    */
+    private $keyFrameInterval = 48;
+
+    /**
+     * @var \Illuminate\Support\Collection
+     */
+    private $pendingFormat;
+
+    /**
+     * @var \Pbmedia\LaravelFFMpeg\Exporters\PlaylistGenerator
+     */
+    private $playlistGenerator;
+
+    /**
+     * @var \Closure
+     */
+    private $segmentFilenameGenerator = null;
 
     public function setSegmentLength(int $length): self
     {

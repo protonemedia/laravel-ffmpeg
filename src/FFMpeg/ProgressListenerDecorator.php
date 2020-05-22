@@ -17,7 +17,14 @@ class ProgressListenerDecorator implements ProgressableInterface, AudioInterface
 {
     use ForwardsCalls;
 
+    /**
+     * @var \FFMpeg\Format\AudioInterface|\FFMpeg\Format\VideoInterface
+     */
     protected $format;
+
+    /**
+     * @var array
+     */
     protected $listeners = [];
 
     public function __construct($format)

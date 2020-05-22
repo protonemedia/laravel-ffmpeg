@@ -18,9 +18,20 @@ class Disk
 {
     use ForwardsCalls;
 
+    /**
+     * @var string|\Illuminate\Contracts\Filesystem\Filesystem
+     */
     private $disk;
-    private ?TemporaryDirectory $temporaryDirectory = null;
-    private ?FilesystemAdapter $filesystemAdapter   = null;
+
+    /**
+     * @var \Spatie\TemporaryDirectory\TemporaryDirectory
+     */
+    private $temporaryDirectory;
+
+    /**
+     * @var \Illuminate\Filesystem\FilesystemAdapter
+     */
+    private $filesystemAdapter;
 
     public function __construct($disk)
     {

@@ -3,21 +3,31 @@
 namespace Pbmedia\LaravelFFMpeg\Filesystem;
 
 use Illuminate\Filesystem\FilesystemAdapter;
-use Spatie\TemporaryDirectory\TemporaryDirectory;
 
 class Media
 {
-    private Disk $disk;
-    private $path;
-    private ?TemporaryDirectory $temporaryDirectory = null;
+    /**
+     * @var \Pbmedia\LaravelFFMpeg\Filesystem\Disk
+     */
+    private $disk;
 
-    public function __construct(Disk $disk, $path)
+    /**
+     * @var string
+     */
+    private $path;
+
+    /**
+     * @var \Spatie\TemporaryDirectory\TemporaryDirectory
+     */
+    private $temporaryDirectory;
+
+    public function __construct(Disk $disk, string $path)
     {
         $this->disk = $disk;
         $this->path = $path;
     }
 
-    public static function make($disk, $path): self
+    public static function make($disk, string $path): self
     {
         return new static(Disk::make($disk), $path);
     }

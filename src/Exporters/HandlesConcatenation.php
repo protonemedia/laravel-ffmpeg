@@ -6,9 +6,20 @@ use Pbmedia\LaravelFFMpeg\Filesystem\Media;
 
 trait HandlesConcatenation
 {
-    protected bool $concatWithTranscoding = false;
-    protected bool $concatWithVideo       = false;
-    protected bool $concatWithAudio       = false;
+    /**
+     * @var boolean
+     */
+    protected $concatWithTranscoding = false;
+
+    /**
+     * @var boolean
+     */
+    protected $concatWithVideo = false;
+
+    /**
+     * @var boolean
+     */
+    protected $concatWithAudio = false;
 
     public function concatWithTranscoding($hasVideo = true, $hasAudio = true): self
     {

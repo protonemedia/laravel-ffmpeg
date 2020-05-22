@@ -21,11 +21,30 @@ class PHPFFMpeg
 {
     use ForwardsCalls;
 
-    private FFMpeg $ffmpeg;
-    private bool $forceAdvanced = false;
-    private MediaCollection $mediaCollection;
-    private Collection $pendingComplexFilters;
-    private ?AbstractMediaType $media = null;
+    /**
+     * @var \FFMpeg\FFMpeg
+     */
+    private $ffmpeg;
+
+    /**
+     * @var \Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection
+     */
+    private $mediaCollection;
+
+    /**
+     * @var boolean
+     */
+    private $forceAdvanced = false;
+
+    /**
+     * @var \Illuminate\Support\Collection
+     */
+    private $pendingComplexFilters;
+
+    /**
+     * @var \FFMpeg\Media\AbstractMediaType
+     */
+    private $media;
 
     public function __construct(FFMpeg $ffmpeg)
     {

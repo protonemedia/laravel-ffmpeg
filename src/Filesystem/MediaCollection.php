@@ -6,13 +6,16 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
 
 /**
- * Mostly a wrapper around the Collection class.
+ * @mixin \Illuminate\Support\Collection
  */
 class MediaCollection
 {
     use ForwardsCalls;
 
-    private Collection $items;
+    /**
+     * @var \Illuminate\Support\Collection
+     */
+    private $items;
 
     public function __construct(array $items = [])
     {
