@@ -27,7 +27,7 @@ class HLSExporter extends MediaExporter
     /**
      * @var \Illuminate\Support\Collection
      */
-    private $pendingFormat;
+    private $pendingFormats;
 
     /**
      * @var \Pbmedia\LaravelFFMpeg\Exporters\PlaylistGenerator
