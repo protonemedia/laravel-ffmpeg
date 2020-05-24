@@ -86,20 +86,13 @@ class Media
 
     private function temporaryDirectoryAdapter(): FilesystemAdapter
     {
-        $this->makeTemporaryDirectory();
-
-        return app('filesystem')->createLocalDriver(
-            ['root' => $this->temporaryDirectory->path()]
-        );
-    }
-
-    private function makeTemporaryDirectory(): self
-    {
         if (!$this->temporaryDirectory) {
             $this->temporaryDirectory = $this->getDisk()->getTemporaryDirectory();
         }
 
-        return $this;
+        return app('filesystem')->createLocalDriver(
+            ['root' => $this->temporaryDirectory->path()]
+        );
     }
 
     public function getLocalPath(): string
@@ -111,15 +104,13 @@ class Media
             return $disk->path($path);
         }
 
-        if (!$this->temporaryDirectory) {
-            $this->makeTemporaryDirectory();
+        $temporaryDirectoryAdapter = $this->temporaryDirectoryAdapter();
+
+        if ($disk->exists($path) && !$temporaryDirectoryAdapter->exists($path)) {
+            $temporaryDirectoryAdapter->writeStream($path, $disk->readStream($path));
         }
 
-        if ($disk->exists($path) && !$this->temporaryDirectoryAdapter()->exists($path)) {
-            $this->temporaryDirectoryAdapter()->writeStream($path, $disk->readStream($path));
-        }
-
-        return $this->temporaryDirectoryAdapter()->path($path);
+        return $temporaryDirectoryAdapter->path($path);
     }
 
     public function copyAllFromTemporaryDirectory(string $visibility = null)
