@@ -225,7 +225,7 @@ class PHPFFMpeg
         $this->pendingComplexFilters->push(new LegacyFilterMapping(
             $in,
             $out,
-            ...$arguments,
+            ...$arguments
         ));
 
         return $this;
