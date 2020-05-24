@@ -95,7 +95,7 @@ class HLSExporter extends MediaExporter
             },
             function ($path) use (&$formatPlaylistPath) {
                 $formatPlaylistPath = $path;
-            },
+            }
         );
 
         return [$segmentsPattern, $formatPlaylistPath];
@@ -169,7 +169,7 @@ class HLSExporter extends MediaExporter
 
     public function save(string $path = null): MediaOpener
     {
-        $media = $this->getDisk()->makeMedia($path)->makeDirectory();
+        $media = $this->getDisk()->makeMedia($path);
 
         $baseName = $media->getDirectory() . $media->getFilenameWithoutExtension();
 

@@ -25,6 +25,8 @@ class Media
     {
         $this->disk = $disk;
         $this->path = $path;
+
+        $this->makeDirectory();
     }
 
     public static function make($disk, string $path): self
@@ -57,23 +59,19 @@ class Media
         return $directory;
     }
 
-    public function makeDirectory(): self
+    private function makeDirectory(): void
     {
         $directory = $this->getDirectory();
-
-        if ($directory === './') {
-            return $this;
-        }
 
         $adapter = $this->getDisk()->isLocalDisk()
             ? $this->getDisk()->getFilesystemAdapter()
             : $this->temporaryDirectoryAdapter();
 
-        if (!$adapter->has($directory)) {
-            $adapter->makeDirectory($directory);
+        if ($adapter->has($directory)) {
+            return;
         }
 
-        return $this;
+        $adapter->makeDirectory($directory);
     }
 
     public function getFilenameWithoutExtension(): string
@@ -115,10 +113,10 @@ class Media
 
         if (!$this->temporaryDirectory) {
             $this->makeTemporaryDirectory();
+        }
 
-            if ($disk->exists($path)) {
-                $this->temporaryDirectoryAdapter()->writeStream($path, $disk->readStream($path));
-            }
+        if ($disk->exists($path) && !$this->temporaryDirectoryAdapter()->exists($path)) {
+            $this->temporaryDirectoryAdapter()->writeStream($path, $disk->readStream($path));
         }
 
         return $this->temporaryDirectoryAdapter()->path($path);

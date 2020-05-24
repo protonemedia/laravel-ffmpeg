@@ -92,6 +92,33 @@ class HlsExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_export_a_single_media_file_into_a_subdirectory_on_a_remote_disk()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate = (new X264)->setKiloBitrate(250);
+        $midBitrate = (new X264)->setKiloBitrate(1000);
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->addFormat($midBitrate)
+            ->toDisk('memory')
+            ->save('sub/dir/adaptive.m3u8');
+
+        $this->assertTrue(Storage::disk('memory')->has('sub/dir/adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('memory')->has('sub/dir/adaptive_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('memory')->has('sub/dir/adaptive_1_1000.m3u8'));
+
+        $masterPlaylist = Storage::disk('memory')->get('sub/dir/adaptive.m3u8');
+        $lowPlaylist    = Storage::disk('memory')->get('sub/dir/adaptive_0_250.m3u8');
+
+        $this->assertStringNotContainsString('sub/dir', $masterPlaylist);
+        $this->assertStringNotContainsString('sub/dir', $lowPlaylist);
+    }
+
+    /** @test */
     public function it_can_use_a_custom_format_for_the_segment_naming()
     {
         $this->fakeLocalVideoFile();
