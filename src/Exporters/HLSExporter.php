@@ -181,7 +181,7 @@ class HLSExporter extends MediaExporter
             [$segmentsPattern, $formatPlaylistPath] = $this->getSegmentPatternAndFormatPlaylistPath(
                 $baseName,
                 $format,
-                $key,
+                $key
             );
 
             $this->addHLSParametersToFormat($format, $segmentsPattern, $disk);

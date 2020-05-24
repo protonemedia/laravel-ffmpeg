@@ -14,7 +14,7 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. The
 * Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
 * Built-in support for HLS.
 * Built-in support for concatening, multiple inputs/outputs, timelapses, complex filters (and mapping), frame/thumbnail exports.
-* PHP 7.4 only.
+* PHP 7.2 and higher.
 
 ## Video Course Builder
 
@@ -23,18 +23,6 @@ We're developing a package/app/service to quickly setup your own course platform
 Are there other features you want to see? Do you have ideas about pricing models? Or do you have other suggestions? Let me know [right here on GitHub](https://github.com/pascalbaljetmedia/laravel-ffmpeg/issues/187) or reach out [on Twitter](https://twitter.com/pascalbaljet).
 
 ## Installation
-
-If you're still using an older version of Laravel (or PHP < 7.2), please use the chart below to find out which version you should use. Mind that older versions are no longer supported.
-
-| Laravel Version | Package Version |
-|-----------------|-----------------|
-| 6.0 + 7.0       | 7.0             |
-| 7.0             | 6.0             |
-| 6.0             | 5.0             |
-| 5.8             | 4.0             |
-| 5.7             | 3.0             |
-| 5.6             | 2.1             |
-| 5.1-5.5         | 1.3             |
 
 You can install the package via composer:
 
@@ -47,8 +35,7 @@ Add the Service Provider and Facade to your ```app.php``` config file if you're 
 ```php
 <?php
 
-
-// Laravel 5: config/app.php
+// config/app.php
 
 'providers' => [
     ...
