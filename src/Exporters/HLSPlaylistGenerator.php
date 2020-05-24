@@ -46,7 +46,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     {
         return Collection::make($playlistMedia)->map(function (Media $playlistMedia) use ($driver) {
             $media = (new MediaOpener($playlistMedia->getDisk(), $driver->fresh()))->open(
-                $this->getPathOfFirstSegment($playlistMedia)
+                $playlistMedia->getDirectory() . $this->getPathOfFirstSegment($playlistMedia)
             );
 
             $streamInfo = [
@@ -58,7 +58,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
                 $streamInfo[] = "FRAME-RATE={$frameRate}";
             }
 
-            return [implode(',', $streamInfo), $playlistMedia->getPath()];
+            return [implode(',', $streamInfo), $playlistMedia->getFilename()];
         })->collapse()
             ->prepend(static::PLAYLIST_START)
             ->push(static::PLAYLIST_END)

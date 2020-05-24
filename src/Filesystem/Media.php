@@ -42,16 +42,66 @@ class Media
         return $this->path;
     }
 
+    public function getDirectory(): ?string
+    {
+        $directory = rtrim(pathinfo($this->getPath())['dirname'], DIRECTORY_SEPARATOR);
+
+        if ($directory === '.') {
+            $directory = '';
+        }
+
+        if ($directory) {
+            $directory .= DIRECTORY_SEPARATOR;
+        }
+
+        return $directory;
+    }
+
+    public function makeDirectory(): self
+    {
+        $directory = $this->getDirectory();
+
+        if ($directory === './') {
+            return $this;
+        }
+
+        $adapter = $this->getDisk()->isLocalDisk()
+            ? $this->getDisk()->getFilesystemAdapter()
+            : $this->temporaryDirectoryAdapter();
+
+        if (!$adapter->has($directory)) {
+            $adapter->makeDirectory($directory);
+        }
+
+        return $this;
+    }
+
     public function getFilenameWithoutExtension(): string
     {
         return pathinfo($this->getPath())['filename'];
     }
 
+    public function getFilename(): string
+    {
+        return pathinfo($this->getPath())['basename'];
+    }
+
     private function temporaryDirectoryAdapter(): FilesystemAdapter
     {
+        $this->makeTemporaryDirectory();
+
         return app('filesystem')->createLocalDriver(
             ['root' => $this->temporaryDirectory->path()]
         );
+    }
+
+    private function makeTemporaryDirectory(): self
+    {
+        if (!$this->temporaryDirectory) {
+            $this->temporaryDirectory = $this->getDisk()->getTemporaryDirectory();
+        }
+
+        return $this;
     }
 
     public function getLocalPath(): string
@@ -64,7 +114,7 @@ class Media
         }
 
         if (!$this->temporaryDirectory) {
-            $this->temporaryDirectory = $disk->getTemporaryDirectory();
+            $this->makeTemporaryDirectory();
 
             if ($disk->exists($path)) {
                 $this->temporaryDirectoryAdapter()->writeStream($path, $disk->readStream($path));

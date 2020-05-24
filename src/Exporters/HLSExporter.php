@@ -169,7 +169,9 @@ class HLSExporter extends MediaExporter
 
     public function save(string $path = null): MediaOpener
     {
-        $baseName = $this->getDisk()->makeMedia($path)->getFilenameWithoutExtension();
+        $media = $this->getDisk()->makeMedia($path)->makeDirectory();
+
+        $baseName = $media->getDirectory() . $media->getFilenameWithoutExtension();
 
         return $this->pendingFormats->map(function ($formatAndCallback, $key) use ($baseName) {
             $disk = $this->getDisk()->clone();

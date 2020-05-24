@@ -51,16 +51,44 @@ class HlsExportTest extends TestCase
 
         $playlist = Storage::disk('memory')->get('adaptive.m3u8');
 
-        $this->assertEquals(implode(PHP_EOL, [
+        $pattern = '/' . implode("\n", [
             '#EXTM3U',
-            '#EXT-X-STREAM-INF:BANDWIDTH=287416,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
             'adaptive_0_250.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=1141383,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
             'adaptive_1_1000.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=4185389,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
             'adaptive_2_4000.m3u8',
             '#EXT-X-ENDLIST',
-        ]), $playlist);
+        ]) . '/';
+
+        $this->assertEquals(1, preg_match($pattern, $playlist));
+    }
+
+    /** @test */
+    public function it_can_export_a_single_media_file_into_a_subdirectory()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate = (new X264)->setKiloBitrate(250);
+        $midBitrate = (new X264)->setKiloBitrate(1000);
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->addFormat($midBitrate)
+            ->save('sub/dir/adaptive.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_1_1000.m3u8'));
+
+        $masterPlaylist = Storage::disk('local')->get('sub/dir/adaptive.m3u8');
+        $lowPlaylist    = Storage::disk('local')->get('sub/dir/adaptive_0_250.m3u8');
+
+        $this->assertStringNotContainsString('sub/dir', $masterPlaylist);
+        $this->assertStringNotContainsString('sub/dir', $lowPlaylist);
     }
 
     /** @test */
@@ -94,14 +122,16 @@ class HlsExportTest extends TestCase
 
         $playlist = Storage::disk('memory')->get('adaptive.m3u8');
 
-        $this->assertEquals(implode(PHP_EOL, [
+        $pattern = '/' . implode("\n", [
             '#EXTM3U',
-            '#EXT-X-STREAM-INF:BANDWIDTH=290922,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
             'NadaptiveB250K0.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=1142020,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
             'NadaptiveB1000K1.m3u8',
             '#EXT-X-ENDLIST',
-        ]), $playlist);
+        ]) . '/';
+
+        $this->assertEquals(1, preg_match($pattern, $playlist));
     }
 
     /** @test */
