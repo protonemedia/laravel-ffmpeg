@@ -2,8 +2,7 @@
 
 namespace Pbmedia\LaravelFFMpeg\Exporters;
 
-use FFMpeg\FFProbe\DataMapping\Stream;
-use Illuminate\Support\Arr;
+use Exception;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
@@ -24,13 +23,6 @@ class HLSPlaylistGenerator implements PlaylistGenerator
         });
     }
 
-    private function getVideoStream(MediaOpener $media): ?Stream
-    {
-        return Arr::first($media->getStreams(), function (Stream $stream) {
-            return $stream->get('codec_type') === 'video';
-        });
-    }
-
     private function getBandwidth(MediaOpener $media)
     {
         return $media->getFormat()->get('bit_rate');
@@ -38,17 +30,18 @@ class HLSPlaylistGenerator implements PlaylistGenerator
 
     private function getResolution(MediaOpener $media)
     {
-        $videoStream = $this->getVideoStream($media);
+        try {
+            $dimensions = optional($media->getVideoStream())->getDimensions();
+        } catch (Exception $exception) {
+            return null;
+        }
 
-        $width  = optional($videoStream)->get('width');
-        $height = optional($videoStream)->get('height');
-
-        return ($width && $height) ? "{$width}x{$height}" : null;
+        return "{$dimensions->getWidth()}x{$dimensions->getHeight()}";
     }
 
     private function getFrameRate(MediaOpener $media)
     {
-        $mediaStream = $this->getVideoStream($media);
+        $mediaStream = $media->getVideoStream();
 
         $frameRate = trim(Str::before(optional($mediaStream)->get('avg_frame_rate'), "/1"));
 

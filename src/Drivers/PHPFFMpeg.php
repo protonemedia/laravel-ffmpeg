@@ -5,6 +5,7 @@ namespace Pbmedia\LaravelFFMpeg\Drivers;
 use Closure;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\FFMpeg;
+use FFMpeg\FFProbe\DataMapping\Stream;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\FilterInterface;
 use FFMpeg\Media\AbstractMediaType;
@@ -167,6 +168,16 @@ class PHPFFMpeg
         if ($format->has('duration')) {
             return $format->get('duration') * 1000;
         }
+    }
+
+    /**
+     * Gets the first video streams of the media.
+     */
+    public function getVideoStream(): ?Stream
+    {
+        return Arr::first($this->getStreams(), function (Stream $stream) {
+            return $stream->isVideo();
+        });
     }
 
     //
