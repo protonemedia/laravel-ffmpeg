@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Filters\Video\ClipFilter;
+use FFMpeg\Format\Audio\Mp3;
 use FFMpeg\Format\Video\WMV;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Facades\Storage;
@@ -15,7 +16,7 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 class ExportTest extends TestCase
 {
     /** @test */
-    public function it_can_export_a_single_media_file()
+    public function it_can_export_a_single_video_file()
     {
         $this->fakeLocalVideoFile();
 
@@ -26,6 +27,19 @@ class ExportTest extends TestCase
             ->save('new_video.mp4');
 
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
+    }
+    /** @test */
+    public function it_can_export_a_single_audio_file()
+    {
+        $this->fakeLocalAudioFile();
+
+        (new MediaOpener)
+            ->open('guitar.m4a')
+            ->export()
+            ->inFormat(new Mp3)
+            ->save('guitar.mp3');
+
+        $this->assertTrue(Storage::disk('local')->has('guitar.mp3'));
     }
 
     /** @test */

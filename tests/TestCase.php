@@ -62,9 +62,17 @@ abstract class TestCase extends BaseTestCase
         return [ServiceProvider::class];
     }
 
+    protected function fakeLocalAudioFile()
+    {
+        Storage::fake('local');
+
+        $this->addTestFile('guitar.m4a');
+    }
+
     protected function fakeLocalVideoFile()
     {
         Storage::fake('local');
+
         $this->addTestFile('video.mp4');
     }
 
