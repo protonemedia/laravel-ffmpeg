@@ -1,13 +1,13 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Support;
+namespace ProtoneMedia\LaravelFFMpeg\Support;
 
 use FFMpeg\Driver\FFMpegDriver;
 use FFMpeg\FFMpeg;
 use FFMpeg\FFProbe;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
-use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
-use Pbmedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 use Psr\Log\LoggerInterface;
 
 class ServiceProvider extends BaseServiceProvider

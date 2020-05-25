@@ -1,13 +1,13 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Tests;
+namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Video\VideoFilters;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Facades\Storage;
-use Pbmedia\LaravelFFMpeg\Exporters\HLSPlaylistGenerator;
-use Pbmedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Exporters\HLSPlaylistGenerator;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HlsExportTest extends TestCase
 {

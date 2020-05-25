@@ -1,6 +1,6 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Drivers;
+namespace ProtoneMedia\LaravelFFMpeg\Drivers;
 
 use Closure;
 use FFMpeg\Coordinate\TimeCode;
@@ -15,8 +15,8 @@ use FFMpeg\Media\Frame;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
-use Pbmedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
-use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class PHPFFMpeg
 {
@@ -28,7 +28,7 @@ class PHPFFMpeg
     private $ffmpeg;
 
     /**
-     * @var \Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection
+     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection
      */
     private $mediaCollection;
 

@@ -3,9 +3,15 @@
     "description": "FFMpeg for Laravel",
     "keywords": [
         "pbmedia",
-        "laravel-ffmpeg"
+        "laravel",
+        "laravel-ffmpeg",
+        "ffmpeg",
+        "protonemedia",
+        "protone media",
+        "pascal baljet media",
+        "pascalbaljetmedia"
     ],
-    "homepage": "https://github.com/pbmedia/laravel-ffmpeg",
+    "homepage": "https://github.com/pascalbaljetmedia/laravel-ffmpeg",
     "license": "MIT",
     "type": "library",
     "authors": [
@@ -36,12 +42,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Pbmedia\\LaravelFFMpeg\\": "src"
+            "ProtoneMedia\\LaravelFFMpeg\\": "src"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Pbmedia\\LaravelFFMpeg\\Tests\\": "tests"
+            "ProtoneMedia\\LaravelFFMpeg\\Tests\\": "tests"
         }
     },
     "scripts": {
@@ -54,10 +60,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Pbmedia\\LaravelFFMpeg\\Support\\ServiceProvider"
+                "ProtoneMedia\\LaravelFFMpeg\\Support\\ServiceProvider"
             ],
             "aliases": {
-                "FFMpeg": "Pbmedia\\LaravelFFMpeg\\Support\\FFMpeg"
+                "FFMpeg": "ProtoneMedia\\LaravelFFMpeg\\Support\\FFMpeg"
             }
         }
     }

@@ -1,16 +1,16 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Tests;
+namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Filters\Video\ClipFilter;
 use FFMpeg\Format\Video\WMV;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Facades\Storage;
-use Pbmedia\LaravelFFMpeg\FFMpeg\ProgressListenerDecorator;
-use Pbmedia\LaravelFFMpeg\Filesystem\Media;
-use Pbmedia\LaravelFFMpeg\MediaOpener;
-use Pbmedia\LaravelFFMpeg\Support\FFMpeg;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\ProgressListenerDecorator;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class ExportTest extends TestCase
 {

@@ -1,9 +1,9 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Tests;
+namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Support\Facades\Storage;
-use Pbmedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class FrameTest extends TestCase
 {

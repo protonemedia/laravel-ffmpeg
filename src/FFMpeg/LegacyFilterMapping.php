@@ -1,11 +1,11 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\FFMpeg;
+namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
-use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
-use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class LegacyFilterMapping
 {

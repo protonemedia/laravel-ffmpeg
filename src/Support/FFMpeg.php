@@ -1,6 +1,6 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Support;
+namespace ProtoneMedia\LaravelFFMpeg\Support;
 
 use Illuminate\Support\Facades\Facade;
 

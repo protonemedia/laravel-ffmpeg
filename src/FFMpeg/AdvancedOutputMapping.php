@@ -1,11 +1,11 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\FFMpeg;
+namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 
 use FFMpeg\Format\FormatInterface;
 use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Media\AdvancedMedia;
-use Pbmedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 
 class AdvancedOutputMapping
 {
@@ -20,7 +20,7 @@ class AdvancedOutputMapping
     private $format;
 
     /**
-     * @var \Pbmedia\LaravelFFMpeg\Filesystem\Media
+     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Media
      */
     private $output;
 

@@ -1,14 +1,14 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Tests;
+namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\Filesystem as FlysystemFilesystem;
 use League\Flysystem\Memory\MemoryAdapter;
 use Orchestra\Testbench\TestCase as BaseTestCase;
-use Pbmedia\LaravelFFMpeg\Support\FFMpeg;
-use Pbmedia\LaravelFFMpeg\Support\ServiceProvider;
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider;
 use Twistor\Flysystem\Http\HttpAdapter;
 
 abstract class TestCase extends BaseTestCase

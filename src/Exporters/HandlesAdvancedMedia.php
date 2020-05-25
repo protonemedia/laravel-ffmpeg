@@ -1,10 +1,10 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Exporters;
+namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use FFMpeg\Format\FormatInterface;
-use Pbmedia\LaravelFFMpeg\FFMpeg\AdvancedOutputMapping;
-use Pbmedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\AdvancedOutputMapping;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 
 trait HandlesAdvancedMedia
 {

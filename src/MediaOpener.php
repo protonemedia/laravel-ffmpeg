@@ -1,39 +1,39 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg;
+namespace ProtoneMedia\LaravelFFMpeg;
 
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Media\AbstractMediaType;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Traits\ForwardsCalls;
-use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
-use Pbmedia\LaravelFFMpeg\Exporters\HLSExporter;
-use Pbmedia\LaravelFFMpeg\Exporters\MediaExporter;
-use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
-use Pbmedia\LaravelFFMpeg\Filesystem\Media;
-use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
-use Pbmedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
+use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
+use ProtoneMedia\LaravelFFMpeg\Exporters\MediaExporter;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 
 /**
- * @mixin \Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg
+ * @mixin \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
  */
 class MediaOpener
 {
     use ForwardsCalls;
 
     /**
-     * @var \Pbmedia\LaravelFFMpeg\Filesystem\Disk
+     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
      */
     private $disk;
 
     /**
-     * @var \Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg
+     * @var \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
      */
     private $driver;
 
     /**
-     * @var \Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection
+     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection
      */
     private $collection;
 

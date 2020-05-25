@@ -1,6 +1,6 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Filesystem;
+namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;

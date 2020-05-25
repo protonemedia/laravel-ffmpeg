@@ -1,16 +1,16 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Exporters;
+namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
-use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
-use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
-use Pbmedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 /**
- * @mixin \Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg
+ * @mixin \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
  */
 class MediaExporter
 {
@@ -22,7 +22,7 @@ class MediaExporter
         HasProgressListener;
 
     /**
-     * @var \Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg
+     * @var \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
      */
     protected $driver;
 
@@ -37,7 +37,7 @@ class MediaExporter
     protected $visibility;
 
     /**
-     * @var \Pbmedia\LaravelFFMpeg\Filesystem\Disk
+     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
      */
     private $toDisk;
 

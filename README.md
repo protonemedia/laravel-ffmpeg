@@ -39,13 +39,13 @@ Add the Service Provider and Facade to your ```app.php``` config file if you're 
 
 'providers' => [
     ...
-    Pbmedia\LaravelFFMpeg\Support\ServiceProvider::class,
+    ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider::class,
     ...
 ];
 
 'aliases' => [
     ...
-    'FFMpeg' => Pbmedia\LaravelFFMpeg\Support\FFMpeg::class
+    'FFMpeg' => ProtoneMedia\LaravelFFMpeg\Support\FFMpeg::class
     ...
 ];
 ```
@@ -53,13 +53,13 @@ Add the Service Provider and Facade to your ```app.php``` config file if you're 
 Publish the config file using the artisan CLI tool:
 
 ```bash
-php artisan vendor:publish --provider="Pbmedia\LaravelFFMpeg\Support\ServiceProvider"
+php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider"
 ```
 
 ## Upgrading to v7
 
-* The Facade has been renamed to `Pbmedia\LaravelFFMpeg\Support\FFMpeg`
-* The Service Provider has been renamed to `Pbmedia\LaravelFFMpeg\Support\ServiceProvider`
+* The Facade has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\FFMpeg`
+* The Service Provider has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider`
 * Chaining exports is still supported but you have to reapply filters for each export.
 * HLS playlists now include bitrate, framerate and resolution data. The segments also use a new naming pattern ([read more](#using-custom-segment-patterns)). Please verify your exports still work in your player.
 * A HLS export is now exported as *one* job instead of exporting each format/stream separately. This uses FFMpeg's `map` and `filter_complex` features. It might be sufficient to replace all calls to `addFilter` with `addLegacyFilter`, but some filters should be migrated manually. Please read the [documentation on HLS](#hls) to find out more about adding filters.
@@ -277,7 +277,7 @@ FFMpeg::fromDisk('uploads')
 
 When you open multple inputs, you have to add mappings so FFMpeg knows how to route them. This package provides a `addFormatOutputMapping` method which takes three parameters: the format, the output, and the output labels of the `-filter_complex` part.
 
-The output (2nd argument) should be an instanceof `\Pbmedia\LaravelFFMpeg\Filesystem\Media`. You can instantiate with the `make` method, call it with the name of the disk and the path (see example).
+The output (2nd argument) should be an instanceof `\ProtoneMedia\LaravelFFMpeg\Filesystem\Media`. You can instantiate with the `make` method, call it with the name of the disk and the path (see example).
 
 Check out this example which maps separate video and audio inputs into one output.
 
@@ -450,7 +450,7 @@ The Media object you get when you 'open' a file, actually holds the Media object
 ```php
 <?php
 
-// This gives you an instance of Pbmedia\LaravelFFMpeg\MediaOpener
+// This gives you an instance of ProtoneMedia\LaravelFFMpeg\MediaOpener
 $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
 // The 'getStreams' method will be called on the underlying Media object since
@@ -463,7 +463,7 @@ If you want direct access to the underlying object, call the object as a functio
 ```php
 <?php
 
-// This gives you an instance of Pbmedia\LaravelFFMpeg\MediaOpener
+// This gives you an instance of ProtoneMedia\LaravelFFMpeg\MediaOpener
 $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
 // This gives you an instance of FFMpeg\Media\MediaTypeInterface

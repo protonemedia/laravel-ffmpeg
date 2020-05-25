@@ -1,13 +1,13 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Exporters;
+namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Exception;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use Pbmedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
-use Pbmedia\LaravelFFMpeg\Filesystem\Media;
-use Pbmedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HLSPlaylistGenerator implements PlaylistGenerator
 {

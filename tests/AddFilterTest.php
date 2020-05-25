@@ -1,6 +1,6 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Tests;
+namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Audio\SimpleFilter;
@@ -9,9 +9,9 @@ use FFMpeg\Format\AudioInterface;
 use FFMpeg\Format\Video\X264;
 use FFMpeg\Media\Audio;
 use Illuminate\Support\Arr;
-use Pbmedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
-use Pbmedia\LaravelFFMpeg\Filesystem\Media;
-use Pbmedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class AddFilter extends TestCase
 {

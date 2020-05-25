@@ -1,15 +1,15 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Tests;
+namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Media\Video;
 use FFMpeg\Media\Waveform;
 use Illuminate\Support\Facades\Storage;
-use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
-use Pbmedia\LaravelFFMpeg\Filesystem\Media;
-use Pbmedia\LaravelFFMpeg\Filesystem\MediaCollection;
-use Pbmedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
-use Pbmedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class MediaOpenerTest extends TestCase
 {

@@ -1,6 +1,6 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\FFMpeg;
+namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 
 use FFMpeg\FFProbe;
 use FFMpeg\Format\AudioInterface;

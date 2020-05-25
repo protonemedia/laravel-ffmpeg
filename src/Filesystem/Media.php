@@ -1,13 +1,13 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Filesystem;
+namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 
 use Illuminate\Filesystem\FilesystemAdapter;
 
 class Media
 {
     /**
-     * @var \Pbmedia\LaravelFFMpeg\Filesystem\Disk
+     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
      */
     private $disk;
 

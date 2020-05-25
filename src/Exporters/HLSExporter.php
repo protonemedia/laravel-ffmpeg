@@ -1,6 +1,6 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Exporters;
+namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Closure;
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
@@ -9,8 +9,8 @@ use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Format\VideoInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Fluent;
-use Pbmedia\LaravelFFMpeg\Filesystem\Disk;
-use Pbmedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HLSExporter extends MediaExporter
 {
@@ -30,7 +30,7 @@ class HLSExporter extends MediaExporter
     private $pendingFormats;
 
     /**
-     * @var \Pbmedia\LaravelFFMpeg\Exporters\PlaylistGenerator
+     * @var \ProtoneMedia\LaravelFFMpeg\Exporters\PlaylistGenerator
      */
     private $playlistGenerator;
 
