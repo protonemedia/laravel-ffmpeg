@@ -33,8 +33,6 @@ composer require pbmedia/laravel-ffmpeg
 Add the Service Provider and Facade to your ```app.php``` config file if you're not using Package Discovery.
 
 ```php
-<?php
-
 // config/app.php
 
 'providers' => [
@@ -61,15 +59,13 @@ php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\Servic
 * The namespace has changed to `ProtoneMedia\LaravelFFMpeg`, the facade has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\FFMpeg`, and the Service Provider has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider`.
 * Chaining exports are still supported, but you have to reapply filters for each export.
 * HLS playlists now include bitrate, framerate and resolution data. The segments also use a new naming pattern ([read more](#using-custom-segment-patterns)). Please verify your exports still work in your player.
-* HLS export is now exported as *one* job instead of exporting each format/stream separately. This uses FFMpeg's `map` and `filter_complex` features. It might be sufficient to replace all calls to `addFilter` with `addLegacyFilter`, but some filters should be migrated manually. Please read the [documentation on HLS](#hls) to find out more about adding filters.
+* HLS export is now executed as *one* job instead of exporting each format/stream separately. This uses FFMpeg's `map` and `filter_complex` features. It might be sufficient to replace all calls to `addFilter` with `addLegacyFilter`, but some filters should be migrated manually. Please read the [documentation on HLS](#hls) to find out more about adding filters.
 
 ## Usage
 
 Convert an audio or video file:
 
 ```php
-<?php
-
 FFMpeg::fromDisk('songs')
     ->open('yesterday.mp3')
     ->export()
@@ -81,8 +77,6 @@ FFMpeg::fromDisk('songs')
 Instead of the ```fromDisk()``` method you can also use the ```fromFilesystem()``` method, where ```$filesystem``` is an instance of ```Illuminate\Contracts\Filesystem\Filesystem```.
 
 ```php
-<?php
-
 $media = FFMpeg::fromFilesystem($filesystem)->open('yesterday.mp3');
 ```
 
@@ -91,8 +85,6 @@ $media = FFMpeg::fromFilesystem($filesystem)->open('yesterday.mp3');
 You can monitor the transcoding progress. Use the ```onProgress``` method to provide a callback, which gives you the completed percentage. In previous versions of this package you had to pass the callback to the format object.
 
 ```php
-<?php
-
 FFMpeg::open('steve_howe.mp4')
     ->export()
     ->onProgress(function ($percentage) {
@@ -103,8 +95,6 @@ FFMpeg::open('steve_howe.mp4')
 As of version 7.0, the callback also exposes `$remaining` (in seconds) and `$rate`:
 
 ```php
-<?php
-
 FFMpeg::open('steve_howe.mp4')
     ->export()
     ->onProgress(function ($percentage, $remaining, $rate) {
@@ -117,8 +107,6 @@ FFMpeg::open('steve_howe.mp4')
 You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter objects:
 
 ```php
-<?php
-
 use FFMpeg\Filters\Video\VideoFilters;
 
 FFMpeg::fromDisk('videos')
@@ -148,8 +136,6 @@ FFMpeg::fromDisk('videos')
 As of version 7.0, you can also call the `addFilter` method *after* the `export` method:
 
 ```php
-<?php
-
 use FFMpeg\Filters\Video\VideoFilters;
 
 FFMpeg::fromDisk('videos')
@@ -168,8 +154,6 @@ FFMpeg::fromDisk('videos')
 Sometimes you don't want to use the built-in filters. You can apply your own filter by providing a set of options. This can be an array or multiple strings as arguments:
 
 ```php
-<?php
-
 FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->addFilter(['-itsoffset', 1]);
@@ -184,8 +168,6 @@ FFMpeg::fromDisk('videos')
 ### Chain multiple convertions
 
 ```php
-<?php
-
 // The 'fromDisk()' method is not required, the file will now
 // be opened from the default 'disk', as specified in
 // the config file.
@@ -222,8 +204,6 @@ FFMpeg::open('my_movie.mov')
 ### Create a frame from a video
 
 ```php
-<?php
-
 FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->getFrameFromSeconds(10)
@@ -247,8 +227,6 @@ $frame = $media->getFrameFromTimecode($timecode);
 You can also get the raw contents of the frame instead of saving it to the filesystem:
 
 ```php
-<?php
-
 $contents = FFMpeg::open('video.mp4')
     ->getFrameFromSeconds(2)
     ->export()
@@ -260,8 +238,6 @@ $contents = FFMpeg::open('video.mp4')
 You can create a timelapse from a sequence of images by using the `asTimelapseWithFramerate` method on the exporter
 
 ```php
-<?php
-
 FFMpeg::open('feature_%04d.png')
     ->export()
     ->asTimelapseWithFramerate(1)
@@ -274,8 +250,6 @@ FFMpeg::open('feature_%04d.png')
 As of version 7.0 you can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method of by using an array. You can mix inputs from different disks.
 
 ```php
-<?php
-
 FFMpeg::open('video1.mp4')->open('video2.mp4');
 
 FFMpeg::open(['video1.mp4', 'video2.mp4']);
@@ -293,8 +267,6 @@ The output (2nd argument) should be an instanceof `\ProtoneMedia\LaravelFFMpeg\F
 Check out this example, which maps separate video and audio inputs into one output.
 
 ```php
-<?php
-
 FFMpeg::fromDisk('local')
     ->open(['video.mp4', 'audio.m4a'])
     ->export()
@@ -305,8 +277,6 @@ FFMpeg::fromDisk('local')
 This is an example [from the underlying library](https://github.com/PHP-FFMpeg/PHP-FFMpeg#base-usage):
 
 ```php
-<?php
-
 // This code takes 2 input videos, stacks they horizontally in 1 output video and
 // adds to this new video the audio from the first video. (It is impossible
 // with a simple filter graph that has only 1 input and only 1 output).
@@ -322,8 +292,6 @@ FFMpeg::fromDisk('local')
 Just like single inputs, you can also pass a callback to the `addFilter` method. This will give you an instance of `\FFMpeg\Filters\AdvancedMedia\ComplexFilters`:
 
 ```php
-<?php
-
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 
 FFMpeg::open(['video.mp4', 'video2.mp4'])
@@ -336,8 +304,6 @@ FFMpeg::open(['video.mp4', 'video2.mp4'])
 ### Concat files without transcoding
 
 ```php
-<?php
-
 FFMpeg::fromDisk('local')
     ->open(['video.mp4', 'video2.mp4'])
     ->export()
@@ -348,8 +314,6 @@ FFMpeg::fromDisk('local')
 ### Concat files with transcoding
 
 ```php
-<?php
-
 FFMpeg::fromDisk('local')
     ->open(['video.mp4', 'video2.mp4'])
     ->export()
@@ -363,8 +327,6 @@ FFMpeg::fromDisk('local')
 With the ```Media``` class you can determinate the duration of a file:
 
 ```php
-<?php
-
 $media = FFMpeg::open('wwdc_2006.mp4');
 
 $durationInSeconds = $media->getDurationInSeconds(); // returns an int
@@ -376,8 +338,6 @@ $durationInMiliseconds = $media->getDurationInMiliseconds(); // returns a float
 When opening or saving files from or to a remote disk, temporary files will be created on your server. After you're done exporting or processing these files, you could clean them up by calling the ```cleanupTemporaryFiles()``` method:
 
 ```php
-<?php
-
 FFMpeg::cleanupTemporaryFiles();
 ```
 
@@ -386,8 +346,6 @@ FFMpeg::cleanupTemporaryFiles();
 You can create a M3U8 playlist to do [HLS](https://en.wikipedia.org/wiki/HTTP_Live_Streaming).
 
 ```php
-<?php
-
 $lowBitrate = (new X264)->setKiloBitrate(250);
 $midBitrate = (new X264)->setKiloBitrate(500);
 $highBitrate = (new X264)->setKiloBitrate(1000);
@@ -410,8 +368,6 @@ You can use the `addFilter` method to add a complex filter (see `$lowBitrate` ex
 As of version 7.0, HLS export is built using FFMpeg's `map` and `filter_complex` features. This is a breaking change from previous versions which performed a single export for each format. If you're upgrading, replace the `addFilter` calls with `addLegacyFilter` calls and verify the result (see `$superBitrate` example). Not all filters will work this way and some need to be upgraded manually.
 
 ```php
-<?php
-
 $lowBitrate = (new X264)->setKiloBitrate(250);
 $midBitrate = (new X264)->setKiloBitrate(500);
 $highBitrate = (new X264)->setKiloBitrate(1000);
@@ -443,8 +399,6 @@ FFMpeg::open('steve_howe.mp4')
 You can use a custom pattern to name the segments and playlists. The `useSegmentFilenameGenerator` gives you 5 arguments. The first, second and third argument provide information about the basename of the export, the format of the current iteration and the key of the current iteration. The fourth argument is a callback you should call with your *segments* pattern. The fifth argument is a callback you should call with your *playlist* pattern. Note that this is not the name of the master playlist, but the name of the playlist of each format.
 
 ```php
-<?php
-
 FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->exportForHLS()
@@ -459,8 +413,6 @@ FFMpeg::fromDisk('videos')
 The Media object you get when you 'open' a file, actually holds the Media object that belongs to the [underlying driver](https://github.com/PHP-FFMpeg/PHP-FFMpeg). It handles dynamic method calls as you can see [here](https://github.com/pascalbaljetmedia/laravel-ffmpeg/blob/master/src/Media.php#L114-L117). This way all methods of the underlying driver are still available to you.
 
 ```php
-<?php
-
 // This gives you an instance of ProtoneMedia\LaravelFFMpeg\MediaOpener
 $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
@@ -472,8 +424,6 @@ $codec = $media->getStreams()->first()->get('codec_name');
 If you want direct access to the underlying object, call the object as a function (invoke):
 
 ```php
-<?php
-
 // This gives you an instance of ProtoneMedia\LaravelFFMpeg\MediaOpener
 $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
@@ -486,8 +436,6 @@ $baseMedia = $media();
 The [progress listener](#progress-monitoring) exposes the transcoded percentage, but the underlying package also has an internal `AbstractProgressListener` that exposes the current pass and the current time. Though the use-case is limited, you might want to get access to this listener instance. You can do this by decorating the format with the `ProgressListenerDecorator`. This feature is highly experimental, so be sure the test this thoroughly before using it in production.
 
 ```php
-<?php
-
 use FFMpeg\Format\ProgressListener\AbstractProgressListener;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\ProgressListenerDecorator;
 
