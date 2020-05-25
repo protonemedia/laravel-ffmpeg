@@ -58,8 +58,7 @@ php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\Servic
 
 ## Upgrading to v7
 
-* The Facade has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\FFMpeg`
-* The Service Provider has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider`
+* The namespace has changed to `ProtoneMedia\LaravelFFMpeg`, the facade has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\FFMpeg` and the Service Provider has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider`.
 * Chaining exports is still supported but you have to reapply filters for each export.
 * HLS playlists now include bitrate, framerate and resolution data. The segments also use a new naming pattern ([read more](#using-custom-segment-patterns)). Please verify your exports still work in your player.
 * A HLS export is now exported as *one* job instead of exporting each format/stream separately. This uses FFMpeg's `map` and `filter_complex` features. It might be sufficient to replace all calls to `addFilter` with `addLegacyFilter`, but some filters should be migrated manually. Please read the [documentation on HLS](#hls) to find out more about adding filters.
