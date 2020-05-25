@@ -132,7 +132,7 @@ class MediaExporter
         $outputMedia->setVisibility($this->visibility);
 
         if ($this->onProgressCallback) {
-            call_user_func($this->onProgressCallback, 100);
+            call_user_func($this->onProgressCallback, 100, 0, 0);
         }
 
         return $this->getMediaOpener();

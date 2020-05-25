@@ -96,7 +96,19 @@ You can monitor the transcoding progress. Use the ```onProgress``` method to pro
 FFMpeg::open('steve_howe.mp4')
     ->export()
     ->onProgress(function ($percentage) {
-        echo "$percentage % transcoded";
+        echo "{$percentage}% transcoded";
+    });
+```
+
+As of version 7.0, the callback also exposes `$remaining` (in seconds) and `$rate`:
+
+```php
+<?php
+
+FFMpeg::open('steve_howe.mp4')
+    ->export()
+    ->onProgress(function ($percentage, $remaining, $rate) {
+        echo "{$remaining} seconds left at rate: {$rate}";
     });
 ```
 
@@ -467,6 +479,34 @@ $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
 // This gives you an instance of FFMpeg\Media\MediaTypeInterface
 $baseMedia = $media();
+```
+
+## Experimental
+
+The [progress listener](#progress-monitoring) exposes the transcoded percentage, but the underlying package also has an internal `AbstractProgressListener` that exposes the current pass and the current time. Though the use-case is limited, you might want to get access to this listener instance. You can do this by decorating the format with the `ProgressListenerDecorator`. This is highly experimental, so be sure the test this thoroughly before using it in production.
+
+```php
+<?php
+
+use FFMpeg\Format\ProgressListener\AbstractProgressListener;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\ProgressListenerDecorator;
+
+$format = new \FFMpeg\Format\Video\X264;
+$decoratedFormat = ProgressListenerDecorator::decorate($format);
+
+FFMpeg::open('video.mp4')
+    ->export()
+    ->inFormat($decoratedFormat)
+    ->onProgress(function () use ($decoratedFormat) {
+        $listeners = $decoratedFormat->getListeners();  // array of listeners
+
+        $listener = $listeners[0];  // instance of AbstractProgressListener
+
+        $listener->getCurrentPass();
+        $listener->getTotalPass();
+        $listener->getCurrentTime();
+    })
+    ->save('new_video.mp4');
 ```
 
 ## Example app

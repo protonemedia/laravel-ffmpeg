@@ -17,6 +17,11 @@ trait HasProgressListener
      */
     protected $lastPercentage;
 
+    /**
+     * @var float
+     */
+    protected $lastRemaining = 0;
+
     public function onProgress(Closure $callback): self
     {
         $this->onProgressCallback = $callback;
@@ -26,10 +31,12 @@ trait HasProgressListener
 
     private function applyProgressListenerToFormat(EventEmitterInterface $format)
     {
-        $format->on('progress', function ($video, $format, $percentage) {
+        $format->on('progress', function ($media, $format, $percentage, $remaining = null, $rate = null) {
             if ($percentage !== $this->lastPercentage && $percentage < 100) {
                 $this->lastPercentage = $percentage;
-                call_user_func($this->onProgressCallback, $percentage);
+                $this->lastRemaining = $remaining ?: $this->lastRemaining;
+
+                call_user_func($this->onProgressCallback, $this->lastPercentage, $this->lastRemaining, $rate);
             }
         });
     }

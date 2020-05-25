@@ -58,15 +58,14 @@ class ExportTest extends TestCase
 
         $decoratedFormat = ProgressListenerDecorator::decorate(new X264);
 
-        $decoratedFormat->on('progress', function () use ($decoratedFormat, &$times) {
-            $listeners = $decoratedFormat->getListeners();
-            $times[] = $listeners[0]->getCurrentTime();
-        });
-
         (new MediaOpener)
             ->open('video.mp4')
             ->export()
             ->inFormat($decoratedFormat)
+            ->onProgress(function () use ($decoratedFormat, &$times) {
+                $listeners = $decoratedFormat->getListeners();
+                $times[] = $listeners[0]->getCurrentTime();
+            })
             ->save('new_video.mp4');
 
         $this->assertNotEmpty($times);
@@ -78,17 +77,23 @@ class ExportTest extends TestCase
         $this->fakeLocalVideoFile();
 
         $percentages = [];
+        $remainings  = [];
+        $rates       = [];
 
         (new MediaOpener)
             ->open('video.mp4')
             ->export()
-            ->onProgress(function ($percentage) use (&$percentages) {
+            ->onProgress(function ($percentage, $remaining, $rate) use (&$percentages, &$remainings, &$rates) {
                 $percentages[] = $percentage;
+                $remainings[] = $remaining;
+                $rates[] = $rate;
             })
             ->inFormat(new X264)
             ->save('new_video.mp4');
 
         $this->assertNotEmpty($percentages);
+        $this->assertNotEmpty($remainings);
+        $this->assertNotEmpty($rates);
     }
 
     /** @test */
