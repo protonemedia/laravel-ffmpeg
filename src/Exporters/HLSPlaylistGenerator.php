@@ -45,7 +45,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
 
         $frameRate = trim(Str::before(optional($mediaStream)->get('avg_frame_rate'), "/1"));
 
-        if (Str::endsWith($frameRate, '/0')) {
+        if (!$frameRate || Str::endsWith($frameRate, '/0')) {
             return null;
         }
 
