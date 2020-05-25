@@ -13,7 +13,7 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. The
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
 * Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
 * Built-in support for HLS.
-* Built-in support for concatening, multiple inputs/outputs, timelapses, complex filters (and mapping), frame/thumbnail exports.
+* Built-in support for concatenation, multiple inputs/outputs, timelapses, complex filters (and mapping), frame/thumbnail exports.
 * PHP 7.2 and higher.
 
 ## Video Course Builder
