@@ -6,19 +6,19 @@
 [![Quality Score](https://img.shields.io/scrutinizer/g/pascalbaljetmedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/pascalbaljetmedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This package provides an integration with FFmpeg for Laravel 6.0 and higher. The storage of the files is handled by [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem).
+This package provides an integration with FFmpeg for Laravel 6.0 and higher. [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem) handles the storage of the files.
 
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
 * Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
 * Built-in support for HLS.
-* Built-in support for concatenation, multiple inputs/outputs, timelapses, complex filters (and mapping), frame/thumbnail exports.
+* Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * PHP 7.2 and higher.
 
 ## Video Course Builder
 
-We're developing a package/app/service to quickly setup your own course platform. We have one simple question though... which solution and pricing would you prefer? Vote at [videocoursebuilder.com](https://videocoursebuilder.com) and read all about the features!
+We're developing a package/app/service to set up your course platform quickly. We have one straightforward question, however. Which solution and pricing would you prefer? Vote at [videocoursebuilder.com](https://videocoursebuilder.com) and read all about the features!
 
 Are there other features you want to see? Do you have ideas about pricing models? Or do you have other suggestions? Let me know [right here on GitHub](https://github.com/pascalbaljetmedia/laravel-ffmpeg/issues/187) or reach out [on Twitter](https://twitter.com/pascalbaljet).
 
@@ -58,10 +58,10 @@ php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\Servic
 
 ## Upgrading to v7
 
-* The namespace has changed to `ProtoneMedia\LaravelFFMpeg`, the facade has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\FFMpeg` and the Service Provider has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider`.
-* Chaining exports is still supported but you have to reapply filters for each export.
+* The namespace has changed to `ProtoneMedia\LaravelFFMpeg`, the facade has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\FFMpeg`, and the Service Provider has been renamed to `ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider`.
+* Chaining exports are still supported, but you have to reapply filters for each export.
 * HLS playlists now include bitrate, framerate and resolution data. The segments also use a new naming pattern ([read more](#using-custom-segment-patterns)). Please verify your exports still work in your player.
-* A HLS export is now exported as *one* job instead of exporting each format/stream separately. This uses FFMpeg's `map` and `filter_complex` features. It might be sufficient to replace all calls to `addFilter` with `addLegacyFilter`, but some filters should be migrated manually. Please read the [documentation on HLS](#hls) to find out more about adding filters.
+* HLS export is now exported as *one* job instead of exporting each format/stream separately. This uses FFMpeg's `map` and `filter_complex` features. It might be sufficient to replace all calls to `addFilter` with `addLegacyFilter`, but some filters should be migrated manually. Please read the [documentation on HLS](#hls) to find out more about adding filters.
 
 ## Usage
 
@@ -88,7 +88,7 @@ $media = FFMpeg::fromFilesystem($filesystem)->open('yesterday.mp3');
 
 ### Progress monitoring
 
-You can monitor the transcoding progress. Use the ```onProgress``` method to provide a callback which gives you the completed percentage. In previous versions of this package you had to pass the callback to the format object.
+You can monitor the transcoding progress. Use the ```onProgress``` method to provide a callback, which gives you the completed percentage. In previous versions of this package you had to pass the callback to the format object.
 
 ```php
 <?php
@@ -286,11 +286,11 @@ FFMpeg::fromDisk('uploads')
     ->open('video2.mp4');
 ```
 
-When you open multple inputs, you have to add mappings so FFMpeg knows how to route them. This package provides a `addFormatOutputMapping` method which takes three parameters: the format, the output, and the output labels of the `-filter_complex` part.
+When you open multiple inputs, you have to add mappings so FFMpeg knows how to route them. This package provides a `addFormatOutputMapping` method, which takes three parameters: the format, the output, and the output labels of the `-filter_complex` part.
 
 The output (2nd argument) should be an instanceof `\ProtoneMedia\LaravelFFMpeg\Filesystem\Media`. You can instantiate with the `make` method, call it with the name of the disk and the path (see example).
 
-Check out this example which maps separate video and audio inputs into one output.
+Check out this example, which maps separate video and audio inputs into one output.
 
 ```php
 <?php
@@ -309,7 +309,7 @@ This is an example [from the underlying library](https://github.com/PHP-FFMpeg/P
 
 // This code takes 2 input videos, stacks they horizontally in 1 output video and
 // adds to this new video the audio from the first video. (It is impossible
-// with simple filtergraph that has only 1 input and only 1 output).
+// with a simple filter graph that has only 1 input and only 1 output).
 
 FFMpeg::fromDisk('local')
     ->open(['video.mp4', 'video2.mp4'])
@@ -483,7 +483,7 @@ $baseMedia = $media();
 
 ## Experimental
 
-The [progress listener](#progress-monitoring) exposes the transcoded percentage, but the underlying package also has an internal `AbstractProgressListener` that exposes the current pass and the current time. Though the use-case is limited, you might want to get access to this listener instance. You can do this by decorating the format with the `ProgressListenerDecorator`. This is highly experimental, so be sure the test this thoroughly before using it in production.
+The [progress listener](#progress-monitoring) exposes the transcoded percentage, but the underlying package also has an internal `AbstractProgressListener` that exposes the current pass and the current time. Though the use-case is limited, you might want to get access to this listener instance. You can do this by decorating the format with the `ProgressListenerDecorator`. This feature is highly experimental, so be sure the test this thoroughly before using it in production.
 
 ```php
 <?php
@@ -511,7 +511,7 @@ FFMpeg::open('video.mp4')
 
 ## Example app
 
-Here's a blogpost that will help you get started with this package:
+Here's a blog post that will help you get started with this package:
 
 https://protone.media/en/blog/how-to-use-ffmpeg-in-your-laravel-projects
 
@@ -525,7 +525,7 @@ https://protone.media/en/blog/how-to-use-ffmpeg-in-your-laravel-projects
 
 ## Changelog
 
-Please see [CHANGELOG](CHANGELOG.md) for more information what has changed recently.
+Please see [CHANGELOG](CHANGELOG.md) for more information about what has changed recently.
 
 ## Testing
 
@@ -546,7 +546,7 @@ Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
 * [`Laravel WebDAV`](https://github.com/pascalbaljetmedia/laravel-webdav): WebDAV driver for Laravel's Filesystem.
 ## Security
 
-If you discover any security related issues, please email code@protone.media instead of using the issue tracker. Please do not email any questions, open an issue if you have a question.
+If you discover any security-related issues, please email code@protone.media instead of using the issue tracker. Please do not email any questions, open an issue if you have a question.
 
 ## Credits
 
