@@ -2,6 +2,51 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.0.0 - 2020-05-26
+
+### Added
+
+-   Support for both Laravel 6.0 and Laravel 7.0
+-   Support for multiple inputs/outputs including mapping and complex filters
+-   Concatenation with transcoding
+-   Concatenation without transcoding
+-   Support for image sequences (timelapse)
+-   Bitrate, framerate and resolution data in HLS playlist
+-   Execute one job for HLS export instead of one job for each format
+-   Custom playlist/segment naming pattern for HLS export
+-   Support for disabling log
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Improved progress monitoring
+-   Improved handling of remote filesystems
+
+### Removed
+
+-   Nothing
+
+## 6.0.0 - 2020-03-03
+
+### Added
+
+-   Support for Laravel 7.0
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Nothing
+
+### Removed
+
+-   Support for Laravel 6.0
+
 ## 5.0.0 - 2019-09-03
 
 ### Added

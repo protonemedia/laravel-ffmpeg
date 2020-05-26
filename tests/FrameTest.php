@@ -1,59 +1,69 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Tests;
+namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Mockery;
-use Pbmedia\LaravelFFMpeg\Frame;
-use Pbmedia\LaravelFFMpeg\FrameExporter;
+use Illuminate\Support\Facades\Storage;
+use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class FrameTest extends TestCase
 {
-    public function testGettingAFrameFromAString()
+    /** @test */
+    public function it_can_export_a_frame_using_seconds()
     {
-        $media = $this->getVideoMedia();
-        $frame = $media->getFrameFromString('00:00:12.47');
+        $this->fakeLocalVideoFile();
 
-        $this->assertInstanceOf(Frame::class, $frame);
-        $this->assertEquals((string) $frame->getTimeCode(), '00:00:12.47');
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->getFrameFromSeconds(2)
+            ->export()
+            ->accurate()
+            ->save('thumb.png');
+
+        $this->assertTrue(Storage::disk('local')->has('thumb.png'));
     }
 
-    public function testGettingAFrameFromSeconds()
+    /** @test */
+    public function it_can_export_a_frame_as_base64()
     {
-        $media = $this->getVideoMedia();
-        $frame = $media->getFrameFromSeconds(5);
+        $this->fakeLocalVideoFile();
 
-        $this->assertInstanceOf(Frame::class, $frame);
-        $this->assertEquals((string) $frame->getTimeCode(), '00:00:05.00');
+        $contents = (new MediaOpener)
+            ->open('video.mp4')
+            ->getFrameFromSeconds(2)
+            ->export()
+            ->getFrameContents();
+
+        $this->assertIsString($contents);
     }
 
-    public function testSettingTheAccuracy()
+    /** @test */
+    public function it_can_export_a_frame_using_a_string()
     {
-        $media    = $this->getVideoMedia();
-        $frame    = $media->getFrameFromSeconds(5);
-        $exporter = $frame->export();
+        $this->fakeLocalVideoFile();
 
-        $this->assertInstanceOf(FrameExporter::class, $exporter);
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->getFrameFromString('00:00:03.14')
+            ->export()
+            ->unaccurate()
+            ->save('thumb.png');
 
-        $exporter->accurate();
-        $this->assertTrue($exporter->getAccuracy());
-
-        $exporter->unaccurate();
-        $this->assertFalse($exporter->getAccuracy());
+        $this->assertTrue(Storage::disk('local')->has('thumb.png'));
     }
 
-    public function testExportingAFrame()
+    /** @test */
+    public function it_can_export_a_frame_using_a_timecode()
     {
-        $file = $this->getVideoMedia()->getFile();
+        $this->fakeLocalVideoFile();
 
-        $media = Mockery::mock(Frame::class);
-        $media->shouldReceive('getFile')->once()->andReturn($file);
-        $media->shouldReceive('isFrame')->once()->andReturn(true);
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->getFrameFromTimecode(
+                \FFMpeg\Coordinate\TimeCode::fromString('00:00:03.14')
+            )
+            ->export()
+            ->save('thumb.png');
 
-        $media->shouldReceive('save')->once()->withArgs([
-            $this->srcDir . '/FrameAtThreeSeconds.png', false,
-        ]);
-
-        $exporter = new FrameExporter($media);
-        $exporter->save('FrameAtThreeSeconds.png');
+        $this->assertTrue(Storage::disk('local')->has('thumb.png'));
     }
 }

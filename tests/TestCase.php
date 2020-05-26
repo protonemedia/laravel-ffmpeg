@@ -1,92 +1,105 @@
 <?php
 
-namespace Pbmedia\LaravelFFMpeg\Tests;
+namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Config\Repository as ConfigRepository;
-use Illuminate\Contracts\Filesystem\Factory as Filesystems;
 use Illuminate\Filesystem\FilesystemAdapter;
-use Illuminate\Log\Logger as Writer;
-use League\Flysystem\Adapter\Ftp;
-use League\Flysystem\Adapter\Local;
-use League\Flysystem\Filesystem as Flysystem;
-use Mockery;
-use Monolog\Logger;
-use Pbmedia\LaravelFFMpeg\FFMpeg;
-use PHPUnit\Framework\TestCase as PHPUnitTestCase;
+use Illuminate\Support\Facades\Storage;
+use League\Flysystem\Filesystem as FlysystemFilesystem;
+use League\Flysystem\Memory\MemoryAdapter;
+use Orchestra\Testbench\TestCase as BaseTestCase;
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider;
+use Twistor\Flysystem\Http\HttpAdapter;
 
-class TestCase extends PHPUnitTestCase
+abstract class TestCase extends BaseTestCase
 {
-    public $srcDir;
-
-    public $remoteFilesystem;
-
-    public function setUp(): void
+    protected function setUp(): void
     {
-        $this->srcDir = __DIR__ . '/src';
+        parent::setUp();
 
-        $this->remoteFilesystem = false;
+        FFMpeg::cleanupTemporaryFiles();
     }
 
-    public function getDefaultConfig()
+    protected function tearDown(): void
     {
-        if (php_uname('s') === "Darwin") {
-            return require __DIR__ . '/../config/laravel-ffmpeg-mac-brew.php';
-        }
+        parent::tearDown();
 
-        return require __DIR__ . '/../config/laravel-ffmpeg-ubuntu.php';
+        FFMpeg::cleanupTemporaryFiles();
     }
 
-    public function getLocalAdapter(): FilesystemAdapter
+    protected function getEnvironmentSetUp($app)
     {
-        $flysystem = new Flysystem(new Local($this->srcDir));
+        $app['config']->set('filesystems.default', 'local');
 
-        return new FilesystemAdapter($flysystem);
+        $app['config']->set('filesystems.disks', array_merge($app['config']->get('filesystems.disks'), [
+            'http' => [
+                'driver' => 'http',
+            ],
+            'memory' => [
+                'driver' => 'memory',
+            ],
+        ]));
+
+        Storage::extend('http', function ($app, $config) {
+            return new FilesystemAdapter(
+                new FlysystemFilesystem(
+                    new HttpAdapter('https://raw.githubusercontent.com/pascalbaljetmedia/laravel-ffmpeg/master/tests/src/')
+                )
+            );
+        });
+
+        Storage::extend('memory', function ($app, $config) {
+            return new FilesystemAdapter(
+                new FlysystemFilesystem(
+                    new MemoryAdapter
+                )
+            );
+        });
     }
 
-    public function getFtpAdapter(): FilesystemAdapter
+    protected function getPackageProviders($app)
     {
-        $flysystem = new Flysystem(new Ftp([]));
-
-        return new FilesystemAdapter($flysystem);
+        return [ServiceProvider::class];
     }
 
-    public function getFilesystems(): Filesystems
+    protected function fakeLocalAudioFile()
     {
-        $filesystems = Mockery::mock(Filesystems::class);
+        Storage::fake('local');
 
-        if ($this->remoteFilesystem) {
-            $filesystems->shouldReceive('disk')->once()->with('s3')->andReturn($this->getFtpAdapter());
-
-        } else {
-            $filesystems->shouldReceive('disk')->once()->with('local')->andReturn($this->getLocalAdapter());
-        }
-
-        return $filesystems;
+        $this->addTestFile('guitar.m4a');
     }
 
-    public function getService(): FFMpeg
+    protected function fakeLocalVideoFile()
     {
-        $filesystems = $this->getFilesystems();
+        Storage::fake('local');
 
-        $logger = new Writer(new Logger('ffmpeg'));
-        $config = Mockery::mock(ConfigRepository::class);
-
-        $filesystems->shouldReceive('disk')->once()->with('local')->andReturn($this->getLocalAdapter());
-        $config->shouldReceive('get')->once()->with('laravel-ffmpeg')->andReturn($this->getDefaultConfig());
-        $config->shouldReceive('get')->once()->with('filesystems.default')->andReturn('local');
-
-        return new FFMpeg($filesystems, $config, $logger);
+        $this->addTestFile('video.mp4');
     }
 
-    public function getGuitarMedia()
+    protected function addTestFile($file)
     {
-        $service = $this->getService();
-        return $service->open('guitar.m4a');
+        Storage::disk('local')->put($file, file_get_contents(__DIR__ . "/src/{$file}"));
     }
 
-    public function getVideoMedia()
+    protected function fakeLocalImageFiles()
     {
-        $service = $this->getService();
-        return $service->open('video.mp4');
+        Storage::fake('local');
+
+        $disk = Storage::disk('local');
+        $disk->put('feature_0001.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
+        $disk->put('feature_0002.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
+        $disk->put('feature_0003.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
+        $disk->put('feature_0004.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
+        $disk->put('feature_0005.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
+        $disk->put('feature_0006.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
+        $disk->put('feature_0007.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
+        $disk->put('feature_0008.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
+        $disk->put('feature_0009.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
+    }
+
+    protected function fakeLocalVideoFiles()
+    {
+        $this->fakeLocalVideoFile();
+        $this->addTestFile('video2.mp4');
     }
 }
