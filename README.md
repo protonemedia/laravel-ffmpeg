@@ -17,7 +17,6 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. [La
 * PHP 7.2 and higher.
 
 ## Video Course Builder
-
 We're developing a package/app/service to set up your course platform quickly. We have one straightforward question, however. Which solution and pricing would you prefer? Vote at [videocoursebuilder.com](https://videocoursebuilder.com) and read all about the features!
 
 Are there other features you want to see? Do you have ideas about pricing models? Or do you have other suggestions? Let me know [right here on GitHub](https://github.com/pascalbaljetmedia/laravel-ffmpeg/issues/187) or reach out [on Twitter](https://twitter.com/pascalbaljet).
