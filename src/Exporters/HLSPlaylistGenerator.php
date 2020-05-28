@@ -18,7 +18,9 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     {
         $playlistContent = file_get_contents($playlistMedia->getLocalPath());
 
-        return Collection::make(explode(PHP_EOL, $playlistContent))->first(function ($line) {
+        $lines = preg_split('/\n|\r\n?/', $playlistContent);
+
+        return Collection::make($lines)->first(function ($line) {
             return !Str::startsWith($line, '#') && Str::endsWith($line, '.ts');
         });
     }
