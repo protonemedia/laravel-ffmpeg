@@ -2,6 +2,24 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.0.1 - 2020-05-28
+
+### Added
+
+-   Nothing
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Fixed HLS playlist creation on Windows hosts
+
+### Removed
+
+-   Nothing
+
 ## 7.0.0 - 2020-05-26
 
 ### Added
