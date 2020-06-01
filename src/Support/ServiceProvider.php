@@ -7,7 +7,6 @@ use FFMpeg\FFMpeg;
 use FFMpeg\FFProbe;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
-use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 use Psr\Log\LoggerInterface;
 
 class ServiceProvider extends BaseServiceProvider
@@ -49,34 +48,34 @@ class ServiceProvider extends BaseServiceProvider
             ];
         });
 
-        $this->app->bind(FFProbe::class, function () {
+        $this->app->singleton(FFProbe::class, function () {
             return FFProbe::create(
                 $this->app->make('laravel-ffmpeg-configuration'),
                 $this->app->make('laravel-ffmpeg-logger')
             );
         });
 
-        $this->app->bind(FFMpegDriver::class, function () {
+        $this->app->singleton(FFMpegDriver::class, function () {
             return FFMpegDriver::create(
                 $this->app->make('laravel-ffmpeg-logger'),
                 $this->app->make('laravel-ffmpeg-configuration')
             );
         });
 
-        $this->app->bind(FFMpeg::class, function () {
+        $this->app->singleton(FFMpeg::class, function () {
             return new FFMpeg(
                 $this->app->make(FFMpegDriver::class),
                 $this->app->make(FFProbe::class)
             );
         });
 
-        $this->app->bind(PHPFFMpeg::class, function () {
+        $this->app->singleton(PHPFFMpeg::class, function () {
             return new PHPFFMpeg($this->app->make(FFMpeg::class));
         });
 
         // Register the main class to use with the facade
-        $this->app->bind('laravel-ffmpeg', function () {
-            return new MediaOpener(
+        $this->app->singleton('laravel-ffmpeg', function () {
+            return new MediaOpenerFactory(
                 $this->app['config']->get('filesystems.default'),
                 $this->app->make(PHPFFMpeg::class)
             );

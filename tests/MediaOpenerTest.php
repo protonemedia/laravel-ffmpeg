@@ -10,6 +10,7 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class MediaOpenerTest extends TestCase
 {
@@ -124,5 +125,18 @@ class MediaOpenerTest extends TestCase
 
         $this->assertInstanceOf(Waveform::class, $media->waveform());
         $this->assertInstanceOf(Waveform::class, $media->getDriver()->waveform());
+    }
+
+    /** @test */
+    public function it_can_use_the_facade_to_do_two_independant_exports()
+    {
+        $this->fakeLocalVideoFile();
+        $this->addTestFile('guitar.m4a');
+
+        $mediaA = FFMpeg::open('video.mp4');
+        $mediaB = FFMpeg::open('guitar.m4a');
+
+        $this->assertCount(1, $mediaA->getDriver()->getMediaCollection()->collection());
+        $this->assertCount(1, $mediaB->getDriver()->getMediaCollection()->collection());
     }
 }
