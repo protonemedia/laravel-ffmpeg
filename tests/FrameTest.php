@@ -8,6 +8,22 @@ use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 class FrameTest extends TestCase
 {
     /** @test */
+    public function it_can_only_export_a_frame_from_a_video_file()
+    {
+        $this->fakeLocalAudioFile();
+
+        try {
+            (new MediaOpener)
+                ->open('guitar.m4a')
+                ->getFrameFromSeconds(2)
+                ->export();
+        } catch (\Exception $e) {
+            return $this->assertTrue(true);
+        }
+
+        $this->fail('Should have thrown an exception');
+    }
+    /** @test */
     public function it_can_export_a_frame_using_seconds()
     {
         $this->fakeLocalVideoFile();

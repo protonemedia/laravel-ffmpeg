@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Drivers;
 
 use Closure;
+use Exception;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\FFMpeg;
 use FFMpeg\FFProbe\DataMapping\Stream;
@@ -12,6 +13,7 @@ use FFMpeg\Media\AbstractMediaType;
 use FFMpeg\Media\AdvancedMedia;
 use FFMpeg\Media\Concat;
 use FFMpeg\Media\Frame;
+use FFMpeg\Media\Video;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
@@ -19,6 +21,9 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
+/**
+ * @mixin \FFMpeg\Media\AbstractMediaType
+ */
 class PHPFFMpeg
 {
     use ForwardsCalls;
@@ -82,6 +87,11 @@ class PHPFFMpeg
         return $this->get() instanceof Concat;
     }
 
+    public function isVideo(): bool
+    {
+        return $this->get() instanceof Video;
+    }
+
     public function getMediaCollection(): MediaCollection
     {
         return $this->mediaCollection;
@@ -111,6 +121,10 @@ class PHPFFMpeg
 
     public function frame(TimeCode $timecode)
     {
+        if (!$this->isVideo()) {
+            throw new Exception('Opened media is not a video file.');
+        }
+
         $this->media = $this->media->frame($timecode);
 
         return $this;

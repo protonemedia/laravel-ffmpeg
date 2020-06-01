@@ -117,7 +117,7 @@ class HLSExporter extends MediaExporter
         ]);
     }
 
-    private function applyFiltersCallback(callable $filtersCallback, $key): bool
+    private function applyFiltersCallback(callable $filtersCallback, $key): array
     {
         $called = new Fluent(['called' => false]);
 
@@ -164,7 +164,13 @@ class HLSExporter extends MediaExporter
 
         $filtersCallback($mediaMock);
 
-        return $called['called'];
+        $outs = [$called['called'] ? "[v{$key}]" : '0:v'];
+
+        if ($this->getAudioStream()) {
+            $outs[] = '0:a';
+        }
+
+        return $outs;
     }
 
     public function save(string $path = null): MediaOpener
@@ -186,19 +192,11 @@ class HLSExporter extends MediaExporter
 
             $this->addHLSParametersToFormat($format, $segmentsPattern, $disk);
 
-            $keysWithFilters = [];
-
             if ($filtersCallback) {
-                if ($this->applyFiltersCallback($filtersCallback, $key)) {
-                    $keysWithFilters[$key] = "[v{$key}]";
-                }
+                $outs = $this->applyFiltersCallback($filtersCallback, $key);
             }
 
-            $outs = array_key_exists($key, $keysWithFilters)
-                ? array_filter([$keysWithFilters[$key], $this->getAudioStream() ? "0:a" : null])
-                : ['0'];
-
-            $this->addFormatOutputMapping($format, $disk->makeMedia($formatPlaylistPath), $outs);
+            $this->addFormatOutputMapping($format, $disk->makeMedia($formatPlaylistPath), $outs ?? ['0']);
 
             return $this->getDisk()->makeMedia($formatPlaylistPath);
         })->pipe(function ($playlistMedia) use ($path) {

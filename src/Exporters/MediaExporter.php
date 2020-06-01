@@ -96,7 +96,7 @@ class MediaExporter
     {
         $outputMedia = $path ? $this->getDisk()->makeMedia($path) : null;
 
-        if ($this->concatWithTranscoding) {
+        if ($this->concatWithTranscoding && $outputMedia) {
             $this->addConcatFilterAndMapping($outputMedia);
         }
 
@@ -112,7 +112,7 @@ class MediaExporter
             $this->addTimelapseParametersToFormat();
         }
 
-        if ($this->driver->isConcat()) {
+        if ($this->driver->isConcat() && $outputMedia) {
             $this->driver->saveFromSameCodecs($outputMedia->getLocalPath());
         } elseif ($this->driver->isFrame()) {
             $data = $this->driver->save(
