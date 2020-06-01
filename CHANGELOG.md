@@ -2,6 +2,25 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.0.2 - 2020-06-01
+
+### Added
+
+-   Nothing
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Audio bugfix for HLS exports with filters
+
+### Removed
+
+-   Nothing
+
+
 ## 7.0.1 - 2020-05-28
 
 ### Added
