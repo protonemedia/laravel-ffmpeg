@@ -319,7 +319,7 @@ class ExportTest extends TestCase
         $media = (new MediaOpener)->fromDisk('local')->open('concat.mp4');
 
         $this->assertEquals(
-            7,
+            9,
             $media->getDurationInSeconds()
         );
 
