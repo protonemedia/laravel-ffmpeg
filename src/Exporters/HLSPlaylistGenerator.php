@@ -57,7 +57,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     public function get(array $playlistMedia, PHPFFMpeg $driver): string
     {
         return Collection::make($playlistMedia)->map(function (Media $playlistMedia) use ($driver) {
-            $media = (new MediaOpener($playlistMedia->getDisk(), $driver->fresh()))->open(
+            $media = (new MediaOpener($playlistMedia->getDisk(), $driver))->open(
                 $playlistMedia->getDirectory() . $this->getPathOfFirstSegment($playlistMedia)
             );
 

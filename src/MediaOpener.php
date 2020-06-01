@@ -51,7 +51,7 @@ class MediaOpener
     {
         $this->disk = Disk::make($disk ?: config('filesystems.default'));
 
-        $this->driver = $driver ?: app(PHPFFMpeg::class);
+        $this->driver = ($driver ?: app(PHPFFMpeg::class))->fresh();
 
         $this->collection = $mediaCollection ?: new MediaCollection;
     }

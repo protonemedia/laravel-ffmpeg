@@ -2,6 +2,24 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.0.3 - 2020-06-01
+
+### Added
+
+-   Added a `MediaOpenerFactory` to support pre v7.0 facade
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Nothing
+
+### Removed
+
+-   Nothing
+
 ## 7.0.2 - 2020-06-01
 
 ### Added

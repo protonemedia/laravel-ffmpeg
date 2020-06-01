@@ -163,7 +163,7 @@ class MediaExporter
     {
         return new MediaOpener(
             $this->driver->getMediaCollection()->last()->getDisk(),
-            $this->driver->fresh(),
+            $this->driver,
             $this->driver->getMediaCollection()
         );
     }
