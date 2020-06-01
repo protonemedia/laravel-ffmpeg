@@ -16,6 +16,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class PHPFFMpeg
@@ -137,7 +138,13 @@ class PHPFFMpeg
 
     public function getStreams(): array
     {
-        return iterator_to_array($this->media->getStreams());
+        if (!$this->isAdvancedMedia()) {
+            return iterator_to_array($this->media->getStreams());
+        }
+
+        return $this->mediaCollection->map(function (Media $media) {
+            return $this->fresh()->open(MediaCollection::make([$media]))->getStreams();
+        })->collapse()->all();
     }
 
     public function getFilters(): array
@@ -168,6 +175,16 @@ class PHPFFMpeg
         if ($format->has('duration')) {
             return $format->get('duration') * 1000;
         }
+    }
+
+    /**
+     * Gets the first audio streams of the media.
+     */
+    public function getAudioStream(): ?Stream
+    {
+        return Arr::first($this->getStreams(), function (Stream $stream) {
+            return $stream->isAudio();
+        });
     }
 
     /**

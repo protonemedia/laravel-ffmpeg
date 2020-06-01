@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use FFMpeg\Format\Video\X264;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\Filesystem as FlysystemFilesystem;
@@ -57,22 +58,32 @@ abstract class TestCase extends BaseTestCase
         });
     }
 
+    protected function x264(): X264
+    {
+        return new X264('libmp3lame');
+    }
+
     protected function getPackageProviders($app)
     {
         return [ServiceProvider::class];
     }
 
-    protected function fakeLocalAudioFile()
+    protected function fakeLocalDisk()
     {
         Storage::fake('local');
 
+        return Storage::disk('local');
+    }
+
+    protected function fakeLocalAudioFile()
+    {
+        $this->fakeLocalDisk();
         $this->addTestFile('guitar.m4a');
     }
 
     protected function fakeLocalVideoFile()
     {
-        Storage::fake('local');
-
+        $this->fakeLocalDisk();
         $this->addTestFile('video.mp4');
     }
 
@@ -83,9 +94,8 @@ abstract class TestCase extends BaseTestCase
 
     protected function fakeLocalImageFiles()
     {
-        Storage::fake('local');
+        $disk = $this->fakeLocalDisk();
 
-        $disk = Storage::disk('local');
         $disk->put('feature_0001.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
         $disk->put('feature_0002.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
         $disk->put('feature_0003.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
