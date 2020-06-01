@@ -6,7 +6,6 @@ use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Filters\Video\ClipFilter;
 use FFMpeg\Format\Audio\Mp3;
 use FFMpeg\Format\Video\WMV;
-use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\ProgressListenerDecorator;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
@@ -23,7 +22,7 @@ class ExportTest extends TestCase
         (new MediaOpener)
             ->open('video.mp4')
             ->export()
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('new_video.mp4');
 
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
@@ -49,7 +48,7 @@ class ExportTest extends TestCase
 
         $percentages = [];
 
-        $format = new X264;
+        $format = $this->x264();
         $format->on('progress', function ($video, $format, $percentage) use (&$percentages) {
             $percentages[] = $percentage;
         });
@@ -70,7 +69,7 @@ class ExportTest extends TestCase
 
         $times = [];
 
-        $decoratedFormat = ProgressListenerDecorator::decorate(new X264);
+        $decoratedFormat = ProgressListenerDecorator::decorate($this->x264());
 
         (new MediaOpener)
             ->open('video.mp4')
@@ -102,7 +101,7 @@ class ExportTest extends TestCase
                 $remainings[] = $remaining;
                 $rates[] = $rate;
             })
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('new_video.mp4');
 
         $this->assertNotEmpty($percentages);
@@ -118,10 +117,10 @@ class ExportTest extends TestCase
         (new MediaOpener)
             ->open('video.mp4')
             ->export()
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('new_video1.mp4')
             ->export()
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('new_video2.mp4');
 
         $this->assertTrue(Storage::disk('local')->has('new_video1.mp4'));
@@ -137,7 +136,7 @@ class ExportTest extends TestCase
             ->open('video.mp4')
             ->addFilter(new ClipFilter(TimeCode::fromSeconds(1), TimeCode::fromSeconds(2)))
             ->export()
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('new_video.mp4');
 
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
@@ -153,7 +152,7 @@ class ExportTest extends TestCase
             ->open('video.mp4')
             ->export()
             ->addFilter(new ClipFilter(TimeCode::fromSeconds(1), TimeCode::fromSeconds(2)))
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('new_video.mp4');
 
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
@@ -169,11 +168,11 @@ class ExportTest extends TestCase
             ->open('video.mp4')
             ->addFilter(new ClipFilter(TimeCode::fromSeconds(1), TimeCode::fromSeconds(2)))
             ->export()
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('short_video.mp4')
 
             ->export()
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('long_video.mp4');
 
         $this->assertTrue(Storage::disk('local')->has('short_video.mp4'));
@@ -196,7 +195,7 @@ class ExportTest extends TestCase
             ->onProgress(function ($percentage) use (&$percentages) {
                 $percentages[] = $percentage;
             })
-            ->addFormatOutputMapping(new X264, Media::make('local', 'new_video1.mp4'), ['0:v', '1:v'])
+            ->addFormatOutputMapping($this->x264(), Media::make('local', 'new_video1.mp4'), ['0:v', '1:v'])
             ->addFormatOutputMapping(new WMV, Media::make('memory', 'new_video2.wmv'), ['0:v', '1:v'])
             ->save();
 
@@ -215,7 +214,7 @@ class ExportTest extends TestCase
             ->open(['video.mp4', 'video2.mp4'])
             ->export()
             ->addFilter('[0:v][1:v]', 'hstack', '[v]')
-            ->addFormatOutputMapping(new X264, Media::make('local', 'new_video.mp4'), ['[v]'])
+            ->addFormatOutputMapping($this->x264(), Media::make('local', 'new_video.mp4'), ['[v]'])
             ->save();
 
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
@@ -230,12 +229,13 @@ class ExportTest extends TestCase
     public function it_can_mix_audio_and_video_files()
     {
         $this->fakeLocalVideoFile();
+        $this->addTestFile('video_no_audio.mp4');
         $this->addTestFile('guitar.m4a');
 
         FFMpeg::fromDisk('local')
             ->open(['video.mp4','guitar.m4a'])
             ->export()
-            ->addFormatOutputMapping(new X264('libmp3lame'), Media::make('local', 'new_video.mp4'), ['0:v', '1:a'])
+            ->addFormatOutputMapping($this->x264(), Media::make('local', 'new_video.mp4'), ['0:v', '1:a'])
             ->save();
 
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
@@ -249,7 +249,7 @@ class ExportTest extends TestCase
         (new MediaOpener)
             ->open('video.mp4')
             ->export()
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->toDisk('memory')
             ->save('new_video.mp4');
 
@@ -265,7 +265,7 @@ class ExportTest extends TestCase
             ->open('feature_%04d.png')
             ->export()
             ->asTimelapseWithFramerate(1)
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('timelapse.mp4');
 
         $this->assertTrue(Storage::disk('local')->has('timelapse.mp4'));
@@ -292,7 +292,7 @@ class ExportTest extends TestCase
         $media = (new MediaOpener)->fromDisk('local')->open('concat.mp4');
 
         $this->assertEquals(
-            7,
+            9,
             $media->getDurationInSeconds()
         );
 
@@ -311,7 +311,7 @@ class ExportTest extends TestCase
             ->open(['video.mp4', 'video2.mp4'])
             ->export()
             ->concatWithTranscoding(true, false)
-            ->inFormat(new X264)
+            ->inFormat($this->x264())
             ->save('concat.mp4');
 
         $this->assertTrue(Storage::disk('local')->has('concat.mp4'));
@@ -319,7 +319,7 @@ class ExportTest extends TestCase
         $media = (new MediaOpener)->fromDisk('local')->open('concat.mp4');
 
         $this->assertEquals(
-            7,
+            9,
             $media->getDurationInSeconds()
         );
 

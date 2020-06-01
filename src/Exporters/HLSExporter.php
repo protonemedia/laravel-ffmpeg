@@ -194,7 +194,11 @@ class HLSExporter extends MediaExporter
                 }
             }
 
-            $this->addFormatOutputMapping($format, $disk->makeMedia($formatPlaylistPath), [$keysWithFilters[$key] ?? '0']);
+            $outs = array_key_exists($key, $keysWithFilters)
+                ? array_filter([$keysWithFilters[$key], $this->getAudioStream() ? "0:a" : null])
+                : ['0'];
+
+            $this->addFormatOutputMapping($format, $disk->makeMedia($formatPlaylistPath), $outs);
 
             return $this->getDisk()->makeMedia($formatPlaylistPath);
         })->pipe(function ($playlistMedia) use ($path) {

@@ -6,7 +6,6 @@ use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\Video\VideoFilters;
 use FFMpeg\Format\AudioInterface;
-use FFMpeg\Format\Video\X264;
 use FFMpeg\Media\Audio;
 use Illuminate\Support\Arr;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
@@ -130,7 +129,7 @@ class AddFilter extends TestCase
             ->open(['video.mp4', 'video2.mp4'])
             ->addFilter('[0:v][1:v]', 'hstack', '[v]')
             ->export()
-            ->addFormatOutputMapping(new X264, Media::make('local', 'output.mp4'), ['0:a', '[v]'])
+            ->addFormatOutputMapping($this->x264(), Media::make('local', 'output.mp4'), ['0:a', '[v]'])
             ->getCommand();
 
         $this->assertStringContainsString('-filter_complex [0:v][1:v]hstack[v] -map 0:a -map [v]', $command);
@@ -149,7 +148,7 @@ class AddFilter extends TestCase
             ->open(['video.mp4', 'video2.mp4'])
             ->addFilterAsComplexFilter('[0]', '[v0]', $resizeFilter)
             ->export()
-            ->addFormatOutputMapping(new X264, Media::make('local', 'output.mp4'), ['[v0]'])
+            ->addFormatOutputMapping($this->x264(), Media::make('local', 'output.mp4'), ['[v0]'])
             ->save();
 
         $this->assertEquals(
@@ -169,7 +168,7 @@ class AddFilter extends TestCase
                 $filters->resize(new \FFMpeg\Coordinate\Dimension(1280, 960));
             })
             ->export()
-            ->addFormatOutputMapping(new X264, Media::make('local', 'output.mp4'), ['[v0]'])
+            ->addFormatOutputMapping($this->x264(), Media::make('local', 'output.mp4'), ['[v0]'])
             ->save();
 
         $this->assertEquals(
