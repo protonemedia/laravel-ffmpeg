@@ -128,6 +128,21 @@ class ExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_chain_multiple_exports_using_the_each_method()
+    {
+        $this->fakeLocalVideoFile();
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->each(['new_video1.mp4', 'new_video2.mp4'], function ($ffmpeg, $filename) {
+                $ffmpeg->export()->inFormat($this->x264())->save($filename);
+            });
+
+        $this->assertTrue(Storage::disk('local')->has('new_video1.mp4'));
+        $this->assertTrue(Storage::disk('local')->has('new_video2.mp4'));
+    }
+
+    /** @test */
     public function it_can_export_a_with_a_single_filter()
     {
         $this->fakeLocalVideoFile();

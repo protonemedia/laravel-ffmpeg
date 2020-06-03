@@ -6,6 +6,7 @@ use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Media\AbstractMediaType;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
@@ -54,6 +55,15 @@ class MediaOpener
         $this->driver = ($driver ?: app(PHPFFMpeg::class))->fresh();
 
         $this->collection = $mediaCollection ?: new MediaCollection;
+    }
+
+    public function clone(): self
+    {
+        return new MediaOpener(
+            $this->disk,
+            $this->driver,
+            $this->collection
+        );
     }
 
     /**
@@ -152,6 +162,15 @@ class MediaOpener
     public function cleanupTemporaryFiles(): self
     {
         TemporaryDirectories::deleteAll();
+
+        return $this;
+    }
+
+    public function each($items, callable $callback): self
+    {
+        Collection::make($items)->each(function ($item, $key) use ($callback) {
+            return $callback($this->clone(), $item, $key);
+        });
 
         return $this;
     }

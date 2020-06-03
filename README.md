@@ -232,6 +232,28 @@ $contents = FFMpeg::open('video.mp4')
     ->getFrameContents();
 ```
 
+### Multiple exports using loops
+
+Chaining multiple conversions works because the `save` method of the `MediaExporter` returns a fresh instance of the `MediaOpener`. You can use this to loop through items, for example, to exports multiple frames from one video:
+
+```php
+$mediaOpener = FFMpeg::open('video.mp4');
+
+foreach ([5, 15, 25] as $key => $seconds) {
+    $mediaOpener = $mediaOpener->getFrameFromSeconds($seconds)
+        ->export()
+        ->save("thumb_{$key}.png");
+}
+```
+
+The `MediaOpener` comes with an `each` method as well. The example above could be refactored like this:
+
+```php
+FFMpeg::open('video.mp4')->each([5, 15, 25], function ($ffmpeg, $seconds, $key) {
+    $ffmpeg->getFrameFromSeconds($seconds)->export()->save("thumb_{$key}.png");
+});
+```
+
 ### Create a timelapse
 
 You can create a timelapse from a sequence of images by using the `asTimelapseWithFramerate` method on the exporter
