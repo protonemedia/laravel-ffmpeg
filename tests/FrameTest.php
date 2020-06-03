@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class FrameTest extends TestCase
 {
@@ -23,6 +24,7 @@ class FrameTest extends TestCase
 
         $this->fail('Should have thrown an exception');
     }
+
     /** @test */
     public function it_can_export_a_frame_using_seconds()
     {
@@ -36,6 +38,38 @@ class FrameTest extends TestCase
             ->save('thumb.png');
 
         $this->assertTrue(Storage::disk('local')->has('thumb.png'));
+    }
+
+    /** @test */
+    public function it_can_loop_through_the_exporter()
+    {
+        $this->fakeLocalVideoFile();
+
+        $ffmpeg = FFMpeg::open('video.mp4');
+
+        foreach ([1,2,3] as $key => $frame) {
+            $ffmpeg = $ffmpeg->getFrameFromSeconds($frame)
+                ->export()
+                ->save("thumb_{$key}.png");
+        }
+
+        $this->assertTrue(Storage::disk('local')->has('thumb_0.png'));
+        $this->assertTrue(Storage::disk('local')->has('thumb_1.png'));
+        $this->assertTrue(Storage::disk('local')->has('thumb_2.png'));
+    }
+
+    /** @test */
+    public function it_can_loop_through_the_exporter_with_the_foreach_method()
+    {
+        $this->fakeLocalVideoFile();
+
+        FFMpeg::open('video.mp4')->each([1, 2, 3], function ($ffmpeg, $timestamp, $key) {
+            $ffmpeg->getFrameFromSeconds($timestamp)->export()->save("thumb_{$timestamp}.png");
+        });
+
+        $this->assertTrue(Storage::disk('local')->has('thumb_1.png'));
+        $this->assertTrue(Storage::disk('local')->has('thumb_2.png'));
+        $this->assertTrue(Storage::disk('local')->has('thumb_3.png'));
     }
 
     /** @test */

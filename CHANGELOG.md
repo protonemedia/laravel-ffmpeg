@@ -2,6 +2,24 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.0.4 - 2020-06-03
+
+### Added
+
+-   Added an `each` method to the `MediaOpener`
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Nothing
+
+### Removed
+
+-   Nothing
+
 ## 7.0.3 - 2020-06-01
 
 ### Added
