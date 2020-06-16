@@ -417,7 +417,7 @@ FFMpeg::open('steve_howe.mp4')
 
 ### Using custom segment patterns
 
-You can use a custom pattern to name the segments and playlists. The `useSegmentFilenameGenerator` gives you 5 arguments. The first, second and third argument provide information about the basename of the export, the format of the current iteration and the key of the current iteration. The fourth argument is a callback you should call with your *segments* pattern. The fifth argument is a callback you should call with your *playlist* pattern. Note that this is not the name of the master playlist, but the name of the playlist of each format.
+You can use a custom pattern to name the segments and playlists. The `useSegmentFilenameGenerator` gives you 5 arguments. The first, second and third argument provide information about the basename of the export, the format of the current iteration and the key of the current iteration. The fourth argument is a callback you should call with your *segments* pattern. The fifth argument is a callback you should call with your *playlist* pattern. Note that this is not the name of the primary playlist, but the name of the playlist of each format.
 
 ```php
 FFMpeg::fromDisk('videos')
