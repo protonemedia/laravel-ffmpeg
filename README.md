@@ -166,7 +166,7 @@ FFMpeg::fromDisk('videos')
 
 ### Export without transcoding
 
-This package comes with a `ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat` class that allows you the export a file without transcoding the streams. You might want to use this to use another container:
+This package comes with a `ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat` class that allows you to export a file without transcoding the streams. You might want to use this to use another container:
 
 ```php
 FFMpeg::open('video.mp4')
