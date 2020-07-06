@@ -164,6 +164,17 @@ FFMpeg::fromDisk('videos')
     ->addFilter('-itsoffset', 1);
 ```
 
+### Export without transcoding
+
+This package comes with a `ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat` class that allows you the export a file without transcoding the streams. You might want to use this to use another container:
+
+```php
+FFMpeg::open('video.mp4')
+    ->export()
+    ->inFormat(new \ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat)
+    ->save('video.mkv');
+```
+
 ### Chain multiple convertions
 
 ```php
@@ -283,7 +294,7 @@ FFMpeg::fromDisk('uploads')
 
 When you open multiple inputs, you have to add mappings so FFMpeg knows how to route them. This package provides a `addFormatOutputMapping` method, which takes three parameters: the format, the output, and the output labels of the `-filter_complex` part.
 
-The output (2nd argument) should be an instanceof `\ProtoneMedia\LaravelFFMpeg\Filesystem\Media`. You can instantiate with the `make` method, call it with the name of the disk and the path (see example).
+The output (2nd argument) should be an instanceof `ProtoneMedia\LaravelFFMpeg\Filesystem\Media`. You can instantiate with the `make` method, call it with the name of the disk and the path (see example).
 
 Check out this example, which maps separate video and audio inputs into one output.
 
