@@ -2,6 +2,24 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.0.5 - 2020-07-04
+
+### Added
+
+-   Added `CopyFormat` to export a file without transcoding.
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Nothing
+
+### Removed
+
+-   Nothing
+
 ## 7.0.4 - 2020-06-03
 
 ### Added
