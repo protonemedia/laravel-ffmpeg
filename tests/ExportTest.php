@@ -27,6 +27,20 @@ class ExportTest extends TestCase
 
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
     }
+
+    /** @test */
+    public function it_can_export_a_single_remote_video_file()
+    {
+        $this->fakeLocalVideoFile();
+
+        FFMpeg::openUrl('https://raw.githubusercontent.com/protonemedia/laravel-ffmpeg/master/tests/src/video.mp4')
+            ->export()
+            ->inFormat($this->x264())
+            ->save('new_video.mp4');
+
+        $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
+    }
+
     /** @test */
     public function it_can_export_a_single_audio_file()
     {

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -98,6 +99,21 @@ class MediaOpenerTest extends TestCase
         TemporaryDirectories::deleteAll();
 
         $this->assertFileNotExists($tempPath);
+    }
+
+    /** @test */
+    public function it_can_open_a_remote_url_without_opening()
+    {
+        $mediaCollection = (new MediaOpener)
+            ->openUrl($url = 'https://raw.githubusercontent.com/protonemedia/laravel-ffmpeg/master/tests/src/guitar.m4a')
+            ->getDriver()
+            ->getMediaCollection();
+
+        $this->assertInstanceOf(MediaCollection::class, $mediaCollection);
+        $this->assertEquals(1, $mediaCollection->count());
+
+        $this->assertInstanceOf(MediaOnNetwork::class, $media = $mediaCollection->first());
+        $this->assertEquals($url, $media->getPath());
     }
 
     /** @test */

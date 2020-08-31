@@ -44,7 +44,7 @@ abstract class TestCase extends BaseTestCase
         Storage::extend('http', function ($app, $config) {
             return new FilesystemAdapter(
                 new FlysystemFilesystem(
-                    new HttpAdapter('https://raw.githubusercontent.com/pascalbaljetmedia/laravel-ffmpeg/master/tests/src/')
+                    new HttpAdapter('https://raw.githubusercontent.com/protonemedia/laravel-ffmpeg/master/tests/src/')
                 )
             );
         });

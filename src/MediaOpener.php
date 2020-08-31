@@ -14,6 +14,7 @@ use ProtoneMedia\LaravelFFMpeg\Exporters\MediaExporter;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 
 /**
@@ -93,6 +94,17 @@ class MediaOpener
 
         foreach ($paths as $path) {
             $this->collection->push(Media::make($this->disk, $path));
+        }
+
+        return $this;
+    }
+
+    public function openUrl($path): self
+    {
+        $paths = Arr::wrap($path);
+
+        foreach ($paths as $path) {
+            $this->collection->push(MediaOnNetwork::make($path));
         }
 
         return $this;
