@@ -2,7 +2,7 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
-## 7.0.5 - 2020-09-04
+## 7.1.0 - 2020-09-04
 
 ### Added
 
