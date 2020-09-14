@@ -90,9 +90,7 @@ class MediaOpener
      */
     public function open($path): self
     {
-        $paths = Arr::wrap($path);
-
-        foreach ($paths as $path) {
+        foreach (Arr::wrap($path) as $path) {
             $this->collection->push(Media::make($this->disk, $path));
         }
 
@@ -101,9 +99,7 @@ class MediaOpener
 
     public function openUrl($path, array $headers = []): self
     {
-        $paths = Arr::wrap($path);
-
-        foreach ($paths as $path) {
+        foreach (Arr::wrap($path) as $path) {
             $this->collection->push(MediaOnNetwork::make($path, $headers));
         }
 

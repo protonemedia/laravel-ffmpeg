@@ -17,7 +17,7 @@ trait BuildsCommandsWithHttpHeaders
             return $command;
         }
 
-        return Collection::make($command)->map(function ($command, $pass) {
+        return Collection::make($command)->map(function ($command) {
             return static::mergeBeforePathInput(
                 $command,
                 $this->getPathfile(),
