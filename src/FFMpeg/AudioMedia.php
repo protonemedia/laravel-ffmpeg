@@ -6,7 +6,7 @@ use FFMpeg\Media\Audio;
 
 class AudioMedia extends Audio
 {
-    use InteractsWithHttpHeaders;
+    use BuildsCommandsWithHttpHeaders;
 
     public static function make(Audio $audio)
     {

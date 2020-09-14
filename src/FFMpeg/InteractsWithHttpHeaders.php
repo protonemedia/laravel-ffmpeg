@@ -2,12 +2,16 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 
-use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
 
 trait InteractsWithHttpHeaders
 {
     protected $headers = [];
+
+    public function getHeaders(): array
+    {
+        return $this->headers;
+    }
 
     public function setHeaders(array $headers = []): self
     {
@@ -16,22 +20,15 @@ trait InteractsWithHttpHeaders
         return $this;
     }
 
-    protected function buildCommand(FormatInterface $format, $outputPathfile)
+    protected static function mergeBeforePathInput(array $input, string $path, array $values = []): array
     {
-        $command = parent::buildCommand($format, $outputPathfile);
+        $key = array_search($path, $input) - 1;
 
-        if (empty($this->headers)) {
-            return $command;
-        }
-
-        return Collection::make($command)->map(function ($command, $pass) {
-            $inputKey = array_search($this->getPathfile(), $command) - 1;
-
-            $first = array_slice($command, 0, $inputKey);
-            $last = array_slice($command, $inputKey);
-
-            return array_merge($first, static::compileHeaders($this->headers), $last);
-        })->all();
+        return array_merge(
+            array_slice($input, 0, $key),
+            $values,
+            array_slice($input, $key)
+        );
     }
 
     public static function compileHeaders(array $headers = []): array
@@ -44,9 +41,6 @@ trait InteractsWithHttpHeaders
             return "{$key}: {$value}";
         })->filter()->push("")->implode("\r\n");
 
-        return [
-            '-headers',
-            $headers,
-        ];
+        return ['-headers', $headers];
     }
 }

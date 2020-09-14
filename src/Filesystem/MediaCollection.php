@@ -35,6 +35,16 @@ class MediaCollection
         return $this->items->map->getLocalPath()->all();
     }
 
+    /**
+     * Returns an array with all headers of the Media items.
+     */
+    public function getHeaders(): array
+    {
+        return $this->items->map(function ($media) {
+            return $media instanceof MediaOnNetwork ? $media->getHeaders() : [];
+        })->all();
+    }
+
     public function collection(): Collection
     {
         return $this->items;

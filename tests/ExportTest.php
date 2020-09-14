@@ -237,6 +237,29 @@ class ExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_merge_two_remote_video_files_with_different_headers()
+    {
+        $this->fakeLocalVideoFile();
+
+        FFMpeg::openUrl('https://ffmpeg.protone.media/video.mp4', [
+            'Authorization' => 'Basic YWRtaW46MTIzNA==',
+        ])->openUrl('https://ffmpeg.protone.media/video2.mp4', [
+            'Authorization' => 'Basic YWRtaW46NDMyMQ==',
+        ])
+            ->export()
+            ->addFilter('[0:v][1:v]', 'hstack', '[v]')
+            ->addFormatOutputMapping($this->x264(), Media::make('local', 'new_video.mp4'), ['[v]'])
+            ->save();
+
+        $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
+
+        $this->assertEquals(
+            3840,
+            (new MediaOpener)->fromDisk('local')->open('new_video.mp4')->getStreams()[0]->get('width')
+        );
+    }
+
+    /** @test */
     public function it_can_stack_two_videos_horizontally()
     {
         $this->fakeLocalVideoFiles();

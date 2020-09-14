@@ -6,7 +6,7 @@ use FFMpeg\Media\Video;
 
 class VideoMedia extends Video
 {
-    use InteractsWithHttpHeaders;
+    use BuildsCommandsWithHttpHeaders;
 
     public static function make(Video $video)
     {

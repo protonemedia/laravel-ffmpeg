@@ -25,7 +25,6 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\VideoMedia;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
-use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
 
 /**
  * @mixin \FFMpeg\Media\AbstractMediaType
@@ -115,27 +114,24 @@ class PHPFFMpeg
         $this->mediaCollection = $mediaCollection;
 
         if ($mediaCollection->count() === 1 && !$this->forceAdvanced) {
-            $packageMedia = Arr::first($mediaCollection->collection());
+            $media = Arr::first($mediaCollection->collection());
 
             $this->ffmpeg->setFFProbe(
-                FFProbe::make($this->ffmpeg->getFFProbe())->setMedia($packageMedia)
+                FFProbe::make($this->ffmpeg->getFFProbe())->setMedia($media)
             );
 
-            $media = $this->ffmpeg->open($packageMedia->getLocalPath());
+            $ffmpegMedia = $this->ffmpeg->open($media->getLocalPath());
 
-            $this->media = $media instanceof Video
-                ? VideoMedia::make($media)
-                : AudioMedia::make($media);
+            $this->media = $ffmpegMedia instanceof Video
+                ? VideoMedia::make($ffmpegMedia)
+                : AudioMedia::make($ffmpegMedia);
 
-            if ($packageMedia instanceof MediaOnNetwork) {
-                $this->media->setHeaders($packageMedia->getHeaders());
-            }
+            $this->media->setHeaders(Arr::first($mediaCollection->getHeaders()));
         } else {
-            $localPaths = $mediaCollection->getLocalPaths();
+            $ffmpegMedia = $this->ffmpeg->openAdvanced($mediaCollection->getLocalPaths());
 
-            $this->media = AdvancedMedia::make(
-                $this->ffmpeg->openAdvanced($localPaths)
-            );
+            $this->media = AdvancedMedia::make($ffmpegMedia)
+                ->setHeaders($mediaCollection->getHeaders());
         }
 
         return $this;
