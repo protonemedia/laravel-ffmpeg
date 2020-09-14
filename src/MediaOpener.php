@@ -99,12 +99,12 @@ class MediaOpener
         return $this;
     }
 
-    public function openUrl($path): self
+    public function openUrl($path, array $headers = []): self
     {
         $paths = Arr::wrap($path);
 
         foreach ($paths as $path) {
-            $this->collection->push(MediaOnNetwork::make($path));
+            $this->collection->push(MediaOnNetwork::make($path, $headers));
         }
 
         return $this;

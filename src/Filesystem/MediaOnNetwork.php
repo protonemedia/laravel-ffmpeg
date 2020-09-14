@@ -2,6 +2,8 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\AudioMedia;
+
 class MediaOnNetwork
 {
     /**
@@ -9,14 +11,20 @@ class MediaOnNetwork
      */
     private $path;
 
-    public function __construct(string $path)
+    /**
+     * @var array
+     */
+    private $headers = [];
+
+    public function __construct(string $path, array $headers = [])
     {
-        $this->path = $path;
+        $this->path    = $path;
+        $this->headers = $headers;
     }
 
-    public static function make(string $path): self
+    public static function make(string $path, array $headers = []): self
     {
-        return new static($path);
+        return new static($path, $headers);
     }
 
     public function getPath(): string
@@ -42,5 +50,15 @@ class MediaOnNetwork
     public function getFilename(): string
     {
         return pathinfo($this->getPath())['basename'];
+    }
+
+    public function getHeaders(): array
+    {
+        return $this->headers;
+    }
+
+    public function getCompiledHeaders(): array
+    {
+        return AudioMedia::compileHeaders($this->getHeaders());
     }
 }

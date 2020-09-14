@@ -10,16 +10,22 @@ use FFMpeg\FFProbe\DataMapping\Stream;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\FilterInterface;
 use FFMpeg\Media\AbstractMediaType;
-use FFMpeg\Media\AdvancedMedia;
+use FFMpeg\Media\AdvancedMedia as BaseAdvancedMedia;
 use FFMpeg\Media\Concat;
 use FFMpeg\Media\Frame;
 use FFMpeg\Media\Video;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
+use ProtoneMedia\LaravelFFMpeg\Exporters\MediaExporter;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\AdvancedMedia;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\AudioMedia;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\VideoMedia;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
 
 /**
  * @mixin \FFMpeg\Media\AbstractMediaType
@@ -74,7 +80,7 @@ class PHPFFMpeg
 
     private function isAdvancedMedia(): bool
     {
-        return $this->get() instanceof AdvancedMedia;
+        return $this->get() instanceof BaseAdvancedMedia;
     }
 
     public function isFrame(): bool
@@ -108,12 +114,28 @@ class PHPFFMpeg
 
         $this->mediaCollection = $mediaCollection;
 
-        $localPaths = $mediaCollection->getLocalPaths();
+        if ($mediaCollection->count() === 1 && !$this->forceAdvanced) {
+            $packageMedia = Arr::first($mediaCollection->collection());
 
-        if (count($localPaths) === 1 && !$this->forceAdvanced) {
-            $this->media = $this->ffmpeg->open(Arr::first($localPaths));
+            $this->ffmpeg->setFFProbe(
+                FFProbe::make($this->ffmpeg->getFFProbe())->setMedia($packageMedia)
+            );
+
+            $media = $this->ffmpeg->open($packageMedia->getLocalPath());
+
+            $this->media = $media instanceof Video
+                ? VideoMedia::make($media)
+                : AudioMedia::make($media);
+
+            if ($packageMedia instanceof MediaOnNetwork) {
+                $this->media->setHeaders($packageMedia->getHeaders());
+            }
         } else {
-            $this->media = $this->ffmpeg->openAdvanced($localPaths);
+            $localPaths = $mediaCollection->getLocalPaths();
+
+            $this->media = AdvancedMedia::make(
+                $this->ffmpeg->openAdvanced($localPaths)
+            );
         }
 
         return $this;

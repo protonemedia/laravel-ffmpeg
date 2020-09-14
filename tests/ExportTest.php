@@ -33,7 +33,9 @@ class ExportTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        FFMpeg::openUrl('https://raw.githubusercontent.com/protonemedia/laravel-ffmpeg/master/tests/src/video.mp4')
+        FFMpeg::openUrl('https://ffmpeg.protone.media/video.mp4', [
+            'Authorization' => 'Basic YWRtaW46MTIzNA==',
+        ])
             ->export()
             ->inFormat($this->x264())
             ->save('new_video.mp4');

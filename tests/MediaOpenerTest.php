@@ -2,9 +2,11 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use FFMpeg\Exception\RuntimeException;
 use FFMpeg\Media\Video;
 use FFMpeg\Media\Waveform;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
@@ -114,6 +116,24 @@ class MediaOpenerTest extends TestCase
 
         $this->assertInstanceOf(MediaOnNetwork::class, $media = $mediaCollection->first());
         $this->assertEquals($url, $media->getPath());
+    }
+
+    /** @test */
+    public function it_can_open_a_remote_url_with_headers()
+    {
+        try {
+            (new MediaOpener)->openUrl('https://ffmpeg.protone.media/video.mp4')->getDriver();
+
+            $this->fail('Should have thrown 401 exception');
+        } catch (RuntimeException $exception) {
+            $this->assertTrue(Str::contains($exception->getPrevious()->getMessage(), "HTTP error 401 Unauthorized"));
+        }
+
+        $driver = FFMpeg::openUrl('https://ffmpeg.protone.media/video.mp4', [
+            'Authorization' => 'Basic YWRtaW46MTIzNA==',
+        ])->getDriver();
+
+        $this->assertEquals(5, $driver->getDurationInSeconds());
     }
 
     /** @test */

@@ -40,6 +40,11 @@ class MediaCollection
         return $this->items;
     }
 
+    public function count(): int
+    {
+        return $this->items->count();
+    }
+
     public function __call($method, $parameters)
     {
         return $this->forwardCallTo($this->collection(), $method, $parameters);
