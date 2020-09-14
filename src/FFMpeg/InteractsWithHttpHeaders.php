@@ -24,6 +24,11 @@ trait InteractsWithHttpHeaders
     {
         $key = array_search($path, $input) - 1;
 
+        return static::mergeBeforeKey($input, $key, $values);
+    }
+
+    protected static function mergeBeforeKey(array $input, int $key, array $values = []): array
+    {
         return array_merge(
             array_slice($input, 0, $key),
             $values,

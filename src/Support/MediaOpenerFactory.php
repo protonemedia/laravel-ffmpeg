@@ -19,6 +19,11 @@ class MediaOpenerFactory
         $this->driver      = $driver;
     }
 
+    public function new(): MediaOpener
+    {
+        return new MediaOpener($this->defaultDisk, $this->driver);
+    }
+
     /**
     * Handle dynamic method calls into the MediaOpener.
     *
@@ -28,10 +33,6 @@ class MediaOpenerFactory
     */
     public function __call($method, $parameters)
     {
-        return $this->forwardCallTo(
-            new MediaOpener($this->defaultDisk, $this->driver),
-            $method,
-            $parameters
-        );
+        return $this->forwardCallTo($this->new(), $method, $parameters);
     }
 }

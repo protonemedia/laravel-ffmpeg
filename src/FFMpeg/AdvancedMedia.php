@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 
 use FFMpeg\Media\AdvancedMedia as MediaAdvancedMedia;
+use Illuminate\Support\Arr;
 
 class AdvancedMedia extends MediaAdvancedMedia
 {
@@ -20,18 +21,18 @@ class AdvancedMedia extends MediaAdvancedMedia
     {
         $command = parent::buildCommand();
 
-        $inputKey = array_search($this->getPathfile(), $command) - 1;
+        $inputKey = array_search(Arr::first($this->getInputs()), $command) - 1;
 
-        foreach ($this->getInputs() as $inputKey => $path) {
-            $headers = $this->headers[$inputKey];
-            $inputKey += 2;
+        foreach ($this->getInputs() as $key => $path) {
+            $headers = $this->headers[$key];
 
             if (empty($headers)) {
+                $inputKey += 2;
                 continue;
             }
 
-            $command = static::mergeBeforePathInput($command, $path, static::compileHeaders($headers));
-            $inputKey += 2;
+            $command = static::mergeBeforeKey($command, $inputKey, static::compileHeaders($headers));
+            $inputKey += 4;
         }
 
         return $command;
