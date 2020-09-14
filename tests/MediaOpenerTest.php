@@ -126,7 +126,10 @@ class MediaOpenerTest extends TestCase
 
             $this->fail('Should have thrown 401 exception');
         } catch (RuntimeException $exception) {
-            $this->assertTrue(Str::contains($exception->getPrevious()->getMessage(), "HTTP error 401 Unauthorized"));
+            $this->assertTrue(
+                Str::contains($exception->getPrevious()->getMessage(), "HTTP error 401 Unauthorized"),
+                $exception->getPrevious()->getMessage()
+            );
         }
 
         $driver = FFMpeg::openUrl('https://ffmpeg.protone.media/video.mp4', [
