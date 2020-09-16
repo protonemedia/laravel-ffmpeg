@@ -50,6 +50,11 @@ class MediaCollection
         return $this->items;
     }
 
+    /**
+     * Count the number of items in the collection.
+     *
+     * @return int
+     */
     public function count(): int
     {
         return $this->items->count();

@@ -97,6 +97,9 @@ class MediaOpener
         return $this;
     }
 
+    /**
+     * Instantiates a MediaOnNetwork object for each given url.
+     */
     public function openUrl($path, array $headers = []): self
     {
         foreach (Arr::wrap($path) as $path) {
