@@ -2,6 +2,24 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.2.0 - 2020-09-17
+
+### Added
+
+-   Support for inputs from the web
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Nothing
+
+### Removed
+
+-   Nothing
+
 ## 7.1.0 - 2020-09-04
 
 ### Added
