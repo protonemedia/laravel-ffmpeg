@@ -101,6 +101,18 @@ FFMpeg::open('steve_howe.mp4')
     });
 ```
 
+### Open files from the web
+
+You can open files from the web by using the `openUrl` method. You can specify custom HTTP headers with the optional second parameter:
+
+```php
+FFMpeg::openUrl('https://videocoursebuilder.com/lesson-1.mp4');
+
+FFMpeg::openUrl('https://videocoursebuilder.com/lesson-2.mp4', [
+    'Authorization' => 'Basic YWRtaW46MTIzNA==',
+]);
+```
+
 ### Filters
 
 You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter objects:
@@ -331,6 +343,32 @@ FFMpeg::open(['video.mp4', 'video2.mp4'])
     ->addFilter(function(ComplexFilters $filters) {
         // $filters->watermark(...);
     });
+```
+
+Opening files from the web works similarly. You can pass an array of URLs to the `openUrl` method, optionally with custom HTTP headers.
+
+```php
+FFMpeg::openUrl([
+    'https://videocoursebuilder.com/lesson-3.mp4',
+    'https://videocoursebuilder.com/lesson-4.mp4',
+]);
+
+FFMpeg::openUrl([
+    'https://videocoursebuilder.com/lesson-3.mp4',
+    'https://videocoursebuilder.com/lesson-4.mp4',
+], [
+    'Authorization' => 'Basic YWRtaW46MTIzNA==',
+]);
+```
+
+If you want to use another set of HTTP headers for each URL, you can chain the `openUrl` method:
+
+```php
+FFMpeg::openUrl('https://videocoursebuilder.com/lesson-5.mp4', [
+    'Authorization' => 'Basic YWRtaW46MTIzNA==',
+])->openUrl('https://videocoursebuilder.com/lesson-6.mp4', [
+    'Authorization' => 'Basic bmltZGE6NDMyMQ==',
+]);
 ```
 
 ### Concat files without transcoding

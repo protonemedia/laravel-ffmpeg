@@ -24,7 +24,7 @@
     ],
     "require": {
         "php": "^7.2",
-        "evenement/evenement": "^2.0 || ^3.0",
+        "evenement/evenement": "^3.0",
         "illuminate/bus": "^6.0|^7.0|^8.0",
         "illuminate/config": "^6.0|^7.0|^8.0",
         "illuminate/filesystem": "^6.0|^7.0|^8.0",

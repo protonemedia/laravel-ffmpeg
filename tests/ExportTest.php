@@ -27,6 +27,22 @@ class ExportTest extends TestCase
 
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
     }
+
+    /** @test */
+    public function it_can_export_a_single_remote_video_file()
+    {
+        $this->fakeLocalVideoFile();
+
+        FFMpeg::openUrl('https://ffmpeg.protone.media/video.mp4', [
+            'Authorization' => 'Basic YWRtaW46MTIzNA==',
+        ])
+            ->export()
+            ->inFormat($this->x264())
+            ->save('new_video.mp4');
+
+        $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
+    }
+
     /** @test */
     public function it_can_export_a_single_audio_file()
     {
@@ -218,6 +234,54 @@ class ExportTest extends TestCase
 
         $this->assertTrue(Storage::disk('local')->has('new_video1.mp4'));
         $this->assertTrue(Storage::disk('memory')->has('new_video2.wmv'));
+    }
+
+    /** @test */
+    public function it_can_merge_two_remote_video_files_with_the_same_headers()
+    {
+        $this->fakeLocalVideoFile();
+
+        FFMpeg::openUrl([
+            'https://ffmpeg.protone.media/video.mp4',
+            'https://ffmpeg.protone.media/video.mp4',
+        ], [
+            'Authorization' => 'Basic YWRtaW46MTIzNA==',
+        ])
+            ->export()
+            ->addFilter('[0:v][1:v]', 'hstack', '[v]')
+            ->addFormatOutputMapping($this->x264(), Media::make('local', 'new_video.mp4'), ['[v]'])
+            ->save();
+
+        $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
+
+        $this->assertEquals(
+            3840,
+            (new MediaOpener)->fromDisk('local')->open('new_video.mp4')->getStreams()[0]->get('width')
+        );
+    }
+
+    /** @test */
+    public function it_can_merge_two_remote_video_files_with_different_headers()
+    {
+        $this->fakeLocalVideoFile();
+
+        FFMpeg::new()
+            ->openUrl('https://ffmpeg.protone.media/video.mp4', [
+                'Authorization' => 'Basic YWRtaW46MTIzNA==',
+            ])->openUrl('https://ffmpeg.protone.media/video2.mp4', [
+                'Authorization' => 'Basic YWRtaW46NDMyMQ==',
+            ])
+            ->export()
+            ->addFilter('[0:v][1:v]', 'hstack', '[v]')
+            ->addFormatOutputMapping($this->x264(), Media::make('local', 'new_video.mp4'), ['[v]'])
+            ->save();
+
+        $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
+
+        $this->assertEquals(
+            3840,
+            (new MediaOpener)->fromDisk('local')->open('new_video.mp4')->getStreams()[0]->get('width')
+        );
     }
 
     /** @test */
