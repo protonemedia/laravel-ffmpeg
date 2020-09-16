@@ -126,7 +126,7 @@ class PHPFFMpeg
                 ? VideoMedia::make($ffmpegMedia)
                 : AudioMedia::make($ffmpegMedia);
 
-            $this->media->setHeaders(Arr::first($mediaCollection->getHeaders()));
+            $this->media->setHeaders(Arr::first($mediaCollection->getHeaders()) ?: []);
         } else {
             $ffmpegMedia = $this->ffmpeg->openAdvanced($mediaCollection->getLocalPaths());
 
