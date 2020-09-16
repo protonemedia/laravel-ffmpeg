@@ -345,12 +345,29 @@ FFMpeg::open(['video.mp4', 'video2.mp4'])
     });
 ```
 
-Opening files from the web works similarly. You can pass an array of URLs to the `openUrl` method:
+Opening files from the web works similarly. You can pass an array of URLs to the `openUrl` method, optionally with custom HTTP headers.
 
 ```php
 FFMpeg::openUrl([
     'https://videocoursebuilder.com/lesson-3.mp4',
     'https://videocoursebuilder.com/lesson-4.mp4',
+]);
+
+FFMpeg::openUrl([
+    'https://videocoursebuilder.com/lesson-3.mp4',
+    'https://videocoursebuilder.com/lesson-4.mp4',
+], [
+    'Authorization' => 'Basic YWRtaW46MTIzNA==',
+]);
+```
+
+If you want to use another set of HTTP headers for each URL, you can chain the `openUrl` method:
+
+```php
+FFMpeg::openUrl('https://videocoursebuilder.com/lesson-5.mp4', [
+    'Authorization' => 'Basic YWRtaW46MTIzNA==',
+])->openUrl('https://videocoursebuilder.com/lesson-6.mp4', [
+    'Authorization' => 'Basic bmltZGE6NDMyMQ==',
 ]);
 ```
 
