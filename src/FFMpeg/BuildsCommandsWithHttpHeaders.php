@@ -9,6 +9,14 @@ trait BuildsCommandsWithHttpHeaders
 {
     use InteractsWithHttpHeaders;
 
+    /**
+     * Builds the command using the underlying library and then
+     * prepends the input with the headers.
+     *
+     * @param \FFMpeg\Format\FormatInterface $format
+     * @param string $outputPathfile
+     * @return array
+     */
     protected function buildCommand(FormatInterface $format, $outputPathfile)
     {
         $command = parent::buildCommand($format, $outputPathfile);

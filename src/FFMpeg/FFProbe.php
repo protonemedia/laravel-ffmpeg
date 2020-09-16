@@ -9,8 +9,24 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
 
 class FFProbe extends FFMpegFFProbe
 {
+    /**
+     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Media|\ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork
+     */
     protected $media;
 
+    public function setMedia($media): self
+    {
+        $this->media = $media;
+
+        return $this;
+    }
+
+    /**
+     * Create a new instance of this class with the instance of the underlying library.
+     *
+     * @param \FFMpeg\FFProbe $probe
+     * @return self
+     */
     public static function make(FFMpegFFProbe $probe): self
     {
         if ($probe instanceof FFProbe) {
@@ -20,12 +36,14 @@ class FFProbe extends FFMpegFFProbe
         return new static($probe->getFFProbeDriver(), $probe->getCache());
     }
 
-    public function setMedia($media): self
-    {
-        $this->media = $media;
-
-        return $this;
-    }
+    /**
+     * Probes the streams contained in a given file.
+     *
+     * @param string $pathfile
+     * @return \FFMpeg\FFProbe\DataMapping\StreamCollection
+     * @throws \FFMpeg\Exception\InvalidArgumentException
+     * @throws \FFMpeg\Exception\RuntimeException
+     */
 
     public function streams($pathfile)
     {
@@ -42,6 +60,7 @@ class FFProbe extends FFMpegFFProbe
 
     /**
      * This is just copy-paste from FFMpeg\FFProbe...
+     * It prepends the command with the headers.
      */
     private function probeStreams($pathfile, $allowJson = true)
     {

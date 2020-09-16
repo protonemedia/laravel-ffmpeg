@@ -9,12 +9,21 @@ class AdvancedMedia extends MediaAdvancedMedia
 {
     use InteractsWithHttpHeaders;
 
-    public static function make(MediaAdvancedMedia $media)
+    /**
+     * Create a new instance of this class with the instance of the underlying library.
+     *
+     * @param \FFMpeg\Media\AdvancedMedia $media
+     * @return self
+     */
+    public static function make(MediaAdvancedMedia $media): self
     {
         return new static($media->getInputs(), $media->getFFMpegDriver(), FFProbe::make($media->getFFProbe()));
     }
 
     /**
+     * Builds the command using the underlying library and then
+     * prepends every input with its own set of headers.
+     *
      * @return array
      */
     protected function buildCommand()
