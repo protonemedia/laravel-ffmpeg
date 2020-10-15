@@ -2,6 +2,24 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.3.0 - 2020-10-??
+
+### Added
+
+-   Built-in support for watermarks.
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Nothing
+
+### Removed
+
+-   Nothing
+
 ## 7.2.0 - 2020-09-17
 
 ### Added

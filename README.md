@@ -176,6 +176,34 @@ FFMpeg::fromDisk('videos')
     ->addFilter('-itsoffset', 1);
 ```
 
+### Watermark filter
+
+As of version 7.3, you can easily add a watermark with the `addWatermark` method:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
+
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->addWatermark(function(WatermarkFactory $watermark) {
+        $watermark->fromDisk('local')
+            ->open('logo.png')
+            ->top(25)
+            ->left(25);
+    });
+
+// or
+
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->addWatermark(function(WatermarkFactory $watermark) {
+        $watermark->open('logo.png')
+            ->horizontalAlignment(WatermarkFactory::RIGHT, 25)
+            ->verticalAlignment(WatermarkFactory::BOTTOM, 25);
+    });
+```
+
+
 ### Export without transcoding
 
 This package comes with a `ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat` class that allows you to export a file without transcoding the streams. You might want to use this to use another container:

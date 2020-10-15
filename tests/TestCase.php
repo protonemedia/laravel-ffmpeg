@@ -87,6 +87,12 @@ abstract class TestCase extends BaseTestCase
         $this->addTestFile('video.mp4');
     }
 
+    protected function fakeLocalLogoFile()
+    {
+        $this->fakeLocalDisk();
+        $this->addTestFile('logo.png');
+    }
+
     protected function addTestFile($file)
     {
         Storage::disk('local')->put($file, file_get_contents(__DIR__ . "/src/{$file}"));
