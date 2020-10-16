@@ -53,4 +53,38 @@ class MediaOnNetwork
     {
         return static::compileHeaders($this->getHeaders());
     }
+
+    /**
+     * Downloads the Media from the internet and stores it in
+     * a temporary directory.
+     *
+     * @param callable $withCurl
+     * @return \ProtoneMedia\LaravelFFMpeg\Filesystem\Media
+     */
+    public function toMedia(callable $withCurl = null): Media
+    {
+        $disk = Disk::makeTemporaryDisk();
+
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_URL, $this->path);
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+
+        if (!empty($this->headers)) {
+            curl_setopt($curl, CURLOPT_HTTPHEADER, $this->headers);
+        }
+
+        if ($withCurl) {
+            $curl = $withCurl($curl) ?: $curl;
+        }
+
+        $contents = curl_exec($curl);
+        curl_close($curl);
+
+        $disk->getFilesystemAdapter()->put(
+            $filename = $this->getFilename(),
+            $contents
+        );
+
+        return new Media($disk, $filename);
+    }
 }

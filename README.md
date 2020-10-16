@@ -194,12 +194,26 @@ FFMpeg::fromDisk('videos')
 
 // or
 
-FFMpeg::fromDisk('videos')
-    ->open('steve_howe.mp4')
+FFMpeg::open('steve_howe.mp4')
     ->addWatermark(function(WatermarkFactory $watermark) {
         $watermark->open('logo.png')
             ->horizontalAlignment(WatermarkFactory::RIGHT, 25)
             ->verticalAlignment(WatermarkFactory::BOTTOM, 25);
+    });
+```
+
+The `WatermarkFactory` also supports opening files from the web with the `openUrl` method. It supports custom HTTP headers as well.
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->addWatermark(function(WatermarkFactory $watermark) {
+        $watermark->openUrl('https://videocoursebuilder.com/logo.png');
+
+        // or
+
+        $watermark->openUrl('https://videocoursebuilder.com/logo.png', [
+            'Authorization' => 'Basic YWRtaW46MTIzNA==',
+        ]);
     });
 ```
 

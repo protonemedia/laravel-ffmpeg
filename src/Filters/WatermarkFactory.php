@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Filters;
 use FFMpeg\Filters\Video\WatermarkFilter;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
 
 /**
  * Partly based on this PR:
@@ -68,6 +69,17 @@ class WatermarkFactory
     public function open(string $path): self
     {
         $this->media = Media::make($this->disk, $path);
+
+        return $this;
+    }
+
+    /**
+     * Instantiates a MediaOnNetwork object for the given url and transforms
+     * it into a Media object.
+     */
+    public function openUrl(string $path, array $headers = []): self
+    {
+        $this->media = MediaOnNetwork::make($path, $headers)->toMedia();
 
         return $this;
     }

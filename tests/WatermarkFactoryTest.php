@@ -40,6 +40,20 @@ class WatermarkFactoryTest extends TestCase
     }
 
     /** @test */
+    public function it_downloads_a_remote_logo_to_a_temporary_filesystem()
+    {
+        $factory = new WatermarkFactory;
+        $factory->openUrl('https://ffmpeg.protone.media/logo.png', [
+            'Authorization' => 'Basic YWRtaW46MTIzNA==',
+        ]);
+
+        $this->assertInstanceOf(WatermarkFilter::class, $factory->get());
+
+        $this->assertStringContainsString(sys_get_temp_dir(), $this->getSecondCommand($factory));
+        $this->assertStringContainsString('logo.png', $this->getSecondCommand($factory));
+    }
+
+    /** @test */
     public function it_gives_the_coordinates_to_the_watermark_filter()
     {
         $factory = new WatermarkFactory;
