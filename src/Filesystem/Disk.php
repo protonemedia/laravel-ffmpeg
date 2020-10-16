@@ -50,6 +50,15 @@ class Disk
         return new static($disk);
     }
 
+    public static function makeTemporaryDisk(): self
+    {
+        $filesystemAdapter = app('filesystem')->createLocalDriver([
+            'root' => TemporaryDirectories::create()->path(),
+        ]);
+
+        return new static($filesystemAdapter);
+    }
+
     /**
      * Creates a fresh instance, mostly used to force a new TemporaryDirectory.
      */

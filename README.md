@@ -176,6 +176,64 @@ FFMpeg::fromDisk('videos')
     ->addFilter('-itsoffset', 1);
 ```
 
+### Watermark filter
+
+As of version 7.3, you can easily add a watermark using the `addWatermark` method. With the `WatermarkFactory`, you can open your watermark file from a specific disk, just like opening an audio or video file. When you discard the `fromDisk` method, it uses the default disk specified in the `filesystems.php` configuration file.
+
+After opening your watermark file, you can position it with the `top`, `right`, `bottom`, and `left` methods. The first parameter of these methods is the offset, which is optional and can be negative.
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
+
+FFMpeg::fromDisk('videos')
+    ->open('steve_howe.mp4')
+    ->addWatermark(function(WatermarkFactory $watermark) {
+        $watermark->fromDisk('local')
+            ->open('logo.png')
+            ->right(25)
+            ->bottom(25);
+    });
+```
+
+Instead of using the position methods, you can also use the `horizontalAlignment` and `verticalAlignment` methods.
+
+For horizontal alignment, you can use the `WatermarkFactory::LEFT`, `WatermarkFactory::CENTER` and `WatermarkFactory::RIGHT` constants. For vertical alignment, you can use the `WatermarkFactory::TOP`, `WatermarkFactory::CENTER` and `WatermarkFactory::BOTTOM` constants. Both methods take an optional second parameter, which is the offset.
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->addWatermark(function(WatermarkFactory $watermark) {
+        $watermark->open('logo.png')
+            ->horizontalAlignment(WatermarkFactory::LEFT, 25)
+            ->verticalAlignment(WatermarkFactory::TOP, 25);
+    });
+```
+
+The `WatermarkFactory` also supports opening files from the web with the `openUrl` method. It supports custom HTTP headers as well.
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->addWatermark(function(WatermarkFactory $watermark) {
+        $watermark->openUrl('https://videocoursebuilder.com/logo.png');
+
+        // or
+
+        $watermark->openUrl('https://videocoursebuilder.com/logo.png', [
+            'Authorization' => 'Basic YWRtaW46MTIzNA==',
+        ]);
+    });
+```
+
+If you want more control over the GET request, you can pass in an optional third parameter, which gives you the Curl resource.
+
+```php
+$watermark->openUrl('https://videocoursebuilder.com/logo.png', [
+    'Authorization' => 'Basic YWRtaW46MTIzNA==',
+], function($curl) {
+    curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
+});
+```
+
 ### Export without transcoding
 
 This package comes with a `ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat` class that allows you to export a file without transcoding the streams. You might want to use this to use another container:

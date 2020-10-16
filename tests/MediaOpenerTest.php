@@ -119,6 +119,22 @@ class MediaOpenerTest extends TestCase
     }
 
     /** @test */
+    public function it_can_transform_a_media_on_network_object_to_a_media_object()
+    {
+        $mediaOnNetwerk = MediaOnNetwork::make('https://ffmpeg.protone.media/logo.png', [
+            'Authorization' => 'Basic YWRtaW46MTIzNA==',
+        ]);
+
+        $media = $mediaOnNetwerk->toMedia(function ($ch) {
+            $this->assertIsResource($ch);
+        });
+
+        [$width] = getimagesize($media->getLocalPath());
+
+        $this->assertEquals(400, $width);
+    }
+
+    /** @test */
     public function it_can_open_a_remote_url_with_headers()
     {
         try {

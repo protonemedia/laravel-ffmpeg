@@ -25,6 +25,7 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\VideoMedia;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
+use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 
 /**
  * @mixin \FFMpeg\Media\AbstractMediaType
@@ -271,6 +272,26 @@ class PHPFFMpeg
 
         // use all function arguments as a filter
         $this->media->addFilter(new SimpleFilter($arguments));
+
+        return $this;
+    }
+
+    /**
+     * Calls the callable with a WatermarkFactory instance and
+     * adds the freshly generated WatermarkFilter.
+     *
+     * @param callable $withWatermarkFactory
+     * @return self
+     */
+    public function addWatermark(callable $withWatermarkFactory): self
+    {
+        $watermarkFactory = new WatermarkFactory;
+
+        $withWatermarkFactory($watermarkFactory);
+
+        $watermarkFilter = $watermarkFactory->get();
+
+        $this->addFilter($watermarkFilter);
 
         return $this;
     }
