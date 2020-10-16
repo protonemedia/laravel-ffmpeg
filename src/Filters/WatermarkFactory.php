@@ -13,7 +13,7 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
  */
 class WatermarkFactory
 {
-    /** position contants */
+    /** position constants */
     const LEFT   = 'left';
     const RIGHT  = 'right';
     const CENTER = 'center';
@@ -46,7 +46,7 @@ class WatermarkFactory
     private $alignments = [];
 
     /**
-     * Uses the 'filesystems.default' disk from the config if none is given.
+     * Uses the 'filesystems.default' disk as default.
      */
     public function __construct()
     {
