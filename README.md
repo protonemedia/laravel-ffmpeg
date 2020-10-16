@@ -217,7 +217,6 @@ FFMpeg::open('steve_howe.mp4')
     });
 ```
 
-
 ### Export without transcoding
 
 This package comes with a `ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat` class that allows you to export a file without transcoding the streams. You might want to use this to use another container:

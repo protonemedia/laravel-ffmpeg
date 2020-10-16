@@ -76,10 +76,15 @@ class WatermarkFactory
     /**
      * Instantiates a MediaOnNetwork object for the given url and transforms
      * it into a Media object.
+     *
+     * @param string $path
+     * @param array $headers
+     * @param callable $withCurl
+     * @return self
      */
-    public function openUrl(string $path, array $headers = []): self
+    public function openUrl(string $path, array $headers = [], callable $withCurl = null): self
     {
-        $this->media = MediaOnNetwork::make($path, $headers)->toMedia();
+        $this->media = MediaOnNetwork::make($path, $headers)->toMedia($withCurl);
 
         return $this;
     }
