@@ -180,7 +180,7 @@ FFMpeg::fromDisk('videos')
 
 As of version 7.3, you can easily add a watermark using the `addWatermark` method. With the `WatermarkFactory`, you can open your watermark file from a specific disk, just like opening an audio or video file. When you discard the `fromDisk` method, it uses the default disk as specified in the `filesystems.php` configuration file.
 
-After opening your watermark file, you can position it with the `top`, `right`, `bottom` and `left` methods.
+After opening your watermark file, you can position it with the `top`, `right`, `bottom` and `left` methods. The first parameter of these methods is the offset, which is optional and can be negative as well.
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
@@ -195,7 +195,9 @@ FFMpeg::fromDisk('videos')
     });
 ```
 
-Instead of using the position methods, you can also use the `horizontalAlignment` and `verticalAlignment` methods. For horizontal alignment you can use the `WatermarkFactory::LEFT`, `WatermarkFactory::CENTER` and `WatermarkFactory::RIGHT` constants. For vertical alignment you can use the `WatermarkFactory::TOP`, `WatermarkFactory::CENTER` and `WatermarkFactory::BOTTOM` constants. Both methods take an optional second parameter, which is the offset.
+Instead of using the position methods, you can also use the `horizontalAlignment` and `verticalAlignment` methods.
+
+For horizontal alignment you can use the `WatermarkFactory::LEFT`, `WatermarkFactory::CENTER` and `WatermarkFactory::RIGHT` constants. For vertical alignment you can use the `WatermarkFactory::TOP`, `WatermarkFactory::CENTER` and `WatermarkFactory::BOTTOM` constants. Both methods take an optional second parameter, which is the offset.
 
 ```php
 FFMpeg::open('steve_howe.mp4')
