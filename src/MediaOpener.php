@@ -138,9 +138,9 @@ class MediaOpener
     /**
      * Shortcut to set the timecode by seconds.
      */
-    public function getFrameFromSeconds(float $quantity): self
+    public function getFrameFromSeconds(float $seconds): self
     {
-        return $this->getFrameFromTimecode(TimeCode::fromSeconds($quantity));
+        return $this->getFrameFromTimecode(TimeCode::fromSeconds($seconds));
     }
 
     public function getFrameFromTimecode(TimeCode $timecode): self
