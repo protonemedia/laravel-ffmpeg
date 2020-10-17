@@ -91,7 +91,7 @@ class Media
         }
 
         return app('filesystem')->createLocalDriver(
-            ['root' => $this->temporaryDirectory->path()]
+            ['root' => $this->temporaryDirectory]
         );
     }
 

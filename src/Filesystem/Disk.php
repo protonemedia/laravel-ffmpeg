@@ -53,7 +53,7 @@ class Disk
     public static function makeTemporaryDisk(): self
     {
         $filesystemAdapter = app('filesystem')->createLocalDriver([
-            'root' => TemporaryDirectories::create()->path(),
+            'root' => TemporaryDirectories::create(),
         ]);
 
         return new static($filesystemAdapter);
@@ -71,7 +71,7 @@ class Disk
      * Creates a new TemporaryDirectory instance if none is set, otherwise
      * it returns the current one.
      */
-    public function getTemporaryDirectory(): TemporaryDirectory
+    public function getTemporaryDirectory(): string
     {
         if ($this->temporaryDirectory) {
             return $this->temporaryDirectory;
