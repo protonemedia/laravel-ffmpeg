@@ -30,8 +30,7 @@
         "illuminate/filesystem": "^6.0|^7.0|^8.0",
         "illuminate/log": "^6.0|^7.0|^8.0",
         "illuminate/support": "^6.0|^7.0|^8.0",
-        "php-ffmpeg/php-ffmpeg": "^0.16.0",
-        "spatie/temporary-directory": "^1.2"
+        "php-ffmpeg/php-ffmpeg": "^0.16.0"
     },
     "require-dev": {
         "league/flysystem-memory": "^1.0",
