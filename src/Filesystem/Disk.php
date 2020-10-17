@@ -9,7 +9,6 @@ use Illuminate\Support\Traits\ForwardsCalls;
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\AdapterInterface;
 use League\Flysystem\Filesystem as LeagueFilesystem;
-use Spatie\TemporaryDirectory\TemporaryDirectory;
 
 /**
  * @mixin \Illuminate\Filesystem\FilesystemAdapter
@@ -24,7 +23,7 @@ class Disk
     private $disk;
 
     /**
-     * @var \Spatie\TemporaryDirectory\TemporaryDirectory
+     * @var string
      */
     private $temporaryDirectory;
 

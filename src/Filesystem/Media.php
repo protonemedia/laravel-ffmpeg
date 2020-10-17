@@ -17,7 +17,7 @@ class Media
     private $path;
 
     /**
-     * @var \Spatie\TemporaryDirectory\TemporaryDirectory
+     * @var string
      */
     private $temporaryDirectory;
 
