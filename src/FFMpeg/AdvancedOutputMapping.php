@@ -5,7 +5,8 @@ namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 use FFMpeg\Format\FormatInterface;
 use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Media\AdvancedMedia;
-use Illuminate\Support\Str;
+use Illuminate\Support\Collection;
+use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 
 class AdvancedOutputMapping
@@ -75,18 +76,8 @@ class AdvancedOutputMapping
 
     public function hasOut(string $out): bool
     {
-        if (Str::contains($out, '.')) {
-            $out = Str::before($out, '.');
-        }
-
-        $outs = collect($this->outs)->map(function ($out) {
-            if (Str::contains($out, '.')) {
-                $out = Str::before($out, '.');
-            }
-
-            return $out;
-        })->all();
-
-        return in_array($out, $outs);
+        return Collection::make($this->outs)->map(function ($out) {
+            return HLSExporter::beforeGlue($out);
+        })->contains(HLSExporter::beforeGlue($out));
     }
 }

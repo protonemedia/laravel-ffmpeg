@@ -11,12 +11,15 @@ use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Format\VideoInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Fluent;
+use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HLSExporter extends MediaExporter
 {
+    const FORMAT_FILTER_MAPPING_GLUE = "_hls_ffms_";
+
     /**
      * @var integer
      */
@@ -155,14 +158,14 @@ class HLSExporter extends MediaExporter
                     return '[0]';
                 }
 
-                return "[v{$this->formatKey}.{$filters}]";
+                return HLSExporter::glue($this->formatKey, $filters);
             }
 
             private function output(): string
             {
                 $filters = $this->formatFilters->get($this->formatKey, 0) + 1;
 
-                return "[v{$this->formatKey}.{$filters}]";
+                return HLSExporter::glue($this->formatKey, $filters);
             }
 
             public function addLegacyFilter(...$arguments): self
@@ -211,17 +214,25 @@ class HLSExporter extends MediaExporter
 
         $filters = $formatFilters->get($formatKey, 0);
 
-        if ($filters) {
-            $outs = ["[v{$formatKey}.{$filters}]"];
-        } else {
-            $outs = ['0:v'];
-        }
+        $videoOut = $filters ? static::glue($formatKey, $filters) : '0:v';
+
+        $outs = [$videoOut];
 
         if ($this->getAudioStream()) {
             $outs[] = '0:a';
         }
 
         return $outs;
+    }
+
+    public static function glue($format, $filter): string
+    {
+        return "[v{$format}" . static::FORMAT_FILTER_MAPPING_GLUE . "{$filter}]";
+    }
+
+    public static function beforeGlue($input): string
+    {
+        return Str::before($input, static::FORMAT_FILTER_MAPPING_GLUE);
     }
 
     public function save(string $path = null): MediaOpener
