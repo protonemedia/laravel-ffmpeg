@@ -3,7 +3,9 @@
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Closure;
+use FFMpeg\Coordinate\Dimension;
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
+use FFMpeg\Filters\Video\ResizeFilter;
 use FFMpeg\Format\FormatInterface;
 use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Format\VideoInterface;
@@ -118,61 +120,102 @@ class HLSExporter extends MediaExporter
         ]);
     }
 
-    private function applyFiltersCallback(callable $filtersCallback, $key): array
+    private function applyFiltersCallback(callable $filtersCallback, $formatKey): array
     {
-        $called = new Fluent(['called' => false]);
+        $formatFilters = $this->formatFilters;
 
-        $mediaMock = new class($this->driver, $key, $called) {
+        $mediaMock = new class($this->driver, $formatKey, $formatFilters) {
             private $driver;
-            private $key;
-            private $called;
+            private $formatKey;
+            private $formatFilters;
 
-            public function __construct($driver, $key, $called)
+            public function __construct($driver, $formatKey, $formatFilters)
             {
-                $this->driver = $driver;
-                $this->key    = $key;
-                $this->called = $called;
+                $this->driver        = $driver;
+                $this->formatKey     = $formatKey;
+                $this->formatFilters = $formatFilters;
             }
 
-            public function addLegacyFilter(...$arguments)
+            private function called(): self
             {
-                $this->driver->addFilterAsComplexFilter('[0]', "[v{$this->key}]", ...$arguments);
+                if (!$this->formatFilters->offsetExists($this->formatKey)) {
+                    $this->formatFilters[$this->formatKey] = 1;
+                } else {
+                    $this->formatFilters[$this->formatKey] = $this->formatFilters[$this->formatKey] + 1;
+                }
 
-                $this->called['called'] = true;
+                return $this;
             }
 
-            public function addWatermark(callable $withWatermarkFactory)
+            private function input(): string
+            {
+                $filters = $this->formatFilters->get($this->formatKey, 0);
+
+                if ($filters < 1) {
+                    return '[0]';
+                }
+
+                return "[v{$this->formatKey}.{$filters}]";
+            }
+
+            private function output(): string
+            {
+                $filters = $this->formatFilters->get($this->formatKey, 0) + 1;
+
+                return "[v{$this->formatKey}.{$filters}]";
+            }
+
+            public function addLegacyFilter(...$arguments): self
+            {
+                $this->driver->addFilterAsComplexFilter($this->input(), $this->output(), ...$arguments);
+
+                return $this->called();
+            }
+
+            public function resize($width, $height, $mode = null): self
+            {
+                $dimension = new Dimension($width, $height);
+
+                $filter = new ResizeFilter($dimension, $mode);
+
+                return $this->addLegacyFilter($filter);
+            }
+
+            public function addWatermark(callable $withWatermarkFactory): self
             {
                 $withWatermarkFactory($watermarkFactory = new WatermarkFactory);
 
-                $this->addLegacyFilter($watermarkFactory->get());
+                return $this->addLegacyFilter($watermarkFactory->get());
             }
 
-            public function scale($width, $height)
+            public function scale($width, $height): self
             {
-                $this->addFilter("scale={$width}:{$height}");
+                return $this->addFilter("scale={$width}:{$height}");
             }
 
-            public function addFilter(...$arguments)
+            public function addFilter(...$arguments): self
             {
-                $in  = '[0]';
-                $out = "[v{$this->key}]";
-
                 if (count($arguments) === 1 && !is_callable($arguments[0])) {
-                    $this->driver->addFilter($in, $arguments[0], $out);
+                    $this->driver->addFilter($this->input(), $arguments[0], $this->output());
                 } else {
-                    $this->driver->addFilter(function (ComplexFilters $filters) use ($arguments, $in,$out) {
-                        $arguments[0]($filters, $in, $out);
+                    $this->driver->addFilter(function (ComplexFilters $filters) use ($arguments) {
+                        $arguments[0]($filters, $this->input(), $this->output());
                     });
                 }
 
-                $this->called['called'] = true;
+                return $this->called();
             }
         };
 
         $filtersCallback($mediaMock);
 
-        $outs = [$called['called'] ? "[v{$key}]" : '0:v'];
+        $filters = $formatFilters->get($formatKey, 0);
+
+        if ($filters) {
+            $outs = ["[v{$formatKey}.{$filters}]"];
+        } else {
+            $outs = ['0:v'];
+        }
 
         if ($this->getAudioStream()) {
             $outs[] = '0:a';
@@ -186,6 +229,8 @@ class HLSExporter extends MediaExporter
         $media = $this->getDisk()->makeMedia($path);
 
         $baseName = $media->getDirectory() . $media->getFilenameWithoutExtension();
+
+        $this->formatFilters = new Fluent;
 
         return $this->pendingFormats->map(function ($formatAndCallback, $key) use ($baseName) {
             $disk = $this->getDisk()->clone();

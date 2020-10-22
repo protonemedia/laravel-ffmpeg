@@ -173,18 +173,12 @@ class HlsExportTest extends TestCase
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate, function ($media) {
-                $media->addLegacyFilter(function (VideoFilters $filters) {
-                    $filters->resize(new \FFMpeg\Coordinate\Dimension(640, 480));
-                });
+                $media->scale(640, 360);
             })
             ->addFormat($midBitrate, function ($media) {
-                $media->addLegacyFilter(function ($filters) {
-                    $filters->resize(new \FFMpeg\Coordinate\Dimension(1280, 960));
-                });
-
-                // $media->addWatermark(function (WatermarkFactory $factory) {
-                //     $factory->open("logo.png");
-                // });
+                $media->addWatermark(function (WatermarkFactory $factory) {
+                    $factory->open("logo.png");
+                })->resize(1280, 960);
             })
             ->addFormat($highBitrate)
             ->addFormat($superBitrate, function ($media) {
