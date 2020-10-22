@@ -6,6 +6,7 @@ use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Video\VideoFilters;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSPlaylistGenerator;
+use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HlsExportTest extends TestCase
@@ -161,6 +162,7 @@ class HlsExportTest extends TestCase
     public function it_can_export_to_hls_with_legacy_filters_for_each_format()
     {
         $this->fakeLocalVideoFile();
+        $this->addTestFile('logo.png');
 
         $lowBitrate   = $this->x264()->setKiloBitrate(250);
         $midBitrate   = $this->x264()->setKiloBitrate(500);
@@ -179,6 +181,10 @@ class HlsExportTest extends TestCase
                 $media->addLegacyFilter(function ($filters) {
                     $filters->resize(new \FFMpeg\Coordinate\Dimension(1280, 960));
                 });
+
+                // $media->addWatermark(function (WatermarkFactory $factory) {
+                //     $factory->open("logo.png");
+                // });
             })
             ->addFormat($highBitrate)
             ->addFormat($superBitrate, function ($media) {

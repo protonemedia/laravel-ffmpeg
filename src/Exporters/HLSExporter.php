@@ -10,6 +10,7 @@ use FFMpeg\Format\VideoInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Fluent;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
+use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HLSExporter extends MediaExporter
@@ -138,6 +139,13 @@ class HLSExporter extends MediaExporter
                 $this->driver->addFilterAsComplexFilter('[0]', "[v{$this->key}]", ...$arguments);
 
                 $this->called['called'] = true;
+            }
+
+            public function addWatermark(callable $withWatermarkFactory)
+            {
+                $withWatermarkFactory($watermarkFactory = new WatermarkFactory);
+
+                $this->addLegacyFilter($watermarkFactory->get());
             }
 
             public function scale($width, $height)
