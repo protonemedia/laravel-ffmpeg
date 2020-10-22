@@ -92,6 +92,11 @@ class MediaExporter
         );
     }
 
+    public function dd(string $path = null)
+    {
+        dd($this->getCommand($path));
+    }
+
     public function save(string $path = null)
     {
         $outputMedia = $path ? $this->getDisk()->makeMedia($path) : null;

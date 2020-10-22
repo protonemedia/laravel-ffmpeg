@@ -98,4 +98,25 @@ class WatermarkFactoryTest extends TestCase
 
         $this->assertStringContainsString("overlay=W-w+50:H-h+25", $this->getSecondCommand($factory));
     }
+
+    /** @test */
+    public function it_can_manipulate_the_watermark_image()
+    {
+        $factory = new WatermarkFactory;
+
+        $factory->open('logo.png')
+            ->width(100)
+            ->bottom(25)
+            ->left(25);
+
+        $command = $this->getSecondCommand($factory);
+
+        $this->assertStringContainsString(sys_get_temp_dir(), $command);
+
+        $path = $factory->getPath();
+
+        [$width] = getimagesize($path);
+
+        $this->assertEquals(100, $width);
+    }
 }

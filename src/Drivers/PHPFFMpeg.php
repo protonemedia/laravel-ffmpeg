@@ -4,11 +4,13 @@ namespace ProtoneMedia\LaravelFFMpeg\Drivers;
 
 use Closure;
 use Exception;
+use FFMpeg\Coordinate\Dimension;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\FFMpeg;
 use FFMpeg\FFProbe\DataMapping\Stream;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\FilterInterface;
+use FFMpeg\Filters\Video\ResizeFilter;
 use FFMpeg\Media\AbstractMediaType;
 use FFMpeg\Media\AdvancedMedia as BaseAdvancedMedia;
 use FFMpeg\Media\Concat;
@@ -285,15 +287,28 @@ class PHPFFMpeg
      */
     public function addWatermark(callable $withWatermarkFactory): self
     {
-        $watermarkFactory = new WatermarkFactory;
+        $withWatermarkFactory(
+            $watermarkFactory = new WatermarkFactory
+        );
 
-        $withWatermarkFactory($watermarkFactory);
+        return $this->addFilter($watermarkFactory->get());
+    }
 
-        $watermarkFilter = $watermarkFactory->get();
+    /**
+     * Shortcut for adding a Resize filter.
+     *
+     * @param int $width
+     * @param int $height
+     * @param string $mode
+     * @return self
+     */
+    public function resize($width, $height, $mode = ResizeFilter::RESIZEMODE_FIT): self
+    {
+        $dimension = new Dimension($width, $height);
 
-        $this->addFilter($watermarkFilter);
+        $filter = new ResizeFilter($dimension, $mode);
 
-        return $this;
+        return $this->addFilter($filter);
     }
 
     /**

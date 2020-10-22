@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Audio\SimpleFilter;
+use FFMpeg\Filters\Video\ResizeFilter;
 use FFMpeg\Filters\Video\VideoFilters;
 use FFMpeg\Filters\Video\WatermarkFilter;
 use FFMpeg\Format\AudioInterface;
@@ -34,7 +35,20 @@ class AddFilter extends TestCase
     }
 
     /** @test */
-    public function it_can_add_a_watermark_with_the_factory_helper()
+    public function it_can_resize_the_video_by_using_the_resize_method()
+    {
+        $this->fakeLocalVideoFile();
+
+        $media = (new MediaOpener)->open('video.mp4')->resize(640, 360);
+
+        $this->assertCount(1, $media->getFilters());
+        $this->assertInstanceOf(ResizeFilter::class, $filter = $media->getFilters()[0]);
+        $this->assertEquals(640, $filter->getDimension()->getWidth());
+        $this->assertEquals(360, $filter->getDimension()->getHeight());
+    }
+
+    /** @test */
+    public function it_can_add_a_watermark_with_the_factory_helper_and_manipulate_it()
     {
         $this->fakeLocalVideoFile();
         $this->addTestFile('logo.png');
@@ -44,7 +58,11 @@ class AddFilter extends TestCase
         $this->assertCount(0, $media->getFilters());
 
         $media->addWatermark(function (WatermarkFactory $watermark) {
-            $watermark->open('logo.png');
+            $watermark->open('logo.png')
+                ->greyscale()
+                ->width(100)
+                ->bottom()
+                ->left();
         });
 
         $this->assertCount(1, $media->getFilters());
