@@ -6,6 +6,7 @@ use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Video\VideoFilters;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSPlaylistGenerator;
+use ProtoneMedia\LaravelFFMpeg\Exporters\HLSVideoFilters;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
@@ -172,7 +173,7 @@ class HlsExportTest extends TestCase
         (new MediaOpener)
             ->open('video.mp4')
             ->exportForHLS()
-            ->addFormat($lowBitrate, function ($media) {
+            ->addFormat($lowBitrate, function (HLSVideoFilters $media) {
                 $media->scale(640, 360);
             })
             ->addFormat($midBitrate, function ($media) {

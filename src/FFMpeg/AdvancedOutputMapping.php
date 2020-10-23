@@ -6,7 +6,7 @@ use FFMpeg\Format\FormatInterface;
 use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Media\AdvancedMedia;
 use Illuminate\Support\Collection;
-use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
+use ProtoneMedia\LaravelFFMpeg\Exporters\HLSVideoFilters;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 
 class AdvancedOutputMapping
@@ -76,8 +76,10 @@ class AdvancedOutputMapping
 
     public function hasOut(string $out): bool
     {
-        return Collection::make($this->outs)->map(function ($out) {
-            return HLSExporter::beforeGlue($out);
-        })->contains(HLSExporter::beforeGlue($out));
+        return Collection::make($this->outs)
+            ->map(function ($out) {
+                return HLSVideoFilters::beforeGlue($out);
+            })
+            ->contains(HLSVideoFilters::beforeGlue($out));
     }
 }
