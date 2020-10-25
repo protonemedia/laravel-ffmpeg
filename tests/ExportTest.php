@@ -3,13 +3,13 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use FFMpeg\Coordinate\TimeCode;
-use FFMpeg\Exception\RuntimeException as ExceptionRuntimeException;
+use FFMpeg\Exception\RuntimeException ;
 use FFMpeg\Filters\Video\ClipFilter;
 use FFMpeg\Format\Audio\Mp3;
 use FFMpeg\Format\Video\WMV;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Facades\Storage;
-use ProtoneMedia\LaravelFFMpeg\Exporters\RuntimeException;
+use ProtoneMedia\LaravelFFMpeg\Exporters\EncodingException;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\ProgressListenerDecorator;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
@@ -71,18 +71,18 @@ class ExportTest extends TestCase
                 ->export()
                 ->inFormat(new X264('libfaac'))
                 ->save('new_video.mp4');
-        } catch (RuntimeException $exception) {
+        } catch (EncodingException $exception) {
             $this->assertNotEmpty($exception->getCommand());
             $this->assertNotEmpty($exception->getErrorOutput());
 
             $this->assertEquals('Encoding failed', $exception->getMessage());
-            $this->assertInstanceOf(ExceptionRuntimeException::class, $exception);
+            $this->assertInstanceOf(RuntimeException::class, $exception);
 
             //
 
             config(['laravel-ffmpeg.set_command_and_error_output_on_exception' => true]);
 
-            $exception = RuntimeException::decorate($exception->getPrevious());
+            $exception = EncodingException::decorate($exception);
             $this->assertStringContainsString('failed to execute command', $exception->getMessage());
 
             return;

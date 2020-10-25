@@ -2,7 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
-use FFMpeg\Exception\RuntimeException as BaseRuntimeException;
+use FFMpeg\Exception\RuntimeException;
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
@@ -145,8 +145,8 @@ class MediaExporter
             } else {
                 $this->driver->save($this->format, $outputMedia->getLocalPath());
             }
-        } catch (BaseRuntimeException $exception) {
-            throw RuntimeException::decorate($exception);
+        } catch (RuntimeException $exception) {
+            throw EncodingException::decorate($exception);
         }
 
         $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
@@ -167,8 +167,8 @@ class MediaExporter
 
         try {
             $this->driver->save();
-        } catch (BaseRuntimeException $exception) {
-            throw RuntimeException::decorate($exception);
+        } catch (RuntimeException $exception) {
+            throw EncodingException::decorate($exception);
         }
 
         if ($this->onProgressCallback) {

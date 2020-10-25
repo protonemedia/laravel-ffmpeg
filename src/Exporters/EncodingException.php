@@ -3,16 +3,16 @@
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Alchemy\BinaryDriver\Exception\ExecutionFailureException;
-use FFMpeg\Exception\RuntimeException as BaseException;
+use FFMpeg\Exception\RuntimeException;
 
-class RuntimeException extends BaseException
+class EncodingException extends RuntimeException
 {
-    public static function decorate(BaseException $runtimeException): RuntimeException
+    public static function decorate(RuntimeException $runtimeException): EncodingException
     {
         return tap(new static(
             $runtimeException->getMessage(),
             $runtimeException->getCode(),
-            $runtimeException
+            $runtimeException->getPrevious()
         ), function (self $exception) {
             if (config('laravel-ffmpeg.set_command_and_error_output_on_exception')) {
                 $exception->message = $exception->getAlchemyException()->getMessage();
@@ -32,6 +32,6 @@ class RuntimeException extends BaseException
 
     public function getAlchemyException(): ExecutionFailureException
     {
-        return $this->getPrevious()->getPrevious();
+        return $this->getPrevious();
     }
 }
