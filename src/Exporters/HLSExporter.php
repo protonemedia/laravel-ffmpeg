@@ -3,12 +3,10 @@
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Closure;
-use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Format\FormatInterface;
 use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Format\VideoInterface;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Fluent;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
@@ -117,54 +115,15 @@ class HLSExporter extends MediaExporter
         ]);
     }
 
-    private function applyFiltersCallback(callable $filtersCallback, $key): array
+    private function applyFiltersCallback(callable $filtersCallback, int $formatKey): array
     {
-        $called = new Fluent(['called' => false]);
+        $filtersCallback(
+            $hlsVideoFilters = new HLSVideoFilters($this->driver, $formatKey)
+        );
 
-        $mediaMock = new class($this->driver, $key, $called) {
-            private $driver;
-            private $key;
-            private $called;
+        $filterCount = $hlsVideoFilters->count();
 
-            public function __construct($driver, $key, $called)
-            {
-                $this->driver = $driver;
-                $this->key    = $key;
-                $this->called = $called;
-            }
-
-            public function addLegacyFilter(...$arguments)
-            {
-                $this->driver->addFilterAsComplexFilter('[0]', "[v{$this->key}]", ...$arguments);
-
-                $this->called['called'] = true;
-            }
-
-            public function scale($width, $height)
-            {
-                $this->addFilter("scale={$width}:{$height}");
-            }
-
-            public function addFilter(...$arguments)
-            {
-                $in  = '[0]';
-                $out = "[v{$this->key}]";
-
-                if (count($arguments) === 1 && !is_callable($arguments[0])) {
-                    $this->driver->addFilter($in, $arguments[0], $out);
-                } else {
-                    $this->driver->addFilter(function (ComplexFilters $filters) use ($arguments, $in,$out) {
-                        $arguments[0]($filters, $in, $out);
-                    });
-                }
-
-                $this->called['called'] = true;
-            }
-        };
-
-        $filtersCallback($mediaMock);
-
-        $outs = [$called['called'] ? "[v{$key}]" : '0:v'];
+        $outs = [$filterCount ? HLSVideoFilters::glue($formatKey, $filterCount) : '0:v'];
 
         if ($this->getAudioStream()) {
             $outs[] = '0:a';

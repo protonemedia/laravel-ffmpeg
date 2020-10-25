@@ -3,9 +3,11 @@
 namespace ProtoneMedia\LaravelFFMpeg\Filters;
 
 use FFMpeg\Filters\Video\WatermarkFilter;
+use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
+use Spatie\Image\Image;
 
 /**
  * Partly based on this PR:
@@ -13,6 +15,8 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
  */
 class WatermarkFactory
 {
+    use ForwardsCalls;
+
     /** position constants */
     const LEFT   = 'left';
     const RIGHT  = 'right';
@@ -37,6 +41,11 @@ class WatermarkFactory
     private $right;
     private $bottom;
     private $left;
+
+    /**
+     * @var \Spatie\Image\Image
+     */
+    private $image;
 
     /**
      * Array with the horizontal (x) and verical (y) alignment.
@@ -194,13 +203,33 @@ class WatermarkFactory
     }
 
     /**
+     * Returns the full path to the watermark file.
+     *
+     * @return string
+     */
+    public function getPath(): string
+    {
+        if (!$this->image) {
+            return $this->media->getLocalPath();
+        }
+
+        $path = Disk::makeTemporaryDisk()
+            ->makeMedia($this->media->getFilename())
+            ->getLocalPath();
+
+        $this->image->save($path);
+
+        return $path;
+    }
+
+    /**
      * Returns a new instance of the WatermarkFilter.
      *
      * @return \FFMpeg\Filters\Video\WatermarkFilter
      */
     public function get(): WatermarkFilter
     {
-        $path = $this->media->getLocalPath();
+        $path = $this->getPath();
 
         if (!empty($this->alignments)) {
             return new WatermarkFilter($path, $this->alignments);
@@ -217,5 +246,29 @@ class WatermarkFactory
         }
 
         return new WatermarkFilter($path, $coordinates);
+    }
+
+    /**
+     * Returns an instance of Image.
+     *
+     * @return \Spatie\Image\Image
+     */
+    private function image(): Image
+    {
+        if (!$this->image) {
+            $this->image = Image::load($this->media->getLocalPath());
+        }
+
+        return $this->image;
+    }
+
+    /**
+     * Forwards calls to the Image manipulation class.
+     */
+    public function __call($method, $arguments)
+    {
+        $this->forwardCallTo($this->image(), $method, $arguments);
+
+        return $this;
     }
 }

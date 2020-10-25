@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Exporters\HLSVideoFilters;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
 
 class LegacyFilterMapping
@@ -29,7 +30,7 @@ class LegacyFilterMapping
      */
     public function normalizeIn(): int
     {
-        return preg_replace("/[^0-9]/", "", $this->in);
+        return preg_replace("/[^0-9]/", "", HLSVideoFilters::beforeGlue($this->in));
     }
 
     /**

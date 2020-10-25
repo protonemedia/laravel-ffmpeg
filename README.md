@@ -14,6 +14,7 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. [La
 * Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
 * Built-in support for HLS.
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
+* Built-in support for watermarks (positioning and manipulation).
 * PHP 7.2 and higher.
 
 ## Video Course Builder
@@ -160,6 +161,17 @@ FFMpeg::fromDisk('videos')
     ->save('small_steve.mkv');
 ```
 
+#### Resizing
+
+Since resizing is a common operation, we've added a dedicated method for it:
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->export()
+    ->resize(640, 480);
+```
+The first argument is the width, and the second argument the height. The optional third argument is the mode. You can choose between `fit` (default), `inset`, `width` or `height`. You can find about these modes in the `FFMpeg\Filters\Video\ResizeFilter` class.
+
 ### Custom filters
 
 Sometimes you don't want to use the built-in filters. You can apply your own filter by providing a set of options. This can be an array or multiple strings as arguments:
@@ -233,6 +245,30 @@ $watermark->openUrl('https://videocoursebuilder.com/logo.png', [
     curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
 });
 ```
+
+#### Watermark manipulation
+
+This package can manipulate watermarks by using [Spatie's Image package](https://github.com/spatie/image). To get started, install the package with Composer:
+
+```bash
+composer require spatie/image
+```
+
+Now you can chain one more manipulation methods on the `WatermarkFactory` instance:
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->addWatermark(function(WatermarkFactory $watermark) {
+        $watermark->open('logo.png')
+            ->right(25)
+            ->bottom(25)
+            ->width(100)
+            ->height(100)
+            ->greyscale();
+    });
+```
+
+Check out [the documentation](https://spatie.be/docs/image/v1/introduction) for all available methods.
 
 ### Export without transcoding
 
