@@ -132,7 +132,7 @@ class HLSExporter extends MediaExporter
         return $outs;
     }
 
-    public function save(string $path = null): MediaOpener
+    private function prepareSave(string $path = null): Collection
     {
         $media = $this->getDisk()->makeMedia($path);
 
@@ -158,7 +158,19 @@ class HLSExporter extends MediaExporter
             $this->addFormatOutputMapping($format, $disk->makeMedia($formatPlaylistPath), $outs ?? ['0']);
 
             return $this->getDisk()->makeMedia($formatPlaylistPath);
-        })->pipe(function ($playlistMedia) use ($path) {
+        });
+    }
+
+    public function getCommand(string $path = null)
+    {
+        $this->prepareSave($path);
+
+        return parent::getCommand(null);
+    }
+
+    public function save(string $path = null): MediaOpener
+    {
+        return $this->prepareSave($path)->pipe(function ($playlistMedia) use ($path) {
             $result = parent::save();
 
             $playlist = $this->getPlaylistGenerator()->get(
