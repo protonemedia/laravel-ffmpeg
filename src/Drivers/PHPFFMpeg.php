@@ -2,15 +2,9 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Drivers;
 
-use Closure;
 use Exception;
-use FFMpeg\Coordinate\Dimension;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\FFMpeg;
-use FFMpeg\FFProbe\DataMapping\Stream;
-use FFMpeg\Filters\Audio\SimpleFilter;
-use FFMpeg\Filters\FilterInterface;
-use FFMpeg\Filters\Video\ResizeFilter;
 use FFMpeg\Media\AbstractMediaType;
 use FFMpeg\Media\AdvancedMedia as BaseAdvancedMedia;
 use FFMpeg\Media\Concat;
@@ -19,15 +13,11 @@ use FFMpeg\Media\Video;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
-use ProtoneMedia\LaravelFFMpeg\Exporters\MediaExporter;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\AdvancedMedia;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\AudioMedia;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
-use ProtoneMedia\LaravelFFMpeg\FFMpeg\LegacyFilterMapping;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\VideoMedia;
-use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
-use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 
 /**
  * @mixin \FFMpeg\Media\AbstractMediaType
@@ -35,6 +25,8 @@ use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 class PHPFFMpeg
 {
     use ForwardsCalls;
+    use InteractsWithFilters;
+    use InteractsWithMediaStreams;
 
     /**
      * @var \FFMpeg\FFMpeg
@@ -50,11 +42,6 @@ class PHPFFMpeg
      * @var boolean
      */
     private $forceAdvanced = false;
-
-    /**
-     * @var \Illuminate\Support\Collection
-     */
-    private $pendingComplexFilters;
 
     /**
      * @var \FFMpeg\Media\AbstractMediaType
@@ -169,167 +156,6 @@ class PHPFFMpeg
         $this->forceAdvanced = true;
 
         return $this->open($mediaCollection);
-    }
-
-    public function getStreams(): array
-    {
-        if (!$this->isAdvancedMedia()) {
-            return iterator_to_array($this->media->getStreams());
-        }
-
-        return $this->mediaCollection->map(function (Media $media) {
-            return $this->fresh()->open(MediaCollection::make([$media]))->getStreams();
-        })->collapse()->all();
-    }
-
-    public function getFilters(): array
-    {
-        return iterator_to_array($this->media->getFiltersCollection());
-    }
-
-    //
-
-    public function getDurationInSeconds(): int
-    {
-        return round($this->getDurationInMiliseconds() / 1000);
-    }
-
-    /**
-     * Gets the duration of the media from the first stream or from the format.
-     */
-    public function getDurationInMiliseconds(): int
-    {
-        $stream = Arr::first($this->getStreams());
-
-        if ($stream->has('duration')) {
-            return $stream->get('duration') * 1000;
-        }
-
-        $format = $this->getFormat();
-
-        if ($format->has('duration')) {
-            return $format->get('duration') * 1000;
-        }
-    }
-
-    /**
-     * Gets the first audio streams of the media.
-     */
-    public function getAudioStream(): ?Stream
-    {
-        return Arr::first($this->getStreams(), function (Stream $stream) {
-            return $stream->isAudio();
-        });
-    }
-
-    /**
-     * Gets the first video streams of the media.
-     */
-    public function getVideoStream(): ?Stream
-    {
-        return Arr::first($this->getStreams(), function (Stream $stream) {
-            return $stream->isVideo();
-        });
-    }
-
-    //
-
-    /**
-     * Helper method to provide multiple ways to add a filter to the underlying
-     * media object.
-     *
-     * @return self
-     */
-    public function addFilter(): self
-    {
-        $arguments = func_get_args();
-
-        // to support '[in]filter[out]' complex filters
-        if ($this->isAdvancedMedia() && count($arguments) === 3) {
-            $this->media->filters()->custom(...$arguments);
-
-            return $this;
-        }
-
-        // use a callback to add a filter
-        if ($arguments[0] instanceof Closure) {
-            call_user_func_array($arguments[0], [$this->media->filters()]);
-
-            return $this;
-        }
-
-        // use an object to add a filter
-        if ($arguments[0] instanceof FilterInterface) {
-            call_user_func_array([$this->media, 'addFilter'], $arguments);
-
-            return $this;
-        }
-
-        // use a single array with parameters to define a filter
-        if (is_array($arguments[0])) {
-            $this->media->addFilter(new SimpleFilter($arguments[0]));
-
-            return $this;
-        }
-
-        // use all function arguments as a filter
-        $this->media->addFilter(new SimpleFilter($arguments));
-
-        return $this;
-    }
-
-    /**
-     * Calls the callable with a WatermarkFactory instance and
-     * adds the freshly generated WatermarkFilter.
-     *
-     * @param callable $withWatermarkFactory
-     * @return self
-     */
-    public function addWatermark(callable $withWatermarkFactory): self
-    {
-        $withWatermarkFactory(
-            $watermarkFactory = new WatermarkFactory
-        );
-
-        return $this->addFilter($watermarkFactory->get());
-    }
-
-    /**
-     * Shortcut for adding a Resize filter.
-     *
-     * @param int $width
-     * @param int $height
-     * @param string $mode
-     * @return self
-     */
-    public function resize($width, $height, $mode = ResizeFilter::RESIZEMODE_FIT): self
-    {
-        $dimension = new Dimension($width, $height);
-
-        $filter = new ResizeFilter($dimension, $mode);
-
-        return $this->addFilter($filter);
-    }
-
-    /**
-     * Maps the arguments into a 'LegacyFilterMapping' instance and
-     * pushed it to the 'pendingComplexFilters' collection. These
-     * filters will be applied later on by the MediaExporter.
-     */
-    public function addFilterAsComplexFilter($in, $out, ...$arguments): self
-    {
-        $this->pendingComplexFilters->push(new LegacyFilterMapping(
-            $in,
-            $out,
-            ...$arguments
-        ));
-
-        return $this;
-    }
-
-    public function getPendingComplexFilters(): Collection
-    {
-        return $this->pendingComplexFilters;
     }
 
     /**
