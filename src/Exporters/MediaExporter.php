@@ -84,7 +84,7 @@ class MediaExporter
 
     public function getCommand(string $path = null)
     {
-        $media = $this->prepareSave($path);
+        $media = $this->prepareSaving($path);
 
         return $this->driver->getFinalCommand($this->format, optional($media)->getLocalPath());
     }
@@ -94,7 +94,7 @@ class MediaExporter
         dd($this->getCommand($path));
     }
 
-    private function prepareSave(string $path = null): ?Media
+    private function prepareSaving(string $path = null): ?Media
     {
         $outputMedia = $path ? $this->getDisk()->makeMedia($path) : null;
 
@@ -123,7 +123,7 @@ class MediaExporter
 
     public function save(string $path = null)
     {
-        $outputMedia = $this->prepareSave($path);
+        $outputMedia = $this->prepareSaving($path);
 
         if ($this->maps->isNotEmpty()) {
             return $this->saveWithMappings();
