@@ -2,11 +2,13 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
+use FFMpeg\Exception\RuntimeException;
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 /**
@@ -82,14 +84,9 @@ class MediaExporter
 
     public function getCommand(string $path = null)
     {
-        $this->driver->getPendingComplexFilters()->each->apply($this->driver, $this->maps);
+        $media = $this->prepareSaving($path);
 
-        $this->maps->each->apply($this->driver->get());
-
-        return $this->driver->getFinalCommand(
-            $this->format,
-            $path ? $this->getDisk()->makeMedia($path)->getLocalPath() : null
-        );
+        return $this->driver->getFinalCommand($this->format, optional($media)->getLocalPath());
     }
 
     public function dd(string $path = null)
@@ -97,7 +94,7 @@ class MediaExporter
         dd($this->getCommand($path));
     }
 
-    public function save(string $path = null)
+    private function prepareSaving(string $path = null): ?Media
     {
         $outputMedia = $path ? $this->getDisk()->makeMedia($path) : null;
 
@@ -106,7 +103,11 @@ class MediaExporter
         }
 
         if ($this->maps->isNotEmpty()) {
-            return $this->saveWithMappings();
+            $this->driver->getPendingComplexFilters()->each->apply($this->driver, $this->maps);
+
+            $this->maps->map->apply($this->driver->get());
+
+            return $outputMedia;
         }
 
         if ($this->format && $this->onProgressCallback) {
@@ -117,20 +118,35 @@ class MediaExporter
             $this->addTimelapseParametersToFormat();
         }
 
-        if ($this->driver->isConcat() && $outputMedia) {
-            $this->driver->saveFromSameCodecs($outputMedia->getLocalPath());
-        } elseif ($this->driver->isFrame()) {
-            $data = $this->driver->save(
-                optional($outputMedia)->getLocalPath(),
-                $this->getAccuracy(),
-                $this->returnFrameContents
-            );
+        return $outputMedia;
+    }
 
-            if ($this->returnFrameContents) {
-                return $data;
+    public function save(string $path = null)
+    {
+        $outputMedia = $this->prepareSaving($path);
+
+        if ($this->maps->isNotEmpty()) {
+            return $this->saveWithMappings();
+        }
+
+        try {
+            if ($this->driver->isConcat() && $outputMedia) {
+                $this->driver->saveFromSameCodecs($outputMedia->getLocalPath());
+            } elseif ($this->driver->isFrame()) {
+                $data = $this->driver->save(
+                    optional($outputMedia)->getLocalPath(),
+                    $this->getAccuracy(),
+                    $this->returnFrameContents
+                );
+
+                if ($this->returnFrameContents) {
+                    return $data;
+                }
+            } else {
+                $this->driver->save($this->format, $outputMedia->getLocalPath());
             }
-        } else {
-            $this->driver->save($this->format, $outputMedia->getLocalPath());
+        } catch (RuntimeException $exception) {
+            throw EncodingException::decorate($exception);
         }
 
         $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
@@ -145,15 +161,15 @@ class MediaExporter
 
     private function saveWithMappings(): MediaOpener
     {
-        $this->driver->getPendingComplexFilters()->each->apply($this->driver, $this->maps);
-
-        $this->maps->map->apply($this->driver->get());
-
         if ($this->onProgressCallback) {
             $this->applyProgressListenerToFormat($this->maps->last()->getFormat());
         }
 
-        $this->driver->save();
+        try {
+            $this->driver->save();
+        } catch (RuntimeException $exception) {
+            throw EncodingException::decorate($exception);
+        }
 
         if ($this->onProgressCallback) {
             call_user_func($this->onProgressCallback, 100);

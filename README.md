@@ -114,6 +114,24 @@ FFMpeg::openUrl('https://videocoursebuilder.com/lesson-2.mp4', [
 ]);
 ```
 
+### Handling exceptions
+
+When the encoding fails, a `ProtoneMedia\LaravelFFMpeg\Exporters\EncodingException` shall be thrown, which extends the underlying `FFMpeg\Exception\RuntimeException` class. This class has two methods that can help you identify the problem. Using the `getCommand` method, you can get the executed command with all parameters. The `getErrorOutput` method gives you a full output log.
+
+For legacy reasons, the message of the exception is always *Encoding failed*. You can replace this message with a more informative message by updating the `set_command_and_error_output_on_exception` configuration key to `true`.
+
+```php
+try {
+    FFMpeg::open('yesterday.mp3')
+        ->export()
+        ->inFormat(new Aac)
+        ->save('yesterday.aac');
+} catch (EncodingException $exception) {
+    $command = $exception->getCommand();
+    $errorLog = $exception->getErrorOutput();
+}
+```
+
 ### Filters
 
 You can add filters through a ```Closure``` or by using PHP-FFMpeg's Filter objects:
