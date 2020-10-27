@@ -7,6 +7,8 @@ use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\NullFormat;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
@@ -86,7 +88,10 @@ class MediaExporter
     {
         $media = $this->prepareSaving($path);
 
-        return $this->driver->getFinalCommand($this->format, optional($media)->getLocalPath());
+        return $this->driver->getFinalCommand(
+            $this->format ?: new NullFormat,
+            optional($media)->getLocalPath() ?: '/dev/null'
+        );
     }
 
     public function dd(string $path = null)
@@ -143,20 +148,35 @@ class MediaExporter
                     return $data;
                 }
             } else {
-                $this->driver->save($this->format, $outputMedia->getLocalPath());
+                $this->driver->save(
+                    $this->format ?: new NullFormat,
+                    optional($outputMedia)->getLocalPath() ?: '/dev/null'
+                );
             }
         } catch (RuntimeException $exception) {
             throw EncodingException::decorate($exception);
         }
 
-        $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
-        $outputMedia->setVisibility($this->visibility);
+        if ($outputMedia) {
+            $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
+            $outputMedia->setVisibility($this->visibility);
+        }
 
         if ($this->onProgressCallback) {
             call_user_func($this->onProgressCallback, 100, 0, 0);
         }
 
         return $this->getMediaOpener();
+    }
+
+    public function getResponse(): array
+    {
+        $listener = new StdListener;
+
+        $this->getFFMpegDriver()->listen($listener);
+        $this->save();
+
+        return $listener->get();
     }
 
     private function saveWithMappings(): MediaOpener
