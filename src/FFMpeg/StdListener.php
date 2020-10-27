@@ -3,10 +3,13 @@
 namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 
 use Alchemy\BinaryDriver\Listeners\ListenerInterface;
+use Evenement\EventEmitterTrait;
 use Symfony\Component\Process\Process;
 
 class StdListener implements ListenerInterface
 {
+    use EventEmitterTrait;
+
     private $data = [
         Process::ERR => [],
         Process::OUT => [],
@@ -25,29 +28,5 @@ class StdListener implements ListenerInterface
     public function forwardedEvents()
     {
         return [];
-    }
-
-    public function on($event, callable $listener)
-    {
-    }
-
-    public function once($event, callable $listener)
-    {
-    }
-
-    public function removeListener($event, callable $listener)
-    {
-    }
-
-    public function removeAllListeners($event = null)
-    {
-    }
-
-    public function listeners($event = null)
-    {
-    }
-
-    public function emit($event, array $arguments = [])
-    {
     }
 }
