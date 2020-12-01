@@ -17,10 +17,9 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. [La
 * Built-in support for watermarks (positioning and manipulation).
 * PHP 7.2 and higher.
 
-## Video Course Builder
-We're developing a package/app/service to set up your course platform quickly. We have one straightforward question, however. Which solution and pricing would you prefer? Vote at [videocoursebuilder.com](https://videocoursebuilder.com) and read all about the features!
+## Support
 
-Are there other features you want to see? Do you have ideas about pricing models? Or do you have other suggestions? Let me know [right here on GitHub](https://github.com/pascalbaljetmedia/laravel-ffmpeg/issues/187) or reach out [on Twitter](https://twitter.com/pascalbaljet).
+We proudly support the community by developing Laravel packages and giving them away for free. Keeping track of issues and pull requests takes time, but we're happy to help! If this package saves you time or if you're relying on it professionally, please consider [supporting the maintenance and development](https://github.com/sponsors/pascalbaljet).
 
 ## Installation
 
@@ -672,7 +671,9 @@ Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
 * [`Laravel Analytics Event Tracking`](https://github.com/protonemedia/laravel-analytics-event-tracking): Laravel package to easily send events to Google Analytics.
 * [`Laravel Blade On Demand`](https://github.com/protonemedia/laravel-blade-on-demand): Laravel package to compile Blade templates in memory.
 * [`Laravel Cross Eloquent Search`](https://github.com/protonemedia/laravel-cross-eloquent-search): Laravel package to search through multiple Eloquent models.
+* [`Laravel Eloquent Scope as Select`](https://github.com/protonemedia/laravel-eloquent-scope-as-select): Stop duplicating your Eloquent query scopes and constraints in PHP. This package lets you re-use your query scopes and constraints by adding them as a subquery.
 * [`Laravel Form Components`](https://github.com/protonemedia/laravel-form-components): Blade components to rapidly build forms with Tailwind CSS Custom Forms and Bootstrap 4. Supports validation, model binding, default values, translations, includes default vendor styling and fully customizable!
+* [`Laravel Mixins`](https://github.com/protonemedia/laravel-mixins): A collection of Laravel goodies.
 * [`Laravel Paddle`](https://github.com/protonemedia/laravel-paddle): Paddle.com API integration for Laravel with support for webhooks/events.
 * [`Laravel Verify New Email`](https://github.com/protonemedia/laravel-verify-new-email): This package adds support for verifying new email addresses: when a user updates its email address, it won't replace the old one until the new one is verified.
 * [`Laravel WebDAV`](https://github.com/protonemedia/laravel-webdav): WebDAV driver for Laravel's Filesystem.
