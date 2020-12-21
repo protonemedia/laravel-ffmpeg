@@ -115,56 +115,49 @@ class HlsExportTest extends TestCase
 
         $lowBitrate = $this->x264()->setKiloBitrate(250);
 
+        $keys = [];
+
         FFMpeg::open('video.mp4')
             ->exportForHLS()
             ->withRotatingEncryptionKey()
             ->setKeyFrameInterval(1)
             ->setSegmentLength(1)
             ->addFormat($lowBitrate)
-            ->onEncryptionKey(function () {
-                // dd(func_get_args());
+            ->onEncryptionKey(function ($filename, $contents) use (&$keys) {
+                $keys[$filename] = $contents;
             })
             ->save('adaptive.m3u8');
+
+        $this->assertCount(6, $keys);
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
 
-        $playlist = Storage::disk('local')->get('adaptive.m3u8');
-
-        $pattern = '/' . implode("\n", [
-            '#EXTM3U',
-            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
-            'adaptive_0_250.m3u8',
-            '#EXT-X-ENDLIST',
-        ]) . '/';
-
-        $this->assertEquals(1, preg_match($pattern, $playlist));
-
         $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
 
-        $pattern = '/' . implode("\n", [
+        $pattern = "/" . implode("\n", [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
             '#EXT-X-TARGETDURATION:1',
             '#EXT-X-MEDIA-SEQUENCE:0',
             '#EXT-X-PLAYLIST-TYPE:VOD',
             '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
-            "#EXTINF:1.000000,",
-            "adaptive_0_250_00000.ts",
+            '#EXTINF:1.000000,',
+            'adaptive_0_250_00000.ts',
             '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
-            "#EXTINF:1.000000,",
-            "adaptive_0_250_00001.ts",
+            '#EXTINF:1.000000,',
+            'adaptive_0_250_00001.ts',
             '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
-            "#EXTINF:1.000000,",
-            "adaptive_0_250_00002.ts",
+            '#EXTINF:1.000000,',
+            'adaptive_0_250_00002.ts',
             '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
-            "#EXTINF:1.000000,",
-            "adaptive_0_250_00003.ts",
+            '#EXTINF:1.000000,',
+            'adaptive_0_250_00003.ts',
             '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
-            "#EXTINF:0.720000,",
-            "adaptive_0_250_00004.ts",
+            '#EXTINF:0.720000,',
+            'adaptive_0_250_00004.ts',
             '#EXT-X-ENDLIST',
-        ]) . '/';
+        ]) . "/";
 
         $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist));
     }

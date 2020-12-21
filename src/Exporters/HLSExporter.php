@@ -7,13 +7,13 @@ use FFMpeg\Format\FormatInterface;
 use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Format\VideoInterface;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
-use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HLSExporter extends MediaExporter
 {
+    use EncryptsHLSSegments;
+
     /**
      * @var integer
      */
@@ -35,24 +35,9 @@ class HLSExporter extends MediaExporter
     private $playlistGenerator;
 
     /**
-     * The encryption key.
-     *
-     * @var string
-     */
-    private $encryptionKey;
-
-    /**
      * @var \Closure
      */
     private $segmentFilenameGenerator = null;
-
-    private $newEncryptionKeyCallback = null;
-
-    private $encryptionKeyDisk = null;
-    private $encryptionKeyName = null;
-    private $encryptionIV      = null;
-
-    private $rotatingEncryptiongKey = false;
 
     public function setSegmentLength(int $length): self
     {
@@ -87,51 +72,12 @@ class HLSExporter extends MediaExporter
         return $this;
     }
 
-    public function onEncryptionKey(Closure $callback): self
-    {
-        $this->newEncryptionKeyCallback = $callback;
-
-        return $this;
-    }
-
     private function getSegmentFilenameGenerator(): callable
     {
         return $this->segmentFilenameGenerator ?: function ($name, $format, $key, $segments, $playlist) {
             $segments("{$name}_{$key}_{$format->getKiloBitrate()}_%05d.ts");
             $playlist("{$name}_{$key}_{$format->getKiloBitrate()}.m3u8");
         };
-    }
-
-    /**
-     * Creates a new encryption key.
-     *
-     * @return string
-     */
-    public static function generateEncryptionKey(): string
-    {
-        return random_bytes(16);
-    }
-
-    /**
-     * Sets the encryption key with the given value or generates a new one.
-     *
-     * @param string $key
-     * @return self
-     */
-    public function withEncryptionKey($key = null): self
-    {
-        $this->encryptionKey = $key ?: static::generateEncryptionKey();
-
-        return $this;
-    }
-
-    public function withRotatingEncryptionKey(): self
-    {
-        $this->withEncryptionKey();
-
-        $this->rotatingEncryptiongKey = true;
-
-        return $this;
     }
 
     private function getSegmentPatternAndFormatPlaylistPath(string $baseName, VideoInterface $format, int $key): array
@@ -155,41 +101,6 @@ class HLSExporter extends MediaExporter
         return [$segmentsPattern, $formatPlaylistPath];
     }
 
-    private function rotateEncryptionKey()
-    {
-        $this->withEncryptionKey();
-
-        if (!$this->encryptionKeyName) {
-            $this->encryptionKeyName = Str::random(8);
-        }
-
-        if (!$this->encryptionIV) {
-            $this->encryptionIV = bin2hex(static::generateEncryptionKey());
-        }
-
-        if (!$this->encryptionKeyDisk) {
-            $this->encryptionKeyDisk = Disk::makeTemporaryDisk();
-        }
-
-        $name = $this->encryptionKeyName . "_" . Str::random(8);
-
-        file_put_contents(
-            $keyPath = $this->encryptionKeyDisk->makeMedia("{$name}.key")->getLocalPath(),
-            $this->encryptionKey
-        );
-
-        file_put_contents(
-            $keyInfoPath = $this->encryptionKeyDisk->makeMedia("{$this->encryptionKeyName}.keyinfo")->getLocalPath(),
-            $keyPath . PHP_EOL . $keyPath . PHP_EOL . $this->encryptionIV
-        );
-
-        if ($this->newEncryptionKeyCallback) {
-            call_user_func($this->newEncryptionKeyCallback, "{$name}.key", $this->encryptionKey);
-        }
-
-        return $keyInfoPath;
-    }
-
     private function addHLSParametersToFormat(DefaultVideo $format, string $segmentsPattern, Disk $disk)
     {
         $hlsParameters = [
@@ -205,30 +116,11 @@ class HLSExporter extends MediaExporter
             $disk->makeMedia($segmentsPattern)->getLocalPath(),
         ];
 
-        if ($this->encryptionKey) {
-            $hlsParameters[] = '-hls_key_info_file';
-            $hlsParameters[] = $this->rotateEncryptionKey();
-
-            if ($this->rotatingEncryptiongKey) {
-                $hlsParameters[] = '-hls_flags';
-                $hlsParameters[] = 'periodic_rekey';
-            }
-        }
-
         $format->setAdditionalParameters(array_merge(
             $format->getAdditionalParameters() ?: [],
-            $hlsParameters
+            $hlsParameters,
+            $this->getEncrypedHLSParameters()
         ));
-
-        if ($this->rotatingEncryptiongKey) {
-            $this->addListener(new StdListener)->onEvent('listen', function ($line) {
-                if (!(Str::contains($line, "Opening 'crypto:/") && Str::contains($line, ".ts' for writing"))) {
-                    return;
-                }
-
-                $this->rotateEncryptionKey();
-            });
-        }
     }
 
     private function applyFiltersCallback(callable $filtersCallback, int $formatKey): array
@@ -266,6 +158,8 @@ class HLSExporter extends MediaExporter
             );
 
             $this->addHLSParametersToFormat($format, $segmentsPattern, $disk);
+
+            $this->addRotatingKeyListener();
 
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);
