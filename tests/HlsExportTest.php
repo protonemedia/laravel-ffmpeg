@@ -138,7 +138,7 @@ class HlsExportTest extends TestCase
         $pattern = "/" . implode("\n", [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
-            '#EXT-X-TARGETDURATION:1',
+            '#EXT-X-TARGETDURATION:[0-9]+',
             '#EXT-X-MEDIA-SEQUENCE:0',
             '#EXT-X-PLAYLIST-TYPE:VOD',
             '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
@@ -191,7 +191,7 @@ class HlsExportTest extends TestCase
         $pattern = "/" . implode("\n", [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
-            '#EXT-X-TARGETDURATION:1',
+            '#EXT-X-TARGETDURATION:[0-9]+',
             '#EXT-X-MEDIA-SEQUENCE:0',
             '#EXT-X-PLAYLIST-TYPE:VOD',
             '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
@@ -210,7 +210,7 @@ class HlsExportTest extends TestCase
             '#EXT-X-ENDLIST',
         ]) . "/";
 
-        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist));
+        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist), "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist);
     }
 
     /** @test */
