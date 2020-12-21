@@ -12,7 +12,7 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. [La
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
 * Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
-* Built-in support for HLS
+* Built-in support for HLS.
 * Built-in support for encrypted HLS (AES-128) with rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
@@ -592,7 +592,7 @@ FFMpeg::fromDisk('videos')
 
 ### Encrypted HLS
 
-Fixed encryption key:
+As of version 7.5, you can encrypt each HLS segment using AES-128 encryption. To do this, simple call the `withEncryptionKey` method on the HLS exporter with a key. We provide a `generateEncryptionKey` helper method on the `HLSExporter` class to generate a key. Make sure you store the key properly, as the exported result is worthless without the key.
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
@@ -608,7 +608,7 @@ FFMpeg::open('steve_howe.mp4')
     ->save('adaptive_steve.m3u8');
 ```
 
-Rotating encryption key:
+To secure your HLS export even more, you can rotate the key on each segment of the export. This will generate multiple keys that you'll need to store. Use the `withRotatingEncryptionKey` method to enable this feature and provide a callback that implements to storage of the keys.
 
 ```php
 FFMpeg::open('steve_howe.mp4')
@@ -632,6 +632,14 @@ FFMpeg::open('steve_howe.mp4')
     ->addFormat($midBitrate)
     ->addFormat($highBitrate)
     ->save('adaptive_steve.m3u8');
+```
+
+The `withRotatingEncryptionKey` method has an optional second argument to set the number of segments that use the same key. This defaults to `1`.
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->withRotatingEncryptionKey($callable, 10);
 ```
 
 ## Advanced
