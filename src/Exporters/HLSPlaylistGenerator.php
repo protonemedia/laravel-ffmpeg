@@ -51,6 +51,10 @@ class HLSPlaylistGenerator implements PlaylistGenerator
             return null;
         }
 
+        if (!is_numeric($frameRate)) {
+            return null;
+        }
+
         return $frameRate ? number_format($frameRate, 3, '.', '') : null;
     }
 
