@@ -589,6 +589,48 @@ FFMpeg::fromDisk('videos')
     });
 ```
 
+### Encrypted HLS
+
+Fixed encryption key:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
+
+$encryptionKey = HLSExporter::generateEncryptionKey();
+
+FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->withEncryptionKey($encryptionKey)
+    ->addFormat($lowBitrate)
+    ->addFormat($midBitrate)
+    ->addFormat($highBitrate)
+    ->save('adaptive_steve.m3u8');
+```
+
+Rotating encryption key:
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->withRotatingEncryptionKey(function ($filename, $contents) {
+        // use this callback to store the encryption keys
+
+        Storage::disk('secrets')->put($filename, $contents);
+
+        // or...
+
+        DB::table('hls_secrets')->insert([
+            'video_id' => 1,
+            'filename' => $filename,
+            'contents' => $contents,
+        ]);
+    })
+    ->addFormat($lowBitrate)
+    ->addFormat($midBitrate)
+    ->addFormat($highBitrate)
+    ->save('adaptive_steve.m3u8');
+```
+
 ## Advanced
 
 The Media object you get when you 'open' a file, actually holds the Media object that belongs to the [underlying driver](https://github.com/PHP-FFMpeg/PHP-FFMpeg). It handles dynamic method calls as you can see [here](https://github.com/pascalbaljetmedia/laravel-ffmpeg/blob/master/src/Media.php#L114-L117). This way all methods of the underlying driver are still available to you.

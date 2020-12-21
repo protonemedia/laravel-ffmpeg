@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Video\VideoFilters;
 use Illuminate\Support\Facades\Storage;
+use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSPlaylistGenerator;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSVideoFilters;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
@@ -73,7 +74,7 @@ class HlsExportTest extends TestCase
 
         FFMpeg::open('video.mp4')
             ->exportForHLS()
-            ->withEncryptionKey()
+            ->withEncryptionKey(HLSExporter::generateEncryptionKey())
             ->addFormat($lowBitrate)
             ->save('adaptive.m3u8');
 

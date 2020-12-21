@@ -86,7 +86,7 @@ trait EncryptsHLSSegments
      * @param string $key
      * @return self
      */
-    public function withEncryptionKey($key = null): self
+    public function withEncryptionKey($key): self
     {
         $this->encryptionSecretsDisk = Disk::makeTemporaryDisk();
         $this->encryptionIV          = bin2hex(static::generateEncryptionKey());
@@ -111,7 +111,7 @@ trait EncryptsHLSSegments
         $this->onNewEncryptionKey   = $callback;
         $this->segmentsPerKey       = $segmentsPerKey;
 
-        return $this->withEncryptionKey();
+        return $this->withEncryptionKey(static::generateEncryptionKey());
     }
 
     /**
