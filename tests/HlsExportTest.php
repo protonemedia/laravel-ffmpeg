@@ -119,11 +119,10 @@ class HlsExportTest extends TestCase
 
         FFMpeg::open('video.mp4')
             ->exportForHLS()
-            ->withRotatingEncryptionKey()
             ->setKeyFrameInterval(1)
             ->setSegmentLength(1)
             ->addFormat($lowBitrate)
-            ->onNewEncryptionKey(function ($filename, $contents) use (&$keys) {
+            ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys) {
                 $keys[$filename] = $contents;
             })
             ->save('adaptive.m3u8');
@@ -151,6 +150,57 @@ class HlsExportTest extends TestCase
             '#EXTINF:1.000000,',
             'adaptive_0_250_00002.ts',
             '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            '#EXTINF:1.000000,',
+            'adaptive_0_250_00003.ts',
+            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            '#EXTINF:0.720000,',
+            'adaptive_0_250_00004.ts',
+            '#EXT-X-ENDLIST',
+        ]) . "/";
+
+        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist));
+    }
+
+    /** @test */
+    public function it_can_set_the_numbers_of_segments_per_key()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate = $this->x264()->setKiloBitrate(250);
+
+        $keys = [];
+
+        FFMpeg::open('video.mp4')
+            ->exportForHLS()
+            ->setKeyFrameInterval(1)
+            ->setSegmentLength(1)
+            ->addFormat($lowBitrate)
+            ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys) {
+                $keys[$filename] = $contents;
+            }, 2)
+            ->save('adaptive.m3u8');
+
+        $this->assertCount(3, $keys);
+
+        $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
+
+        $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
+
+        $pattern = "/" . implode("\n", [
+            '#EXTM3U',
+            '#EXT-X-VERSION:3',
+            '#EXT-X-TARGETDURATION:1',
+            '#EXT-X-MEDIA-SEQUENCE:0',
+            '#EXT-X-PLAYLIST-TYPE:VOD',
+            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            '#EXTINF:1.000000,',
+            'adaptive_0_250_00000.ts',
+            '#EXTINF:1.000000,',
+            'adaptive_0_250_00001.ts',
+            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            '#EXTINF:1.000000,',
+            'adaptive_0_250_00002.ts',
             '#EXTINF:1.000000,',
             'adaptive_0_250_00003.ts',
             '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',

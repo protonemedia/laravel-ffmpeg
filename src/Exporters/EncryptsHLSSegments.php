@@ -46,6 +46,20 @@ trait EncryptsHLSSegments
     private $rotateEncryptiongKey = false;
 
     /**
+     * Number of opened segments.
+     *
+     * @var integer
+     */
+    private $segmentsOpened = 0;
+
+    /**
+     * Number of segments that can use the same key.
+     *
+     * @var integer
+     */
+    private $segmentsPerKey = 1;
+
+    /**
      * Creates a new encryption key.
      *
      * @return string
@@ -83,28 +97,21 @@ trait EncryptsHLSSegments
     }
 
     /**
-     * Enables encryption with rotating keys.
-     *
-     * @return self
-     */
-    public function withRotatingEncryptionKey(): self
-    {
-        $this->rotateEncryptiongKey = true;
-
-        return $this->withEncryptionKey();
-    }
-
-    /**
-     * A callable for each key that is generated.
+     * Enables encryption with rotating keys. The callable will receive every new
+     * key and the integer sets the number of segments that can
+     * use the same key.
      *
      * @param Closure $callback
+     * @param int $segmentsPerKey
      * @return self
      */
-    public function onNewEncryptionKey(Closure $callback): self
+    public function withRotatingEncryptionKey(Closure $callback, int $segmentsPerKey = 1): self
     {
-        $this->onNewEncryptionKey = $callback;
+        $this->rotateEncryptiongKey = true;
+        $this->onNewEncryptionKey   = $callback;
+        $this->segmentsPerKey       = $segmentsPerKey;
 
-        return $this;
+        return $this->withEncryptionKey();
     }
 
     /**
@@ -180,7 +187,13 @@ trait EncryptsHLSSegments
             $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:/")
                 && Str::contains($line, ".ts' for writing");
 
-            if ($opensEncryptedSegment) {
+            if (!$opensEncryptedSegment) {
+                return;
+            }
+
+            $this->segmentsOpened++;
+
+            if ($this->segmentsOpened % $this->segmentsPerKey === 0) {
                 $this->rotateEncryptionKey();
             }
         });
