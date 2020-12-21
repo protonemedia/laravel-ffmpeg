@@ -9,8 +9,6 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 
 trait EncryptsHLSSegments
 {
-    const HLS_KEY_INFO_FILENAME = 'hls_encryption.keyinfo';
-
     /**
      * The encryption key.
      *
@@ -125,9 +123,12 @@ trait EncryptsHLSSegments
         $keyPath = $this->encryptionSecretsDisk->makeMedia($keyFilename)->getLocalPath();
 
         // generate an info file with a reference to the encryption key and IV
-        $this->encryptionSecretsDisk->put(static::HLS_KEY_INFO_FILENAME, implode(PHP_EOL, [
-            $keyPath, $keyPath, $this->encryptionIV,
-        ]));
+        $this->encryptionSecretsDisk->put(
+            HLSExporter::HLS_KEY_INFO_FILENAME,
+            implode(PHP_EOL, [
+                $keyPath, $keyPath, $this->encryptionIV,
+            ])
+        );
 
         // call the callback
         if ($this->onNewEncryptionKey) {
@@ -136,7 +137,7 @@ trait EncryptsHLSSegments
 
         // return the absolute path to the info file
         return $this->encryptionSecretsDisk
-            ->makeMedia(static::HLS_KEY_INFO_FILENAME)
+            ->makeMedia(HLSExporter::HLS_KEY_INFO_FILENAME)
             ->getLocalPath();
     }
 

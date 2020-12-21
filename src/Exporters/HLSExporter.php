@@ -14,6 +14,8 @@ class HLSExporter extends MediaExporter
 {
     use EncryptsHLSSegments;
 
+    const HLS_KEY_INFO_FILENAME = 'hls_encryption.keyinfo';
+
     /**
      * @var integer
      */
