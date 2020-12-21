@@ -20,4 +20,9 @@ trait HasInputOptions
 
         return $this;
     }
+
+    public function getCompiledInputOptions(): array
+    {
+        return $this->getInputOptions();
+    }
 }

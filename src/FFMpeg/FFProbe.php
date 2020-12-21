@@ -54,7 +54,7 @@ class FFProbe extends FFMpegFFProbe
             return false;
         }
 
-        if (empty($this->media->getInputOptions())) {
+        if (empty($this->media->getCompiledInputOptions())) {
             return false;
         }
 
@@ -90,7 +90,7 @@ class FFProbe extends FFMpegFFProbe
     private function probeStreams($pathfile, $command, $type, $allowJson = true)
     {
         $commands = array_merge(
-            $this->media->getInputOptions(),
+            $this->media->getCompiledInputOptions(),
             [$pathfile, $command]
         );
 

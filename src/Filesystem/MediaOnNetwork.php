@@ -50,9 +50,9 @@ class MediaOnNetwork
         return pathinfo($this->getPath())['basename'];
     }
 
-    public function getInputOptions(): array
+    public function getCompiledInputOptions(): array
     {
-        return array_merge($this->inputOptions, $this->getCompiledHeaders());
+        return array_merge($this->getInputOptions(), $this->getCompiledHeaders());
     }
 
     public function getCompiledHeaders(): array
