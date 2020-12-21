@@ -142,8 +142,6 @@ class HlsExportTest extends TestCase
 
         $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
 
-        dd($encryptedPlaylist);
-
         $pattern = '/' . implode("\n", [
             '#EXTM3U',
             '#EXT-X-VERSION:3',

@@ -32,7 +32,7 @@ class StdListener extends EventEmitter implements ListenerInterface
         foreach ($lines as $line) {
             $line = $this->data[$type][] = trim($line);
 
-            $this->emit($this->eventName, [$line]);
+            $this->emit($this->eventName, [$line, $type]);
         }
     }
 
