@@ -62,7 +62,7 @@ class HlsExportTest extends TestCase
             '#EXT-X-ENDLIST',
         ]) . '/';
 
-        $this->assertEquals(1, preg_match($pattern, $playlist));
+        $this->assertEquals(1, preg_match($pattern, $playlist), "Playlist mismatch:" . PHP_EOL . $playlist);
     }
 
     /** @test */
@@ -106,7 +106,7 @@ class HlsExportTest extends TestCase
             '#EXT-X-ENDLIST',
         ]) . '/';
 
-        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist));
+        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist), "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist);
     }
 
     /** @test */
@@ -159,7 +159,7 @@ class HlsExportTest extends TestCase
             '#EXT-X-ENDLIST',
         ]) . "/";
 
-        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist));
+        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist), "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist);
     }
 
     /** @test */
