@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Closure;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
@@ -182,6 +183,28 @@ trait EncryptsHLSSegments
             if ($opensEncryptedSegment) {
                 $this->rotateEncryptionKey();
             }
+        });
+    }
+
+    private function replaceAbsolutePathsHLSEncryption(Collection $playlistMedia)
+    {
+        if (!$this->encryptionSecretsDisk) {
+            return;
+        }
+
+        $playlistMedia->each(function ($playlistMedia) {
+            $disk = $playlistMedia->getDisk();
+            $path = $playlistMedia->getPath();
+
+            $prefix = '#EXT-X-KEY:METHOD=AES-128,URI="';
+
+            $content = str_replace(
+                $prefix . $this->encryptionSecretsDisk->path(''),
+                $prefix,
+                $disk->get($path)
+            );
+
+            $disk->put($path, $content);
         });
     }
 

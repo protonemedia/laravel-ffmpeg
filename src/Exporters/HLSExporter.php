@@ -191,6 +191,7 @@ class HLSExporter extends MediaExporter
 
             $this->getDisk()->put($path, $playlist);
 
+            $this->replaceAbsolutePathsHLSEncryption($playlistMedia);
             $this->cleanupHLSEncryption();
 
             return $result;
