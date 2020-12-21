@@ -12,7 +12,8 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. [La
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
 * Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
-* Built-in support for HLS.
+* Built-in support for HLS
+* Built-in support for encrypted HLS (AES-128) with rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
 * PHP 7.3 and higher.
@@ -613,14 +614,16 @@ Rotating encryption key:
 FFMpeg::open('steve_howe.mp4')
     ->exportForHLS()
     ->withRotatingEncryptionKey(function ($filename, $contents) {
+        $videoId = 1;
+
         // use this callback to store the encryption keys
 
-        Storage::disk('secrets')->put($filename, $contents);
+        Storage::disk('secrets')->put($videoId . '/' . $filename, $contents);
 
         // or...
 
         DB::table('hls_secrets')->insert([
-            'video_id' => 1,
+            'video_id' => $videoId,
             'filename' => $filename,
             'contents' => $contents,
         ]);
