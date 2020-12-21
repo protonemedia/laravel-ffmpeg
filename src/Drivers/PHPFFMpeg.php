@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Drivers;
 
+use Alchemy\BinaryDriver\Listeners\ListenerInterface;
 use Exception;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\FFMpeg;
@@ -156,6 +157,24 @@ class PHPFFMpeg
         $this->forceAdvanced = true;
 
         return $this->open($mediaCollection);
+    }
+
+    /**
+     * Add a Listener to the underlying library.
+     *
+     * @param \Alchemy\BinaryDriver\Listeners\ListenerInterface $listener
+     * @return self
+     */
+    public function addListener(ListenerInterface $listener): self
+    {
+        $this->get()->getFFMpegDriver()->listen($listener);
+
+        return $this;
+    }
+
+    public function onEvent(string $event, callable $callback)
+    {
+        $this->get()->getFFMpegDriver()->on($event, $callback);
     }
 
     /**
