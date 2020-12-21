@@ -116,7 +116,7 @@ trait EncryptsHLSSegments
     {
         // randomize the encryption key
         $this->encryptionSecretsDisk->put(
-            $keyFilename = Str::random(8) . '.key',
+            $keyFilename = uniqid() . '.key',
             $encryptionKey = $this->setEncryptionKey()
         );
 
