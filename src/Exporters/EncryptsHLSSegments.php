@@ -42,7 +42,7 @@ trait EncryptsHLSSegments
      *
      * @var boolean
      */
-    private $rotatingEncryptiongKey = false;
+    private $rotateEncryptiongKey = false;
 
     /**
      * Creates a new encryption key.
@@ -88,7 +88,7 @@ trait EncryptsHLSSegments
      */
     public function withRotatingEncryptionKey(): self
     {
-        $this->rotatingEncryptiongKey = true;
+        $this->rotateEncryptiongKey = true;
 
         return $this->withEncryptionKey();
     }
@@ -155,7 +155,7 @@ trait EncryptsHLSSegments
         $keyInfoPath = $this->rotateEncryptionKey();
         $parameters  = ['-hls_key_info_file', $keyInfoPath];
 
-        if ($this->rotatingEncryptiongKey) {
+        if ($this->rotateEncryptiongKey) {
             $parameters[] = '-hls_flags';
             $parameters[] = 'periodic_rekey';
         }
@@ -171,7 +171,7 @@ trait EncryptsHLSSegments
      */
     private function addHandlerToRotateEncryption()
     {
-        if (!$this->rotatingEncryptiongKey) {
+        if (!$this->rotateEncryptiongKey) {
             return;
         }
 
