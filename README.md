@@ -592,7 +592,7 @@ FFMpeg::fromDisk('videos')
 
 ### Encrypted HLS
 
-As of version 7.5, you can encrypt each HLS segment using AES-128 encryption. To do this, simple call the `withEncryptionKey` method on the HLS exporter with a key. We provide a `generateEncryptionKey` helper method on the `HLSExporter` class to generate a key. Make sure you store the key properly, as the exported result is worthless without the key.
+As of version 7.5, you can encrypt each HLS segment using AES-128 encryption. To do this, call the `withEncryptionKey` method on the HLS exporter with a key. We provide a `generateEncryptionKey` helper method on the `HLSExporter` class to generate a key. Make sure you store the key well, as the exported result is worthless without the key.
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
@@ -608,7 +608,7 @@ FFMpeg::open('steve_howe.mp4')
     ->save('adaptive_steve.m3u8');
 ```
 
-To secure your HLS export even more, you can rotate the key on each segment of the export. This will generate multiple keys that you'll need to store. Use the `withRotatingEncryptionKey` method to enable this feature and provide a callback that implements to storage of the keys.
+To secure your HLS export even further, you can rotate the key on each exported segment. By doing so, it will generate multiple keys that you'll need to store. Use the `withRotatingEncryptionKey` method to enable this feature and provide a callback that implements the storage of the keys.
 
 ```php
 FFMpeg::open('steve_howe.mp4')
