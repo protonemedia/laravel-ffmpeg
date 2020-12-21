@@ -16,20 +16,13 @@ trait EncryptsHLSSegments
      */
     private $encryptionKey;
 
-    private $newEncryptionKeyCallback = null;
+    private $onNewEncryptionKey = null;
 
-    private $encryptionKeyDisk      = null;
-    private $encryptionKeyName      = null;
+    private $encryptionSecretsDisk  = null;
+    private $encryptionInfoFilename = null;
     private $encryptionIV           = null;
     private $rotatingEncryptiongKey = false;
     private $segmentsOpenend        = 0;
-
-    public function onEncryptionKey(Closure $callback): self
-    {
-        $this->newEncryptionKeyCallback = $callback;
-
-        return $this;
-    }
 
     /**
      * Creates a new encryption key.
@@ -47,57 +40,72 @@ trait EncryptsHLSSegments
      * @param string $key
      * @return self
      */
-    public function withEncryptionKey($key = null): self
+    private function setEncryptionKey($key = null): self
     {
-        $this->encryptionKey = $key ?: static::generateEncryptionKey();
-
-        return $this;
+        return $this->encryptionKey = $key ?: static::generateEncryptionKey();
     }
 
+    /**
+     * Initialises the disk, info and IV for encryption and sets the key.
+     *
+     * @param string $key
+     * @return self
+     */
+    public function withEncryptionKey($key = null): self
+    {
+        $this->encryptionSecretsDisk  = Disk::makeTemporaryDisk();
+        $this->encryptionInfoFilename = Str::random(8) . ".keyinfo";
+        $this->encryptionIV           = bin2hex(static::generateEncryptionKey());
+
+        return tap($this)->setEncryptionKey($key);
+    }
+
+    /**
+     * Enables encryption with rotating keys.
+     *
+     * @return self
+     */
     public function withRotatingEncryptionKey(): self
     {
-        $this->withEncryptionKey();
-
         $this->rotatingEncryptiongKey = true;
+
+        return $this->withEncryptionKey();
+    }
+
+    /**
+     * A callable for each key that is generated.
+     *
+     * @param Closure $callback
+     * @return self
+     */
+    public function onNewEncryptionKey(Closure $callback): self
+    {
+        $this->onNewEncryptionKey = $callback;
 
         return $this;
     }
 
     private function rotateEncryptionKey()
     {
-        $this->withEncryptionKey();
+        // randomize the encryption key
+        $this->encryptionSecretsDisk->put(
+            $keyFilename = Str::random(8) . '.key',
+            $encryptionKey = $this->setEncryptionKey()
+        );
 
-        if (!$this->encryptionKeyDisk) {
-            $this->encryptionKeyDisk = Disk::makeTemporaryDisk();
-        }
+        $keyPath = $this->encryptionSecretsDisk->makeMedia($keyFilename)->getLocalPath();
 
-        if (!$this->encryptionKeyName) {
-            $this->encryptionKeyName = Str::random(8);
-        }
-
-        if (!$this->encryptionIV) {
-            $this->encryptionIV = bin2hex(static::generateEncryptionKey());
-        }
-
-        $keyInfoPath = $this->encryptionKeyDisk
-            ->makeMedia("{$this->encryptionKeyName}.keyinfo")
-            ->getLocalPath();
-
-        $name = $this->encryptionKeyName . "_" . Str::random(8);
-
-        $keyPath = $this->encryptionKeyDisk->makeMedia("{$name}.key")->getLocalPath();
-
-        file_put_contents($keyPath, $this->encryptionKey);
-
-        file_put_contents($keyInfoPath, implode(PHP_EOL, [
+        $this->encryptionSecretsDisk->put($this->encryptionInfoFilename, implode(PHP_EOL, [
             $keyPath, $keyPath, $this->encryptionIV,
         ]));
 
-        if ($this->newEncryptionKeyCallback) {
-            call_user_func($this->newEncryptionKeyCallback, "{$name}.key", $this->encryptionKey);
+        if ($this->onNewEncryptionKey) {
+            call_user_func($this->onNewEncryptionKey, $keyFilename, $encryptionKey);
         }
 
-        return $keyInfoPath;
+        return $this->encryptionSecretsDisk
+            ->makeMedia($this->encryptionInfoFilename)
+            ->getLocalPath();
     }
 
     private function getEncrypedHLSParameters(): array
@@ -106,32 +114,46 @@ trait EncryptsHLSSegments
             return [];
         }
 
-        $hlsParameters = [
-            '-hls_key_info_file',
-            $this->rotateEncryptionKey(),
-        ];
+        $keyInfoPath = $this->rotateEncryptionKey();
+        $parameters  = ['-hls_key_info_file', $keyInfoPath];
 
         if ($this->rotatingEncryptiongKey) {
-            $hlsParameters[] = '-hls_flags';
-            $hlsParameters[] = 'periodic_rekey';
+            $parameters[] = '-hls_flags';
+            $parameters[] = 'periodic_rekey';
         }
 
-        return $hlsParameters;
+        return $parameters;
     }
 
-    private function addRotatingKeyListener()
+    private function addHandlerToRotateEncryption()
     {
         if (!$this->rotatingEncryptiongKey) {
             return;
         }
 
         $this->addListener(new StdListener)->onEvent('listen', function ($line) {
-            if (!(Str::contains($line, "Opening 'crypto:/") && Str::contains($line, ".ts' for writing"))) {
+            $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:/")
+                && Str::contains($line, ".ts' for writing");
+
+            if (!$opensEncryptedSegment) {
                 return;
             }
 
             $this->segmentsOpenend++;
             $this->rotateEncryptionKey();
         });
+    }
+
+    private function cleanupHLSEncryption()
+    {
+        if (!$this->encryptionSecretsDisk) {
+            return;
+        }
+
+        $paths = $this->encryptionSecretsDisk->allFiles();
+
+        foreach ($paths as $path) {
+            $this->encryptionSecretsDisk->delete($path);
+        }
     }
 }

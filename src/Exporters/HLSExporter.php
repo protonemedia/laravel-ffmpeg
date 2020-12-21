@@ -158,8 +158,7 @@ class HLSExporter extends MediaExporter
             );
 
             $this->addHLSParametersToFormat($format, $segmentsPattern, $disk);
-
-            $this->addRotatingKeyListener();
+            $this->addHandlerToRotateEncryption();
 
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);
@@ -189,6 +188,8 @@ class HLSExporter extends MediaExporter
             );
 
             $this->getDisk()->put($path, $playlist);
+
+            $this->cleanupHLSEncryption();
 
             return $result;
         });

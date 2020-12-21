@@ -123,7 +123,7 @@ class HlsExportTest extends TestCase
             ->setKeyFrameInterval(1)
             ->setSegmentLength(1)
             ->addFormat($lowBitrate)
-            ->onEncryptionKey(function ($filename, $contents) use (&$keys) {
+            ->onNewEncryptionKey(function ($filename, $contents) use (&$keys) {
                 $keys[$filename] = $contents;
             })
             ->save('adaptive.m3u8');
