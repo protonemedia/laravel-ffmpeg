@@ -9,6 +9,8 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 
 trait EncryptsHLSSegments
 {
+    const HLS_KEY_INFO_FILENAME = 'hls_encryption.keyinfo';
+
     /**
      * The encryption key.
      *
@@ -16,13 +18,33 @@ trait EncryptsHLSSegments
      */
     private $encryptionKey;
 
-    private $onNewEncryptionKey = null;
+    /**
+     * Gets called whenever a new encryption key is set.
+     *
+     * @var callable
+     */
+    private $onNewEncryptionKey ;
 
-    private $encryptionSecretsDisk  = null;
-    private $encryptionInfoFilename = null;
-    private $encryptionIV           = null;
+    /**
+     * Disk to store the secrets.
+     *
+     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
+     */
+    private $encryptionSecretsDisk;
+
+    /**
+     * Encryption IV
+     *
+     * @var string
+     */
+    private $encryptionIV;
+
+    /**
+     * Wether to rotate the key on every segment.
+     *
+     * @var boolean
+     */
     private $rotatingEncryptiongKey = false;
-    private $segmentsOpenend        = 0;
 
     /**
      * Creates a new encryption key.
@@ -38,9 +60,9 @@ trait EncryptsHLSSegments
      * Sets the encryption key with the given value or generates a new one.
      *
      * @param string $key
-     * @return self
+     * @return string
      */
-    private function setEncryptionKey($key = null): self
+    private function setEncryptionKey($key = null): string
     {
         return $this->encryptionKey = $key ?: static::generateEncryptionKey();
     }
@@ -53,11 +75,12 @@ trait EncryptsHLSSegments
      */
     public function withEncryptionKey($key = null): self
     {
-        $this->encryptionSecretsDisk  = Disk::makeTemporaryDisk();
-        $this->encryptionInfoFilename = Str::random(8) . ".keyinfo";
-        $this->encryptionIV           = bin2hex(static::generateEncryptionKey());
+        $this->encryptionSecretsDisk = Disk::makeTemporaryDisk();
+        $this->encryptionIV          = bin2hex(static::generateEncryptionKey());
 
-        return tap($this)->setEncryptionKey($key);
+        $this->setEncryptionKey($key);
+
+        return $this;
     }
 
     /**
@@ -85,7 +108,12 @@ trait EncryptsHLSSegments
         return $this;
     }
 
-    private function rotateEncryptionKey()
+    /**
+     * Rotates the key and returns the absolute path to the info file.
+     *
+     * @return string
+     */
+    private function rotateEncryptionKey(): string
     {
         // randomize the encryption key
         $this->encryptionSecretsDisk->put(
@@ -93,21 +121,30 @@ trait EncryptsHLSSegments
             $encryptionKey = $this->setEncryptionKey()
         );
 
+        // get the absolute path to the encryption key
         $keyPath = $this->encryptionSecretsDisk->makeMedia($keyFilename)->getLocalPath();
 
-        $this->encryptionSecretsDisk->put($this->encryptionInfoFilename, implode(PHP_EOL, [
+        // generate an info file with a reference to the encryption key and IV
+        $this->encryptionSecretsDisk->put(static::HLS_KEY_INFO_FILENAME, implode(PHP_EOL, [
             $keyPath, $keyPath, $this->encryptionIV,
         ]));
 
+        // call the callback
         if ($this->onNewEncryptionKey) {
             call_user_func($this->onNewEncryptionKey, $keyFilename, $encryptionKey);
         }
 
+        // return the absolute path to the info file
         return $this->encryptionSecretsDisk
-            ->makeMedia($this->encryptionInfoFilename)
+            ->makeMedia(static::HLS_KEY_INFO_FILENAME)
             ->getLocalPath();
     }
 
+    /**
+     * Returns an array with the encryption parameters.
+     *
+     * @return array
+     */
     private function getEncrypedHLSParameters(): array
     {
         if (!$this->encryptionKey) {
@@ -125,6 +162,12 @@ trait EncryptsHLSSegments
         return $parameters;
     }
 
+    /**
+     * Adds a listener and handler to rotate the key on
+     * every new HLS segment.
+     *
+     * @return void
+     */
     private function addHandlerToRotateEncryption()
     {
         if (!$this->rotatingEncryptiongKey) {
@@ -135,15 +178,17 @@ trait EncryptsHLSSegments
             $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:/")
                 && Str::contains($line, ".ts' for writing");
 
-            if (!$opensEncryptedSegment) {
-                return;
+            if ($opensEncryptedSegment) {
+                $this->rotateEncryptionKey();
             }
-
-            $this->segmentsOpenend++;
-            $this->rotateEncryptionKey();
         });
     }
 
+    /**
+     * Removes the encryption keys from the temporary disk.
+     *
+     * @return void
+     */
     private function cleanupHLSEncryption()
     {
         if (!$this->encryptionSecretsDisk) {
