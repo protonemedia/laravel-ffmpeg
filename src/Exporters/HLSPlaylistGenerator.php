@@ -14,41 +14,8 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     const PLAYLIST_START = '#EXTM3U';
     const PLAYLIST_END   = '#EXT-X-ENDLIST';
 
-    private static function getLinesOfPlaylist(Media $playlistMedia): Collection
-    {
-        $playlistContent = file_get_contents($playlistMedia->getLocalPath());
-
-        $lines = preg_split('/\n|\r\n?/', $playlistContent);
-
-        return Collection::make($lines);
-    }
-
-    private function getEncryptionInputArguments(Media $playlistMedia): array
-    {
-        $keyLine = static::getLinesOfPlaylist($playlistMedia)->first(function ($line) {
-            return Str::startsWith($line, '#EXT-X-KEY:METHOD=AES-128');
-        });
-
-        if (!$keyLine) {
-            return [];
-        }
-
-        $key = Str::before(Str::after($keyLine, '#EXT-X-KEY:METHOD=AES-128,URI="'), '",IV=');
-        $iv  = Str::after($keyLine, '",IV=');
-
-        return ['-key', $key, '-iv', $iv];
-    }
-
-    private function getPathOfFirstSegment(Media $playlistMedia): string
-    {
-        return static::getLinesOfPlaylist($playlistMedia)->first(function ($line) {
-            return !Str::startsWith($line, '#') && Str::endsWith($line, '.ts');
-        });
-    }
-
     private function getBandwidth(MediaOpener $media)
     {
-        dd($media->getVideoStream());
         return $media->getFormat()->get('bit_rate');
     }
 
@@ -80,7 +47,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     {
         return Collection::make($playlistMedia)->map(function (Media $playlistMedia) use ($driver) {
             $media = (new MediaOpener($playlistMedia->getDisk(), $driver))
-                ->open($playlistMedia->getPath(), ['-allowed_extensions', 'ALL']);
+                ->openWithInputOptions($playlistMedia->getPath(), ['-allowed_extensions', 'ALL']);
 
             $streamInfo = [
                 "#EXT-X-STREAM-INF:BANDWIDTH={$this->getBandwidth($media)}",

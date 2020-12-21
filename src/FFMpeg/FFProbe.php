@@ -5,8 +5,6 @@ namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 use Alchemy\BinaryDriver\Exception\ExecutionFailureException;
 use FFMpeg\Exception\RuntimeException;
 use FFMpeg\FFProbe as FFMpegFFProbe;
-use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
-use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaWithInputOptions;
 
 class FFProbe extends FFMpegFFProbe
 {
@@ -46,31 +44,54 @@ class FFProbe extends FFMpegFFProbe
      * @throws \FFMpeg\Exception\RuntimeException
      */
 
-    public function streams($pathfile)
+    private function shouldUseCustomProbe($pathfile): bool
     {
-        $mediaWithInputOptions = $this->media instanceof MediaOnNetwork || $this->media instanceof MediaWithInputOptions;
+        if (!$this->media) {
+            return false;
+        }
 
-        if (!$mediaWithInputOptions || $this->media->getLocalPath() !== $pathfile) {
-            return parent::streams($pathfile);
+        if ($this->media->getLocalPath() !== $pathfile) {
+            return false;
+        }
+
+        if (empty($this->media->getInputOptions())) {
+            return false;
         }
 
         if (!$this->getOptionsTester()->has('-show_streams')) {
             throw new RuntimeException('This version of ffprobe is too old and does not support `-show_streams` option, please upgrade');
         }
 
-        return $this->probeStreams($pathfile);
+        return true;
+    }
+
+    public function streams($pathfile)
+    {
+        if (!$this->shouldUseCustomProbe($pathfile)) {
+            return parent::streams($pathfile);
+        }
+
+        return $this->probeStreams($pathfile, '-show_streams', static::TYPE_STREAMS);
+    }
+
+    public function format($pathfile)
+    {
+        if (!$this->shouldUseCustomProbe($pathfile)) {
+            return parent::format($pathfile);
+        }
+
+        return $this->probeStreams($pathfile, '-show_format', static::TYPE_FORMAT);
     }
 
     /**
      * This is just copy-paste from FFMpeg\FFProbe...
      * It prepends the command with the headers.
      */
-    private function probeStreams($pathfile, $allowJson = true)
+    private function probeStreams($pathfile, $command, $type, $allowJson = true)
     {
         $commands = array_merge(
-            $this->media instanceof MediaOnNetwork ? $this->media->getCompiledHeaders() : [],
-            $this->media instanceof MediaWithInputOptions ? $this->media->getInputOptions() : [],
-            [$pathfile, '-show_streams'],
+            $this->media->getInputOptions(),
+            [$pathfile, $command],
         );
 
         $parseIsToDo = false;
@@ -94,7 +115,7 @@ class FFProbe extends FFMpegFFProbe
         }
 
         if ($parseIsToDo) {
-            $data = $this->getParser()->parse(static::TYPE_STREAMS, $output);
+            $data = $this->getParser()->parse($type, $output);
         } else {
             try {
                 $data = @json_decode($output, true);
@@ -107,6 +128,6 @@ class FFProbe extends FFMpegFFProbe
             }
         }
 
-        return $this->getMapper()->map(static::TYPE_STREAMS, $data);
+        return $this->getMapper()->map($type, $data);
     }
 }

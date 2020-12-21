@@ -2,12 +2,8 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 
-use ProtoneMedia\LaravelFFMpeg\FFMpeg\InteractsWithInputPath;
-
-class MediaWithInputOptions extends Media
+trait HasInputOptions
 {
-    use InteractsWithInputPath;
-
     /**
      * @var array
      */
@@ -23,16 +19,5 @@ class MediaWithInputOptions extends Media
         $this->inputOptions = $options;
 
         return $this;
-    }
-
-    public function getLocalPath(): string
-    {
-        $path = parent::getLocalPath();
-
-        if (in_array('-key', $this->inputOptions)) {
-            return "crypto:{$path}";
-        }
-
-        return $path;
     }
 }

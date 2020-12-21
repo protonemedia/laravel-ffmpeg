@@ -82,9 +82,14 @@ class HLSExporter extends MediaExporter
         };
     }
 
+    public static function generateEncryptionKey(): string
+    {
+        return Encrypter::generateKey('AES-128-CBC');
+    }
+
     public function withEncryptionKey($key = null): self
     {
-        $this->encryptionKey = $key ?: Encrypter::generateKey('AES-128-CBC');
+        $this->encryptionKey = $key ?: static::generateEncryptionKey();
 
         return $this;
     }
@@ -137,7 +142,7 @@ class HLSExporter extends MediaExporter
 
             file_put_contents(
                 $keyInfoPath = $disk->makeMedia("{$name}.keyinfo")->getLocalPath(),
-                $keyPath . PHP_EOL . $keyPath . PHP_EOL . bin2hex(Encrypter::generateKey('AES-128-CBC'))
+                $keyPath . PHP_EOL . $keyPath . PHP_EOL . bin2hex(static::generateEncryptionKey())
             );
 
             $hlsParameters[] = '-hls_key_info_file';

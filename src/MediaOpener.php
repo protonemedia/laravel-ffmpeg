@@ -15,7 +15,6 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
-use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaWithInputOptions;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 
 /**
@@ -91,17 +90,18 @@ class MediaOpener
      */
     public function open($paths): self
     {
-        if (func_num_args() > 1) {
-            $arguments = func_get_args();
-
-            $this->collection->push(MediaWithInputOptions::make($this->disk, $arguments[0], $arguments[1]));
-
-            return $this;
-        }
-
         foreach (Arr::wrap($paths) as $path) {
             $this->collection->push(Media::make($this->disk, $path));
         }
+
+        return $this;
+    }
+
+    public function openWithInputOptions(string $path, array $options = []): self
+    {
+        $this->collection->push(
+            Media::make($this->disk, $path)->setInputOptions($options)
+        );
 
         return $this;
     }

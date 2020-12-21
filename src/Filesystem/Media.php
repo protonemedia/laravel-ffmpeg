@@ -6,6 +6,8 @@ use Illuminate\Filesystem\FilesystemAdapter;
 
 class Media
 {
+    use HasInputOptions;
+
     /**
      * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
      */
@@ -29,15 +31,9 @@ class Media
         $this->makeDirectory();
     }
 
-    public static function make($disk, string $path, array $options = []): self
+    public static function make($disk, string $path): self
     {
-        $disk = Disk::make($disk);
-
-        if (!empty($options)) {
-            return (new MediaWithInputOptions($disk, $path))->setInputOptions($options);
-        }
-
-        return new static($disk, $path);
+        return new static(Disk::make($disk), $path);
     }
 
     public function getDisk(): Disk
