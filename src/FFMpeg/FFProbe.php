@@ -91,7 +91,7 @@ class FFProbe extends FFMpegFFProbe
     {
         $commands = array_merge(
             $this->media->getInputOptions(),
-            [$pathfile, $command],
+            [$pathfile, $command]
         );
 
         $parseIsToDo = false;
