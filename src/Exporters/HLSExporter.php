@@ -160,7 +160,7 @@ class HLSExporter extends MediaExporter
             );
 
             $this->addHLSParametersToFormat($format, $segmentsPattern, $disk);
-            $this->addHandlerToRotateEncryption();
+            $this->addHandlerToRotateEncryptionKey();
 
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);

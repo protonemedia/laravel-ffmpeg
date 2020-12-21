@@ -169,7 +169,7 @@ trait EncryptsHLSSegments
      *
      * @return void
      */
-    private function addHandlerToRotateEncryption()
+    private function addHandlerToRotateEncryptionKey()
     {
         if (!$this->rotateEncryptiongKey) {
             return;
