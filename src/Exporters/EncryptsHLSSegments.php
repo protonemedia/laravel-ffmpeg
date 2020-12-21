@@ -21,7 +21,7 @@ trait EncryptsHLSSegments
      *
      * @var callable
      */
-    private $onNewEncryptionKey ;
+    private $onNewEncryptionKey;
 
     /**
      * Disk to store the secrets.
