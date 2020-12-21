@@ -15,7 +15,7 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. [La
 * Built-in support for HLS.
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
-* PHP 7.2 and higher.
+* PHP 7.3 and higher.
 
 ## Support
 
