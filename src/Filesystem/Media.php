@@ -29,9 +29,15 @@ class Media
         $this->makeDirectory();
     }
 
-    public static function make($disk, string $path): self
+    public static function make($disk, string $path, array $options = []): self
     {
-        return new static(Disk::make($disk), $path);
+        $disk = Disk::make($disk);
+
+        if (!empty($options)) {
+            return (new MediaWithInputOptions($disk, $path))->setInputOptions($options);
+        }
+
+        return new static($disk, $path);
     }
 
     public function getDisk(): Disk

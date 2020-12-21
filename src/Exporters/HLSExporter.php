@@ -6,7 +6,9 @@ use Closure;
 use FFMpeg\Format\FormatInterface;
 use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Format\VideoInterface;
+use Illuminate\Encryption\Encrypter;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
@@ -31,6 +33,8 @@ class HLSExporter extends MediaExporter
      * @var \ProtoneMedia\LaravelFFMpeg\Exporters\PlaylistGenerator
      */
     private $playlistGenerator;
+
+    private $encryptionKey;
 
     /**
      * @var \Closure
@@ -78,6 +82,13 @@ class HLSExporter extends MediaExporter
         };
     }
 
+    public function withEncryptionKey($key = null): self
+    {
+        $this->encryptionKey = $key ?: Encrypter::generateKey('AES-128-CBC');
+
+        return $this;
+    }
+
     private function getSegmentPatternAndFormatPlaylistPath(string $baseName, VideoInterface $format, int $key): array
     {
         $segmentsPattern    = null;
@@ -101,7 +112,7 @@ class HLSExporter extends MediaExporter
 
     private function addHLSParametersToFormat(DefaultVideo $format, string $segmentsPattern, Disk $disk)
     {
-        $format->setAdditionalParameters([
+        $hlsParameters = [
             '-sc_threshold',
             '0',
             '-g',
@@ -112,7 +123,31 @@ class HLSExporter extends MediaExporter
             $this->segmentLength,
             '-hls_segment_filename',
             $disk->makeMedia($segmentsPattern)->getLocalPath(),
-        ]);
+        ];
+
+        if ($this->encryptionKey) {
+            $name = Str::random(8);
+
+            $disk = Disk::makeTemporaryDisk();
+
+            file_put_contents(
+                $keyPath = $disk->makeMedia("{$name}.key")->getLocalPath(),
+                $this->encryptionKey
+            );
+
+            file_put_contents(
+                $keyInfoPath = $disk->makeMedia("{$name}.keyinfo")->getLocalPath(),
+                $keyPath . PHP_EOL . $keyPath . PHP_EOL . bin2hex(Encrypter::generateKey('AES-128-CBC'))
+            );
+
+            $hlsParameters[] = '-hls_key_info_file';
+            $hlsParameters[] = $keyInfoPath;
+        }
+
+        $format->setAdditionalParameters(array_merge(
+            $format->getAdditionalParameters() ?: [],
+            $hlsParameters
+        ));
     }
 
     private function applyFiltersCallback(callable $filtersCallback, int $formatKey): array

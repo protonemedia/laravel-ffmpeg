@@ -6,6 +6,7 @@ use Alchemy\BinaryDriver\Exception\ExecutionFailureException;
 use FFMpeg\Exception\RuntimeException;
 use FFMpeg\FFProbe as FFMpegFFProbe;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaWithInputOptions;
 
 class FFProbe extends FFMpegFFProbe
 {
@@ -47,7 +48,9 @@ class FFProbe extends FFMpegFFProbe
 
     public function streams($pathfile)
     {
-        if (!$this->media instanceof MediaOnNetwork || $this->media->getLocalPath() !== $pathfile) {
+        $mediaWithInputOptions = $this->media instanceof MediaOnNetwork || $this->media instanceof MediaWithInputOptions;
+
+        if (!$mediaWithInputOptions || $this->media->getLocalPath() !== $pathfile) {
             return parent::streams($pathfile);
         }
 
@@ -65,8 +68,9 @@ class FFProbe extends FFMpegFFProbe
     private function probeStreams($pathfile, $allowJson = true)
     {
         $commands = array_merge(
-            $this->media->getCompiledHeaders(),
-            [$pathfile, '-show_streams']
+            $this->media instanceof MediaOnNetwork ? $this->media->getCompiledHeaders() : [],
+            $this->media instanceof MediaWithInputOptions ? $this->media->getInputOptions() : [],
+            [$pathfile, '-show_streams'],
         );
 
         $parseIsToDo = false;
