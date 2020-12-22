@@ -13,7 +13,7 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. [La
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
 * Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
 * Built-in support for HLS.
-* Built-in support for encrypted HLS (AES-128) with rotating keys (optional).
+* Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
 * PHP 7.3 and higher.
@@ -640,6 +640,41 @@ The `withRotatingEncryptionKey` method has an optional second argument to set th
 FFMpeg::open('steve_howe.mp4')
     ->exportForHLS()
     ->withRotatingEncryptionKey($callable, 10);
+```
+
+### Protecting your HLS encryption keys
+
+To make working with encrypted HLS even easier, we've added a `DynamicHLSPlaylist` class that modifies playlists on-the-fly and specifically for your application. This way you can add your own authentication and authorization logic. As we're using a plain Laravel controller, you can use features like [Gates](https://laravel.com/docs/master/authorization#gates) and [Middleware](https://laravel.com/docs/master/middleware#introduction) as well.
+
+In this example, we've saved the HLS export to the `public` disk and we've stored the encryption keys to the `secrets` disk, which isn't publicly available. As the browser can't access the encryption keys, it won't be able to play the video. Each playlist has paths to the encryption keys, and we need to modify those paths so they point to an accessable endpoint.
+
+This implementation consists of two routes. One that responses with an encryption key, and one that responses with a modified playlist. The first route (`video.key`) is rather simple, and this is where you should add your own additional logic.
+
+The second route (`video.playlist`) uses the `DynamicHLSPlaylist` class. Calling the `dynamicHLSPlaylist` method on the `FFMpeg` facade, ands similar to opening media files, you can open a playlist using the `fromDisk` and `open` methods. Then you must provide three callbacks. Each of them gives you a relative path and expects a full path in return. As the `DynamicHLSPlaylist` class implements the `Illuminate\Contracts\Support\Responsable` interface, you can simply return the instance.
+
+The first callback (KeyUrlResolver) gives you the relative path to an encryption key. The second callback (MediaUrlResolver) gives you the relative path to a media segment (.ts files). The third callback (PlaylistUrlResolver) gives you the relative path to a playlist.
+
+Now instead of using `Storage::disk('public')->url('adaptive_steve.m3u8')` to get the full url to your primary playlist, you can use `route('video.playlist', ['playlist' => 'adaptive_steve.m3u8'])`.
+
+```php
+Route::get('/video/secret/{key}', function ($key) {
+    return Storage::disk('secrets')->download($key);
+})->name('video.key');
+
+Route::get('/video/{playlist}', function ($playlist) {
+    return FFMpeg::dynamicHLSPlaylist()
+        ->fromDisk('public')
+        ->open($playlist)
+        ->setKeyUrlResolver(function ($key) {
+            return route('video.key', ['key' => $key]);
+        })
+        ->setMediaUrlResolver(function ($mediaFilename) {
+            return Storage::disk('public')->url($mediaFilename);
+        })
+        ->setPlaylistUrlResolver(function ($playlistFilename) {
+            return route('video.playlist', ['playlist' => $playlistFilename]);
+        });
+})->name('video.playlist');
 ```
 
 ## Process Output

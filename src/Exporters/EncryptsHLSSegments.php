@@ -121,7 +121,6 @@ trait EncryptsHLSSegments
      */
     private function rotateEncryptionKey(): string
     {
-
         // get the absolute path to the encryption key
         $keyPath = $this->encryptionSecretsDisk
             ->makeMedia($keyFilename = uniqid() . '.key')
