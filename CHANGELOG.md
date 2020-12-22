@@ -2,7 +2,67 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
-## 7.3.0 - 2020-10-??
+## 7.5.0 - 2020-12-22
+
+### Added
+
+-   Support for PHP 8.0
+-   Encrypted HLS
+-   New `getProcessOutput` method to analyze media
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Nothing
+
+### Removed
+
+-   Support for PHP 7.2
+
+## 7.4.1 - 2020-10-26
+
+### Added
+
+-   Better exceptions
+-   dd() improvements
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Nothing
+
+### Removed
+
+-   Nothing
+
+## 7.4.0 - 2020-10-25
+
+### Added
+
+-   Watermark manipulations
+-   Dump and die
+-   Resize filter shortcut
+-   HLS export with multiple filters per format
+
+### Deprecated
+
+-   Nothing
+
+### Fixed
+
+-   Nothing
+
+### Removed
+
+-   Nothing
+
+## 7.3.0 - 2020-10-16
 
 ### Added
 
