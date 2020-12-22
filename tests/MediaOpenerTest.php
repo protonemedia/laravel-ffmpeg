@@ -100,7 +100,7 @@ class MediaOpenerTest extends TestCase
 
         TemporaryDirectories::deleteAll();
 
-        $this->assertFileNotExists($tempPath);
+        $this->assertFalse(file_exists($tempPath));
     }
 
     /** @test */
@@ -126,7 +126,7 @@ class MediaOpenerTest extends TestCase
         ]);
 
         $media = $mediaOnNetwerk->toMedia(function ($ch) {
-            $this->assertIsResource($ch);
+            $this->assertNotNull($ch);
         });
 
         [$width] = getimagesize($media->getLocalPath());
