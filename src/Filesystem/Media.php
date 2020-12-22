@@ -6,6 +6,8 @@ use Illuminate\Filesystem\FilesystemAdapter;
 
 class Media
 {
+    use HasInputOptions;
+
     /**
      * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
      */

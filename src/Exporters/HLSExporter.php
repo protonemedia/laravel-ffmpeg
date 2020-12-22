@@ -12,6 +12,10 @@ use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HLSExporter extends MediaExporter
 {
+    use EncryptsHLSSegments;
+
+    const HLS_KEY_INFO_FILENAME = 'hls_encryption.keyinfo';
+
     /**
      * @var integer
      */
@@ -101,7 +105,7 @@ class HLSExporter extends MediaExporter
 
     private function addHLSParametersToFormat(DefaultVideo $format, string $segmentsPattern, Disk $disk)
     {
-        $format->setAdditionalParameters([
+        $hlsParameters = [
             '-sc_threshold',
             '0',
             '-g',
@@ -112,7 +116,13 @@ class HLSExporter extends MediaExporter
             $this->segmentLength,
             '-hls_segment_filename',
             $disk->makeMedia($segmentsPattern)->getLocalPath(),
-        ]);
+        ];
+
+        $format->setAdditionalParameters(array_merge(
+            $format->getAdditionalParameters() ?: [],
+            $hlsParameters,
+            $this->getEncrypedHLSParameters()
+        ));
     }
 
     private function applyFiltersCallback(callable $filtersCallback, int $formatKey): array
@@ -158,6 +168,8 @@ class HLSExporter extends MediaExporter
             $this->addFormatOutputMapping($format, $disk->makeMedia($formatPlaylistPath), $outs ?? ['0']);
 
             return $this->getDisk()->makeMedia($formatPlaylistPath);
+        })->tap(function () {
+            $this->addHandlerToRotateEncryptionKey();
         });
     }
 
@@ -179,6 +191,9 @@ class HLSExporter extends MediaExporter
             );
 
             $this->getDisk()->put($path, $playlist);
+
+            $this->replaceAbsolutePathsHLSEncryption($playlistMedia);
+            $this->cleanupHLSEncryption();
 
             return $result;
         });

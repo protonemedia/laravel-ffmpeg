@@ -6,6 +6,7 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\InteractsWithHttpHeaders;
 
 class MediaOnNetwork
 {
+    use HasInputOptions;
     use InteractsWithHttpHeaders;
 
     /**
@@ -47,6 +48,11 @@ class MediaOnNetwork
     public function getFilename(): string
     {
         return pathinfo($this->getPath())['basename'];
+    }
+
+    public function getCompiledInputOptions(): array
+    {
+        return array_merge($this->getInputOptions(), $this->getCompiledHeaders());
     }
 
     public function getCompiledHeaders(): array

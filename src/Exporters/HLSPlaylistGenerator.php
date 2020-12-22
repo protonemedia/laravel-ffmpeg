@@ -14,17 +14,6 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     const PLAYLIST_START = '#EXTM3U';
     const PLAYLIST_END   = '#EXT-X-ENDLIST';
 
-    private function getPathOfFirstSegment(Media $playlistMedia): string
-    {
-        $playlistContent = file_get_contents($playlistMedia->getLocalPath());
-
-        $lines = preg_split('/\n|\r\n?/', $playlistContent);
-
-        return Collection::make($lines)->first(function ($line) {
-            return !Str::startsWith($line, '#') && Str::endsWith($line, '.ts');
-        });
-    }
-
     private function getBandwidth(MediaOpener $media)
     {
         return $media->getFormat()->get('bit_rate');
@@ -57,9 +46,8 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     public function get(array $playlistMedia, PHPFFMpeg $driver): string
     {
         return Collection::make($playlistMedia)->map(function (Media $playlistMedia) use ($driver) {
-            $media = (new MediaOpener($playlistMedia->getDisk(), $driver))->open(
-                $playlistMedia->getDirectory() . $this->getPathOfFirstSegment($playlistMedia)
-            );
+            $media = (new MediaOpener($playlistMedia->getDisk(), $driver))
+                ->openWithInputOptions($playlistMedia->getPath(), ['-allowed_extensions', 'ALL']);
 
             $streamInfo = [
                 "#EXT-X-STREAM-INF:BANDWIDTH={$this->getBandwidth($media)}",

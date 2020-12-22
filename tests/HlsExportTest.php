@@ -27,27 +27,27 @@ class HlsExportTest extends TestCase
             ->addFormat($lowBitrate)
             ->addFormat($midBitrate)
             ->addFormat($highBitrate)
-            ->toDisk('memory')
+            ->toDisk('local')
             ->save('adaptive.m3u8');
 
-        $this->assertTrue(Storage::disk('memory')->has('adaptive.m3u8'));
-        $this->assertTrue(Storage::disk('memory')->has('adaptive_0_250.m3u8'));
-        $this->assertTrue(Storage::disk('memory')->has('adaptive_1_1000.m3u8'));
-        $this->assertTrue(Storage::disk('memory')->has('adaptive_2_4000.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_1_1000.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_2_4000.m3u8'));
 
-        $media = (new MediaOpener)->fromDisk('memory')->open('adaptive_0_250_00000.ts');
+        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_0_250_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('memory')->open('adaptive_1_1000_00000.ts');
+        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_1_1000_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('memory')->open('adaptive_2_4000_00000.ts');
+        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_2_4000_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
-        $playlist = Storage::disk('memory')->get('adaptive.m3u8');
+        $playlist = Storage::disk('local')->get('adaptive.m3u8');
 
         $pattern = '/' . implode("\n", [
             '#EXTM3U',
@@ -60,7 +60,7 @@ class HlsExportTest extends TestCase
             '#EXT-X-ENDLIST',
         ]) . '/';
 
-        $this->assertEquals(1, preg_match($pattern, $playlist));
+        $this->assertEquals(1, preg_match($pattern, $playlist), "Playlist mismatch:" . PHP_EOL . $playlist);
     }
 
     /** @test */
@@ -102,15 +102,15 @@ class HlsExportTest extends TestCase
             ->exportForHLS()
             ->addFormat($lowBitrate)
             ->addFormat($midBitrate)
-            ->toDisk('memory')
+            ->toDisk('local')
             ->save('sub/dir/adaptive.m3u8');
 
-        $this->assertTrue(Storage::disk('memory')->has('sub/dir/adaptive.m3u8'));
-        $this->assertTrue(Storage::disk('memory')->has('sub/dir/adaptive_0_250.m3u8'));
-        $this->assertTrue(Storage::disk('memory')->has('sub/dir/adaptive_1_1000.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_1_1000.m3u8'));
 
-        $masterPlaylist = Storage::disk('memory')->get('sub/dir/adaptive.m3u8');
-        $lowPlaylist    = Storage::disk('memory')->get('sub/dir/adaptive_0_250.m3u8');
+        $masterPlaylist = Storage::disk('local')->get('sub/dir/adaptive.m3u8');
+        $lowPlaylist    = Storage::disk('local')->get('sub/dir/adaptive_0_250.m3u8');
 
         $this->assertStringNotContainsString('sub/dir', $masterPlaylist);
         $this->assertStringNotContainsString('sub/dir', $lowPlaylist);
@@ -136,16 +136,16 @@ class HlsExportTest extends TestCase
                 $segments("N{$name}B{$format->getKiloBitrate()}K{$key}_%02d.ts");
                 $playlist("N{$name}B{$format->getKiloBitrate()}K{$key}.m3u8");
             })
-            ->toDisk('memory')
+            ->toDisk('local')
             ->save('adaptive.m3u8');
 
-        $this->assertTrue(Storage::disk('memory')->has('adaptive.m3u8'));
-        $this->assertTrue(Storage::disk('memory')->has('NadaptiveB250K0.m3u8'));
-        $this->assertTrue(Storage::disk('memory')->has('NadaptiveB250K0_00.ts'));
-        $this->assertTrue(Storage::disk('memory')->has('NadaptiveB1000K1.m3u8'));
-        $this->assertTrue(Storage::disk('memory')->has('NadaptiveB1000K1_00.ts'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('NadaptiveB250K0.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('NadaptiveB250K0_00.ts'));
+        $this->assertTrue(Storage::disk('local')->has('NadaptiveB1000K1.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('NadaptiveB1000K1_00.ts'));
 
-        $playlist = Storage::disk('memory')->get('adaptive.m3u8');
+        $playlist = Storage::disk('local')->get('adaptive.m3u8');
 
         $pattern = '/' . implode("\n", [
             '#EXTM3U',
@@ -208,6 +208,11 @@ class HlsExportTest extends TestCase
         $media = (new MediaOpener)->fromDisk('local')->open('adaptive_3_1500_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
+
+        $playlist = Storage::disk('local')->get('adaptive.m3u8');
+
+        $this->assertStringContainsString('RESOLUTION=640x360', $playlist);
+        $this->assertStringContainsString('RESOLUTION=1920x1080', $playlist);
     }
 
     /** @test */

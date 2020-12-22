@@ -13,9 +13,10 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. [La
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
 * Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
 * Built-in support for HLS.
+* Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
-* PHP 7.2 and higher.
+* PHP 7.3 and higher.
 
 ## Support
 
@@ -587,6 +588,108 @@ FFMpeg::fromDisk('videos')
         $segments("{$name}-{$format}-{$key}-%03d.ts");
         $playlist("{$name}-{$format}-{$key}.m3u8");
     });
+```
+
+### Encrypted HLS
+
+As of version 7.5, you can encrypt each HLS segment using AES-128 encryption. To do this, call the `withEncryptionKey` method on the HLS exporter with a key. We provide a `generateEncryptionKey` helper method on the `HLSExporter` class to generate a key. Make sure you store the key well, as the exported result is worthless without the key.
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
+
+$encryptionKey = HLSExporter::generateEncryptionKey();
+
+FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->withEncryptionKey($encryptionKey)
+    ->addFormat($lowBitrate)
+    ->addFormat($midBitrate)
+    ->addFormat($highBitrate)
+    ->save('adaptive_steve.m3u8');
+```
+
+To secure your HLS export even further, you can rotate the key on each exported segment. By doing so, it will generate multiple keys that you'll need to store. Use the `withRotatingEncryptionKey` method to enable this feature and provide a callback that implements the storage of the keys.
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->withRotatingEncryptionKey(function ($filename, $contents) {
+        $videoId = 1;
+
+        // use this callback to store the encryption keys
+
+        Storage::disk('secrets')->put($videoId . '/' . $filename, $contents);
+
+        // or...
+
+        DB::table('hls_secrets')->insert([
+            'video_id' => $videoId,
+            'filename' => $filename,
+            'contents' => $contents,
+        ]);
+    })
+    ->addFormat($lowBitrate)
+    ->addFormat($midBitrate)
+    ->addFormat($highBitrate)
+    ->save('adaptive_steve.m3u8');
+```
+
+The `withRotatingEncryptionKey` method has an optional second argument to set the number of segments that use the same key. This defaults to `1`.
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->withRotatingEncryptionKey($callable, 10);
+```
+
+### Protecting your HLS encryption keys
+
+To make working with encrypted HLS even better, we've added a `DynamicHLSPlaylist` class that modifies playlists on-the-fly and specifically for your application. This way, you can add your authentication and authorization logic. As we're using a plain Laravel controller, you can use features like [Gates](https://laravel.com/docs/master/authorization#gates) and [Middleware](https://laravel.com/docs/master/middleware#introduction).
+
+In this example, we've saved the HLS export to the `public` disk, and we've stored the encryption keys to the `secrets` disk, which isn't publicly available. As the browser can't access the encryption keys, it won't play the video. Each playlist has paths to the encryption keys, and we need to modify those paths to point to an accessible endpoint.
+
+This implementation consists of two routes. One that responses with an encryption key and one that responses with a modified playlist. The first route (`video.key`) is relatively simple, and this is where you should add your additional logic.
+
+The second route (`video.playlist`) uses the `DynamicHLSPlaylist` class. Call the `dynamicHLSPlaylist` method on the `FFMpeg` facade, and similar to opening media files, you can open a playlist utilizing the `fromDisk` and `open` methods. Then you must provide three callbacks. Each of them gives you a relative path and expects a full path in return. As the `DynamicHLSPlaylist` class implements the `Illuminate\Contracts\Support\Responsable` interface, you can return the instance.
+
+The first callback (KeyUrlResolver) gives you the relative path to an encryption key. The second callback (MediaUrlResolver) gives you the relative path to a media segment (.ts files). The third callback (PlaylistUrlResolver) gives you the relative path to a playlist.
+
+Now instead of using `Storage::disk('public')->url('adaptive_steve.m3u8')` to get the full url to your primary playlist, you can use `route('video.playlist', ['playlist' => 'adaptive_steve.m3u8'])`. The `DynamicHLSPlaylist` class takes care of all the paths and urls.
+
+```php
+Route::get('/video/secret/{key}', function ($key) {
+    return Storage::disk('secrets')->download($key);
+})->name('video.key');
+
+Route::get('/video/{playlist}', function ($playlist) {
+    return FFMpeg::dynamicHLSPlaylist()
+        ->fromDisk('public')
+        ->open($playlist)
+        ->setKeyUrlResolver(function ($key) {
+            return route('video.key', ['key' => $key]);
+        })
+        ->setMediaUrlResolver(function ($mediaFilename) {
+            return Storage::disk('public')->url($mediaFilename);
+        })
+        ->setPlaylistUrlResolver(function ($playlistFilename) {
+            return route('video.playlist', ['playlist' => $playlistFilename]);
+        });
+})->name('video.playlist');
+```
+
+## Process Output
+
+You can get the raw process output by calling the `getProcessOutput` method. Though the use-case is limited, you can use it to analyze a file (for example, with the `volumedetect` filter). It returns a `\ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput` class that has three methods: `all`, `errors` and `output`. Each method returns a line with the corresponding lines.
+
+```php
+$processOutput = FFMpeg::open('video.mp4')
+    ->export()
+    ->addFilter(['-filter:a', 'volumedetect', '-f', 'null'])
+    ->getProcessOutput();
+
+$processOutput->all();
+$processOutput->errors();
+$processOutput->out();
 ```
 
 ## Advanced
