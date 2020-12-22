@@ -121,14 +121,16 @@ trait EncryptsHLSSegments
      */
     private function rotateEncryptionKey(): string
     {
-        // randomize the encryption key
-        $this->encryptionSecretsDisk->put(
-            $keyFilename = uniqid() . '.key',
-            $encryptionKey = $this->setEncryptionKey()
-        );
 
         // get the absolute path to the encryption key
-        $keyPath = $this->encryptionSecretsDisk->makeMedia($keyFilename)->getLocalPath();
+        $keyPath = $this->encryptionSecretsDisk
+            ->makeMedia($keyFilename = uniqid() . '.key')->getLocalPath();
+
+        // randomize the encryption key
+        $this->encryptionSecretsDisk->put(
+            $keyFilename,
+            $encryptionKey = $this->setEncryptionKey()
+        );
 
         // generate an info file with a reference to the encryption key and IV
         $this->encryptionSecretsDisk->put(
