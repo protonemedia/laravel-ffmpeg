@@ -35,15 +35,6 @@ class FFProbe extends FFMpegFFProbe
         return new static($probe->getFFProbeDriver(), $probe->getCache());
     }
 
-    /**
-     * Probes the streams contained in a given file.
-     *
-     * @param string $pathfile
-     * @return \FFMpeg\FFProbe\DataMapping\StreamCollection
-     * @throws \FFMpeg\Exception\InvalidArgumentException
-     * @throws \FFMpeg\Exception\RuntimeException
-     */
-
     private function shouldUseCustomProbe($pathfile): bool
     {
         if (!$this->media) {
@@ -65,6 +56,14 @@ class FFProbe extends FFMpegFFProbe
         return true;
     }
 
+    /**
+     * Probes the streams contained in a given file.
+     *
+     * @param string $pathfile
+     * @return \FFMpeg\FFProbe\DataMapping\StreamCollection
+     * @throws \FFMpeg\Exception\InvalidArgumentException
+     * @throws \FFMpeg\Exception\RuntimeException
+     */
     public function streams($pathfile)
     {
         if (!$this->shouldUseCustomProbe($pathfile)) {
@@ -74,6 +73,14 @@ class FFProbe extends FFMpegFFProbe
         return $this->probeStreams($pathfile, '-show_streams', static::TYPE_STREAMS);
     }
 
+    /**
+     * Probes the format of a given file.
+     *
+     * @param string $pathfile
+     * @return \FFMpeg\FFProbe\DataMapping\Format A Format object
+     * @throws \FFMpeg\Exception\InvalidArgumentException
+     * @throws \FFMpeg\Exception\RuntimeException
+     */
     public function format($pathfile)
     {
         if (!$this->shouldUseCustomProbe($pathfile)) {
@@ -85,7 +92,7 @@ class FFProbe extends FFMpegFFProbe
 
     /**
      * This is just copy-paste from FFMpeg\FFProbe...
-     * It prepends the command with the headers.
+     * It prepends the command with the input options.
      */
     private function probeStreams($pathfile, $command, $type, $allowJson = true)
     {
@@ -124,7 +131,7 @@ class FFProbe extends FFMpegFFProbe
                     throw new RuntimeException(sprintf('Unable to parse json %s', $output));
                 }
             } catch (RuntimeException $e) {
-                return $this->probeStreams($pathfile, false);
+                return $this->probeStreams($pathfile, $command, $type, false);
             }
         }
 

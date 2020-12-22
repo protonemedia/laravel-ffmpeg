@@ -97,6 +97,13 @@ class MediaOpener
         return $this;
     }
 
+    /**
+     * Instantiates a single Media object and sets the given options on the object.
+     *
+     * @param string $path
+     * @param array $options
+     * @return self
+     */
     public function openWithInputOptions(string $path, array $options = []): self
     {
         $this->collection->push(

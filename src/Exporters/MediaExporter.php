@@ -12,6 +12,7 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput;
 
 /**
  * @mixin \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
@@ -169,14 +170,11 @@ class MediaExporter
         return $this->getMediaOpener();
     }
 
-    public function getResponse(): array
+    public function getProcessOutput(): ProcessOutput
     {
-        $listener = new StdListener;
-
-        $this->getFFMpegDriver()->listen($listener);
-        $this->save();
-
-        return $listener->get();
+        return tap(new StdListener, function (StdListener $listener) {
+            $this->addListener($listener)->save();
+        })->get();
     }
 
     private function saveWithMappings(): MediaOpener

@@ -11,14 +11,15 @@ class VolumeDetectTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $response = FFMpeg::open('video.mp4')
+        $processOutput = FFMpeg::open('video.mp4')
             ->export()
             ->addFilter(['-filter:a', 'volumedetect', '-f', 'null'])
-            ->getResponse();
+            ->getProcessOutput();
 
-        $this->assertArrayHasKey('err', $response);
-        $this->assertArrayHasKey('out', $response);
+        $this->assertIsArray($processOutput->all());
+        $this->assertIsArray($processOutput->errors());
+        $this->assertIsArray($processOutput->out());
 
-        $this->assertStringContainsString('Parsed_volumedetect_0', implode('', $response['err']));
+        $this->assertStringContainsString('Parsed_volumedetect_0', implode('', $processOutput->all()));
     }
 }

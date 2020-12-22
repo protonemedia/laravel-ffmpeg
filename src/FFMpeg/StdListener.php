@@ -4,10 +4,13 @@ namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 
 use Alchemy\BinaryDriver\Listeners\ListenerInterface;
 use Evenement\EventEmitter;
+use ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput;
 use Symfony\Component\Process\Process;
 
 class StdListener extends EventEmitter implements ListenerInterface
 {
+    const TYPE_ALL = 'all';
+
     /**
      * Name of the emitted event.
      *
@@ -15,30 +18,56 @@ class StdListener extends EventEmitter implements ListenerInterface
      */
     private $eventName;
 
+    /**
+     * Container for the outputted lines.
+     *
+     * @var array
+     */
+    private $data = [
+        self::TYPE_ALL => [],
+        Process::ERR   => [],
+        Process::OUT   => [],
+    ];
+
     public function __construct(string $eventName = 'listen')
     {
         $this->eventName = $eventName;
     }
 
-    private $data = [
-        Process::ERR => [],
-        Process::OUT => [],
-    ];
-
+    /**
+     * Handler for a new line of data.
+     *
+     * @param string $type
+     * @param string $data
+     * @return void
+     */
     public function handle($type, $data)
     {
         $lines = preg_split('/\n|\r\n?/', $data);
 
         foreach ($lines as $line) {
-            $line = $this->data[$type][] = trim($line);
+            $line = trim($line);
+
+            $this->data[$type][] = $line;
+
+            $this->data[static::TYPE_ALL][] = $line;
 
             $this->emit($this->eventName, [$line, $type]);
         }
     }
 
-    public function get(): array
+    /**
+     * Returns the collected output lines.
+     *
+     * @return array
+     */
+    public function get(): ProcessOutput
     {
-        return $this->data;
+        return new ProcessOutput(
+            $this->data[static::TYPE_ALL],
+            $this->data[Process::ERR],
+            $this->data[Process::OUT]
+        );
     }
 
     public function forwardedEvents()

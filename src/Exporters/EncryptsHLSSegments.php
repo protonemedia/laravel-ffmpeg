@@ -199,6 +199,14 @@ trait EncryptsHLSSegments
         });
     }
 
+    /**
+     * While encoding, the encryption keys are saved to a temporary directory.
+     * With this method, we loop through all segment playlists and replace
+     * the absolute path to the keys to a relative ones.
+     *
+     * @param \Illuminate\Support\Collection $playlistMedia
+     * @return void
+     */
     private function replaceAbsolutePathsHLSEncryption(Collection $playlistMedia)
     {
         if (!$this->encryptionSecretsDisk) {

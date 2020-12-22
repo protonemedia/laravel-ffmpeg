@@ -642,6 +642,21 @@ FFMpeg::open('steve_howe.mp4')
     ->withRotatingEncryptionKey($callable, 10);
 ```
 
+## Process Output
+
+You can get the raw process output by calling the `getProcessOutput` method. The use-case is limited, but you could use it to analyze a file (for example, with the `volumedetect` filter). It returns a `\ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput` class that has three methods: `all`, `errors` and `output`. Each method returns a line with the corresponding lines.
+
+```php
+$processOutput = FFMpeg::open('video.mp4')
+    ->export()
+    ->addFilter(['-filter:a', 'volumedetect', '-f', 'null'])
+    ->getProcessOutput();
+
+$processOutput->all();
+$processOutput->errors();
+$processOutput->out();
+```
+
 ## Advanced
 
 The Media object you get when you 'open' a file, actually holds the Media object that belongs to the [underlying driver](https://github.com/PHP-FFMpeg/PHP-FFMpeg). It handles dynamic method calls as you can see [here](https://github.com/pascalbaljetmedia/laravel-ffmpeg/blob/master/src/Media.php#L114-L117). This way all methods of the underlying driver are still available to you.
