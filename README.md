@@ -650,11 +650,11 @@ In this example, we've saved the HLS export to the `public` disk, and we've stor
 
 This implementation consists of two routes. One that responses with an encryption key and one that responses with a modified playlist. The first route (`video.key`) is relatively simple, and this is where you should add your additional logic.
 
-The second route (`video.playlist`) uses the `DynamicHLSPlaylist` class. Calling the `dynamicHLSPlaylist` method on the `FFMpeg` facade, and similar to opening media files, you can open a playlist utilizing the `fromDisk` and `open` methods. Then you must provide three callbacks. Each of them gives you a relative path and expects a full path in return. As the `DynamicHLSPlaylist` class implements the `Illuminate\Contracts\Support\Responsable` interface, you can return the instance.
+The second route (`video.playlist`) uses the `DynamicHLSPlaylist` class. Call the `dynamicHLSPlaylist` method on the `FFMpeg` facade, and similar to opening media files, you can open a playlist utilizing the `fromDisk` and `open` methods. Then you must provide three callbacks. Each of them gives you a relative path and expects a full path in return. As the `DynamicHLSPlaylist` class implements the `Illuminate\Contracts\Support\Responsable` interface, you can return the instance.
 
 The first callback (KeyUrlResolver) gives you the relative path to an encryption key. The second callback (MediaUrlResolver) gives you the relative path to a media segment (.ts files). The third callback (PlaylistUrlResolver) gives you the relative path to a playlist.
 
-Now instead of using `Storage::disk('public')->url('adaptive_steve.m3u8')` to get the full url to your primary playlist, you can use `route('video.playlist', ['playlist' => 'adaptive_steve.m3u8'])`. The `DynamicHLSPlaylist` takes care of all the paths and urls.
+Now instead of using `Storage::disk('public')->url('adaptive_steve.m3u8')` to get the full url to your primary playlist, you can use `route('video.playlist', ['playlist' => 'adaptive_steve.m3u8'])`. The `DynamicHLSPlaylist` class takes care of all the paths and urls.
 
 ```php
 Route::get('/video/secret/{key}', function ($key) {
