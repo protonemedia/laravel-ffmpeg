@@ -644,7 +644,7 @@ FFMpeg::open('steve_howe.mp4')
 
 ## Process Output
 
-You can get the raw process output by calling the `getProcessOutput` method. The use-case is limited, but you could use it to analyze a file (for example, with the `volumedetect` filter). It returns a `\ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput` class that has three methods: `all`, `errors` and `output`. Each method returns a line with the corresponding lines.
+You can get the raw process output by calling the `getProcessOutput` method. Though the use-case is limited, you can use it to analyze a file (for example, with the `volumedetect` filter). It returns a `\ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput` class that has three methods: `all`, `errors` and `output`. Each method returns a line with the corresponding lines.
 
 ```php
 $processOutput = FFMpeg::open('video.mp4')

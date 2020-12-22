@@ -29,10 +29,13 @@ class DynamicHLSPlaylistTest extends TestCase
         $dynamicPlaylist = FFMpeg::dynamicHLSPlaylist()
             ->fromDisk('local')
             ->open('adaptive.m3u8')
-            ->setMediaResolver(function ($media) {
+            ->setMediaUrlResolver(function ($media) {
                 return "https://example.com/{$media}";
             })
-            ->setKeyResolver(function ($key) {
+            ->setPlaylistUrlResolver(function ($playlist) {
+                return "https://example.com/{$playlist}";
+            })
+            ->setKeyUrlResolver(function ($key) {
                 return "https://example.com/{$key}?secret=1337";
             })
             ->all();

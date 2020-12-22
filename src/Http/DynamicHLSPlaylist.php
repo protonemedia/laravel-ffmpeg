@@ -2,12 +2,14 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Http;
 
+use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 
-class DynamicHLSPlaylist
+class DynamicHLSPlaylist implements Responsable
 {
     /**
      * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
@@ -41,6 +43,11 @@ class DynamicHLSPlaylist
     /**
      * @var array
      */
+    private $playlistCache = [];
+
+    /**
+     * @var array
+     */
     private $mediaCache = [];
 
     /**
@@ -68,20 +75,28 @@ class DynamicHLSPlaylist
     {
         $this->media = Media::make($this->disk, $path);
 
-        $this->keyCache   = [];
-        $this->mediaCache = [];
+        $this->keyCache      = [];
+        $this->playlistCache = [];
+        $this->mediaCache    = [];
 
         return $this;
     }
 
-    public function setMediaResolver(callable $mediaResolver): self
+    public function setMediaUrlResolver(callable $mediaResolver): self
     {
         $this->mediaResolver = $mediaResolver;
 
         return $this;
     }
 
-    public function setKeyResolver(callable $keyResolver): self
+    public function setPlaylistUrlResolver(callable $playlistResolver): self
+    {
+        $this->playlistResolver = $playlistResolver;
+
+        return $this;
+    }
+
+    public function setKeyUrlResolver(callable $keyResolver): self
     {
         $this->keyResolver = $keyResolver;
 
@@ -94,7 +109,7 @@ class DynamicHLSPlaylist
      * @param string $key
      * @return string
      */
-    public function resolveKeyFilename(string $key): string
+    private function resolveKeyFilename(string $key): string
     {
         if (array_key_exists($key, $this->keyCache)) {
             return $this->keyCache[$key];
@@ -109,13 +124,28 @@ class DynamicHLSPlaylist
      * @param string $key
      * @return string
      */
-    public function resolveMediaFilename(string $media): string
+    private function resolveMediaFilename(string $media): string
     {
         if (array_key_exists($media, $this->mediaCache)) {
             return $this->mediaCache[$media];
         }
 
         return $this->mediaCache[$media] = call_user_func($this->mediaResolver, $media);
+    }
+
+    /**
+     * Returns the resolved playlist filename from the cache or resolves it.
+     *
+     * @param string $key
+     * @return string
+     */
+    private function resolvePlaylistFilename(string $playlist): string
+    {
+        if (array_key_exists($playlist, $this->playlistCache)) {
+            return $this->playlistCache[$playlist];
+        }
+
+        return $this->playlistCache[$playlist] = call_user_func($this->playlistResolver, $playlist);
     }
 
     /**
@@ -155,13 +185,13 @@ class DynamicHLSPlaylist
     }
 
     /**
-     * Returns the processed content of the master playlist.
+     * Returns the processed content of the playlist.
      *
      * @return string
      */
-    public function getMasterPlaylist(): string
+    public function get(): string
     {
-        return $this->get($this->media->getPath());
+        return $this->getProcessedPlaylist($this->media->getPath());
     }
 
     /**
@@ -177,9 +207,9 @@ class DynamicHLSPlaylist
         )->filter(function ($line) {
             return static::lineHasMediaFilename($line);
         })->mapWithKeys(function ($segmentPlaylist) {
-            return [$segmentPlaylist => $this->get($segmentPlaylist)];
+            return [$segmentPlaylist => $this->getProcessedPlaylist($segmentPlaylist)];
         })->prepend(
-            $this->get($this->media->getPath()),
+            $this->getProcessedPlaylist($this->media->getPath()),
             $this->media->getPath()
         );
     }
@@ -190,11 +220,13 @@ class DynamicHLSPlaylist
      * @param string $playlistPath
      * @return string
      */
-    public function get(string $playlistPath): string
+    public function getProcessedPlaylist(string $playlistPath): string
     {
         return static::parseLines($this->disk->get($playlistPath))->map(function (string $line) {
             if (static::lineHasMediaFilename($line)) {
-                return $this->resolveMediaFilename($line);
+                return Str::endsWith($line, '.m3u8')
+                    ? $this->resolvePlaylistFilename($line)
+                    : $this->resolveMediaFilename($line);
             }
 
             $key = static::extractKeyFromExtLine($line);
@@ -209,5 +241,12 @@ class DynamicHLSPlaylist
                 $line
             );
         })->implode(PHP_EOL);
+    }
+
+    public function toResponse($request)
+    {
+        return Response::make($this->get(), 200, [
+            'Content-Type' => 'application/vnd.apple.mpegurl',
+        ]);
     }
 }
