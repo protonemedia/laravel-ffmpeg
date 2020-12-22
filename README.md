@@ -293,9 +293,11 @@ Check out [the documentation](https://spatie.be/docs/image/v1/introduction) for 
 This package comes with a `ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat` class that allows you to export a file without transcoding the streams. You might want to use this to use another container:
 
 ```php
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat;
+
 FFMpeg::open('video.mp4')
     ->export()
-    ->inFormat(new \ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat)
+    ->inFormat(new CopyFormat)
     ->save('video.mkv');
 ```
 
@@ -679,7 +681,7 @@ Route::get('/video/{playlist}', function ($playlist) {
 
 ## Process Output
 
-You can get the raw process output by calling the `getProcessOutput` method. Though the use-case is limited, you can use it to analyze a file (for example, with the `volumedetect` filter). It returns a `\ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput` class that has three methods: `all`, `errors` and `output`. Each method returns a line with the corresponding lines.
+You can get the raw process output by calling the `getProcessOutput` method. Though the use-case is limited, you can use it to analyze a file (for example, with the `volumedetect` filter). It returns a `ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput` class that has three methods: `all`, `errors` and `output`. Each method returns an array with the corresponding lines.
 
 ```php
 $processOutput = FFMpeg::open('video.mp4')
