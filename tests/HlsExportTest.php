@@ -208,6 +208,11 @@ class HlsExportTest extends TestCase
         $media = (new MediaOpener)->fromDisk('local')->open('adaptive_3_1500_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
+
+        $playlist = Storage::disk('local')->get('adaptive.m3u8');
+
+        $this->assertStringContainsString('RESOLUTION=640x360', $playlist);
+        $this->assertStringContainsString('RESOLUTION=1920x1080', $playlist);
     }
 
     /** @test */

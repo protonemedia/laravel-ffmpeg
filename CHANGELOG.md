@@ -6,9 +6,10 @@ All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
 ### Added
 
--   Support for PHP 8.0
--   Encrypted HLS
--   New `getProcessOutput` method to analyze media
+-   Support for PHP 8.0.
+-   Encrypted HLS.
+-   New `getProcessOutput` method to analyze media.
+-   Support for dynamic HLS playlists.
 
 ### Deprecated
 
