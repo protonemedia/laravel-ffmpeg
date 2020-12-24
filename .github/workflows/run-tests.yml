@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
     test:
-        runs-on: ubuntu-16.04
+        runs-on: ubuntu-20.04
         strategy:
             fail-fast: true
             matrix:
@@ -35,8 +35,6 @@ jobs:
             -   name: Install FFmpeg
                 run: |
                     sudo apt-get update
-                    sudo add-apt-repository -y ppa:mc3man/xerus-media
-                    sudo apt-get -qq update
                     sudo apt-get install -y --allow-unauthenticated software-properties-common ffmpeg
 
             -   name: Install dependencies
