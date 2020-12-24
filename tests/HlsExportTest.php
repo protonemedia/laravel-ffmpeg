@@ -12,6 +12,11 @@ use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HlsExportTest extends TestCase
 {
+    public static function streamInfoPattern($resolution): string
+    {
+        return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION=' . $resolution . ',CODECS="[a-zA-Z0-9,.]+",FRAME-RATE=25.000';
+    }
+
     /** @test */
     public function it_can_export_a_single_media_file_into_a_hls_export()
     {
@@ -51,11 +56,11 @@ class HlsExportTest extends TestCase
 
         $pattern = '/' . implode("\n", [
             '#EXTM3U',
-            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            static::streamInfoPattern('1920x1080'),
             'adaptive_0_250.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            static::streamInfoPattern('1920x1080'),
             'adaptive_1_1000.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            static::streamInfoPattern('1920x1080'),
             'adaptive_2_4000.m3u8',
             '#EXT-X-ENDLIST',
         ]) . '/';
@@ -108,6 +113,7 @@ class HlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_0_250.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_1_1000.m3u8'));
+        $this->assertFalse(Storage::disk('local')->has('sub/dir/master_playlist_guide_0.m3u8'));
 
         $masterPlaylist = Storage::disk('local')->get('sub/dir/adaptive.m3u8');
         $lowPlaylist    = Storage::disk('local')->get('sub/dir/adaptive_0_250.m3u8');
@@ -149,9 +155,9 @@ class HlsExportTest extends TestCase
 
         $pattern = '/' . implode("\n", [
             '#EXTM3U',
-            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            static::streamInfoPattern('1920x1080'),
             'NadaptiveB250K0.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            static::streamInfoPattern('1920x1080'),
             'NadaptiveB1000K1.m3u8',
             '#EXT-X-ENDLIST',
         ]) . '/';

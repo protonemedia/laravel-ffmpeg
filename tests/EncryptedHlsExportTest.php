@@ -28,12 +28,12 @@ class EncryptedHlsExportTest extends TestCase
 
         $pattern = '/' . implode("\n", [
             '#EXTM3U',
-            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]+,RESOLUTION=1920x1080,FRAME-RATE=25.000',
+            HlsExportTest::streamInfoPattern('1920x1080'),
             'adaptive_0_250.m3u8',
             '#EXT-X-ENDLIST',
         ]) . '/';
 
-        $this->assertEquals(1, preg_match($pattern, $playlist));
+        $this->assertEquals(1, preg_match($pattern, $playlist), "Playlist mismatch:" . PHP_EOL . $playlist);
 
         $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
 

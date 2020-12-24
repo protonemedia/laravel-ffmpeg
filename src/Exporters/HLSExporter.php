@@ -8,6 +8,7 @@ use FFMpeg\Format\Video\DefaultVideo;
 use FFMpeg\Format\VideoInterface;
 use Illuminate\Support\Collection;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HLSExporter extends MediaExporter
@@ -142,13 +143,27 @@ class HLSExporter extends MediaExporter
         return $outs;
     }
 
+    public static function generateMasterPlaylistFilename($key): string
+    {
+        return "master_playlist_guide_{$key}.m3u8";
+    }
+
+    private function cleanupMasterPlaylistGuides(Media $media)
+    {
+        $this->pendingFormats->map(function ($formatAndCallback, $key) use ($media) {
+            $media->getDisk()->delete(
+                $media->getDirectory() . static::generateMasterPlaylistFilename($key)
+            );
+        });
+    }
+
     private function prepareSaving(string $path = null): Collection
     {
         $media = $this->getDisk()->makeMedia($path);
 
         $baseName = $media->getDirectory() . $media->getFilenameWithoutExtension();
 
-        return $this->pendingFormats->map(function ($formatAndCallback, $key) use ($baseName) {
+        return $this->pendingFormats->map(function ($formatAndCallback, $key) use ($baseName, $media) {
             $disk = $this->getDisk()->clone();
 
             [$format, $filtersCallback] = $formatAndCallback;
@@ -160,6 +175,14 @@ class HLSExporter extends MediaExporter
             );
 
             $this->addHLSParametersToFormat($format, $segmentsPattern, $disk);
+
+            $format->setAdditionalParameters(array_merge(
+                $format->getAdditionalParameters(),
+                [
+                    '-master_pl_name',
+                    $this->generateMasterPlaylistFilename($key),
+                ]
+            ));
 
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);
@@ -193,6 +216,7 @@ class HLSExporter extends MediaExporter
             $this->getDisk()->put($path, $playlist);
 
             $this->replaceAbsolutePathsHLSEncryption($playlistMedia);
+            $this->cleanupMasterPlaylistGuides($playlistMedia->first());
             $this->cleanupHLSEncryption();
 
             return $result;

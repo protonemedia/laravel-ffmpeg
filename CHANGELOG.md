@@ -2,6 +2,13 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.5.1 - 2020-12-24
+
+### Added
+
+-   Support for codec in HLS playlist
+-   Fixed bitrate bug in HLS playlist
+
 ## 7.5.0 - 2020-12-22
 
 ### Added

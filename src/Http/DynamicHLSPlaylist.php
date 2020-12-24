@@ -154,7 +154,7 @@ class DynamicHLSPlaylist implements Responsable
      * @param string $lines
      * @return \Illuminate\Support\Collection
      */
-    private static function parseLines(string $lines): Collection
+    public static function parseLines(string $lines): Collection
     {
         return Collection::make(preg_split('/\n|\r\n?/', $lines));
     }

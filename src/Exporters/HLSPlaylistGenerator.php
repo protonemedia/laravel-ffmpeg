@@ -2,33 +2,17 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
-use Exception;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\Http\DynamicHLSPlaylist;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HLSPlaylistGenerator implements PlaylistGenerator
 {
     const PLAYLIST_START = '#EXTM3U';
     const PLAYLIST_END   = '#EXT-X-ENDLIST';
-
-    private function getBandwidth(MediaOpener $media)
-    {
-        return $media->getFormat()->get('bit_rate');
-    }
-
-    private function getResolution(MediaOpener $media)
-    {
-        try {
-            $dimensions = optional($media->getVideoStream())->getDimensions();
-        } catch (Exception $exception) {
-            return null;
-        }
-
-        return "{$dimensions->getWidth()}x{$dimensions->getHeight()}";
-    }
 
     private function getFrameRate(MediaOpener $media)
     {
@@ -43,22 +27,30 @@ class HLSPlaylistGenerator implements PlaylistGenerator
         return $frameRate ? number_format($frameRate, 3, '.', '') : null;
     }
 
+    private function getStreamInfoLine(Media $playlistMedia, string $key): string
+    {
+        $masterPlaylist = $playlistMedia->getDisk()->get(
+            $playlistMedia->getDirectory() . HLSExporter::generateMasterPlaylistFilename($key, $playlistMedia)
+        );
+
+        $lines = DynamicHLSPlaylist::parseLines($masterPlaylist)->filter();
+
+        return $lines->get($lines->search($playlistMedia->getFilename()) - 1);
+    }
+
     public function get(array $playlistMedia, PHPFFMpeg $driver): string
     {
-        return Collection::make($playlistMedia)->map(function (Media $playlistMedia) use ($driver) {
+        return Collection::make($playlistMedia)->map(function (Media $playlistMedia, $key) use ($driver) {
             $media = (new MediaOpener($playlistMedia->getDisk(), $driver))
                 ->openWithInputOptions($playlistMedia->getPath(), ['-allowed_extensions', 'ALL']);
 
-            $streamInfo = [
-                "#EXT-X-STREAM-INF:BANDWIDTH={$this->getBandwidth($media)}",
-                "RESOLUTION={$this->getResolution($media)}",
-            ];
+            $streamInfoLine = $this->getStreamInfoLine($playlistMedia, $key);
 
             if ($frameRate = $this->getFrameRate($media)) {
-                $streamInfo[] = "FRAME-RATE={$frameRate}";
+                $streamInfoLine .= ",FRAME-RATE={$frameRate}";
             }
 
-            return [implode(',', $streamInfo), $playlistMedia->getFilename()];
+            return [$streamInfoLine, $playlistMedia->getFilename()];
         })->collapse()
             ->prepend(static::PLAYLIST_START)
             ->push(static::PLAYLIST_END)
