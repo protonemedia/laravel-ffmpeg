@@ -63,17 +63,19 @@ class Media
 
     private function makeDirectory(): void
     {
+        $disk = $this->getDisk();
+
+        if (!$disk->isLocalDisk()) {
+            $disk = $disk->temporaryDirectoryDisk();
+        }
+
         $directory = $this->getDirectory();
 
-        $adapter = $this->getDisk()->isLocalDisk()
-            ? $this->getDisk()->getFilesystemAdapter()
-            : $this->temporaryDirectoryAdapter();
-
-        if ($adapter->has($directory)) {
+        if ($disk->has($directory)) {
             return;
         }
 
-        $adapter->makeDirectory($directory);
+        $disk->makeDirectory($directory);
     }
 
     public function getFilenameWithoutExtension(): string
@@ -84,6 +86,11 @@ class Media
     public function getFilename(): string
     {
         return pathinfo($this->getPath())['basename'];
+    }
+
+    private function temporaryDirectoryDisk(): Disk
+    {
+        return Disk::make($this->temporaryDirectoryAdapter());
     }
 
     private function temporaryDirectoryAdapter(): FilesystemAdapter
@@ -106,13 +113,13 @@ class Media
             return $disk->path($path);
         }
 
-        $temporaryDirectoryAdapter = $this->temporaryDirectoryAdapter();
+        $temporaryDirectoryDisk = $this->temporaryDirectoryDisk();
 
-        if ($disk->exists($path) && !$temporaryDirectoryAdapter->exists($path)) {
-            $temporaryDirectoryAdapter->writeStream($path, $disk->readStream($path));
+        if ($disk->exists($path) && !$temporaryDirectoryDisk->exists($path)) {
+            $temporaryDirectoryDisk->writeStream($path, $disk->readStream($path));
         }
 
-        return $temporaryDirectoryAdapter->path($path);
+        return $temporaryDirectoryDisk->path($path);
     }
 
     public function copyAllFromTemporaryDirectory(string $visibility = null)
@@ -121,12 +128,12 @@ class Media
             return $this;
         }
 
-        $temporaryDirectoryAdapter = $this->temporaryDirectoryAdapter();
+        $temporaryDirectoryDisk = $this->temporaryDirectoryDisk();
 
         $destinationAdapater = $this->getDisk()->getFilesystemAdapter();
 
-        foreach ($temporaryDirectoryAdapter->allFiles() as $path) {
-            $destinationAdapater->writeStream($path, $temporaryDirectoryAdapter->readStream($path));
+        foreach ($temporaryDirectoryDisk->allFiles() as $path) {
+            $destinationAdapater->writeStream($path, $temporaryDirectoryDisk->readStream($path));
 
             if ($visibility) {
                 $destinationAdapater->setVisibility($path, $visibility);

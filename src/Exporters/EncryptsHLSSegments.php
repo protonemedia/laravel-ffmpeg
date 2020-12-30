@@ -186,7 +186,7 @@ trait EncryptsHLSSegments
         }
 
         $this->addListener(new StdListener)->onEvent('listen', function ($line) {
-            $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:/")
+            $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:")
                 && Str::contains($line, ".ts' for writing");
 
             if (!$opensEncryptedSegment) {
