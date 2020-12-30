@@ -66,7 +66,7 @@ class FFProbe extends FFMpegFFProbe
      */
     public function streams($pathfile)
     {
-        $pathfile = realpath($pathfile);
+        $pathfile = realpath($pathfile) ?: $pathfile;
 
         if (!$this->shouldUseCustomProbe($pathfile)) {
             return parent::streams($pathfile);
@@ -85,7 +85,7 @@ class FFProbe extends FFMpegFFProbe
      */
     public function format($pathfile)
     {
-        $pathfile = realpath($pathfile);
+        $pathfile = realpath($pathfile) ?: $pathfile;
 
         if (!$this->shouldUseCustomProbe($pathfile)) {
             return parent::format($pathfile);
