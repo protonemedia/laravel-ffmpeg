@@ -34,6 +34,7 @@ jobs:
                     coverage: none
 
             -   name: Install FFmpeg
+                if: ${{ matrix.os == 'ubuntu-20.04' }}
                 run: |
                     sudo apt-get update
                     sudo apt-get install -y --allow-unauthenticated software-properties-common ffmpeg
