@@ -131,11 +131,13 @@ class Disk
     {
         $normalizedPath = Util::normalizePath($path);
 
-        if (Str::startsWith($path, '/') && !Str::startsWith($normalizedPath, '/')) {
-            return "/{$normalizedPath}";
+        if (!Str::startsWith($path, '/')) {
+            return $normalizedPath;
         }
 
-        return $normalizedPath;
+        return Str::startsWith($normalizedPath, '/')
+            ? $normalizedPath
+            : "/{$normalizedPath}";
     }
 
     /**
@@ -148,8 +150,14 @@ class Disk
     {
         $path = $this->getFilesystemAdapter()->path($path);
 
-        if ($this->isLocalDisk() && windows_os()) {
-            return static::normalizePath($path);
+        if (!$this->isLocalDisk()) {
+            return $path;
+        }
+
+        $path = static::normalizePath($path);
+
+        if (file_exists($path)) {
+            return realpath($path) ?: $path;
         }
 
         return $path;

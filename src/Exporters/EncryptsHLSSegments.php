@@ -222,7 +222,7 @@ trait EncryptsHLSSegments
             $prefix = '#EXT-X-KEY:METHOD=AES-128,URI="';
 
             $content = str_replace(
-                $prefix . $this->encryptionSecretsDisk->path(''),
+                $prefix . rtrim($this->encryptionSecretsDisk->path(''), '/') . '/',
                 $prefix,
                 $disk->get($path)
             );
