@@ -136,7 +136,7 @@ class Disk
         $path = $this->getFilesystemAdapter()->path($path);
 
         if ($this->isLocalDisk() && windows_os()) {
-            return str_replace('\\', '/', $path);
+            return str_replace('/', DIRECTORY_SEPARATOR, str_replace('\\', '/', $path));
         }
 
         return $path;
