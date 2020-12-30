@@ -66,7 +66,7 @@ class Media
         $disk = $this->getDisk();
 
         if (!$disk->isLocalDisk()) {
-            $disk = $this->temporaryDirectoryAdapter();
+            $disk = $this->temporaryDirectoryDisk();
         }
 
         $directory = $this->getDirectory();

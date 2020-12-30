@@ -26,7 +26,7 @@ class EncryptedHlsExportTest extends TestCase
 
         $playlist = Storage::disk('local')->get('adaptive.m3u8');
 
-        $pattern = '/' . implode("\n", [
+        $pattern = '/' . implode("\r\n", [
             '#EXTM3U',
             HlsExportTest::streamInfoPattern('1920x1080'),
             'adaptive_0_250.m3u8',
@@ -37,7 +37,7 @@ class EncryptedHlsExportTest extends TestCase
 
         $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
 
-        $pattern = '/' . implode("\n", [
+        $pattern = '/' . implode("\r\n", [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
             '#EXT-X-TARGETDURATION:5',
@@ -78,7 +78,7 @@ class EncryptedHlsExportTest extends TestCase
 
         $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
 
-        $pattern = "/" . implode("\n", [
+        $pattern = "/" . implode("\r\n", [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
             '#EXT-X-TARGETDURATION:[0-9]+',
@@ -131,7 +131,7 @@ class EncryptedHlsExportTest extends TestCase
 
         $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
 
-        $pattern = "/" . implode("\n", [
+        $pattern = "/" . implode("\r\n", [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
             '#EXT-X-TARGETDURATION:[0-9]+',
