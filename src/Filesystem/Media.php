@@ -43,7 +43,7 @@ class Media
 
     public function getPath(): string
     {
-        return str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $this->path);
+        return $this->path;
     }
 
     public function getDirectory(): ?string

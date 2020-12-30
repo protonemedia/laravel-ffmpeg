@@ -126,6 +126,23 @@ class Disk
     }
 
     /**
+     * Get the full path for the file at the given "short" path.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    public function path(string $path): string
+    {
+        $path = $this->getFilesystemAdapter()->path($path);
+
+        if ($this->isLocalDisk()) {
+            return realpath($path) ?: $path;
+        }
+
+        return $path;
+    }
+
+    /**
      * Forwards all calls to Laravel's FilesystemAdapter which will pass
      * dynamic methods call onto Flysystem.
      */
