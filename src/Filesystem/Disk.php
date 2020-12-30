@@ -9,6 +9,7 @@ use Illuminate\Support\Traits\ForwardsCalls;
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\AdapterInterface;
 use League\Flysystem\Filesystem as LeagueFilesystem;
+use League\Flysystem\Util;
 
 /**
  * @mixin \Illuminate\Filesystem\FilesystemAdapter
@@ -136,7 +137,7 @@ class Disk
         $path = $this->getFilesystemAdapter()->path($path);
 
         if ($this->isLocalDisk() && windows_os()) {
-            return str_replace('\\', '/', $path);
+            return Util::normalizePath($path);
         }
 
         return $path;
