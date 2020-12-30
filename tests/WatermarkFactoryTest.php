@@ -6,7 +6,7 @@ use FFMpeg\Filters\Video\WatermarkFilter;
 use FFMpeg\Format\VideoInterface;
 use FFMpeg\Media\Video;
 use Illuminate\Support\Facades\Storage;
-use League\Flysystem\Util;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 
 class WatermarkFactoryTest extends TestCase
@@ -35,7 +35,7 @@ class WatermarkFactoryTest extends TestCase
         $this->assertInstanceOf(WatermarkFilter::class, $factory->get());
 
         $this->assertStringContainsString(
-            'movie=' . Util::normalizePath(Storage::disk('local')->path('logo.png')) . ' [watermark];',
+            'movie=' . Disk::normalizePath(Storage::disk('local')->path('logo.png')) . ' [watermark];',
             $this->getSecondCommand($factory)
         );
     }
@@ -50,7 +50,7 @@ class WatermarkFactoryTest extends TestCase
 
         $this->assertInstanceOf(WatermarkFilter::class, $factory->get());
 
-        $this->assertStringContainsString(Util::normalizePath(sys_get_temp_dir()), $this->getSecondCommand($factory));
+        $this->assertStringContainsString(Disk::normalizePath(sys_get_temp_dir()), $this->getSecondCommand($factory));
         $this->assertStringContainsString('logo.png', $this->getSecondCommand($factory));
     }
 
@@ -112,7 +112,7 @@ class WatermarkFactoryTest extends TestCase
 
         $command = $this->getSecondCommand($factory);
 
-        $this->assertStringContainsString(Util::normalizePath(sys_get_temp_dir()), $command);
+        $this->assertStringContainsString(Disk::normalizePath(sys_get_temp_dir()), $command);
 
         $path = $factory->getPath();
 
