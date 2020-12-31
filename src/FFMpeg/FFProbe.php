@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 use Alchemy\BinaryDriver\Exception\ExecutionFailureException;
 use FFMpeg\Exception\RuntimeException;
 use FFMpeg\FFProbe as FFMpegFFProbe;
+use Illuminate\Support\Str;
 use League\Flysystem\Util;
 
 class FFProbe extends FFMpegFFProbe
@@ -77,7 +78,7 @@ class FFProbe extends FFMpegFFProbe
     {
         $directory = Util::pathinfo($pathfile)['dirname'];
 
-        if (file_exists($directory)) {
+        if (!Str::startsWith($directory, 'http')) {
             $this->getFFProbeDriver()->setWorkingDirectory($directory);
         }
 
@@ -100,7 +101,7 @@ class FFProbe extends FFMpegFFProbe
     {
         $directory = Util::pathinfo($pathfile)['dirname'];
 
-        if (file_exists($directory)) {
+        if (!Str::startsWith($directory, 'http')) {
             $this->getFFProbeDriver()->setWorkingDirectory($directory);
         }
 
