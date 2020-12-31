@@ -53,6 +53,7 @@ class HlsExportTest extends TestCase
         $this->assertNotNull($media->getAudioStream());
 
         $playlist = Storage::disk('local')->get('adaptive.m3u8');
+        $playlist = preg_replace('/\n|\r\n?/', "\n", $playlist);
 
         $pattern = '/' . implode("\n", [
             '#EXTM3U',

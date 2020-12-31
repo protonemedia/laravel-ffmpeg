@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class EncryptedHlsExportTest extends TestCase
@@ -24,6 +25,7 @@ class EncryptedHlsExportTest extends TestCase
             ->exportForHLS()
             ->withEncryptionKey(HLSExporter::generateEncryptionKey())
             ->addFormat($lowBitrate)
+            ->addListener($listener = new StdListener)
             ->save('adaptive.m3u8');
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
@@ -56,7 +58,11 @@ class EncryptedHlsExportTest extends TestCase
             '#EXT-X-ENDLIST',
         ]) . '/';
 
-        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist), "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist);
+        $this->assertEquals(
+            1,
+            preg_match($pattern, $encryptedPlaylist),
+            "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist . PHP_EOL . PHP_EOL . implode(PHP_EOL, $listener->get()->all())
+        );
     }
 
     /** @test */
@@ -66,15 +72,17 @@ class EncryptedHlsExportTest extends TestCase
 
         $lowBitrate = $this->x264()->setKiloBitrate(250);
 
-        $keys = [];
+        $keys     = [];
+        $listener = null;
 
         FFMpeg::open('video.mp4')
             ->exportForHLS()
             ->setKeyFrameInterval(1)
             ->setSegmentLength(1)
             ->addFormat($lowBitrate)
-            ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys) {
+            ->withRotatingEncryptionKey(function ($filename, $contents, $stdListener) use (&$keys, &$listener) {
                 $keys[$filename] = $contents;
+                $listener = $listener ?: $stdListener;
             })
             ->save('adaptive.m3u8');
 
@@ -110,7 +118,7 @@ class EncryptedHlsExportTest extends TestCase
             '#EXT-X-ENDLIST',
         ]) . "/";
 
-        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist), "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist);
+        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist), "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist . PHP_EOL . PHP_EOL . implode(PHP_EOL, $listener->get()->all()));
     }
 
     /** @test */

@@ -131,9 +131,9 @@ class Disk
     {
         $normalizedPath = Util::normalizePath($path);
 
-        // reapply the starting slash on non-windows os
-        if (Str::startsWith($path, '/') && !Str::startsWith($normalizedPath, '/') && !windows_os()) {
-            $normalizedPath = "/{$normalizedPath}";
+        // reapply the starting slash
+        if (Str::startsWith($path, '/') && !Str::startsWith($normalizedPath, '/')) {
+            return "/{$normalizedPath}";
         }
 
         return $normalizedPath;

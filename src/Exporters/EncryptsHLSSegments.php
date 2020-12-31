@@ -59,6 +59,8 @@ trait EncryptsHLSSegments
      */
     private $segmentsPerKey = 1;
 
+    private $listener;
+
     /**
      * Creates a new encryption key.
      *
@@ -142,7 +144,7 @@ trait EncryptsHLSSegments
 
         // call the callback
         if ($this->onNewEncryptionKey) {
-            call_user_func($this->onNewEncryptionKey, $keyFilename, $encryptionKey);
+            call_user_func($this->onNewEncryptionKey, $keyFilename, $encryptionKey, $this->listener);
         }
 
         // return the absolute path to the info file
@@ -185,7 +187,7 @@ trait EncryptsHLSSegments
             return;
         }
 
-        $this->addListener(new StdListener)->onEvent('listen', function ($line) {
+        $this->addListener($this->listener = new StdListener)->onEvent('listen', function ($line) {
             $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:")
                 && Str::contains($line, ".ts' for writing");
 
