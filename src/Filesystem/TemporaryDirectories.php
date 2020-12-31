@@ -3,30 +3,34 @@
 namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 
 use Illuminate\Filesystem\Filesystem;
-use Illuminate\Support\Str;
 
 class TemporaryDirectories
 {
-    private static $directories = [];
+    private $root;
 
-    public static function create(): string
+    private $directories = [];
+
+    public function __construct(string $root)
     {
-        $directory = static::$directories[] = Str::random();
+        $this->root = rtrim($root, '/');
+    }
 
-        return storage_path("ffmpeg_temp/{$directory}");
+    public function create(): string
+    {
+        return $this->directories[] = $this->root . uniqid('/');
     }
 
     /**
      * Loop through all directories and delete them.
      */
-    public static function deleteAll(): void
+    public function deleteAll(): void
     {
-        foreach (static::$directories as $directory) {
-            (new Filesystem)->deleteDirectory(
-                storage_path("ffmpeg_temp/{$directory}")
-            );
+        $filesystem = new Filesystem;
+
+        foreach ($this->directories as $directory) {
+            $filesystem->deleteDirectory($directory);
         }
 
-        static::$directories = [];
+        $this->directories = [];
     }
 }

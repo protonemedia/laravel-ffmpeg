@@ -188,7 +188,7 @@ class MediaOpener
 
     public function cleanupTemporaryFiles(): self
     {
-        TemporaryDirectories::deleteAll();
+        app(TemporaryDirectories::class)->deleteAll();
 
         return $this;
     }

@@ -54,7 +54,7 @@ class Disk
     public static function makeTemporaryDisk(): self
     {
         $filesystemAdapter = app('filesystem')->createLocalDriver([
-            'root' => TemporaryDirectories::create(),
+            'root' => app(TemporaryDirectories::class)->create(),
         ]);
 
         return new static($filesystemAdapter);
@@ -78,7 +78,7 @@ class Disk
             return $this->temporaryDirectory;
         }
 
-        return $this->temporaryDirectory = TemporaryDirectories::create();
+        return $this->temporaryDirectory = app(TemporaryDirectories::class)->create();
     }
 
     public function makeMedia(string $path): Media

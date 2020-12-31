@@ -98,7 +98,7 @@ class MediaOpenerTest extends TestCase
 
         $this->assertFileExists($tempPath = $media->getLocalPath());
 
-        TemporaryDirectories::deleteAll();
+        app(TemporaryDirectories::class)->deleteAll();
 
         $this->assertFalse(file_exists($tempPath));
     }

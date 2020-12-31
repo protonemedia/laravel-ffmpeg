@@ -7,6 +7,7 @@ use FFMpeg\FFMpeg;
 use FFMpeg\FFProbe;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
 use Psr\Log\LoggerInterface;
 
 class ServiceProvider extends BaseServiceProvider
@@ -71,6 +72,12 @@ class ServiceProvider extends BaseServiceProvider
 
         $this->app->singleton(PHPFFMpeg::class, function () {
             return new PHPFFMpeg($this->app->make(FFMpeg::class));
+        });
+
+        $this->app->singleton(TemporaryDirectories::class, function () {
+            return new TemporaryDirectories(
+                $this->app['config']->get('laravel-ffmpeg.temporary_files_root', sys_get_temp_dir()),
+            );
         });
 
         // Register the main class to use with the facade
