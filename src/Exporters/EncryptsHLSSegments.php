@@ -3,10 +3,13 @@
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Closure;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
+use Symfony\Component\Process\Process;
 
 trait EncryptsHLSSegments
 {
@@ -26,10 +29,8 @@ trait EncryptsHLSSegments
 
     /**
      * Disk to store the secrets.
-     *
-     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
      */
-    private $encryptionSecretsDisk;
+    private $encryptionSecretsRoot;
 
     /**
      * Encryption IV
@@ -59,6 +60,11 @@ trait EncryptsHLSSegments
      */
     private $segmentsPerKey = 1;
 
+    /**
+     * Listener that will rotate the key.
+     *
+     * @var \ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener
+     */
     private $listener;
 
     /**
@@ -91,7 +97,10 @@ trait EncryptsHLSSegments
     public function withEncryptionKey($key): self
     {
         $this->encryptionSecretsDisk = Disk::makeTemporaryDisk();
-        $this->encryptionIV          = bin2hex(static::generateEncryptionKey());
+
+        $this->encryptionSecretsRoot = app(TemporaryDirectories::class)->create();
+
+        $this->encryptionIV = bin2hex(static::generateEncryptionKey());
 
         $this->setEncryptionKey($key);
 
@@ -123,34 +132,31 @@ trait EncryptsHLSSegments
      */
     private function rotateEncryptionKey(): string
     {
+        $hlsKeyInfoPath = $this->encryptionSecretsRoot . '/' . HLSExporter::HLS_KEY_INFO_FILENAME;
+
         // get the absolute path to the encryption key
-        $keyPath = $this->encryptionSecretsDisk
-            ->makeMedia($keyFilename = bin2hex(random_bytes(8)) . '.key')
-            ->getLocalPath();
+        $keyFilename = bin2hex(random_bytes(8)) . '.key';
+        $keyPath     = $this->encryptionSecretsRoot . '/' . $keyFilename;
 
         // randomize the encryption key
-        $this->encryptionSecretsDisk->put(
-            $keyFilename,
-            $encryptionKey = $this->setEncryptionKey()
-        );
+        file_put_contents($keyPath, $encryptionKey = $this->setEncryptionKey());
 
         // generate an info file with a reference to the encryption key and IV
-        $this->encryptionSecretsDisk->put(
-            HLSExporter::HLS_KEY_INFO_FILENAME,
-            implode(PHP_EOL, [
-                $keyPath, $keyPath, $this->encryptionIV,
-            ])
-        );
+        file_put_contents($hlsKeyInfoPath, implode(PHP_EOL, [
+            $keyPath, $keyPath, $this->encryptionIV,
+        ]));
 
         // call the callback
         if ($this->onNewEncryptionKey) {
             call_user_func($this->onNewEncryptionKey, $keyFilename, $encryptionKey, $this->listener);
         }
 
+        if ($this->listener) {
+            $this->listener->handle(Process::OUT, "Generated new key with filename: {$keyFilename}");
+        }
+
         // return the absolute path to the info file
-        return $this->encryptionSecretsDisk
-            ->makeMedia(HLSExporter::HLS_KEY_INFO_FILENAME)
-            ->getLocalPath();
+        return $hlsKeyInfoPath;
     }
 
     /**
@@ -213,7 +219,7 @@ trait EncryptsHLSSegments
      */
     private function replaceAbsolutePathsHLSEncryption(Collection $playlistMedia)
     {
-        if (!$this->encryptionSecretsDisk) {
+        if (!$this->encryptionSecretsRoot) {
             return;
         }
 
@@ -224,7 +230,7 @@ trait EncryptsHLSSegments
             $prefix = '#EXT-X-KEY:METHOD=AES-128,URI="';
 
             $content = str_replace(
-                $prefix . rtrim($this->encryptionSecretsDisk->path(''), '/') . '/',
+                $prefix . $this->encryptionSecretsRoot . '/',
                 $prefix,
                 $disk->get($path)
             );
@@ -240,14 +246,10 @@ trait EncryptsHLSSegments
      */
     private function cleanupHLSEncryption()
     {
-        if (!$this->encryptionSecretsDisk) {
+        if (!$this->encryptionSecretsRoot) {
             return;
         }
 
-        $paths = $this->encryptionSecretsDisk->allFiles();
-
-        foreach ($paths as $path) {
-            $this->encryptionSecretsDisk->delete($path);
-        }
+        (new Filesystem)->deleteDirectory($this->encryptionSecretsRoot);
     }
 }

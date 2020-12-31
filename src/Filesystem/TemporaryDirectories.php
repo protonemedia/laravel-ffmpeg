@@ -37,7 +37,11 @@ class TemporaryDirectories
      */
     public function create(): string
     {
-        return $this->directories[] = $this->root . '/' . bin2hex(random_bytes(8));
+        $directory = $this->root . '/' . bin2hex(random_bytes(8));
+
+        mkdir($directory);
+
+        return $this->directories[] = $directory;
     }
 
     /**
