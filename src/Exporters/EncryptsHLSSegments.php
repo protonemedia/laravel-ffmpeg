@@ -96,8 +96,6 @@ trait EncryptsHLSSegments
      */
     public function withEncryptionKey($key): self
     {
-        $this->encryptionSecretsDisk = Disk::makeTemporaryDisk();
-
         $this->encryptionSecretsRoot = app(TemporaryDirectories::class)->create();
 
         $this->encryptionIV = bin2hex(static::generateEncryptionKey());
@@ -141,6 +139,8 @@ trait EncryptsHLSSegments
         // randomize the encryption key
         file_put_contents($keyPath, $encryptionKey = $this->setEncryptionKey());
 
+        $keyPath = Disk::normalizePath($keyPath);
+
         // generate an info file with a reference to the encryption key and IV
         file_put_contents($hlsKeyInfoPath, implode(PHP_EOL, [
             $keyPath, $keyPath, $this->encryptionIV,
@@ -156,7 +156,7 @@ trait EncryptsHLSSegments
         }
 
         // return the absolute path to the info file
-        return $hlsKeyInfoPath;
+        return Disk::normalizePath($hlsKeyInfoPath);
     }
 
     /**
@@ -231,6 +231,12 @@ trait EncryptsHLSSegments
 
             $content = str_replace(
                 $prefix . $this->encryptionSecretsRoot . '/',
+                $prefix,
+                $disk->get($path)
+            );
+
+            $content = str_replace(
+                $prefix . Disk::normalizePath($this->encryptionSecretsRoot) . '/',
                 $prefix,
                 $disk->get($path)
             );
