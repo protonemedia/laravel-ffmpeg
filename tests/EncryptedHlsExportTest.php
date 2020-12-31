@@ -10,7 +10,7 @@ class EncryptedHlsExportTest extends TestCase
 {
     public static function keyLinePattern()
     {
-        return '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/:]+.key",IV=[a-z0-9]+';
+        return '#EXT-X-KEY:METHOD=AES-128,URI="[~a-zA-Z0-9-_\/:]+.key",IV=[a-z0-9]+';
     }
 
     /** @test */
