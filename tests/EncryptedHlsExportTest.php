@@ -8,6 +8,11 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class EncryptedHlsExportTest extends TestCase
 {
+    public static function keyLinePattern()
+    {
+        return '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/:]+.key",IV=[a-z0-9]+';
+    }
+
     /** @test */
     public function it_can_export_a_single_media_file_into_an_encryped_hls_export()
     {
@@ -45,7 +50,7 @@ class EncryptedHlsExportTest extends TestCase
             '#EXT-X-TARGETDURATION:5',
             '#EXT-X-MEDIA-SEQUENCE:0',
             '#EXT-X-PLAYLIST-TYPE:VOD',
-            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            static::keyLinePattern(),
             '#EXTINF:4.720000,',
             'adaptive_0_250_00000.ts',
             '#EXT-X-ENDLIST',
@@ -87,19 +92,19 @@ class EncryptedHlsExportTest extends TestCase
             '#EXT-X-TARGETDURATION:[0-9]+',
             '#EXT-X-MEDIA-SEQUENCE:0',
             '#EXT-X-PLAYLIST-TYPE:VOD',
-            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            static::keyLinePattern(),
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00000.ts',
-            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            static::keyLinePattern(),
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00001.ts',
-            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            static::keyLinePattern(),
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00002.ts',
-            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            static::keyLinePattern(),
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00003.ts',
-            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            static::keyLinePattern(),
             '#EXTINF:0.720000,',
             'adaptive_0_250_00004.ts',
             '#EXT-X-ENDLIST',
@@ -141,17 +146,17 @@ class EncryptedHlsExportTest extends TestCase
             '#EXT-X-TARGETDURATION:[0-9]+',
             '#EXT-X-MEDIA-SEQUENCE:0',
             '#EXT-X-PLAYLIST-TYPE:VOD',
-            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            static::keyLinePattern(),
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00000.ts',
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00001.ts',
-            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            static::keyLinePattern(),
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00002.ts',
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00003.ts',
-            '#EXT-X-KEY:METHOD=AES-128,URI="[a-zA-Z0-9-_\/]+.key",IV=[a-z0-9]+',
+            static::keyLinePattern(),
             '#EXTINF:0.720000,',
             'adaptive_0_250_00004.ts',
             '#EXT-X-ENDLIST',
