@@ -2,7 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 
-use Illuminate\Support\Facades\File;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 
 class TemporaryDirectories
@@ -22,7 +22,9 @@ class TemporaryDirectories
     public static function deleteAll(): void
     {
         foreach (static::$directories as $directory) {
-            File::deleteDirectory(storage_path("ffmpeg_temp/{$directory}"));
+            (new Filesystem)->deleteDirectory(
+                storage_path("ffmpeg_temp/{$directory}")
+            );
         }
 
         static::$directories = [];
