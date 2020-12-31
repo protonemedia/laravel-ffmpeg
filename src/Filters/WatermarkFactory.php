@@ -232,7 +232,7 @@ class WatermarkFactory
         $path = $this->getPath();
 
         if (windows_os()) {
-            $path = str_replace('/', '\\', $path);
+            $path = str_replace('/', '\\\\', $path);
         }
 
         if (!empty($this->alignments)) {

@@ -6,7 +6,6 @@ use FFMpeg\Filters\Video\WatermarkFilter;
 use FFMpeg\Format\VideoInterface;
 use FFMpeg\Media\Video;
 use Illuminate\Support\Facades\Storage;
-use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 
 class WatermarkFactoryTest extends TestCase
@@ -35,7 +34,7 @@ class WatermarkFactoryTest extends TestCase
         $this->assertInstanceOf(WatermarkFilter::class, $factory->get());
 
         $this->assertStringContainsString(
-            'movie=' . Disk::normalizePath(Storage::disk('local')->path('logo.png')) . ' [watermark];',
+            'movie=' . Storage::disk('local')->path('logo.png') . ' [watermark];',
             $this->getSecondCommand($factory)
         );
     }
