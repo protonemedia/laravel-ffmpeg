@@ -5,10 +5,12 @@ namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Support\Traits\ForwardsCalls;
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\AdapterInterface;
 use League\Flysystem\Filesystem as LeagueFilesystem;
+use League\Flysystem\Util;
 
 /**
  * @mixin \Illuminate\Filesystem\FilesystemAdapter
@@ -123,6 +125,42 @@ class Disk
     public function isLocalDisk(): bool
     {
         return $this->getFlysystemAdapter() instanceof Local;
+    }
+
+    public static function normalizePath($path): string
+    {
+        $normalizedPath = Util::normalizePath($path);
+
+        if (!Str::startsWith($path, '/')) {
+            return $normalizedPath;
+        }
+
+        return Str::startsWith($normalizedPath, '/')
+            ? $normalizedPath
+            : "/{$normalizedPath}";
+    }
+
+    /**
+     * Get the full path for the file at the given "short" path.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    public function path(string $path): string
+    {
+        $path = $this->getFilesystemAdapter()->path($path);
+
+        if (!$this->isLocalDisk()) {
+            return $path;
+        }
+
+        $path = static::normalizePath($path);
+
+        if (file_exists($path)) {
+            return realpath($path) ?: $path;
+        }
+
+        return $path;
     }
 
     /**

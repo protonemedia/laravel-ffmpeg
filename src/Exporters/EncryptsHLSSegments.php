@@ -186,7 +186,7 @@ trait EncryptsHLSSegments
         }
 
         $this->addListener(new StdListener)->onEvent('listen', function ($line) {
-            $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:/")
+            $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:")
                 && Str::contains($line, ".ts' for writing");
 
             if (!$opensEncryptedSegment) {
@@ -222,7 +222,7 @@ trait EncryptsHLSSegments
             $prefix = '#EXT-X-KEY:METHOD=AES-128,URI="';
 
             $content = str_replace(
-                $prefix . $this->encryptionSecretsDisk->path(''),
+                $prefix . rtrim($this->encryptionSecretsDisk->path(''), '/') . '/',
                 $prefix,
                 $disk->get($path)
             );

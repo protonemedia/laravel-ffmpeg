@@ -41,10 +41,10 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     public function get(array $playlistMedia, PHPFFMpeg $driver): string
     {
         return Collection::make($playlistMedia)->map(function (Media $playlistMedia, $key) use ($driver) {
+            $streamInfoLine = $this->getStreamInfoLine($playlistMedia, $key);
+
             $media = (new MediaOpener($playlistMedia->getDisk(), $driver))
                 ->openWithInputOptions($playlistMedia->getPath(), ['-allowed_extensions', 'ALL']);
-
-            $streamInfoLine = $this->getStreamInfoLine($playlistMedia, $key);
 
             if ($frameRate = $this->getFrameRate($media)) {
                 $streamInfoLine .= ",FRAME-RATE={$frameRate}";
