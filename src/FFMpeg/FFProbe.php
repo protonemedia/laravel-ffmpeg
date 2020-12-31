@@ -75,9 +75,11 @@ class FFProbe extends FFMpegFFProbe
      */
     public function streams($pathfile)
     {
-        $this->getFFProbeDriver()->setWorkingDirectory(
-            Util::pathinfo($pathfile)['dirname']
-        );
+        $directory = Util::pathinfo($pathfile)['dirname'];
+
+        if (file_exists($directory)) {
+            $this->getFFProbeDriver()->setWorkingDirectory($directory);
+        }
 
         if (!$this->shouldUseCustomProbe($pathfile)) {
             return parent::streams($pathfile);
@@ -96,9 +98,11 @@ class FFProbe extends FFMpegFFProbe
      */
     public function format($pathfile)
     {
-        $this->getFFProbeDriver()->setWorkingDirectory(
-            Util::pathinfo($pathfile)['dirname']
-        );
+        $directory = Util::pathinfo($pathfile)['dirname'];
+
+        if (file_exists($directory)) {
+            $this->getFFProbeDriver()->setWorkingDirectory($directory);
+        }
 
         if (!$this->shouldUseCustomProbe($pathfile)) {
             return parent::format($pathfile);
