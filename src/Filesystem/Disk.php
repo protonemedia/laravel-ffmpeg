@@ -136,11 +136,7 @@ class Disk
             $normalizedPath = "/{$normalizedPath}";
         }
 
-        if (!file_exists($normalizedPath)) {
-            return $normalizedPath;
-        }
-
-        return realpath($normalizedPath) ?: $normalizedPath;
+        return $normalizedPath;
     }
 
     /**

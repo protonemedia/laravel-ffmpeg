@@ -52,4 +52,4 @@ jobs:
             -   name: Execute tests
                 run: vendor/bin/phpunit
                 env:
-                    FFMPEG_TEMPORARY_FILES_ROOT: ${{ env.GITHUB_WORKSPACE }}
+                    FFMPEG_TEMPORARY_FILES_ROOT: ${{ github.workspace }}
