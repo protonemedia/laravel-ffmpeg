@@ -23,9 +23,9 @@ abstract class TestCase extends BaseTestCase
 
     protected function tearDown(): void
     {
-        parent::tearDown();
-
         FFMpeg::cleanupTemporaryFiles();
+
+        parent::tearDown();
     }
 
     protected function getEnvironmentSetUp($app)
