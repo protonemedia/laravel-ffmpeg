@@ -25,6 +25,7 @@
     "require": {
         "php": "^7.3|^8.0",
         "evenement/evenement": "^3.0",
+        "league/flysystem": "^1.0.34",
         "illuminate/bus": "^6.0|^7.0|^8.0",
         "illuminate/config": "^6.0|^7.0|^8.0",
         "illuminate/filesystem": "^6.0|^7.0|^8.0",
