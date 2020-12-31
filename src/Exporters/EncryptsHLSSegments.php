@@ -125,7 +125,7 @@ trait EncryptsHLSSegments
     {
         // get the absolute path to the encryption key
         $keyPath = $this->encryptionSecretsDisk
-            ->makeMedia($keyFilename = uniqid() . '.key')
+            ->makeMedia($keyFilename = bin2hex(random_bytes(8)) . '.key')
             ->getLocalPath();
 
         // randomize the encryption key

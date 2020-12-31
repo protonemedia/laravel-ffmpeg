@@ -37,7 +37,7 @@ class TemporaryDirectories
      */
     public function create(): string
     {
-        return $this->directories[] = $this->root . uniqid('/');
+        return $this->directories[] = $this->root . '/' . bin2hex(random_bytes(8));
     }
 
     /**
