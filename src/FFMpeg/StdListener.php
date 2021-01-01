@@ -46,13 +46,13 @@ class StdListener extends EventEmitter implements ListenerInterface
         $lines = preg_split('/\n|\r\n?/', $data);
 
         foreach ($lines as $line) {
+            $this->emit($this->eventName, [$line, $type]);
+
             $line = trim($line);
 
             $this->data[$type][] = $line;
 
             $this->data[static::TYPE_ALL][] = $line;
-
-            $this->emit($this->eventName, [$line, $type]);
         }
     }
 
