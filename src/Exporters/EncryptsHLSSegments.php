@@ -151,14 +151,17 @@ trait EncryptsHLSSegments
 
         $encryptionKey = $this->setEncryptionKey($this->nextEncryptionKey ? $this->nextEncryptionKey[1] : null);
 
+        $normalizedKeyPath = Disk::normalizePath($keyPath);
+
         // generate an info file with a reference to the encryption key and IV
         file_put_contents(
             $hlsKeyInfoPath,
-            $keyPath . PHP_EOL . $keyPath . PHP_EOL . $this->encryptionIV,
+            $normalizedKeyPath . PHP_EOL . $normalizedKeyPath . PHP_EOL . $this->encryptionIV,
+            LOCK_EX
         );
 
         // randomize the encryption key
-        file_put_contents($keyPath, $encryptionKey);
+        file_put_contents($keyPath, $encryptionKey, LOCK_EX);
 
         // call the callback
         if ($this->onNewEncryptionKey) {
