@@ -77,8 +77,8 @@ class EncryptedHlsExportTest extends TestCase
 
         FFMpeg::open('video.mp4')
             ->exportForHLS()
-            ->setKeyFrameInterval(1)
-            ->setSegmentLength(1)
+            ->setKeyFrameInterval(2)
+            ->setSegmentLength(2)
             ->addFormat($lowBitrate)
             ->withRotatingEncryptionKey(function ($filename, $contents, $stdListener) use (&$keys, &$listener) {
                 $keys[$filename] = $contents;
@@ -86,7 +86,7 @@ class EncryptedHlsExportTest extends TestCase
             })
             ->save('adaptive.m3u8');
 
-        $this->assertCount(6, $keys);
+        $this->assertCount(4, $keys);
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
@@ -97,24 +97,18 @@ class EncryptedHlsExportTest extends TestCase
         $pattern = "/" . implode("\n", [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
-            '#EXT-X-TARGETDURATION:[0-9]+',
+            '#EXT-X-TARGETDURATION:2',
             '#EXT-X-MEDIA-SEQUENCE:0',
             '#EXT-X-PLAYLIST-TYPE:VOD',
             static::keyLinePattern(),
-            '#EXTINF:1.[0-9]+,',
+            '#EXTINF:2.000000,',
             'adaptive_0_250_00000.ts',
             static::keyLinePattern(),
-            '#EXTINF:1.[0-9]+,',
+            '#EXTINF:2.000000,',
             'adaptive_0_250_00001.ts',
             static::keyLinePattern(),
-            '#EXTINF:1.[0-9]+,',
-            'adaptive_0_250_00002.ts',
-            static::keyLinePattern(),
-            '#EXTINF:1.[0-9]+,',
-            'adaptive_0_250_00003.ts',
-            static::keyLinePattern(),
             '#EXTINF:0.[0-9]+,',
-            'adaptive_0_250_00004.ts',
+            'adaptive_0_250_00002.ts',
             '#EXT-X-ENDLIST',
         ]) . "/";
 
@@ -137,10 +131,10 @@ class EncryptedHlsExportTest extends TestCase
             ->addFormat($lowBitrate)
             ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys) {
                 $keys[$filename] = $contents;
-            }, 2)
+            }, 3)
             ->save('adaptive.m3u8');
 
-        $this->assertCount(3, $keys);
+        $this->assertCount(2, $keys);
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
@@ -159,13 +153,12 @@ class EncryptedHlsExportTest extends TestCase
             'adaptive_0_250_00000.ts',
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00001.ts',
-            static::keyLinePattern(),
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00002.ts',
+            static::keyLinePattern(),
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00003.ts',
-            static::keyLinePattern(),
-            '#EXTINF:0.720000,',
+            '#EXTINF:0.[0-9]+,',
             'adaptive_0_250_00004.ts',
             '#EXT-X-ENDLIST',
         ]) . "/";

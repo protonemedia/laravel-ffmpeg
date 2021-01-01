@@ -153,6 +153,7 @@ class HlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('NadaptiveB1000K1_00.ts'));
 
         $playlist = Storage::disk('local')->get('adaptive.m3u8');
+        $playlist = preg_replace('/\n|\r\n?/', "\n", $playlist);
 
         $pattern = '/' . implode("\n", [
             '#EXTM3U',

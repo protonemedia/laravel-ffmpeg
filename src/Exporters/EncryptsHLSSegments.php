@@ -5,7 +5,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 use Closure;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
@@ -151,6 +150,8 @@ trait EncryptsHLSSegments
 
         $encryptionKey = $this->setEncryptionKey($this->nextEncryptionKey ? $this->nextEncryptionKey[1] : null);
 
+        $this->nextEncryptionKey = null;
+
         $normalizedKeyPath = Disk::normalizePath($keyPath);
 
         // generate an info file with a reference to the encryption key and IV
@@ -163,6 +164,8 @@ trait EncryptsHLSSegments
         // randomize the encryption key
         file_put_contents($keyPath, $encryptionKey, LOCK_EX);
 
+        $this->nextEncryptionKey = [static::generateEncryptionKeyFilename(), static::generateEncryptionKey()];
+
         // call the callback
         if ($this->onNewEncryptionKey) {
             call_user_func($this->onNewEncryptionKey, $keyFilename, $encryptionKey, $this->listener);
@@ -171,8 +174,6 @@ trait EncryptsHLSSegments
         if ($this->listener) {
             $this->listener->handle(Process::OUT, "Generated new key with filename: {$keyFilename}");
         }
-
-        $this->nextEncryptionKey = [static::generateEncryptionKeyFilename(), static::generateEncryptionKey()];
 
         // return the absolute path to the info file
         return Disk::normalizePath($hlsKeyInfoPath);
@@ -213,9 +214,7 @@ trait EncryptsHLSSegments
         }
 
         $this->addListener($this->listener = new StdListener)->onEvent('listen', function ($line) {
-            $opensEncryptedSegment = Str::contains($line, ".keyinfo' for reading");
-
-            if (!$opensEncryptedSegment) {
+            if (!strpos($line, ".keyinfo' for reading")) {
                 return;
             }
 

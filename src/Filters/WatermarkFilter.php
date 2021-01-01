@@ -23,21 +23,17 @@ class WatermarkFilter extends FFMpegWatermarkFilter
     {
         $commands = parent::getCommands();
 
-        if (!windows_os()) {
-            return $commands;
-        }
-
         $commands[1] = str_replace(
             $this->path,
-            static::windowsPath($this->path),
+            static::normalizePath($this->path),
             $commands[1]
         );
 
         return $commands;
     }
 
-    private static function windowsPath(string $path): string
+    public static function normalizePath(string $path): string
     {
-        return str_replace('/', '\\', $path);
+        return  windows_os() ? str_replace('/', '\\', $path) : $path;
     }
 }

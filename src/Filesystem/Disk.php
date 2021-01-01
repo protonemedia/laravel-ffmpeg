@@ -129,8 +129,6 @@ class Disk
 
     public static function normalizePath($path): string
     {
-        return str_replace('\\', '/', $path);
-
         $normalizedPath = Util::normalizePath($path);
 
         // reapply the starting slash

@@ -2,12 +2,11 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use FFMpeg\Filters\Video\WatermarkFilter;
 use FFMpeg\Format\VideoInterface;
 use FFMpeg\Media\Video;
 use Illuminate\Support\Facades\Storage;
-use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
+use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFilter;
 
 class WatermarkFactoryTest extends TestCase
 {
@@ -35,7 +34,7 @@ class WatermarkFactoryTest extends TestCase
         $this->assertInstanceOf(WatermarkFilter::class, $factory->get());
 
         $this->assertStringContainsString(
-            'movie=' . Storage::disk('local')->path('logo.png') . ' [watermark];',
+            'movie=' . WatermarkFilter::normalizePath(Storage::disk('local')->path('logo.png')) . ' [watermark];',
             $this->getSecondCommand($factory)
         );
     }
@@ -113,7 +112,7 @@ class WatermarkFactoryTest extends TestCase
         $command = $this->getSecondCommand($factory);
 
         $this->assertStringContainsString(
-            Disk::normalizePath(config('laravel-ffmpeg.temporary_files_root')),
+            WatermarkFilter::normalizePath(config('laravel-ffmpeg.temporary_files_root')),
             $command
         );
 
