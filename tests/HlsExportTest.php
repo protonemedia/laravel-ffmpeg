@@ -163,7 +163,7 @@ class HlsExportTest extends TestCase
             '#EXT-X-ENDLIST',
         ]) . '/';
 
-        $this->assertEquals(1, preg_match($pattern, $playlist));
+        $this->assertEquals(1, preg_match($pattern, $playlist), "Playlist mismatch:" . PHP_EOL . $playlist);
     }
 
     /** @test */
