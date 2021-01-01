@@ -34,6 +34,15 @@ class WatermarkFilter extends FFMpegWatermarkFilter
 
     public static function normalizePath(string $path): string
     {
-        return  windows_os() ? str_replace('/', '\\', $path) : $path;
+        return windows_os() ? static::normalizeWindowsPath($path) : $path;
+    }
+
+    public static function normalizeWindowsPath(string $path): string
+    {
+        $path = str_replace('/', '\\', $path);
+        $path = str_replace('\\', '\\\\', $path);
+        $path = str_replace(':', '\:', $path);
+
+        return $path;
     }
 }
