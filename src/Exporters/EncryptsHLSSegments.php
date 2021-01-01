@@ -67,8 +67,6 @@ trait EncryptsHLSSegments
      */
     private $listener;
 
-    private $startedAt;
-
     /**
      * Creates a new encryption key.
      *
@@ -126,7 +124,9 @@ trait EncryptsHLSSegments
     }
 
     /**
-     * Rotates the key and returns the absolute path to the info file.
+     * Rotates the key and returns the absolute path to the info file. This method
+     * should be executed as fast as possible, or we might be too late for FFmpeg
+     * opening the next segment. That's why we don't use the Disk-class magic.
      *
      * @return string
      */
@@ -147,10 +147,6 @@ trait EncryptsHLSSegments
         file_put_contents($hlsKeyInfoPath, implode(PHP_EOL, [
             $keyPath, $keyPath, $this->encryptionIV,
         ]));
-
-        if ($this->startedAt) {
-            touch($hlsKeyInfoPath, $this->startedAt->copy()->addSeconds($this->segmentsOpened + 1)->format('U'));
-        }
 
         // call the callback
         if ($this->onNewEncryptionKey) {
@@ -199,10 +195,8 @@ trait EncryptsHLSSegments
             return;
         }
 
-        $this->startedAt = now();
-
         $this->addListener($this->listener = new StdListener)->onEvent('listen', function ($line) {
-            $opensEncryptedSegment = Str::contains($line, ".key' for reading");
+            $opensEncryptedSegment = Str::contains($line, ".keyinfo' for reading");
 
             if (!$opensEncryptedSegment) {
                 return;

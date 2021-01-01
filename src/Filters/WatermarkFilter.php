@@ -27,13 +27,17 @@ class WatermarkFilter extends FFMpegWatermarkFilter
             return $commands;
         }
 
-        $commands[1] = str_replace($this->path, static::windowsPath($this->path), $commands[1]);
+        $commands[1] = str_replace(
+            $this->path,
+            static::windowsPath($this->path),
+            $commands[1]
+        );
 
         return $commands;
     }
 
     private static function windowsPath(string $path): string
     {
-        return '"' . str_replace('/', '\\', $path) . '"';
+        return str_replace('/', '\\', $path);
     }
 }
