@@ -78,6 +78,15 @@ trait EncryptsHLSSegments
     {
         return random_bytes(16);
     }
+    /**
+     * Creates a new encryption key filename.
+     *
+     * @return string
+     */
+    public static function generateEncryptionKeyFilename(): string
+    {
+        return bin2hex(random_bytes(8)) . '.key';
+    }
 
     /**
      * Sets the encryption key with the given value or generates a new one.
@@ -137,18 +146,20 @@ trait EncryptsHLSSegments
         $hlsKeyInfoPath = $this->encryptionSecretsRoot . '/' . HLSExporter::HLS_KEY_INFO_FILENAME;
 
         // get the absolute path to the encryption key
-        $keyFilename = $this->nextEncryptionKey ? $this->nextEncryptionKey[0] : bin2hex(random_bytes(8)) . '.key';
+        $keyFilename = $this->nextEncryptionKey ? $this->nextEncryptionKey[0] : static::generateEncryptionKeyFilename();
         $keyPath     = $this->encryptionSecretsRoot . '/' . $keyFilename;
 
-        // randomize the encryption key
-        file_put_contents($keyPath, $encryptionKey = $this->setEncryptionKey($this->nextEncryptionKey ? $this->nextEncryptionKey[1] : null));
-
-        $keyPath = Disk::normalizePath($keyPath);
+        $encryptionKey = $this->setEncryptionKey($this->nextEncryptionKey ? $this->nextEncryptionKey[1] : null);
 
         // generate an info file with a reference to the encryption key and IV
-        file_put_contents($hlsKeyInfoPath, implode(PHP_EOL, [
-            $keyPath, $keyPath, $this->encryptionIV,
-        ]));
+        file_put_contents(
+            $hlsKeyInfoPath,
+            $keyPath . PHP_EOL . $keyPath . PHP_EOL . $this->encryptionIV,
+            LOCK_EX
+        );
+
+        // randomize the encryption key
+        file_put_contents($keyPath, $encryptionKey, LOCK_EX);
 
         // call the callback
         if ($this->onNewEncryptionKey) {
@@ -159,7 +170,7 @@ trait EncryptsHLSSegments
             $this->listener->handle(Process::OUT, "Generated new key with filename: {$keyFilename}");
         }
 
-        $this->nextEncryptionKey = [bin2hex(random_bytes(8)) . '.key', static::generateEncryptionKey()];
+        $this->nextEncryptionKey = [static::generateEncryptionKeyFilename(), static::generateEncryptionKey()];
 
         // return the absolute path to the info file
         return Disk::normalizePath($hlsKeyInfoPath);
