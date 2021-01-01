@@ -67,6 +67,8 @@ trait EncryptsHLSSegments
      */
     private $listener;
 
+    private $startedAt;
+
     /**
      * Creates a new encryption key.
      *
@@ -146,6 +148,10 @@ trait EncryptsHLSSegments
             $keyPath, $keyPath, $this->encryptionIV,
         ]));
 
+        if ($this->startedAt) {
+            touch($hlsKeyInfoPath, $this->startedAt->copy()->addSeconds($this->segmentsOpened + 1)->format('U'));
+        }
+
         // call the callback
         if ($this->onNewEncryptionKey) {
             call_user_func($this->onNewEncryptionKey, $keyFilename, $encryptionKey, $this->listener);
@@ -192,6 +198,8 @@ trait EncryptsHLSSegments
         if (!$this->rotateEncryptiongKey) {
             return;
         }
+
+        $this->startedAt = now();
 
         $this->addListener($this->listener = new StdListener)->onEvent('listen', function ($line) {
             $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:")
