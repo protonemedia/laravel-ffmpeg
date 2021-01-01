@@ -67,6 +67,8 @@ trait EncryptsHLSSegments
      */
     private $listener;
 
+    private $nextEncryptionKey;
+
     /**
      * Creates a new encryption key.
      *
@@ -135,11 +137,11 @@ trait EncryptsHLSSegments
         $hlsKeyInfoPath = $this->encryptionSecretsRoot . '/' . HLSExporter::HLS_KEY_INFO_FILENAME;
 
         // get the absolute path to the encryption key
-        $keyFilename = bin2hex(random_bytes(8)) . '.key';
+        $keyFilename = $this->nextEncryptionKey ? $this->nextEncryptionKey[0] : bin2hex(random_bytes(8)) . '.key';
         $keyPath     = $this->encryptionSecretsRoot . '/' . $keyFilename;
 
         // randomize the encryption key
-        file_put_contents($keyPath, $encryptionKey = $this->setEncryptionKey());
+        file_put_contents($keyPath, $encryptionKey = $this->setEncryptionKey($this->nextEncryptionKey ? $this->nextEncryptionKey[1] : null));
 
         $keyPath = Disk::normalizePath($keyPath);
 
@@ -156,6 +158,8 @@ trait EncryptsHLSSegments
         if ($this->listener) {
             $this->listener->handle(Process::OUT, "Generated new key with filename: {$keyFilename}");
         }
+
+        $this->nextEncryptionKey = [bin2hex(random_bytes(8)) . '.key', static::generateEncryptionKey()];
 
         // return the absolute path to the info file
         return Disk::normalizePath($hlsKeyInfoPath);
