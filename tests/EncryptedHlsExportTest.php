@@ -113,7 +113,7 @@ class EncryptedHlsExportTest extends TestCase
             '#EXTINF:1.[0-9]+,',
             'adaptive_0_250_00003.ts',
             static::keyLinePattern(),
-            '#EXTINF:0.720000,',
+            '#EXTINF:0.[0-9]+,',
             'adaptive_0_250_00004.ts',
             '#EXT-X-ENDLIST',
         ]) . "/";

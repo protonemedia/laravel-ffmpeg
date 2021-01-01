@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Filters;
 
-use FFMpeg\Filters\Video\WatermarkFilter;
 use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
@@ -222,11 +221,6 @@ class WatermarkFactory
         return $path;
     }
 
-    private static function windowsPath(string $path): string
-    {
-        return '"' . str_replace('/', '\\', $path) . '"';
-    }
-
     /**
      * Returns a new instance of the WatermarkFilter.
      *
@@ -235,8 +229,6 @@ class WatermarkFactory
     public function get(): WatermarkFilter
     {
         $path = $this->getPath();
-
-        $path = windows_os() ? static::windowsPath($path) : $path;
 
         if (!empty($this->alignments)) {
             return new WatermarkFilter($path, $this->alignments);
@@ -251,8 +243,6 @@ class WatermarkFactory
 
             $coordinates[$attribute] = $this->$attribute;
         }
-
-        $path = windows_os() ? static::windowsPath($path) : $path;
 
         return new WatermarkFilter($path, $coordinates);
     }
