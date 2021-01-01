@@ -222,6 +222,11 @@ class WatermarkFactory
         return $path;
     }
 
+    private static function windowsPath(string $path): string
+    {
+        return '"' . str_replace('/', '\\', $path) . '"';
+    }
+
     /**
      * Returns a new instance of the WatermarkFilter.
      *
@@ -231,9 +236,7 @@ class WatermarkFactory
     {
         $path = $this->getPath();
 
-        if (windows_os()) {
-            $path = str_replace('/', '\\', $path);
-        }
+        $path = windows_os() ? static::windowsPath($path) : $path;
 
         if (!empty($this->alignments)) {
             return new WatermarkFilter($path, $this->alignments);
@@ -248,6 +251,8 @@ class WatermarkFactory
 
             $coordinates[$attribute] = $this->$attribute;
         }
+
+        $path = windows_os() ? static::windowsPath($path) : $path;
 
         return new WatermarkFilter($path, $coordinates);
     }

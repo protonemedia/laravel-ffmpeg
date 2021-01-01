@@ -6,6 +6,7 @@ use FFMpeg\Filters\Video\WatermarkFilter;
 use FFMpeg\Format\VideoInterface;
 use FFMpeg\Media\Video;
 use Illuminate\Support\Facades\Storage;
+use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 
 class WatermarkFactoryTest extends TestCase
@@ -111,7 +112,10 @@ class WatermarkFactoryTest extends TestCase
 
         $command = $this->getSecondCommand($factory);
 
-        $this->assertStringContainsString(config('laravel-ffmpeg.temporary_files_root'), $command);
+        $this->assertStringContainsString(
+            Disk::normalizePath(config('laravel-ffmpeg.temporary_files_root')),
+            $command
+        );
 
         $path = $factory->getPath();
 
