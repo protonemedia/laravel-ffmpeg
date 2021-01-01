@@ -155,11 +155,10 @@ trait EncryptsHLSSegments
         file_put_contents(
             $hlsKeyInfoPath,
             $keyPath . PHP_EOL . $keyPath . PHP_EOL . $this->encryptionIV,
-            LOCK_EX
         );
 
         // randomize the encryption key
-        file_put_contents($keyPath, $encryptionKey, LOCK_EX);
+        file_put_contents($keyPath, $encryptionKey);
 
         // call the callback
         if ($this->onNewEncryptionKey) {
