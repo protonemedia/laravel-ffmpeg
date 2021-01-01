@@ -134,10 +134,6 @@ trait EncryptsHLSSegments
     {
         $hlsKeyInfoPath = $this->encryptionSecretsRoot . '/' . HLSExporter::HLS_KEY_INFO_FILENAME;
 
-        if (file_exists($hlsKeyInfoPath)) {
-            unlink($hlsKeyInfoPath);
-        }
-
         // get the absolute path to the encryption key
         $keyFilename = bin2hex(random_bytes(8)) . '.key';
         $keyPath     = $this->encryptionSecretsRoot . '/' . $keyFilename;
@@ -185,7 +181,7 @@ trait EncryptsHLSSegments
 
         if ($this->rotateEncryptiongKey) {
             $parameters[] = '-hls_flags';
-            $parameters[] = 'periodic_rekey+split_by_time';
+            $parameters[] = 'periodic_rekey';
         }
 
         return $parameters;
@@ -206,8 +202,7 @@ trait EncryptsHLSSegments
         $this->startedAt = now();
 
         $this->addListener($this->listener = new StdListener)->onEvent('listen', function ($line) {
-            $opensEncryptedSegment = Str::contains($line, "Opening 'crypto:")
-                && Str::contains($line, ".ts' for writing");
+            $opensEncryptedSegment = Str::contains($line, ".key' for reading");
 
             if (!$opensEncryptedSegment) {
                 return;

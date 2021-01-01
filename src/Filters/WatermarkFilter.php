@@ -10,13 +10,26 @@ use FFMpeg\Filters\Video\WatermarkFilter as FFMpegWatermarkFilter;
  */
 class WatermarkFilter extends FFMpegWatermarkFilter
 {
+    protected $path;
+
     public function __construct($watermarkPath, array $coordinates = [], $priority = 0)
     {
         parent::__construct($watermarkPath, $coordinates, $priority);
 
-        if (windows_os()) {
-            $this->watermarkPath = static::windowsPath($watermarkPath);
+        $this->path = $watermarkPath;
+    }
+
+    protected function getCommands()
+    {
+        $commands = parent::getCommands();
+
+        if (!windows_os()) {
+            return $commands;
         }
+
+        $commands[1] = str_replace($this->path, static::windowsPath($this->path), $commands[1]);
+
+        return $commands;
     }
 
     private static function windowsPath(string $path): string
