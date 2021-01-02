@@ -65,7 +65,12 @@ trait EncryptsHLSSegments
      */
     private $listener;
 
-    private $nextEncryptionKey;
+    /**
+     * A fresh filename and encryption key for the next round.
+     *
+     * @var array
+     */
+    private $nextEncryptionFilenameAndKey;
 
     /**
      * Creates a new encryption key.
@@ -141,28 +146,33 @@ trait EncryptsHLSSegments
      */
     private function rotateEncryptionKey(): string
     {
+        if ($this->nextEncryptionFilenameAndKey) {
+            [$keyFilename, $encryptionKey] = $this->nextEncryptionFilenameAndKey;
+        } else {
+            $keyFilename   = static::generateEncryptionKeyFilename();
+            $encryptionKey = static::generateEncryptionKey();
+        }
+
+        // get the absolute path to the info file and encryption key
         $hlsKeyInfoPath = $this->encryptionSecretsRoot . '/' . HLSExporter::HLS_KEY_INFO_FILENAME;
-
-        // get the absolute path to the encryption key
-        $keyFilename = $this->nextEncryptionKey ? $this->nextEncryptionKey[0] : static::generateEncryptionKeyFilename();
-        $keyPath     = $this->encryptionSecretsRoot . '/' . $keyFilename;
-
-        $encryptionKey = $this->setEncryptionKey($this->nextEncryptionKey ? $this->nextEncryptionKey[1] : null);
-
-        $this->nextEncryptionKey = null;
+        $keyPath        = $this->encryptionSecretsRoot . '/' . $keyFilename;
 
         $normalizedKeyPath = Disk::normalizePath($keyPath);
 
-        // randomize the encryption key
+        // store the encryption key
         file_put_contents($keyPath, $encryptionKey);
 
-        // generate an info file with a reference to the encryption key and IV
+        // store an info file with a reference to the encryption key and IV
         file_put_contents(
             $hlsKeyInfoPath,
             $normalizedKeyPath . PHP_EOL . $normalizedKeyPath . PHP_EOL . $this->encryptionIV
         );
 
-        $this->nextEncryptionKey = [static::generateEncryptionKeyFilename(), static::generateEncryptionKey()];
+        // prepare for the next round
+        $this->nextEncryptionFilenameAndKey = [
+            static::generateEncryptionKeyFilename(),
+            static::generateEncryptionKey(),
+        ];
 
         // call the callback
         if ($this->onNewEncryptionKey) {
