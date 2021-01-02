@@ -4,10 +4,11 @@ on: [push, pull_request]
 
 jobs:
     test:
-        runs-on: ubuntu-20.04
+        runs-on: ${{ matrix.os }}
         strategy:
             fail-fast: true
             matrix:
+                os: [ubuntu-20.04, windows-2019]
                 php: [8.0, 7.4, 7.3]
                 laravel: [8.*, 7.*, 6.*]
                 dependency-version: [prefer-lowest, prefer-stable]
@@ -19,7 +20,7 @@ jobs:
                     -   laravel: 6.*
                         testbench: 4.*
 
-        name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.dependency-version }}
+        name: ${{ matrix.os }} - P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.dependency-version }}
 
         steps:
             -   name: Checkout code
@@ -29,18 +30,32 @@ jobs:
                 uses: shivammathur/setup-php@v2
                 with:
                     php-version: ${{ matrix.php }}
-                    extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, mysql, mysqli, pdo_mysql
+                    extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, mysql, mysqli, pdo_mysql, fileinfo
                     coverage: none
 
             -   name: Install FFmpeg
+                if: ${{ matrix.os == 'ubuntu-20.04' }}
                 run: |
                     sudo apt-get update
                     sudo apt-get install -y --allow-unauthenticated software-properties-common ffmpeg
+
+            -   name: Install FFmpeg (Windows)
+                if: ${{ matrix.os == 'windows-2019' }}
+                uses: FedericoCarboni/setup-ffmpeg@v1-beta
+                id: setup-ffmpeg
 
             -   name: Install dependencies
                 run: |
                     composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
                     composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-suggest
 
+            -   name: Cache dependencies
+                uses: actions/cache@v2
+                with:
+                    path: ~/.composer/cache/files
+                    key: dependencies-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}-dep-${{ matrix.dependency-version }}
+
             -   name: Execute tests
                 run: vendor/bin/phpunit
+                env:
+                    FFMPEG_TEMPORARY_FILES_ROOT: ${{ github.workspace }}

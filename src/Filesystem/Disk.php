@@ -52,7 +52,7 @@ class Disk
     public static function makeTemporaryDisk(): self
     {
         $filesystemAdapter = app('filesystem')->createLocalDriver([
-            'root' => TemporaryDirectories::create(),
+            'root' => app(TemporaryDirectories::class)->create(),
         ]);
 
         return new static($filesystemAdapter);
@@ -76,7 +76,7 @@ class Disk
             return $this->temporaryDirectory;
         }
 
-        return $this->temporaryDirectory = TemporaryDirectories::create();
+        return $this->temporaryDirectory = app(TemporaryDirectories::class)->create();
     }
 
     public function makeMedia(string $path): Media
@@ -123,6 +123,24 @@ class Disk
     public function isLocalDisk(): bool
     {
         return $this->getFlysystemAdapter() instanceof Local;
+    }
+
+    public static function normalizePath($path): string
+    {
+        return str_replace('\\', '/', $path);
+    }
+
+    /**
+     * Get the full path for the file at the given "short" path.
+     *
+     * @param  string  $path
+     * @return string
+     */
+    public function path(string $path): string
+    {
+        $path = $this->getFilesystemAdapter()->path($path);
+
+        return $this->isLocalDisk() ? static::normalizePath($path) : $path;
     }
 
     /**

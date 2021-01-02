@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Filters;
 
-use FFMpeg\Filters\Video\WatermarkFilter;
 use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;

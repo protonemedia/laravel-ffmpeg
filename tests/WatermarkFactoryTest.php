@@ -2,11 +2,11 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use FFMpeg\Filters\Video\WatermarkFilter;
 use FFMpeg\Format\VideoInterface;
 use FFMpeg\Media\Video;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
+use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFilter;
 
 class WatermarkFactoryTest extends TestCase
 {
@@ -34,7 +34,7 @@ class WatermarkFactoryTest extends TestCase
         $this->assertInstanceOf(WatermarkFilter::class, $factory->get());
 
         $this->assertStringContainsString(
-            'movie=' . Storage::disk('local')->path('logo.png') . ' [watermark];',
+            'movie=' . WatermarkFilter::normalizePath(Storage::disk('local')->path('logo.png')) . ' [watermark];',
             $this->getSecondCommand($factory)
         );
     }
@@ -49,8 +49,14 @@ class WatermarkFactoryTest extends TestCase
 
         $this->assertInstanceOf(WatermarkFilter::class, $factory->get());
 
-        $this->assertStringContainsString(sys_get_temp_dir(), $this->getSecondCommand($factory));
-        $this->assertStringContainsString('logo.png', $this->getSecondCommand($factory));
+        $command = $this->getSecondCommand($factory);
+
+        $this->assertStringContainsString(
+            substr(WatermarkFilter::normalizePath(config('laravel-ffmpeg.temporary_files_root')), 1, -1),
+            $command
+        );
+
+        $this->assertStringContainsString('logo.png', $command);
     }
 
     /** @test */
@@ -111,12 +117,24 @@ class WatermarkFactoryTest extends TestCase
 
         $command = $this->getSecondCommand($factory);
 
-        $this->assertStringContainsString(sys_get_temp_dir(), $command);
+        $this->assertStringContainsString(
+            substr(WatermarkFilter::normalizePath(config('laravel-ffmpeg.temporary_files_root')), 1, -1),
+            $command
+        );
 
         $path = $factory->getPath();
 
         [$width] = getimagesize($path);
 
         $this->assertEquals(100, $width);
+    }
+
+    /** @test */
+    public function it_can_normalize_a_windows_path()
+    {
+        $this->assertEquals(
+            'c\:\\\Videos\\\watermarklogo.png',
+            WatermarkFilter::normalizeWindowsPath('c:/Videos/watermarklogo.png')
+        );
     }
 }

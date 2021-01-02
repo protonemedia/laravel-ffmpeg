@@ -2,31 +2,59 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 
-use Neutron\TemporaryFilesystem\Manager;
+use Illuminate\Filesystem\Filesystem;
 
 class TemporaryDirectories
 {
-    public static $manager;
+    /**
+     * Root of the temporary directories.
+     *
+     * @var string
+     */
+    private $root;
 
-    private static function manager(): Manager
+    /**
+     * Array of all directories
+     *
+     * @var array
+     */
+    private $directories = [];
+
+    /**
+     * Sets the root and removes the trailing slash.
+     *
+     * @param string $root
+     */
+    public function __construct(string $root)
     {
-        if (!static::$manager) {
-            static::$manager = Manager::create();
-        }
-
-        return static::$manager;
+        $this->root = rtrim($root, '/');
     }
 
-    public static function create(): string
+    /**
+     * Returns the full path a of new temporary directory.
+     *
+     * @return string
+     */
+    public function create(): string
     {
-        return static::manager()->createTemporaryDirectory();
+        $directory = $this->root . '/' . bin2hex(random_bytes(8));
+
+        mkdir($directory);
+
+        return $this->directories[] = $directory;
     }
 
     /**
      * Loop through all directories and delete them.
      */
-    public static function deleteAll(): void
+    public function deleteAll(): void
     {
-        static::manager()->clean();
+        $filesystem = new Filesystem;
+
+        foreach ($this->directories as $directory) {
+            $filesystem->deleteDirectory($directory);
+        }
+
+        $this->directories = [];
     }
 }
