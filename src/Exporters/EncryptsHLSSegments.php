@@ -49,7 +49,7 @@ trait EncryptsHLSSegments
      *
      * @var integer
      */
-    private $segmentsOpened = 1;
+    private $segmentsOpened = 0;
 
     /**
      * Number of segments that can use the same key.
@@ -218,7 +218,7 @@ trait EncryptsHLSSegments
         }
 
         $this->addListener($this->listener = new StdListener)->onEvent('listen', function ($line) {
-            if (!(strpos($line, ".ts' for writing") && strpos($line, "Opening 'crypto:"))) {
+            if (!strpos($line, ".keyinfo' for reading")) {
                 return;
             }
 
