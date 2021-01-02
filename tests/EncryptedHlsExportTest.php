@@ -127,7 +127,7 @@ class EncryptedHlsExportTest extends TestCase
             ->setKeyFrameInterval(2)
             ->setSegmentLength(2)
             ->addFormat($lowBitrate)
-            ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys, &$listener) {
+            ->withRotatingEncryptionKey(function ($filename, $contents, $stdListener) use (&$keys, &$listener) {
                 $keys[$filename] = $contents;
                 $listener = $listener ?: $stdListener;
             }, 2)

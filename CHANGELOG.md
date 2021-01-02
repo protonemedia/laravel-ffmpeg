@@ -2,6 +2,19 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.5.2 - 2021-01-02
+
+### Added
+
+-   Support for setting a custom path for temporary directories
+-   GitHub Actions now runs on Windows in addition to Ubuntu
+
+### Fixed
+
+-   HLS Encryption I/O improvements
+-   Path normalization on Windows, which solves common problems with HLS and watermarks
+-   Some refactors and documentation improvements
+
 ## 7.5.1 - 2020-12-24
 
 ### Added
