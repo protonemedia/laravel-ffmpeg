@@ -9,12 +9,16 @@ jobs:
             fail-fast: true
             matrix:
                 os: [ubuntu-20.04, windows-2019]
-                php: [8.0]
-                laravel: [8.*]
+                php: [8.0, 7.4, 7.3]
+                laravel: [8.*, 7.*, 6.*]
                 dependency-version: [prefer-lowest, prefer-stable]
                 include:
                     -   laravel: 8.*
                         testbench: 6.*
+                    -   laravel: 7.*
+                        testbench: 5.*
+                    -   laravel: 6.*
+                        testbench: 4.*
 
         name: ${{ matrix.os }} - P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.dependency-version }}
 
@@ -29,7 +33,7 @@ jobs:
                     extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, mysql, mysqli, pdo_mysql, fileinfo
                     coverage: none
 
-            -   name: Install FFmpeg (Windows)
+            -   name: Install FFmpeg
                 uses: FedericoCarboni/setup-ffmpeg@v1-beta
                 id: setup-ffmpeg
 
@@ -37,6 +41,12 @@ jobs:
                 run: |
                     composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
                     composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-suggest
+
+            -   name: Cache dependencies
+                uses: actions/cache@v2
+                with:
+                    path: ~/.composer/cache/files
+                    key: dependencies-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}-dep-${{ matrix.dependency-version }}
 
             -   name: Execute tests
                 run: vendor/bin/phpunit

@@ -7,7 +7,12 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class DynamicHLSPlaylistTest extends TestCase
 {
-    /** @test */
+    use RetryTrait;
+
+    /**
+     * @test
+     * @retry 3
+     */
     public function it_can_export_a_single_media_file_into_an_encryped_hls_export()
     {
         $this->fakeLocalVideoFile();
