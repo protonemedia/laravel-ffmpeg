@@ -126,7 +126,7 @@ abstract class TestCase extends BaseTestCase
 
         $pattern = '/' . implode("\n", $patternLines) . '/';
 
-        $this->assertMatchesRegularExpression($pattern, $playlist, implode(PHP_EOL . PHP_EOL, [
+        $this->assertRegExp($pattern, $playlist, implode(PHP_EOL . PHP_EOL, [
             "Playlist does not match pattern",
             $listener ? implode(PHP_EOL, $listener->get()->all()) : null,
         ]));
