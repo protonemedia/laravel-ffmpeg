@@ -2,9 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Exception;
-use PHPUnit\Framework\IncompleteTestError;
-use PHPUnit\Framework\SkippedTestError;
 use Throwable;
 
 /**
@@ -33,13 +30,7 @@ trait RetryTrait
                 parent::runBare();
 
                 return;
-            } catch (IncompleteTestError $e) {
-                throw $e;
-            } catch (SkippedTestError $e) {
-                throw $e;
             } catch (Throwable $e) {
-                // last one thrown below
-            } catch (Exception $e) {
                 // last one thrown below
             }
         }
