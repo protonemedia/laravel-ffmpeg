@@ -127,7 +127,7 @@ class WatermarkFactoryTest extends TestCase
     public function it_can_normalize_a_windows_path()
     {
         $this->assertEquals(
-            'c\:\Videos\watermarklogo.png',
+            'c\:\\\Videos\\\watermarklogo.png',
             WatermarkFilter::normalizeWindowsPath('c:/Videos/watermarklogo.png')
         );
     }
