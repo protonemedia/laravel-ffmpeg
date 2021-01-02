@@ -49,7 +49,7 @@ trait EncryptsHLSSegments
      *
      * @var integer
      */
-    private $segmentsOpened = 0;
+    private $segmentsOpened = 1;
 
     /**
      * Number of segments that can use the same key.

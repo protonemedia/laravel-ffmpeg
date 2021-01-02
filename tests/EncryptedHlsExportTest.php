@@ -119,7 +119,6 @@ class EncryptedHlsExportTest extends TestCase
 
         $lowBitrate = $this->x264()->setKiloBitrate(250);
 
-        $keys     = [];
         $listener = null;
 
         FFMpeg::open('video.mp4')
@@ -127,13 +126,10 @@ class EncryptedHlsExportTest extends TestCase
             ->setKeyFrameInterval(2)
             ->setSegmentLength(2)
             ->addFormat($lowBitrate)
-            ->withRotatingEncryptionKey(function ($filename, $contents, $stdListener) use (&$keys, &$listener) {
-                $keys[$filename] = $contents;
+            ->withRotatingEncryptionKey(function ($filename, $contents, $stdListener) use (&$listener) {
                 $listener = $listener ?: $stdListener;
             }, 2)
             ->save('adaptive.m3u8');
-
-        $this->assertCount(2, $keys);
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
@@ -147,9 +143,9 @@ class EncryptedHlsExportTest extends TestCase
             static::keyLinePattern(),
             '#EXTINF:2.[0-9]+,',
             'adaptive_0_250_00000.ts',
+            static::keyLinePattern(),
             '#EXTINF:2.[0-9]+,',
             'adaptive_0_250_00001.ts',
-            static::keyLinePattern(),
             '#EXTINF:0.[0-9]+,',
             'adaptive_0_250_00002.ts',
             '#EXT-X-ENDLIST',
