@@ -18,7 +18,7 @@ class EncryptedHlsExportTest extends TestCase
 
     /**
      * @test
-     * @retry 3
+     * @retry 5
      */
     public function it_can_export_a_single_media_file_into_an_encryped_hls_export()
     {
@@ -72,7 +72,7 @@ class EncryptedHlsExportTest extends TestCase
 
     /**
      * @test
-     * @retry 3
+     * @retry 5
      */
     public function it_can_export_a_single_media_file_into_an_encryped_hls_export_with_rotating_keys()
     {
@@ -125,7 +125,7 @@ class EncryptedHlsExportTest extends TestCase
 
     /**
      * @test
-     * @retry 3
+     * @retry 5
      */
     public function it_can_set_the_numbers_of_segments_per_key()
     {

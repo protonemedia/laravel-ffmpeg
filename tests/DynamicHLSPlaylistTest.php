@@ -11,7 +11,7 @@ class DynamicHLSPlaylistTest extends TestCase
 
     /**
      * @test
-     * @retry 3
+     * @retry 5
      */
     public function it_can_export_a_single_media_file_into_an_encryped_hls_export()
     {
