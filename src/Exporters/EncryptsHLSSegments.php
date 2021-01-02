@@ -8,7 +8,6 @@ use Illuminate\Support\Collection;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
-use Symfony\Component\Process\Process;
 
 trait EncryptsHLSSegments
 {
@@ -154,25 +153,20 @@ trait EncryptsHLSSegments
 
         $normalizedKeyPath = Disk::normalizePath($keyPath);
 
+        // randomize the encryption key
+        file_put_contents($keyPath, $encryptionKey);
+
         // generate an info file with a reference to the encryption key and IV
         file_put_contents(
             $hlsKeyInfoPath,
-            $normalizedKeyPath . PHP_EOL . $normalizedKeyPath . PHP_EOL . $this->encryptionIV,
-            LOCK_EX
+            $normalizedKeyPath . PHP_EOL . $normalizedKeyPath . PHP_EOL . $this->encryptionIV
         );
-
-        // randomize the encryption key
-        file_put_contents($keyPath, $encryptionKey, LOCK_EX);
 
         $this->nextEncryptionKey = [static::generateEncryptionKeyFilename(), static::generateEncryptionKey()];
 
         // call the callback
         if ($this->onNewEncryptionKey) {
             call_user_func($this->onNewEncryptionKey, $keyFilename, $encryptionKey, $this->listener);
-        }
-
-        if ($this->listener) {
-            $this->listener->handle(Process::OUT, "Generated new key with filename: {$keyFilename}");
         }
 
         // return the absolute path to the info file

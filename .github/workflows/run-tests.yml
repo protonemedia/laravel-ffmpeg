@@ -29,14 +29,7 @@ jobs:
                     extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, mysql, mysqli, pdo_mysql, fileinfo
                     coverage: none
 
-            -   name: Install FFmpeg (Ubuntu)
-                if: ${{ matrix.os == 'ubuntu-20.04' }}
-                run: |
-                    sudo apt-get update
-                    sudo apt-get install -y --allow-unauthenticated software-properties-common ffmpeg
-
             -   name: Install FFmpeg (Windows)
-                if: ${{ matrix.os == 'windows-2019' }}
                 uses: FedericoCarboni/setup-ffmpeg@v1-beta
                 id: setup-ffmpeg
 
