@@ -107,7 +107,7 @@ class HLSVideoFilters
     {
         $withWatermarkFactory($watermarkFactory = new WatermarkFactory);
 
-        return $this->addLegacyFilter($watermarkFactory->get());
+        return $this->addLegacyFilter($watermarkFactory->get()->wrapInParentheses());
     }
 
     /**
