@@ -5,6 +5,11 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
+/**
+ * Due to slow I/O on the CI platform, we need to retry this test
+ * every now and then. Sometimes the I/O is too slow to pickup
+ * the rotating key.
+ */
 class DynamicHLSPlaylistTest extends TestCase
 {
     use RetryTrait;

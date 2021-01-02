@@ -17,6 +17,7 @@ This package provides an integration with FFmpeg for Laravel 6.0 and higher. [La
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
 * PHP 7.3 and higher.
+* Lots of integration tests, GitHub Actions with both Ubuntu and Windows.
 
 ## Support
 
@@ -524,6 +525,8 @@ When opening or saving files from or to a remote disk, temporary files will be c
 ```php
 FFMpeg::cleanupTemporaryFiles();
 ```
+
+By default, the root of the temporary directories is evaluated by PHP's `sys_get_temp_dir()` method, but you can modify it by setting the `temporary_files_root` configuration key to a custom path.
 
 ## HLS
 

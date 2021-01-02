@@ -125,7 +125,13 @@ class Disk
         return $this->getFlysystemAdapter() instanceof Local;
     }
 
-    public static function normalizePath($path): string
+    /**
+     * Replaces backward slashes into forward slashes.
+     *
+     * @param string $path
+     * @return string
+     */
+    public static function normalizePath(string $path): string
     {
         return str_replace('\\', '/', $path);
     }

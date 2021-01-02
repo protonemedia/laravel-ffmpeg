@@ -7,6 +7,11 @@ use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
+/**
+ * Due to slow I/O on the CI platform, we need to retry these tests
+ * every now and then. Sometimes the I/O is too slow to pickup
+ * the rotating key, resulting in different playlists.
+ */
 class EncryptedHlsExportTest extends TestCase
 {
     use RetryTrait;
@@ -36,22 +41,14 @@ class EncryptedHlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
 
-        $playlist = Storage::disk('local')->get('adaptive.m3u8');
-        $playlist = preg_replace('/\n|\r\n?/', "\n", $playlist);
-
-        $pattern = '/' . implode("\n", [
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
             '#EXTM3U',
             HlsExportTest::streamInfoPattern('1920x1080'),
             'adaptive_0_250.m3u8',
             '#EXT-X-ENDLIST',
-        ]) . '/';
+        ], $listener);
 
-        $this->assertEquals(1, preg_match($pattern, $playlist), "Playlist mismatch:" . PHP_EOL . $playlist);
-
-        $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
-        $encryptedPlaylist = preg_replace('/\n|\r\n?/', "\n", $encryptedPlaylist);
-
-        $pattern = '/' . implode("\n", [
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive_0_250.m3u8'), [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
             '#EXT-X-TARGETDURATION:5',
@@ -61,13 +58,7 @@ class EncryptedHlsExportTest extends TestCase
             '#EXTINF:4.720000,',
             'adaptive_0_250_00000.ts',
             '#EXT-X-ENDLIST',
-        ]) . '/';
-
-        $this->assertEquals(
-            1,
-            preg_match($pattern, $encryptedPlaylist),
-            "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist . PHP_EOL . PHP_EOL . implode(PHP_EOL, $listener->get()->all())
-        );
+        ], $listener);
     }
 
     /**
@@ -99,10 +90,7 @@ class EncryptedHlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
 
-        $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
-        $encryptedPlaylist = preg_replace('/\n|\r\n?/', "\n", $encryptedPlaylist);
-
-        $pattern = "/" . implode("\n", [
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive_0_250.m3u8'), [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
             '#EXT-X-TARGETDURATION:2',
@@ -118,9 +106,7 @@ class EncryptedHlsExportTest extends TestCase
             '#EXTINF:0.[0-9]+,',
             'adaptive_0_250_00002.ts',
             '#EXT-X-ENDLIST',
-        ]) . "/";
-
-        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist), "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist . PHP_EOL . PHP_EOL . implode(PHP_EOL, $listener->get()->all()));
+        ], $listener);
     }
 
     /**
@@ -133,15 +119,17 @@ class EncryptedHlsExportTest extends TestCase
 
         $lowBitrate = $this->x264()->setKiloBitrate(250);
 
-        $keys = [];
+        $keys     = [];
+        $listener = null;
 
         FFMpeg::open('video.mp4')
             ->exportForHLS()
             ->setKeyFrameInterval(2)
             ->setSegmentLength(2)
             ->addFormat($lowBitrate)
-            ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys) {
+            ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys, &$listener) {
                 $keys[$filename] = $contents;
+                $listener = $listener ?: $stdListener;
             }, 2)
             ->save('adaptive.m3u8');
 
@@ -150,10 +138,7 @@ class EncryptedHlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
 
-        $encryptedPlaylist = Storage::disk('local')->get('adaptive_0_250.m3u8');
-        $encryptedPlaylist = preg_replace('/\n|\r\n?/', "\n", $encryptedPlaylist);
-
-        $pattern = "/" . implode("\n", [
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive_0_250.m3u8'), [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
             '#EXT-X-TARGETDURATION:[0-9]+',
@@ -168,8 +153,6 @@ class EncryptedHlsExportTest extends TestCase
             '#EXTINF:0.[0-9]+,',
             'adaptive_0_250_00002.ts',
             '#EXT-X-ENDLIST',
-        ]) . "/";
-
-        $this->assertEquals(1, preg_match($pattern, $encryptedPlaylist), "Playlist mismatch:" . PHP_EOL . $encryptedPlaylist);
+        ], $listener);
     }
 }

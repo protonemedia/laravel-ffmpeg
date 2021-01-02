@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use League\Flysystem\Filesystem as FlysystemFilesystem;
 use League\Flysystem\Memory\MemoryAdapter;
 use Orchestra\Testbench\TestCase as BaseTestCase;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider;
 use Twistor\Flysystem\Http\HttpAdapter;
@@ -117,5 +118,19 @@ abstract class TestCase extends BaseTestCase
     {
         $this->fakeLocalVideoFile();
         $this->addTestFile('video2.mp4');
+    }
+
+    protected function assertPlaylistPattern(string $playlist, array $patternLines, StdListener $listener = null): self
+    {
+        $playlist = preg_replace('/\n|\r\n?/', "\n", $playlist);
+
+        $pattern = '/' . implode("\n", $patternLines) . '/';
+
+        $this->assertMatchesRegularExpression($pattern, $playlist, implode(PHP_EOL . PHP_EOL, [
+            "Playlist does not match pattern",
+            $listener ? implode(PHP_EOL, $listener->get()->all()) : null,
+        ]));
+
+        return $this;
     }
 }

@@ -52,10 +52,7 @@ class HlsExportTest extends TestCase
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
-        $playlist = Storage::disk('local')->get('adaptive.m3u8');
-        $playlist = preg_replace('/\n|\r\n?/', "\n", $playlist);
-
-        $pattern = '/' . implode("\n", [
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
             '#EXTM3U',
             static::streamInfoPattern('1920x1080'),
             'adaptive_0_250.m3u8',
@@ -64,9 +61,7 @@ class HlsExportTest extends TestCase
             static::streamInfoPattern('1920x1080'),
             'adaptive_2_4000.m3u8',
             '#EXT-X-ENDLIST',
-        ]) . '/';
-
-        $this->assertEquals(1, preg_match($pattern, $playlist), "Playlist mismatch:" . PHP_EOL . $playlist);
+        ]);
     }
 
     /** @test */

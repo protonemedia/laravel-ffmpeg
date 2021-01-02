@@ -4,10 +4,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Filters;
 
 use FFMpeg\Filters\Video\WatermarkFilter as FFMpegWatermarkFilter;
 
-/**
- * Partly based on this PR:
- * https://github.com/PHP-FFMpeg/PHP-FFMpeg/pull/754/files
- */
 class WatermarkFilter extends FFMpegWatermarkFilter
 {
     protected $path;
@@ -47,7 +43,9 @@ class WatermarkFilter extends FFMpegWatermarkFilter
     }
 
     /**
-     * Replaces the slashes and escapes the colon.
+     * Replaces the slashes and escapes the colon. For some
+     * reason, this filter doesn't work on Windows with
+     * absolute paths that contain forward slashes.
      *
      * @param string $path
      * @return string
