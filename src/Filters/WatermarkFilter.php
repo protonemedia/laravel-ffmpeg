@@ -11,20 +11,12 @@ use FFMpeg\Filters\Video\WatermarkFilter as FFMpegWatermarkFilter;
 class WatermarkFilter extends FFMpegWatermarkFilter
 {
     protected $path;
-    protected $wrapInParentheses = false;
 
     public function __construct($watermarkPath, array $coordinates = [], $priority = 0)
     {
         parent::__construct($watermarkPath, $coordinates, $priority);
 
         $this->path = $watermarkPath;
-    }
-
-    public function wrapInParentheses(): self
-    {
-        $this->wrapInParentheses = true;
-
-        return $this;
     }
 
     /**
@@ -36,13 +28,7 @@ class WatermarkFilter extends FFMpegWatermarkFilter
     {
         $commands = parent::getCommands();
 
-        $replace = static::normalizePath($this->path);
-
-        if ($this->wrapInParentheses) {
-            $replace = "'{$replace}'";
-        }
-
-        $commands[1] = str_replace($this->path, $replace, $commands[1]);
+        $commands[1] = str_replace($this->path, static::normalizePath($this->path), $commands[1]);
 
         return $commands;
     }
@@ -55,7 +41,9 @@ class WatermarkFilter extends FFMpegWatermarkFilter
      */
     public static function normalizePath(string $path): string
     {
-        return windows_os() ? static::normalizeWindowsPath($path) : $path;
+        $path = windows_os() ? static::normalizeWindowsPath($path) : $path;
+
+        return "'{$path}'";
     }
 
     /**

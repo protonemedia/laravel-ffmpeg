@@ -27,7 +27,7 @@ class FFProbeDriver extends FFMpegFFProbeDriver
         $process = $this->factory->create($command);
 
         if ($this->pendingWorkingDirectory) {
-            $process->setWorkingDirectory($this->pendingWorkingDirectory);
+            // $process->setWorkingDirectory($this->pendingWorkingDirectory);
             $this->pendingWorkingDirectory = null;
         }
 
