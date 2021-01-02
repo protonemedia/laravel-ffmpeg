@@ -2,6 +2,12 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.5.3 - 2021-01-02
+
+### Added
+
+-   Support for custom encryption filename when using non-rotating keys
+
 ## 7.5.2 - 2021-01-02
 
 ### Added

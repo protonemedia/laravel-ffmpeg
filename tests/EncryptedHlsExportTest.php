@@ -16,9 +16,9 @@ class EncryptedHlsExportTest extends TestCase
 {
     use RetryTrait;
 
-    public static function keyLinePattern()
+    public static function keyLinePattern($key = null)
     {
-        return '#EXT-X-KEY:METHOD=AES-128,URI="[~a-zA-Z0-9-_\/:]+.key",IV=[a-z0-9]+';
+        return '#EXT-X-KEY:METHOD=AES-128,URI="' . ($key ?: '[~a-zA-Z0-9-_\/:]+.key') . '",IV=[a-z0-9]+';
     }
 
     /**
@@ -54,7 +54,7 @@ class EncryptedHlsExportTest extends TestCase
             '#EXT-X-TARGETDURATION:5',
             '#EXT-X-MEDIA-SEQUENCE:0',
             '#EXT-X-PLAYLIST-TYPE:VOD',
-            static::keyLinePattern(),
+            static::keyLinePattern('secret.key'),
             '#EXTINF:4.720000,',
             'adaptive_0_250_00000.ts',
             '#EXT-X-ENDLIST',
@@ -86,6 +86,7 @@ class EncryptedHlsExportTest extends TestCase
             ->save('adaptive.m3u8');
 
         $this->assertCount(4, $keys);
+        $this->assertCount(4, array_unique(array_values($keys)));
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));

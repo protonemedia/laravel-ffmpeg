@@ -19,6 +19,13 @@ trait EncryptsHLSSegments
     private $encryptionKey;
 
     /**
+     * The encryption key filename.
+     *
+     * @var string
+     */
+    private $encryptionKeyFilename;
+
+    /**
      * Gets called whenever a new encryption key is set.
      *
      * @var callable
@@ -92,29 +99,19 @@ trait EncryptsHLSSegments
     }
 
     /**
-     * Sets the encryption key with the given value or generates a new one.
-     *
-     * @param string $key
-     * @return string
-     */
-    private function setEncryptionKey($key = null): string
-    {
-        return $this->encryptionKey = $key ?: static::generateEncryptionKey();
-    }
-
-    /**
      * Initialises the disk, info and IV for encryption and sets the key.
      *
      * @param string $key
+     * @param string $filename
      * @return self
      */
-    public function withEncryptionKey($key): self
+    public function withEncryptionKey($key, $filename = 'secret.key'): self
     {
+        $this->encryptionKey = $key;
+        $this->encryptionIV  = bin2hex(static::generateEncryptionKey());
+
+        $this->encryptionKeyFilename = $filename;
         $this->encryptionSecretsRoot = app(TemporaryDirectories::class)->create();
-
-        $this->encryptionIV = bin2hex(static::generateEncryptionKey());
-
-        $this->setEncryptionKey($key);
 
         return $this;
     }
@@ -134,7 +131,7 @@ trait EncryptsHLSSegments
         $this->onNewEncryptionKey   = $callback;
         $this->segmentsPerKey       = $segmentsPerKey;
 
-        return $this->withEncryptionKey(static::generateEncryptionKey());
+        return $this->withEncryptionKey(null, null);
     }
 
     /**
@@ -149,8 +146,8 @@ trait EncryptsHLSSegments
         if ($this->nextEncryptionFilenameAndKey) {
             [$keyFilename, $encryptionKey] = $this->nextEncryptionFilenameAndKey;
         } else {
-            $keyFilename   = static::generateEncryptionKeyFilename();
-            $encryptionKey = static::generateEncryptionKey();
+            $keyFilename   = $this->encryptionKeyFilename ?: static::generateEncryptionKeyFilename();
+            $encryptionKey = $this->encryptionKey ?: static::generateEncryptionKey();
         }
 
         // get the absolute path to the info file and encryption key
@@ -190,7 +187,7 @@ trait EncryptsHLSSegments
      */
     private function getEncrypedHLSParameters(): array
     {
-        if (!$this->encryptionKey) {
+        if (!$this->encryptionIV) {
             return [];
         }
 
