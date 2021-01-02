@@ -126,12 +126,12 @@ class EncryptedHlsExportTest extends TestCase
 
         FFMpeg::open('video.mp4')
             ->exportForHLS()
-            ->setKeyFrameInterval(1)
-            ->setSegmentLength(1)
+            ->setKeyFrameInterval(2)
+            ->setSegmentLength(2)
             ->addFormat($lowBitrate)
             ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys) {
                 $keys[$filename] = $contents;
-            }, 3)
+            }, 2)
             ->save('adaptive.m3u8');
 
         $this->assertCount(2, $keys);
@@ -149,17 +149,13 @@ class EncryptedHlsExportTest extends TestCase
             '#EXT-X-MEDIA-SEQUENCE:0',
             '#EXT-X-PLAYLIST-TYPE:VOD',
             static::keyLinePattern(),
-            '#EXTINF:1.[0-9]+,',
+            '#EXTINF:2.[0-9]+,',
             'adaptive_0_250_00000.ts',
-            '#EXTINF:1.[0-9]+,',
+            '#EXTINF:2.[0-9]+,',
             'adaptive_0_250_00001.ts',
-            '#EXTINF:1.[0-9]+,',
-            'adaptive_0_250_00002.ts',
             static::keyLinePattern(),
-            '#EXTINF:1.[0-9]+,',
-            'adaptive_0_250_00003.ts',
             '#EXTINF:0.[0-9]+,',
-            'adaptive_0_250_00004.ts',
+            'adaptive_0_250_00002.ts',
             '#EXT-X-ENDLIST',
         ]) . "/";
 

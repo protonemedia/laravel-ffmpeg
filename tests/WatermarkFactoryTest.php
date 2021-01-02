@@ -49,8 +49,14 @@ class WatermarkFactoryTest extends TestCase
 
         $this->assertInstanceOf(WatermarkFilter::class, $factory->get());
 
-        $this->assertStringContainsString(config('laravel-ffmpeg.temporary_files_root'), $this->getSecondCommand($factory));
-        $this->assertStringContainsString('logo.png', $this->getSecondCommand($factory));
+        $command = $this->getSecondCommand($factory);
+
+        $this->assertStringContainsString(
+            substr(WatermarkFilter::normalizePath(config('laravel-ffmpeg.temporary_files_root')), 1, -1),
+            $command
+        );
+
+        $this->assertStringContainsString('logo.png', $command);
     }
 
     /** @test */

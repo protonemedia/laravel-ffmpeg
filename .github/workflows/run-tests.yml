@@ -8,10 +8,10 @@ jobs:
         strategy:
             fail-fast: true
             matrix:
-                os: [windows-2019]
+                os: [ubuntu-20.04, windows-2019]
                 php: [8.0]
                 laravel: [8.*]
-                dependency-version: [prefer-stable]
+                dependency-version: [prefer-lowest, prefer-stable]
                 include:
                     -   laravel: 8.*
                         testbench: 6.*
