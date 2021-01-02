@@ -112,7 +112,7 @@ class WatermarkFactoryTest extends TestCase
         $command = $this->getSecondCommand($factory);
 
         $this->assertStringContainsString(
-            WatermarkFilter::normalizePath(config('laravel-ffmpeg.temporary_files_root')),
+            substr(WatermarkFilter::normalizePath(config('laravel-ffmpeg.temporary_files_root')), 1, -1),
             $command
         );
 

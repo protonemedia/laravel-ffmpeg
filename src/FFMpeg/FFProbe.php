@@ -5,8 +5,6 @@ namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 use Alchemy\BinaryDriver\Exception\ExecutionFailureException;
 use FFMpeg\Exception\RuntimeException;
 use FFMpeg\FFProbe as FFMpegFFProbe;
-use Illuminate\Support\Str;
-use League\Flysystem\Util;
 
 class FFProbe extends FFMpegFFProbe
 {
@@ -34,15 +32,7 @@ class FFProbe extends FFMpegFFProbe
             return $probe;
         }
 
-        $baseProbeDriver = $probe->getFFProbeDriver();
-
-        $probeDriver = new FFProbeDriver(
-            $baseProbeDriver->getProcessBuilderFactory(),
-            $baseProbeDriver->getProcessRunner()->getLogger(),
-            $baseProbeDriver->getConfiguration()
-        );
-
-        return new static($probeDriver, $probe->getCache());
+        return new static($probe->getFFProbeDriver(), $probe->getCache());
     }
 
     private function shouldUseCustomProbe($pathfile): bool
@@ -76,12 +66,6 @@ class FFProbe extends FFMpegFFProbe
      */
     public function streams($pathfile)
     {
-        $directory = Util::pathinfo($pathfile)['dirname'];
-
-        if (!Str::startsWith($directory, 'http')) {
-            $this->getFFProbeDriver()->setWorkingDirectory($directory);
-        }
-
         if (!$this->shouldUseCustomProbe($pathfile)) {
             return parent::streams($pathfile);
         }
@@ -99,12 +83,6 @@ class FFProbe extends FFMpegFFProbe
      */
     public function format($pathfile)
     {
-        $directory = Util::pathinfo($pathfile)['dirname'];
-
-        if (!Str::startsWith($directory, 'http')) {
-            $this->getFFProbeDriver()->setWorkingDirectory($directory);
-        }
-
         if (!$this->shouldUseCustomProbe($pathfile)) {
             return parent::format($pathfile);
         }

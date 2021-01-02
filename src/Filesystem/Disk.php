@@ -5,12 +5,10 @@ namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Support\Traits\ForwardsCalls;
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\AdapterInterface;
 use League\Flysystem\Filesystem as LeagueFilesystem;
-use League\Flysystem\Util;
 
 /**
  * @mixin \Illuminate\Filesystem\FilesystemAdapter
@@ -129,14 +127,7 @@ class Disk
 
     public static function normalizePath($path): string
     {
-        $normalizedPath = Util::normalizePath($path);
-
-        // reapply the starting slash
-        if (Str::startsWith($path, '/') && !Str::startsWith($normalizedPath, '/')) {
-            return "/{$normalizedPath}";
-        }
-
-        return $normalizedPath;
+        return str_replace('\\', '/', $path);
     }
 
     /**
