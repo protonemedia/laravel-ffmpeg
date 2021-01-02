@@ -218,7 +218,7 @@ trait EncryptsHLSSegments
         }
 
         $this->addListener($this->listener = new StdListener)->onEvent('listen', function ($line) {
-            if (!strpos($line, ".keyinfo' for reading")) {
+            if (!(strpos($line, ".ts' for writing") && strpos($line, "Opening 'crypto:"))) {
                 return;
             }
 
