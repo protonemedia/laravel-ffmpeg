@@ -109,7 +109,7 @@ class HlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_0_250.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_1_1000.m3u8'));
-        $this->assertFalse(Storage::disk('local')->has('sub/dir/master_playlist_guide_0.m3u8'));
+        $this->assertFalse(Storage::disk('local')->has('sub/dir/temporary_segment_playlist_0.m3u8'));
 
         $masterPlaylist = Storage::disk('local')->get('sub/dir/adaptive.m3u8');
         $lowPlaylist    = Storage::disk('local')->get('sub/dir/adaptive_0_250.m3u8');

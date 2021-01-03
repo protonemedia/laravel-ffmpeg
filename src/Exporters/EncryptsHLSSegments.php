@@ -233,12 +233,12 @@ trait EncryptsHLSSegments
      * the absolute path to the keys to a relative ones.
      *
      * @param \Illuminate\Support\Collection $playlistMedia
-     * @return void
+     * @return self
      */
-    private function replaceAbsolutePathsHLSEncryption(Collection $playlistMedia)
+    private function replaceAbsolutePathsHLSEncryption(Collection $playlistMedia): self
     {
         if (!$this->encryptionSecretsRoot) {
-            return;
+            return $this;
         }
 
         $playlistMedia->each(function ($playlistMedia) {
@@ -248,12 +248,6 @@ trait EncryptsHLSSegments
             $prefix = '#EXT-X-KEY:METHOD=AES-128,URI="';
 
             $content = str_replace(
-                $prefix . $this->encryptionSecretsRoot . '/',
-                $prefix,
-                $disk->get($path)
-            );
-
-            $content = str_replace(
                 $prefix . Disk::normalizePath($this->encryptionSecretsRoot) . '/',
                 $prefix,
                 $disk->get($path)
@@ -261,19 +255,21 @@ trait EncryptsHLSSegments
 
             $disk->put($path, $content);
         });
+
+        return $this;
     }
 
     /**
      * Removes the encryption keys from the temporary disk.
      *
-     * @return void
+     * @return self
      */
-    private function cleanupHLSEncryption()
+    private function cleanupHLSEncryption(): self
     {
-        if (!$this->encryptionSecretsRoot) {
-            return;
+        if ($this->encryptionSecretsRoot) {
+            (new Filesystem)->deleteDirectory($this->encryptionSecretsRoot);
         }
 
-        (new Filesystem)->deleteDirectory($this->encryptionSecretsRoot);
+        return $this;
     }
 }

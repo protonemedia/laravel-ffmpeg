@@ -104,28 +104,48 @@ class HLSExporter extends MediaExporter
         return [$segmentsPattern, $formatPlaylistPath];
     }
 
-    private function addHLSParametersToFormat(DefaultVideo $format, string $segmentsPattern, Disk $disk)
+    /**
+     * Merges the HLS parameters to the given format.
+     *
+     * @param \FFMpeg\Format\Video\DefaultVideo $format
+     * @param string $segmentsPattern
+     * @param \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk $disk
+     * @param integer $key
+     * @return array
+     */
+    private function addHLSParametersToFormat(DefaultVideo $format, string $segmentsPattern, Disk $disk, int $key): array
     {
-        $hlsParameters = [
-            '-sc_threshold',
-            '0',
-            '-g',
-            $this->keyFrameInterval,
-            '-hls_playlist_type',
-            'vod',
-            '-hls_time',
-            $this->segmentLength,
-            '-hls_segment_filename',
-            $disk->makeMedia($segmentsPattern)->getLocalPath(),
-        ];
-
         $format->setAdditionalParameters(array_merge(
             $format->getAdditionalParameters() ?: [],
-            $hlsParameters,
+            $hlsParameters = [
+                '-sc_threshold',
+                '0',
+                '-g',
+                $this->keyFrameInterval,
+                '-hls_playlist_type',
+                'vod',
+                '-hls_time',
+                $this->segmentLength,
+                '-hls_segment_filename',
+                $disk->makeMedia($segmentsPattern)->getLocalPath(),
+                '-master_pl_name',
+                $this->generateTemporarySegmentPlaylistFilename($key),
+            ],
             $this->getEncrypedHLSParameters()
         ));
+
+        return $hlsParameters;
     }
 
+    /**
+     * Gives the callback an HLSVideoFilters object that provides addFilter(),
+     * addLegacyFilter(), addWatermark() and resize() helper methods. It
+     * returns a mapping for the video and (optional) audio stream.
+     *
+     * @param callable $filtersCallback
+     * @param integer $formatKey
+     * @return array
+     */
     private function applyFiltersCallback(callable $filtersCallback, int $formatKey): array
     {
         $filtersCallback(
@@ -143,29 +163,43 @@ class HLSExporter extends MediaExporter
         return $outs;
     }
 
-    public static function generateMasterPlaylistFilename($key): string
+    public static function generateTemporarySegmentPlaylistFilename($key): string
     {
-        return "master_playlist_guide_{$key}.m3u8";
+        return "temporary_segment_playlist_{$key}.m3u8";
     }
 
-    private function cleanupMasterPlaylistGuides(Media $media)
+    private function cleanupSegmentPlaylistGuides(Media $media): self
     {
-        $this->pendingFormats->map(function ($formatAndCallback, $key) use ($media) {
-            $media->getDisk()->delete(
-                $media->getDirectory() . static::generateMasterPlaylistFilename($key)
-            );
+        $disk      = $media->getDisk();
+        $directory = $media->getDirectory();
+
+        $this->pendingFormats->map(function ($formatAndCallback, $key) use ($disk, $directory) {
+            $disk->delete($directory . static::generateTemporarySegmentPlaylistFilename($key));
         });
+
+        return $this;
     }
 
+    /**
+     * Adds a mapping for each added format and automatically handles the mapping
+     * for filters. Adds a handler to rotate the encryption key (optional).
+     * Returns a media collection of all segment playlists.
+     *
+     * @param string $path
+     * @throws \ProtoneMedia\LaravelFFMpeg\Exporters\NoFormatException
+     * @return \Illuminate\Support\Collection
+     */
     private function prepareSaving(string $path = null): Collection
     {
+        if (!$this->pendingFormats) {
+            throw new NoFormatException;
+        }
+
         $media = $this->getDisk()->makeMedia($path);
 
         $baseName = $media->getDirectory() . $media->getFilenameWithoutExtension();
 
-        return $this->pendingFormats->map(function ($formatAndCallback, $key) use ($baseName, $media) {
-            $disk = $this->getDisk()->clone();
-
+        return $this->pendingFormats->map(function (array $formatAndCallback, $key) use ($baseName, $media) {
             [$format, $filtersCallback] = $formatAndCallback;
 
             [$segmentsPattern, $formatPlaylistPath] = $this->getSegmentPatternAndFormatPlaylistPath(
@@ -174,15 +208,9 @@ class HLSExporter extends MediaExporter
                 $key
             );
 
-            $this->addHLSParametersToFormat($format, $segmentsPattern, $disk);
+            $disk = $this->getDisk()->clone();
 
-            $format->setAdditionalParameters(array_merge(
-                $format->getAdditionalParameters(),
-                [
-                    '-master_pl_name',
-                    $this->generateMasterPlaylistFilename($key),
-                ]
-            ));
+            $this->addHLSParametersToFormat($format, $segmentsPattern, $disk, $key);
 
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);
@@ -203,26 +231,41 @@ class HLSExporter extends MediaExporter
         return parent::getCommand(null);
     }
 
-    public function save(string $path = null): MediaOpener
+    /**
+     * Runs the export, generates the main playlist, and cleans up the
+     * segment playlist guides and temporary HLS encryption keys.
+     *
+     * @param string $path
+     * @return \ProtoneMedia\LaravelFFMpeg\MediaOpener
+     */
+    public function save(string $mainPlaylistPath = null): MediaOpener
     {
-        return $this->prepareSaving($path)->pipe(function ($playlistMedia) use ($path) {
+        return $this->prepareSaving($mainPlaylistPath)->pipe(function ($segmentPlaylists) use ($mainPlaylistPath) {
             $result = parent::save();
 
             $playlist = $this->getPlaylistGenerator()->get(
-                $playlistMedia->all(),
+                $segmentPlaylists->all(),
                 $this->driver->fresh()
             );
 
-            $this->getDisk()->put($path, $playlist);
+            $this->getDisk()->put($mainPlaylistPath, $playlist);
 
-            $this->replaceAbsolutePathsHLSEncryption($playlistMedia);
-            $this->cleanupMasterPlaylistGuides($playlistMedia->first());
-            $this->cleanupHLSEncryption();
+            $this->replaceAbsolutePathsHLSEncryption($segmentPlaylists)
+                ->cleanupSegmentPlaylistGuides($segmentPlaylists->first())
+                ->cleanupHLSEncryption();
 
             return $result;
         });
     }
 
+    /**
+     * Initializes the $pendingFormats property when needed and adds the format
+     * with the optional callback to add filters.
+     *
+     * @param \FFMpeg\Format\FormatInterface $format
+     * @param callable $filtersCallback
+     * @return self
+     */
     public function addFormat(FormatInterface $format, callable $filtersCallback = null): self
     {
         if (!$this->pendingFormats) {

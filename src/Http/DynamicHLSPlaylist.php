@@ -196,7 +196,7 @@ class DynamicHLSPlaylist implements Responsable
 
     /**
      * Returns a collection of all processed segment playlists
-     * and the processed master playlist.
+     * and the processed main playlist.
      *
      * @return \Illuminate\Support\Collection
      */

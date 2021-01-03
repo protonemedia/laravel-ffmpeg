@@ -85,6 +85,12 @@ class MediaExporter
         return $this;
     }
 
+    /**
+     * Returns the final command, useful for debugging purposes.
+     *
+     * @param string $path
+     * @return mixed
+     */
     public function getCommand(string $path = null)
     {
         $media = $this->prepareSaving($path);
@@ -95,6 +101,12 @@ class MediaExporter
         );
     }
 
+    /**
+     * Dump the final command and end the script.
+     *
+     * @param string $path
+     * @return void
+     */
     public function dd(string $path = null)
     {
         dd($this->getCommand($path));

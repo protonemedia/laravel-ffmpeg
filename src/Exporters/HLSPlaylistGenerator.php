@@ -29,11 +29,11 @@ class HLSPlaylistGenerator implements PlaylistGenerator
 
     private function getStreamInfoLine(Media $playlistMedia, string $key): string
     {
-        $masterPlaylist = $playlistMedia->getDisk()->get(
-            $playlistMedia->getDirectory() . HLSExporter::generateMasterPlaylistFilename($key, $playlistMedia)
+        $segmentPlaylist = $playlistMedia->getDisk()->get(
+            $playlistMedia->getDirectory() . HLSExporter::generateTemporarySegmentPlaylistFilename($key, $playlistMedia)
         );
 
-        $lines = DynamicHLSPlaylist::parseLines($masterPlaylist)->filter();
+        $lines = DynamicHLSPlaylist::parseLines($segmentPlaylist)->filter();
 
         return $lines->get($lines->search($playlistMedia->getFilename()) - 1);
     }
