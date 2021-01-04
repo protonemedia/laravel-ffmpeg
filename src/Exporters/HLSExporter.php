@@ -114,7 +114,7 @@ class HLSExporter extends MediaExporter
     }
 
     /**
-     * Calls the generator with the name, format and key.
+     * Calls the generator with the path (without extension), format and key.
      *
      * @param string $baseName
      * @param \FFMpeg\Format\VideoInterface $format
