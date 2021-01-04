@@ -42,6 +42,12 @@ class HLSExporter extends MediaExporter
      */
     private $segmentFilenameGenerator = null;
 
+    /**
+     * Setter for the segment length
+     *
+     * @param integer $length
+     * @return self
+     */
     public function setSegmentLength(int $length): self
     {
         $this->segmentLength = $length;
@@ -49,6 +55,12 @@ class HLSExporter extends MediaExporter
         return $this;
     }
 
+    /**
+     * Setter for the Key Frame interval
+     *
+     * @param integer $interval
+     * @return self
+     */
     public function setKeyFrameInterval(int $interval): self
     {
         $this->keyFrameInterval = $interval;
@@ -56,6 +68,13 @@ class HLSExporter extends MediaExporter
         return $this;
     }
 
+    /**
+     * Method to set a different playlist generator than
+     * the default HLSPlaylistGenerator.
+     *
+     * @param \ProtoneMedia\LaravelFFMpeg\Exporters\PlaylistGenerator $playlistGenerator
+     * @return self
+     */
     public function withPlaylistGenerator(PlaylistGenerator $playlistGenerator): self
     {
         $this->playlistGenerator = $playlistGenerator;
@@ -68,6 +87,12 @@ class HLSExporter extends MediaExporter
         return $this->playlistGenerator ?: new HLSPlaylistGenerator;
     }
 
+    /**
+     * Setter for a callback that generates a segment filename.
+     *
+     * @param Closure $callback
+     * @return self
+     */
     public function useSegmentFilenameGenerator(Closure $callback): self
     {
         $this->segmentFilenameGenerator = $callback;
@@ -75,6 +100,11 @@ class HLSExporter extends MediaExporter
         return $this;
     }
 
+    /**
+     * Returns a default generator if none is set.
+     *
+     * @return callable
+     */
     private function getSegmentFilenameGenerator(): callable
     {
         return $this->segmentFilenameGenerator ?: function ($name, $format, $key, $segments, $playlist) {
@@ -83,6 +113,14 @@ class HLSExporter extends MediaExporter
         };
     }
 
+    /**
+     * Calls the generator with the name, format and key.
+     *
+     * @param string $baseName
+     * @param \FFMpeg\Format\VideoInterface $format
+     * @param integer $key
+     * @return array
+     */
     private function getSegmentPatternAndFormatPlaylistPath(string $baseName, VideoInterface $format, int $key): array
     {
         $segmentsPattern    = null;
@@ -163,11 +201,27 @@ class HLSExporter extends MediaExporter
         return $outs;
     }
 
-    public static function generateTemporarySegmentPlaylistFilename($key): string
+    /**
+     * Returns the filename of a segment playlist by its key. We let FFmpeg generate a playlist
+     * for each added format so we don't have to detect the bitrate and codec ourselves.
+     * We use this as a reference so when can generate our own main playlist.
+     *
+     * @param int $key
+     * @return string
+     */
+    public static function generateTemporarySegmentPlaylistFilename(int $key): string
     {
         return "temporary_segment_playlist_{$key}.m3u8";
     }
 
+    /**
+     * Loops through each added format and then deletes the temporary
+     * segment playlist, which we generate manually using the
+     * HLSPlaylistGenerator.
+     *
+     * @param \ProtoneMedia\LaravelFFMpeg\Filesystem\Media $media
+     * @return self
+     */
     private function cleanupSegmentPlaylistGuides(Media $media): self
     {
         $disk      = $media->getDisk();
@@ -224,6 +278,12 @@ class HLSExporter extends MediaExporter
         });
     }
 
+    /**
+     * Prepares the saves command but returns the command instead.
+     *
+     * @param string $path
+     * @return mixed
+     */
     public function getCommand(string $path = null)
     {
         $this->prepareSaving($path);

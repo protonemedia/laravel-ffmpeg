@@ -14,6 +14,13 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     const PLAYLIST_START = '#EXTM3U';
     const PLAYLIST_END   = '#EXT-X-ENDLIST';
 
+    /**
+     * Extracts the framerate from the given media and formats it in a
+     * suitable format.
+     *
+     * @param \ProtoneMedia\LaravelFFMpeg\MediaOpener $media
+     * @return mixed
+     */
     private function getFrameRate(MediaOpener $media)
     {
         $mediaStream = $media->getVideoStream();
@@ -27,30 +34,46 @@ class HLSPlaylistGenerator implements PlaylistGenerator
         return $frameRate ? number_format($frameRate, 3, '.', '') : null;
     }
 
-    private function getStreamInfoLine(Media $playlistMedia, string $key): string
+    /**
+     * Return the line from the master playlist that references the given segment playlist.
+     *
+     * @param \ProtoneMedia\LaravelFFMpeg\Filesystem\Media $playlistMedia
+     * @param string $key
+     * @return string
+     */
+    private function getStreamInfoLine(Media $segmentPlaylist, string $key): string
     {
-        $segmentPlaylist = $playlistMedia->getDisk()->get(
-            $playlistMedia->getDirectory() . HLSExporter::generateTemporarySegmentPlaylistFilename($key, $playlistMedia)
+        $segmentPlaylist = $segmentPlaylist->getDisk()->get(
+            $segmentPlaylist->getDirectory() . HLSExporter::generateTemporarySegmentPlaylistFilename($key, $segmentPlaylist)
         );
 
         $lines = DynamicHLSPlaylist::parseLines($segmentPlaylist)->filter();
 
-        return $lines->get($lines->search($playlistMedia->getFilename()) - 1);
+        return $lines->get($lines->search($segmentPlaylist->getFilename()) - 1);
     }
 
-    public function get(array $playlistMedia, PHPFFMpeg $driver): string
+    /**
+     * Loops through all segment playlists and generates a main playlist. It finds
+     * the relative paths to the segment playlists and adds the framerate when
+     * to each playlist.
+     *
+     * @param array $segmentPlaylists
+     * @param \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg $driver
+     * @return string
+     */
+    public function get(array $segmentPlaylists, PHPFFMpeg $driver): string
     {
-        return Collection::make($playlistMedia)->map(function (Media $playlistMedia, $key) use ($driver) {
-            $streamInfoLine = $this->getStreamInfoLine($playlistMedia, $key);
+        return Collection::make($segmentPlaylists)->map(function (Media $segmentPlaylist, $key) use ($driver) {
+            $streamInfoLine = $this->getStreamInfoLine($segmentPlaylist, $key);
 
-            $media = (new MediaOpener($playlistMedia->getDisk(), $driver))
-                ->openWithInputOptions($playlistMedia->getPath(), ['-allowed_extensions', 'ALL']);
+            $media = (new MediaOpener($segmentPlaylist->getDisk(), $driver))
+                ->openWithInputOptions($segmentPlaylist->getPath(), ['-allowed_extensions', 'ALL']);
 
             if ($frameRate = $this->getFrameRate($media)) {
                 $streamInfoLine .= ",FRAME-RATE={$frameRate}";
             }
 
-            return [$streamInfoLine, $playlistMedia->getFilename()];
+            return [$streamInfoLine, $segmentPlaylist->getFilename()];
         })->collapse()
             ->prepend(static::PLAYLIST_START)
             ->push(static::PLAYLIST_END)

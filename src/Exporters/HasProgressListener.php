@@ -22,6 +22,12 @@ trait HasProgressListener
      */
     protected $lastRemaining = 0;
 
+    /**
+     * Setter for the callback.
+     *
+     * @param Closure $callback
+     * @return self
+     */
     public function onProgress(Closure $callback): self
     {
         $this->onProgressCallback = $callback;
@@ -29,6 +35,13 @@ trait HasProgressListener
         return $this;
     }
 
+    /**
+     * Only calls the callback if the percentage is below 100 and is different
+     * from the previous emitted percentage.
+     *
+     * @param \Evenement\EventEmitterInterface $format
+     * @return void
+     */
     private function applyProgressListenerToFormat(EventEmitterInterface $format)
     {
         $format->on('progress', function ($media, $format, $percentage, $remaining = null, $rate = null) {
