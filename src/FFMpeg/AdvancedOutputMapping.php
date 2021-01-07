@@ -9,6 +9,10 @@ use Illuminate\Support\Collection;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSVideoFilters;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 
+/**
+ * This class is basically a wrapper around the map() method
+ * of a the \FFMpeg\Media\AdvancedMedia class.
+ */
 class AdvancedOutputMapping
 {
     /**

@@ -86,13 +86,14 @@ class HLSVideoFilters
      * @param int $width
      * @param int $height
      * @param string $mode
+     * @param boolean $forceStandards
      * @return self
      */
-    public function resize($width, $height, $mode = null): self
+    public function resize($width, $height, $mode = ResizeFilter::RESIZEMODE_FIT, $forceStandards = true): self
     {
         $dimension = new Dimension($width, $height);
 
-        $filter = new ResizeFilter($dimension, $mode);
+        $filter = new ResizeFilter($dimension, $mode, $forceStandards);
 
         return $this->addLegacyFilter($filter);
     }

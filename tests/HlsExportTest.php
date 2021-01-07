@@ -7,6 +7,7 @@ use FFMpeg\Filters\Video\VideoFilters;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSPlaylistGenerator;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSVideoFilters;
+use ProtoneMedia\LaravelFFMpeg\Exporters\NoFormatException;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
@@ -15,6 +16,24 @@ class HlsExportTest extends TestCase
     public static function streamInfoPattern($resolution): string
     {
         return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION=' . $resolution . ',CODECS="[a-zA-Z0-9,.]+",FRAME-RATE=25.000';
+    }
+
+    /** @test */
+    public function it_throws_an_exception_when_no_format_has_been_added()
+    {
+        $this->fakeLocalVideoFile();
+
+        try {
+            (new MediaOpener)
+                ->open('video.mp4')
+                ->exportForHLS()
+                ->toDisk('local')
+                ->save('adaptive.m3u8');
+        } catch (NoFormatException $exception) {
+            return $this->assertTrue(true);
+        }
+
+        $this->fail('Should have thrown NoFormatException.');
     }
 
     /** @test */
@@ -109,7 +128,7 @@ class HlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_0_250.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_1_1000.m3u8'));
-        $this->assertFalse(Storage::disk('local')->has('sub/dir/master_playlist_guide_0.m3u8'));
+        $this->assertFalse(Storage::disk('local')->has('sub/dir/temporary_segment_playlist_0.m3u8'));
 
         $masterPlaylist = Storage::disk('local')->get('sub/dir/adaptive.m3u8');
         $lowPlaylist    = Storage::disk('local')->get('sub/dir/adaptive_0_250.m3u8');
