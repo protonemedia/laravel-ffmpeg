@@ -53,9 +53,9 @@ class DynamicHLSPlaylist implements Responsable
     /**
      * Uses the 'filesystems.default' disk as default.
      */
-    public function __construct()
+    public function __construct($disk = null)
     {
-        $this->disk = Disk::make(config('filesystems.default'));
+        $this->fromDisk($disk ?: config('filesystems.default'));
     }
 
     /**

@@ -253,7 +253,7 @@ class HLSExporter extends MediaExporter
 
         $baseName = $media->getDirectory() . $media->getFilenameWithoutExtension();
 
-        return $this->pendingFormats->map(function (array $formatAndCallback, $key) use ($baseName, $media) {
+        return $this->pendingFormats->map(function (array $formatAndCallback, $key) use ($baseName) {
             [$format, $filtersCallback] = $formatAndCallback;
 
             [$segmentsPattern, $formatPlaylistPath] = $this->getSegmentPatternAndFormatPlaylistPath(

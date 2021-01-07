@@ -44,7 +44,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     private function getStreamInfoLine(Media $segmentPlaylistMedia, string $key): string
     {
         $segmentPlaylist = $segmentPlaylistMedia->getDisk()->get(
-            $segmentPlaylistMedia->getDirectory() . HLSExporter::generateTemporarySegmentPlaylistFilename($key, $segmentPlaylistMedia)
+            $segmentPlaylistMedia->getDirectory() . HLSExporter::generateTemporarySegmentPlaylistFilename($key)
         );
 
         $lines = DynamicHLSPlaylist::parseLines($segmentPlaylist)->filter();
