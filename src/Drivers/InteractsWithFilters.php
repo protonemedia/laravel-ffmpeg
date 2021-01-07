@@ -98,11 +98,11 @@ trait InteractsWithFilters
      * @param string $mode
      * @return self
      */
-    public function resize($width, $height, $mode = ResizeFilter::RESIZEMODE_FIT): self
+    public function resize($width, $height, $mode = ResizeFilter::RESIZEMODE_FIT, $forceStandards = true): self
     {
         $dimension = new Dimension($width, $height);
 
-        $filter = new ResizeFilter($dimension, $mode);
+        $filter = new ResizeFilter($dimension, $mode, $forceStandards);
 
         return $this->addFilter($filter);
     }
