@@ -189,7 +189,7 @@ FFMpeg::open('steve_howe.mp4')
     ->export()
     ->resize(640, 480);
 ```
-The first argument is the width, and the second argument the height. The optional third argument is the mode. You can choose between `fit` (default), `inset`, `width` or `height`. You can find about these modes in the `FFMpeg\Filters\Video\ResizeFilter` class.
+The first argument is the width, and the second argument the height. The optional third argument is the mode. You can choose between `fit` (default), `inset`, `width` or `height`. The optional fourth argument is a boolean whether or not to force the use of standards ratios. You can find about these modes in the `FFMpeg\Filters\Video\ResizeFilter` class.
 
 ### Custom filters
 

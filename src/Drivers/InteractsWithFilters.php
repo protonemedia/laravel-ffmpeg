@@ -96,6 +96,7 @@ trait InteractsWithFilters
      * @param int $width
      * @param int $height
      * @param string $mode
+     * @param boolean $forceStandards
      * @return self
      */
     public function resize($width, $height, $mode = ResizeFilter::RESIZEMODE_FIT, $forceStandards = true): self
