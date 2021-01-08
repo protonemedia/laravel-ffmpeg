@@ -752,6 +752,12 @@ Here's a blog post that will help you get started with this package:
 
 https://protone.media/en/blog/how-to-use-ffmpeg-in-your-laravel-projects
 
+## Using Video.js to play HLS in any browser
+
+Here's a 20-minute overview how to get started with Video.js. It covers including Video.js from a CDN, importing it as an ES6 module with Laravel Mix (Webpack) and building a reusable Vue.js component.
+
+[https://www.youtube.com/watch?v=nA1Jy8BPjys](https://www.youtube.com/watch?v=nA1Jy8BPjys)
+
 ## Wiki
 
 * [Custom filters](https://github.com/protonemedia/laravel-ffmpeg/wiki/Custom-filters)
