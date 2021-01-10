@@ -682,6 +682,12 @@ Route::get('/video/{playlist}', function ($playlist) {
 })->name('video.playlist');
 ```
 
+### Live Coding Session
+
+Here you can find a Live Coding Session about HLS encryption:
+
+[https://www.youtube.com/watch?v=WlbzWoAcez4](https://www.youtube.com/watch?v=WlbzWoAcez4)
+
 ## Process Output
 
 You can get the raw process output by calling the `getProcessOutput` method. Though the use-case is limited, you can use it to analyze a file (for example, with the `volumedetect` filter). It returns a `ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput` class that has three methods: `all`, `errors` and `output`. Each method returns an array with the corresponding lines.
