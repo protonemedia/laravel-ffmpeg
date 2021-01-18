@@ -143,6 +143,8 @@ class MediaExporter
     {
         $outputMedia = $this->prepareSaving($path);
 
+        $this->driver->applyBeforeSavingCallbacks();
+
         if ($this->maps->isNotEmpty()) {
             return $this->saveWithMappings();
         }

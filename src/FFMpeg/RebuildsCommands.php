@@ -5,8 +5,9 @@ namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
 
-trait BuildsCommandsWithHttpHeaders
+trait RebuildsCommands
 {
+    use InteractsWithBeforeSavingCallbacks;
     use InteractsWithHttpHeaders;
 
     /**
@@ -21,6 +22,14 @@ trait BuildsCommandsWithHttpHeaders
     {
         $command = parent::buildCommand($format, $outputPathfile);
 
+        $command = $this->rebuildCommandWithHeaders($command);
+        $command = $this->rebuildCommandWithCallbacks($command);
+
+        return $command;
+    }
+
+    private function rebuildCommandWithHeaders($command)
+    {
         if (empty($this->headers)) {
             return $command;
         }

@@ -50,6 +50,14 @@ class PHPFFMpeg
      */
     private $media;
 
+    /**
+     * Callbacks that should be called just before the
+     * underlying library hits the save method.
+     *
+     * @var array
+     */
+    private $beforeSavingCallbacks = [];
+
     public function __construct(FFMpeg $ffmpeg)
     {
         $this->ffmpeg                = $ffmpeg;
@@ -179,6 +187,31 @@ class PHPFFMpeg
     public function addListener(ListenerInterface $listener): self
     {
         $this->getFFMpegDriver()->listen($listener);
+
+        return $this;
+    }
+
+    /**
+     * Adds a callable to the callbacks array.
+     *
+     * @param callable $callback
+     * @return self
+     */
+    public function beforeSaving(callable $callback): self
+    {
+        $this->beforeSavingCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Set the callbacks on the Media.
+     *
+     * @return self
+     */
+    public function applyBeforeSavingCallbacks(): self
+    {
+        $this->get()->setBeforeSavingCallbacks($this->beforeSavingCallbacks);
 
         return $this;
     }
