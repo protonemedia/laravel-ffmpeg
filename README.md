@@ -752,6 +752,20 @@ FFMpeg::open('video.mp4')
     ->save('new_video.mp4');
 ```
 
+Since we can't get rid of some of the underlying options, you can interact with the final FFmpeg command by adding a callback to the exporter. You can add one or more callbacks by using the `beforeSaving` method:
+
+```php
+FFMpeg::open('video.mp4')
+    ->export()
+    ->inFormat(new X264)
+    ->beforeSaving(function ($commands) {
+        $commands[] = '-hello';
+
+        return $commands;
+    })
+    ->save('concat.mp4');
+```
+
 ## Example app
 
 Here's a blog post that will help you get started with this package:

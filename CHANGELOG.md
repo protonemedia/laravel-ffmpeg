@@ -2,6 +2,20 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.5.5 - 2021-01-18
+
+### Added
+
+-   Added `beforeSaving` method to add callbacks
+
+## 7.5.4 - 2021-01-07
+
+### Added
+
+-   Added fourth optional argument to the resize method whether or not to force the use of standards ratios
+-   Improved docs
+-   Small refactor
+
 ## 7.5.3 - 2021-01-02
 
 ### Added

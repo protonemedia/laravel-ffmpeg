@@ -6,7 +6,7 @@ use FFMpeg\Media\Audio;
 
 class AudioMedia extends Audio
 {
-    use BuildsCommandsWithHttpHeaders;
+    use RebuildsCommands;
 
     /**
      * Create a new instance of this class with the instance of the underlying library.

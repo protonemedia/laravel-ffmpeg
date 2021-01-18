@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 
 class AdvancedMedia extends MediaAdvancedMedia
 {
+    use InteractsWithBeforeSavingCallbacks;
     use InteractsWithHttpHeaders;
 
     /**
@@ -43,6 +44,8 @@ class AdvancedMedia extends MediaAdvancedMedia
             $command = static::mergeBeforeKey($command, $inputKey, static::compileHeaders($headers));
             $inputKey += 4;
         }
+
+        $command = $this->rebuildCommandWithCallbacks($command);
 
         return $command;
     }

@@ -6,7 +6,7 @@ use FFMpeg\Media\Video;
 
 class VideoMedia extends Video
 {
-    use BuildsCommandsWithHttpHeaders;
+    use RebuildsCommands;
 
     /**
      * Create a new instance of this class with the instance of the underlying library.
