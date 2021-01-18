@@ -9,6 +9,7 @@ use FFMpeg\Driver\FFMpegDriver;
 use FFMpeg\FFMpeg;
 use FFMpeg\Media\AbstractMediaType;
 use FFMpeg\Media\AdvancedMedia as BaseAdvancedMedia;
+use FFMpeg\Media\Audio;
 use FFMpeg\Media\Concat;
 use FFMpeg\Media\Frame;
 use FFMpeg\Media\Video;
@@ -122,9 +123,14 @@ class PHPFFMpeg
 
             $ffmpegMedia = $this->ffmpeg->open($media->getLocalPath());
 
-            $this->media = $ffmpegMedia instanceof Video
-                ? VideoMedia::make($ffmpegMedia)
-                : AudioMedia::make($ffmpegMedia);
+            // this should be refactored to a factory...
+            if ($ffmpegMedia instanceof Video) {
+                $this->media = VideoMedia::make($ffmpegMedia);
+            } elseif ($ffmpegMedia instanceof Audio) {
+                $this->media = AudioMedia::make($ffmpegMedia);
+            } else {
+                $this->media = $ffmpegMedia;
+            }
 
             if (method_exists($this->media, 'setHeaders')) {
                 $this->media->setHeaders(Arr::first($mediaCollection->getHeaders()) ?: []);
