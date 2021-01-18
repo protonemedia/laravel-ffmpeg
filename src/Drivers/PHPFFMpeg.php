@@ -126,7 +126,9 @@ class PHPFFMpeg
                 ? VideoMedia::make($ffmpegMedia)
                 : AudioMedia::make($ffmpegMedia);
 
-            $this->media->setHeaders(Arr::first($mediaCollection->getHeaders()) ?: []);
+            if (method_exists($this->media, 'setHeaders')) {
+                $this->media->setHeaders(Arr::first($mediaCollection->getHeaders()) ?: []);
+            }
         } else {
             $ffmpegMedia = $this->ffmpeg->openAdvanced($mediaCollection->getLocalPaths());
 
@@ -211,7 +213,11 @@ class PHPFFMpeg
      */
     public function applyBeforeSavingCallbacks(): self
     {
-        $this->get()->setBeforeSavingCallbacks($this->beforeSavingCallbacks);
+        $media = $this->get();
+
+        if (method_exists($media, 'setBeforeSavingCallbacks')) {
+            $media->setBeforeSavingCallbacks($this->beforeSavingCallbacks);
+        }
 
         return $this;
     }
