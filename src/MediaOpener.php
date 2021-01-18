@@ -51,7 +51,7 @@ class MediaOpener
      */
     public function __construct($disk = null, PHPFFMpeg $driver = null, MediaCollection $mediaCollection = null)
     {
-        $this->disk = Disk::make($disk ?: config('filesystems.default'));
+        $this->fromDisk($disk ?: config('filesystems.default'));
 
         $this->driver = ($driver ?: app(PHPFFMpeg::class))->fresh();
 
