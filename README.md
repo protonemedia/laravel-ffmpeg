@@ -766,6 +766,8 @@ FFMpeg::open('video.mp4')
     ->save('concat.mp4');
 ```
 
+*Note: this does not work with concatenation and frame exports*
+
 ## Example app
 
 Here's a blog post that will help you get started with this package:
