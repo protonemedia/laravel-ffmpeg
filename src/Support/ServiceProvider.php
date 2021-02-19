@@ -74,10 +74,8 @@ class ServiceProvider extends BaseServiceProvider
             return new PHPFFMpeg($this->app->make(FFMpeg::class));
         });
 
-        $this->app->singleton(TemporaryDirectories::class, function () {
-            return new TemporaryDirectories(
-                $this->app['config']->get('laravel-ffmpeg.temporary_files_root', sys_get_temp_dir()),
-            );
+        $this->app->singleton(TemporaryDirectories::class, function ($app) {
+           return new TemporaryDirectories($app['config']['laravel-ffmpeg']['temporary_files_root']);
         });
 
         // Register the main class to use with the facade
