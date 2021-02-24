@@ -269,10 +269,10 @@ class HLSExporter extends MediaExporter
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);
             }
+            $formatPlaylistOutput = $disk->makeMedia($formatPlaylistPath);
+            $this->addFormatOutputMapping($format, $formatPlaylistOutput, $outs ?? ['0']);
 
-            $this->addFormatOutputMapping($format, $disk->makeMedia($formatPlaylistPath), $outs ?? ['0']);
-
-            return $this->getDisk()->makeMedia($formatPlaylistPath);
+            return $formatPlaylistOutput;
         })->tap(function () {
             $this->addHandlerToRotateEncryptionKey();
         });
