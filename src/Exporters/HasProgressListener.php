@@ -44,7 +44,9 @@ trait HasProgressListener
      */
     private function applyProgressListenerToFormat(EventEmitterInterface $format)
     {
-        $format->once('progress', function ($media, $format, $percentage, $remaining = null, $rate = null) {
+        $format->removeAllListeners('progress');
+
+        $format->on('progress', function ($media, $format, $percentage, $remaining = null, $rate = null) {
             if ($percentage !== $this->lastPercentage && $percentage < 100) {
                 $this->lastPercentage = $percentage;
                 $this->lastRemaining = $remaining ?: $this->lastRemaining;

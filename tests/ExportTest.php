@@ -160,6 +160,33 @@ class ExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_only_bind_one_progress_listener_to_the_exporter()
+    {
+        $this->fakeLocalVideoFile();
+
+        $percentages = [];
+
+        $format = $this->x264();
+
+        foreach ([0,1] as $i) {
+            (new MediaOpener)
+                ->open('video.mp4')
+                ->export()
+                ->onProgress(function ($percentage) use (&$percentages, $i) {
+                    $percentages[$i][] = $percentage;
+                })
+                ->inFormat($format)
+                ->save('new_video.mp4');
+        }
+
+        $firstListener = $percentages[0];
+
+        $completeKey = array_search(100, $firstListener);
+
+        $this->assertEquals(count($firstListener), $completeKey + 1);
+    }
+
+    /** @test */
     public function it_can_chain_multiple_exports()
     {
         $this->fakeLocalVideoFile();
