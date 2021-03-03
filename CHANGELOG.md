@@ -2,6 +2,14 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.5.6 - 2021-03-03
+
+-   Bugfix for HLS exports to S3 disks (thanks @chistel)
+-   Prevent duplicate progress handler when using loops
+
+### Fixed
+
+
 ## 7.5.5 - 2021-01-18
 
 ### Added
