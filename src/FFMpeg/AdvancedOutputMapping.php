@@ -58,7 +58,7 @@ class AdvancedOutputMapping
         if ($this->format instanceof DefaultVideo) {
             $parameters = $this->format->getAdditionalParameters() ?: [];
 
-            if (!in_array('-b:v', $parameters)) {
+            if (!in_array('-b:v', $parameters) && $this->format->getKiloBitrate() !== 0) {
                 $parameters = ['-b:v', $this->format->getKiloBitrate() . 'k'] + $parameters;
             }
 
