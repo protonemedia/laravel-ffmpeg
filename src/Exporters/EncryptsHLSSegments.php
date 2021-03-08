@@ -166,10 +166,12 @@ trait EncryptsHLSSegments
         );
 
         // prepare for the next round
-        $this->nextEncryptionFilenameAndKey = [
-            static::generateEncryptionKeyFilename(),
-            static::generateEncryptionKey(),
-        ];
+        if ($this->rotateEncryptiongKey) {
+            $this->nextEncryptionFilenameAndKey = [
+                static::generateEncryptionKeyFilename(),
+                static::generateEncryptionKey(),
+            ];
+        }
 
         // call the callback
         if ($this->onNewEncryptionKey) {
