@@ -29,22 +29,27 @@ class EncryptedHlsExportTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $lowBitrate = $this->x264()->setKiloBitrate(250);
+        $lowBitrate  = $this->x264()->setKiloBitrate(250);
+        $highBitrate = $this->x264()->setKiloBitrate(500);
 
         FFMpeg::open('video.mp4')
             ->exportForHLS()
             ->withEncryptionKey(HLSExporter::generateEncryptionKey())
             ->addFormat($lowBitrate)
+            ->addFormat($highBitrate)
             ->addListener($listener = new StdListener)
             ->save('adaptive.m3u8');
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_1_500.m3u8'));
 
         $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
             '#EXTM3U',
             HlsExportTest::streamInfoPattern('1920x1080'),
             'adaptive_0_250.m3u8',
+            HlsExportTest::streamInfoPattern('1920x1080'),
+            'adaptive_1_500.m3u8',
             '#EXT-X-ENDLIST',
         ], $listener);
 
