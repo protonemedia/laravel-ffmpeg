@@ -39,7 +39,7 @@ class TemporaryDirectories
     {
         $directory = $this->root . '/' . bin2hex(random_bytes(8));
 
-        mkdir($directory);
+        mkdir($directory, 0777, true);
 
         return $this->directories[] = $directory;
     }
