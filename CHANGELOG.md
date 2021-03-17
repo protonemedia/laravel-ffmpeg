@@ -6,6 +6,7 @@ All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
 ### Fixed
 
+-   Bugfix for creating temporary directories on Windows
 -   Bugfix for HLS exports with custom framerate
 
 ## 7.5.7 - 2021-03-08
