@@ -31,6 +31,12 @@ class HLSPlaylistGenerator implements PlaylistGenerator
             return null;
         }
 
+        if (Str::contains($frameRate, '/')) {
+            [$numerator, $denominator] = explode('/', $frameRate);
+
+            $frameRate = $numerator / $denominator;
+        }
+
         return $frameRate ? number_format($frameRate, 3, '.', '') : null;
     }
 

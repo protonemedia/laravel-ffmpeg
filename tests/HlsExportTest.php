@@ -13,9 +13,9 @@ use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HlsExportTest extends TestCase
 {
-    public static function streamInfoPattern($resolution): string
+    public static function streamInfoPattern($resolution, $frameRate = "25.000"): string
     {
-        return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION=' . $resolution . ',CODECS="[a-zA-Z0-9,.]+",FRAME-RATE=25.000';
+        return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION=' . $resolution . ',CODECS="[a-zA-Z0-9,.]+",FRAME-RATE=' . $frameRate;
     }
 
     /** @test */
@@ -79,6 +79,39 @@ class HlsExportTest extends TestCase
             'adaptive_1_1000.m3u8',
             static::streamInfoPattern('1920x1080'),
             'adaptive_2_4000.m3u8',
+            '#EXT-X-ENDLIST',
+        ]);
+    }
+
+    /** @test */
+    public function it_can_export_a_single_media_file_into_a_hls_export_with_a_custom_framerate()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate = $this->x264()->setKiloBitrate(250)->setAdditionalParameters([
+            "-preset",
+            "ultrafast",
+            "-r",
+            16.667,
+        ]);
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->toDisk('local')
+            ->save('adaptive.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
+
+        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_0_250_00000.ts');
+        $this->assertEquals(1920, $media->getVideoStream()->get('width'));
+        $this->assertNotNull($media->getAudioStream());
+
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
+            '#EXTM3U',
+            static::streamInfoPattern('1920x1080', '16.667'),
+            'adaptive_0_250.m3u8',
             '#EXT-X-ENDLIST',
         ]);
     }
