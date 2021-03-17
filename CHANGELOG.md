@@ -2,6 +2,12 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.5.8 - 2021-03-17
+
+### Fixed
+
+-   Bugfix for HLS exports with custom framerate
+
 ## 7.5.7 - 2021-03-08
 
 ### Fixed
