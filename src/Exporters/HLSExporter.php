@@ -16,6 +16,7 @@ class HLSExporter extends MediaExporter
     use EncryptsHLSSegments;
 
     const HLS_KEY_INFO_FILENAME = 'hls_encryption.keyinfo';
+    const ENCRYPTION_LISTENER   = "listen-encryption-key";
 
     /**
      * @var integer
@@ -312,7 +313,8 @@ class HLSExporter extends MediaExporter
 
             $this->replaceAbsolutePathsHLSEncryption($segmentPlaylists)
                 ->cleanupSegmentPlaylistGuides($segmentPlaylists->first())
-                ->cleanupHLSEncryption();
+                ->cleanupHLSEncryption()
+                ->removeHandlerThatRotatesEncryptionKey();
 
             return $result;
         });

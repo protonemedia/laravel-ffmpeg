@@ -200,6 +200,19 @@ class PHPFFMpeg
     }
 
     /**
+     * Remove the Listener from the underlying library.
+     *
+     * @param \Alchemy\BinaryDriver\Listeners\ListenerInterface $listener
+     * @return self
+     */
+    public function removeListener(ListenerInterface $listener): self
+    {
+        $this->getFFMpegDriver()->unlisten($listener);
+
+        return $this;
+    }
+
+    /**
      * Adds a callable to the callbacks array.
      *
      * @param callable $callback

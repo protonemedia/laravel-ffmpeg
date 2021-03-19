@@ -216,17 +216,39 @@ trait EncryptsHLSSegments
             return;
         }
 
-        $this->addListener($this->listener = new StdListener)->onEvent('listen', function ($line) {
-            if (!strpos($line, ".keyinfo' for reading")) {
-                return;
-            }
+        $this->listener = new StdListener(HLSExporter::ENCRYPTION_LISTENER);
 
-            $this->segmentsOpened++;
+        $this->addListener($this->listener)
+            ->onEvent(HLSExporter::ENCRYPTION_LISTENER, function ($line) {
+                if (!strpos($line, ".keyinfo' for reading")) {
+                    return;
+                }
 
-            if ($this->segmentsOpened % $this->segmentsPerKey === 0) {
-                $this->rotateEncryptionKey();
-            }
-        });
+                $this->segmentsOpened++;
+
+                if ($this->segmentsOpened % $this->segmentsPerKey === 0) {
+                    $this->rotateEncryptionKey();
+                }
+            });
+    }
+
+    /**
+     * Remove the listener at the end of the export to
+     * prevent duplicate event handlers.
+     *
+     * @return self
+     */
+    private function removeHandlerThatRotatesEncryptionKey(): self
+    {
+        if ($this->listener) {
+            $this->listener->removeAllListeners();
+            $this->removeListener($this->listener);
+            $this->listener = null;
+
+            $this->getFFMpegDriver()->removeAllListeners(HLSExporter::ENCRYPTION_LISTENER);
+        }
+
+        return $this;
     }
 
     /**

@@ -70,6 +70,35 @@ class EncryptedHlsExportTest extends TestCase
      * @test
      * @retry 5
      */
+    public function it_can_export_a_single_media_file_twice_into_an_encryped_hls_export()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate = $this->x264()->setKiloBitrate(250);
+
+        $keys = [];
+
+        foreach (range(1, 3) as $i) {
+            FFMpeg::open('video.mp4')
+                ->exportForHLS()
+                ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys, $i) {
+                    $keys[] = $filename;
+                })
+                ->addFormat($lowBitrate)
+                ->save("adaptive{$i}.m3u8");
+        }
+
+        $this->assertTrue(count($keys) < 7);
+
+        $this->assertTrue(Storage::disk('local')->has('adaptive1.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive2.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive3.m3u8'));
+    }
+
+    /**
+     * @test
+     * @retry 5
+     */
     public function it_can_export_a_single_media_file_into_an_encryped_hls_export_with_rotating_keys()
     {
         $this->fakeLocalVideoFile();
