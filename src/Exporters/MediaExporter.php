@@ -188,6 +188,8 @@ class MediaExporter
     {
         return tap(new StdListener, function (StdListener $listener) {
             $this->addListener($listener)->save();
+            $listener->removeAllListeners();
+            $this->removeListener($listener);
         })->get();
     }
 

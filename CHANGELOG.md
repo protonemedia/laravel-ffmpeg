@@ -2,6 +2,12 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.5.9 - 2021-03-19
+
+### Fixed
+
+-   Prevent duplicate encryption key listeners
+
 ## 7.5.8 - 2021-03-17
 
 ### Fixed

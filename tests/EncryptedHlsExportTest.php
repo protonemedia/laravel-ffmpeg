@@ -76,16 +76,23 @@ class EncryptedHlsExportTest extends TestCase
 
         $lowBitrate = $this->x264()->setKiloBitrate(250);
 
-        foreach (range(1, 2) as $i) {
+        $keys = [];
+
+        foreach (range(1, 3) as $i) {
             FFMpeg::open('video.mp4')
                 ->exportForHLS()
-                ->withRotatingEncryptionKey(fn () => null)
+                ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys, $i) {
+                    $keys[] = $filename;
+                })
                 ->addFormat($lowBitrate)
                 ->save("adaptive{$i}.m3u8");
         }
 
+        $this->assertTrue(count($keys) < 7);
+
         $this->assertTrue(Storage::disk('local')->has('adaptive1.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive2.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive3.m3u8'));
     }
 
     /**
