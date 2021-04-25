@@ -96,7 +96,7 @@ class HlsExportTest extends TestCase
             ->exportForHLS()
             ->addFormat(new CopyVideoFormat)
             ->toDisk('local')
-            ->dd('adaptive.m3u8');
+            ->save('adaptive.m3u8');
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_0.m3u8'));
