@@ -8,14 +8,17 @@ use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSPlaylistGenerator;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSVideoFilters;
 use ProtoneMedia\LaravelFFMpeg\Exporters\NoFormatException;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyVideoFormat;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class HlsExportTest extends TestCase
 {
-    public static function streamInfoPattern($resolution, $frameRate = "25.000"): string
+    public static function streamInfoPattern($resolution, $frameRate = "25.000", $withCodec = true): string
     {
-        return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION=' . $resolution . ',CODECS="[a-zA-Z0-9,.]+",FRAME-RATE=' . $frameRate;
+        return $withCodec
+            ? '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION=' . $resolution . ',CODECS="[a-zA-Z0-9,.]+",FRAME-RATE=' . $frameRate
+            : '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION=' . $resolution . ',FRAME-RATE=' . $frameRate;
     }
 
     /** @test */
@@ -79,6 +82,33 @@ class HlsExportTest extends TestCase
             'adaptive_1_1000.m3u8',
             static::streamInfoPattern('1920x1080'),
             'adaptive_2_4000.m3u8',
+            '#EXT-X-ENDLIST',
+        ]);
+    }
+
+    /** @test */
+    public function it_can_export_a_single_media_file_into_a_hls_export_with_the_copy_format()
+    {
+        $this->fakeLocalVideoFile();
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->addFormat(new CopyVideoFormat)
+            ->toDisk('local')
+            ->dd('adaptive.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_0_0.m3u8'));
+
+        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_0_0_00000.ts');
+        $this->assertEquals(1920, $media->getVideoStream()->get('width'));
+        $this->assertNotNull($media->getAudioStream());
+
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
+            '#EXTM3U',
+            static::streamInfoPattern('1920x1080', "25.000", false),
+            'adaptive_0_0.m3u8',
             '#EXT-X-ENDLIST',
         ]);
     }

@@ -2,6 +2,18 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.5.11 - 2021-04-25
+
+### Added
+
+-   Added `CopyVideoFormat` format class
+
+## 7.5.10 - 2021-03-31
+
+### Added
+
+-   Add ability to disable -b:v (thanks @marbocub)
+
 ## 7.5.9 - 2021-03-19
 
 ### Fixed
