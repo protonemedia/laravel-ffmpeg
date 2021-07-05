@@ -87,6 +87,25 @@ class HlsExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_set_additional_parameters_on_the_format()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate = $this->x264()->setKiloBitrate(250)->setAdditionalParameters([
+            '-preset:v', 'ultrafast',
+        ]);
+
+        $command = (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->toDisk('local')
+            ->getCommand('adaptive.m3u8');
+
+        $this->assertStringContainsString('-preset:v ultrafast', $command);
+    }
+
+    /** @test */
     public function it_can_export_a_single_media_file_into_a_hls_export_with_the_copy_format()
     {
         $this->fakeLocalVideoFile();
