@@ -37,7 +37,7 @@ jobs:
                 if: ${{ matrix.os == 'ubuntu-20.04' }}
                 run: |
                     sudo apt-get update
-                    sudo apt-get install -y --allow-unauthenticated software-properties-common ffmpeg libopenjp2-7
+                    sudo apt-get install -y --allow-unauthenticated software-properties-common ffmpeg libopenjp2-7 libtiff5 libatlas-base-dev
 
             -   name: Install FFmpeg (Windows)
                 if: ${{ matrix.os == 'windows-2019' }}
