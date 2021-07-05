@@ -59,7 +59,7 @@ class AdvancedOutputMapping
             $parameters = $this->format->getAdditionalParameters() ?: [];
 
             if (!in_array('-b:v', $parameters) && $this->format->getKiloBitrate() !== 0) {
-                $parameters = ['-b:v', $this->format->getKiloBitrate() . 'k'] + $parameters;
+                $parameters = array_merge(['-b:v', $this->format->getKiloBitrate() . 'k'], $parameters);
             }
 
             $this->format->setAdditionalParameters($parameters);

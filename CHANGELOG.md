@@ -2,6 +2,12 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.5.12 - 2021-07-05
+
+### Added
+
+-   Fix for passing additional parameters to a format when using HLS exports
+
 ## 7.5.11 - 2021-04-25
 
 ### Added
