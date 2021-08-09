@@ -168,7 +168,7 @@ class HLSExporter extends MediaExporter
                 '-hls_segment_filename',
                 $disk->makeMedia($segmentsPattern)->getLocalPath(),
                 '-master_pl_name',
-                $this->generateTemporarySegmentPlaylistFilename($key),
+                static::generateTemporarySegmentPlaylistFilename($key, $this->getUuid()),
             ],
             $this->getEncrypedHLSParameters()
         ));
@@ -208,11 +208,12 @@ class HLSExporter extends MediaExporter
      * We use this as a reference so when can generate our own main playlist.
      *
      * @param int $key
+     * @param string $uuid
      * @return string
      */
-    public static function generateTemporarySegmentPlaylistFilename(int $key): string
+    public static function generateTemporarySegmentPlaylistFilename(int $key, string $uuid = ""): string
     {
-        return "temporary_segment_playlist_{$key}.m3u8";
+        return "temporary_segment_playlist_{$uuid}_{$key}.m3u8";
     }
 
     /**
@@ -229,7 +230,7 @@ class HLSExporter extends MediaExporter
         $directory = $media->getDirectory();
 
         $this->pendingFormats->map(function ($formatAndCallback, $key) use ($disk, $directory) {
-            $disk->delete($directory . static::generateTemporarySegmentPlaylistFilename($key));
+            $disk->delete($directory . static::generateTemporarySegmentPlaylistFilename($key, $this->getUuid()));
         });
 
         return $this;
@@ -304,7 +305,13 @@ class HLSExporter extends MediaExporter
         return $this->prepareSaving($mainPlaylistPath)->pipe(function ($segmentPlaylists) use ($mainPlaylistPath) {
             $result = parent::save();
 
-            $playlist = $this->getPlaylistGenerator()->get(
+            $playlistGenerator = $this->getPlaylistGenerator();
+
+            if (method_exists($playlistGenerator, 'setUuid')) {
+                $playlistGenerator->setUuid($this->getUuid());
+            }
+
+            $playlist = $playlistGenerator->get(
                 $segmentPlaylists->all(),
                 $this->driver->fresh()
             );

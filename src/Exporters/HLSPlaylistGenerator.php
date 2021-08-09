@@ -15,6 +15,24 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     const PLAYLIST_END   = '#EXT-X-ENDLIST';
 
     /**
+     * @var string
+     */
+    private $uuid;
+
+    /**
+     * Setter for the UUID.
+     *
+     * @param string $uuid
+     * @return self
+     */
+    public function setUuid(string $uuid): self
+    {
+        $this->uuid = $uuid;
+
+        return $this;
+    }
+
+    /**
      * Extracts the framerate from the given media and formats it in a
      * suitable format.
      *
@@ -50,7 +68,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
     private function getStreamInfoLine(Media $segmentPlaylistMedia, string $key): string
     {
         $segmentPlaylist = $segmentPlaylistMedia->getDisk()->get(
-            $segmentPlaylistMedia->getDirectory() . HLSExporter::generateTemporarySegmentPlaylistFilename($key)
+            $segmentPlaylistMedia->getDirectory() . HLSExporter::generateTemporarySegmentPlaylistFilename($key, $this->uuid)
         );
 
         $lines = DynamicHLSPlaylist::parseLines($segmentPlaylist)->filter();

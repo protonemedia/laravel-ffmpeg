@@ -199,18 +199,21 @@ class HlsExportTest extends TestCase
         $lowBitrate = $this->x264()->setKiloBitrate(250);
         $midBitrate = $this->x264()->setKiloBitrate(1000);
 
-        (new MediaOpener)
+        $exporter = (new MediaOpener)
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate)
             ->addFormat($midBitrate)
-            ->toDisk('local')
-            ->save('sub/dir/adaptive.m3u8');
+            ->toDisk('local');
+
+        $exporter->save('sub/dir/adaptive.m3u8');
+
+        $uuid = $exporter->getUuid();
 
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_0_250.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('sub/dir/adaptive_1_1000.m3u8'));
-        $this->assertFalse(Storage::disk('local')->has('sub/dir/temporary_segment_playlist_0.m3u8'));
+        $this->assertFalse(Storage::disk('local')->has("sub/dir/temporary_segment_playlist_{$uuid}_0.m3u8"));
 
         $masterPlaylist = Storage::disk('local')->get('sub/dir/adaptive.m3u8');
         $lowPlaylist    = Storage::disk('local')->get('sub/dir/adaptive_0_250.m3u8');

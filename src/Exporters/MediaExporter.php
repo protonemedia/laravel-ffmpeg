@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 use FFMpeg\Exception\RuntimeException;
 use FFMpeg\Format\FormatInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\NullFormat;
@@ -46,11 +47,17 @@ class MediaExporter
      */
     private $toDisk;
 
+    /**
+     * @var string
+     */
+    private $uuid;
+
     public function __construct(PHPFFMpeg $driver)
     {
         $this->driver = $driver;
 
         $this->maps = new Collection;
+        $this->uuid = (string) Str::uuid();
     }
 
     protected function getDisk(): Disk
@@ -62,6 +69,11 @@ class MediaExporter
         $media = $this->driver->getMediaCollection();
 
         return $this->toDisk = $media->first()->getDisk();
+    }
+
+    public function getUuid(): string
+    {
+        return $this->uuid;
     }
 
     public function inFormat(FormatInterface $format): self
