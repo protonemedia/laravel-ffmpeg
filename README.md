@@ -20,7 +20,7 @@ Hey! We've built a Docker-based deployment tool to launch apps and sites fully c
 * Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
-* PHP 7.3 and higher.
+* PHP 7.3, 7.4 and 8.0.
 * Lots of integration tests, GitHub Actions with both Ubuntu and Windows.
 
 ## Support
