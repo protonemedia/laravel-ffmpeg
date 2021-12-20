@@ -191,7 +191,9 @@ Since resizing is a common operation, we've added a dedicated method for it:
 ```php
 FFMpeg::open('steve_howe.mp4')
     ->export()
-    ->resize(640, 480);
+    ->inFormat(new \FFMpeg\Format\Video\X264)
+    ->resize(640, 480)
+    ->save('steve_howe_resized.mp4');
 ```
 The first argument is the width, and the second argument the height. The optional third argument is the mode. You can choose between `fit` (default), `inset`, `width` or `height`. The optional fourth argument is a boolean whether or not to force the use of standards ratios. You can find about these modes in the `FFMpeg\Filters\Video\ResizeFilter` class.
 
