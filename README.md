@@ -15,12 +15,12 @@ Hey! We've built a Docker-based deployment tool to launch apps and sites fully c
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
-* Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
+* Compatible with Laravel 8, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
 * Built-in support for HLS.
 * Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
-* PHP 7.3, 7.4 and 8.0.
+* PHP 7.4, 8.0 and 8.1.
 * Lots of integration tests, GitHub Actions with both Ubuntu and Windows.
 
 ## Support
