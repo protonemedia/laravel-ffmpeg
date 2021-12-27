@@ -2,6 +2,12 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.7.0 - 2021-12-xx
+
+### Added
+
+-   Added Tile filter and factory
+
 ## 7.6.0 - 2021-12-20
 
 ### Added

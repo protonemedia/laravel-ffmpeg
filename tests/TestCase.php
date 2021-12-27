@@ -94,9 +94,9 @@ abstract class TestCase extends BaseTestCase
         $this->addTestFile('logo.png');
     }
 
-    protected function addTestFile($file)
+    protected function addTestFile($file, $disk = 'local')
     {
-        Storage::disk('local')->put($file, file_get_contents(__DIR__ . "/src/{$file}"));
+        Storage::disk($disk)->put($file, file_get_contents(__DIR__ . "/src/{$file}"));
     }
 
     protected function fakeLocalImageFiles()
@@ -118,6 +118,12 @@ abstract class TestCase extends BaseTestCase
     {
         $this->fakeLocalVideoFile();
         $this->addTestFile('video2.mp4');
+    }
+
+    protected function fakeLongLocalVideoFile()
+    {
+        $this->fakeLocalDisk();
+        $this->addTestFile('video3.mp4');
     }
 
     protected function assertPlaylistPattern(string $playlist, array $patternLines, StdListener $listener = null): self

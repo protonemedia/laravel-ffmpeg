@@ -11,11 +11,13 @@ use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
 use ProtoneMedia\LaravelFFMpeg\Exporters\MediaExporter;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\VideoNullFormat;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaOnNetwork;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
+use ProtoneMedia\LaravelFFMpeg\Filters\TileFactory;
 
 /**
  * @mixin \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
@@ -184,6 +186,33 @@ class MediaOpener
     public function exportForHLS(): HLSExporter
     {
         return new HLSExporter($this->getAdvancedDriver());
+    }
+
+    /**
+     * Returns an instance of MediaExporter with a TileFilter and VideoNullFormat.
+     */
+    public function exportTile(callable $withTileFactory): MediaExporter
+    {
+        return $this->export()
+            ->addTileFilter($withTileFactory)
+            ->inFormat(new VideoNullFormat);
+    }
+
+    public function exportFramesByAmount(int $amount, int $width = null, int $height = null): MediaExporter
+    {
+        $interval = ($this->getDurationInSeconds() + 1) / $amount;
+
+        return $this->exportFramesByInterval($interval, $width, $height);
+    }
+
+    public function exportFramesByInterval(float $interval, int $width = null, int $height = null): MediaExporter
+    {
+        return $this->exportTile(
+            fn (TileFactory $tileFactory) => $tileFactory
+                ->interval($interval)
+                ->grid(1, 1)
+                ->scale($width, $height)
+        );
     }
 
     public function cleanupTemporaryFiles(): self

@@ -3,42 +3,16 @@
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Http\DynamicHLSPlaylist;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
+use ProtoneMedia\LaravelFFMpeg\Support\StreamParser;
 
 class HLSPlaylistGenerator implements PlaylistGenerator
 {
     const PLAYLIST_START = '#EXTM3U';
     const PLAYLIST_END   = '#EXT-X-ENDLIST';
-
-    /**
-     * Extracts the framerate from the given media and formats it in a
-     * suitable format.
-     *
-     * @param \ProtoneMedia\LaravelFFMpeg\MediaOpener $media
-     * @return mixed
-     */
-    private function getFrameRate(MediaOpener $media)
-    {
-        $mediaStream = $media->getVideoStream();
-
-        $frameRate = trim(Str::before(optional($mediaStream)->get('avg_frame_rate'), "/1"));
-
-        if (!$frameRate || Str::endsWith($frameRate, '/0')) {
-            return null;
-        }
-
-        if (Str::contains($frameRate, '/')) {
-            [$numerator, $denominator] = explode('/', $frameRate);
-
-            $frameRate = $numerator / $denominator;
-        }
-
-        return $frameRate ? number_format($frameRate, 3, '.', '') : null;
-    }
 
     /**
      * Return the line from the master playlist that references the given segment playlist.
@@ -75,7 +49,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
             $media = (new MediaOpener($segmentPlaylist->getDisk(), $driver))
                 ->openWithInputOptions($segmentPlaylist->getPath(), ['-allowed_extensions', 'ALL']);
 
-            if ($frameRate = $this->getFrameRate($media)) {
+            if ($frameRate = StreamParser::new($media->getVideoStream())->getFrameRate()) {
                 $streamInfoLine .= ",FRAME-RATE={$frameRate}";
             }
 

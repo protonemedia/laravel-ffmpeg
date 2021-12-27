@@ -344,7 +344,7 @@ FFMpeg::open('my_movie.mov')
     ->save('my_movie.webm')
 ```
 
-### Create a frame from a video
+### Export a frame from a video
 
 ```php
 FFMpeg::fromDisk('videos')
@@ -374,6 +374,55 @@ $contents = FFMpeg::open('video.mp4')
     ->getFrameFromSeconds(2)
     ->export()
     ->getFrameContents();
+```
+
+### Export multiple frames at once
+
+As of version 7.7, there is a `TileFilter` that powers the [Tile-feature](#creates-tiles-of-frames). To make exporting multiple frames faster and simpler, we leveraged this feature to add some helper methods. For example, you may use the `exportFramesByInterval` method to export frames by a fixed interval. Alternatively, you may pass the number of frames you want to export to the `exportFramesByAmount` method, which will then calculate the interval based on the duration of the video.
+
+Both methods accept an optional second and third argument to specify to width and height of the frames. Instead of passing both the width and height, you may also pass just one of them. FFmpeg will respect the aspect ratio of the source.
+
+```php
+FFMpeg::open('video.mp4')
+    ->exportFramesByInterval(2)
+    ->save('thumb_%05d.jpg');
+```
+
+```php
+FFMpeg::open('video.mp4')
+    ->exportFramesByAmount(10, 320, 180)
+    ->save('thumb_%05d.jpg');
+```
+
+### Creates tiles of frames
+
+As of version 7.7, you can create tiles from a video. You may call the `exportTile` method to specify how your tiles should be generated. In the example below, each generated image consists of a 3x5 grid (thus containing 15 frames) and each frame is 160x90 pixels. A frame will be taken every 5 seconds from the video. Instead of passing both the width and height, you may also pass just one of them. FFmpeg will respect the aspect ratio of the source.
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Filters\TileFactory;
+
+FFMpeg::open('steve_howe.mp4')
+    ->exportTile(function (TileFactory $factory) {
+        $factory->interval(5)
+            ->scale(160, 90)
+            ->grid(3, 5);
+    })
+    ->save('tile_%05d.jpg');
+```
+
+Instead of passing both the width and height, you may also pass just one of them like `scale(160)` or `scale(null, 90)`. The aspect ratio will be respected. The `TileFactory` has `margin`, `padding`, `width`, and `height` methods as well.
+
+This package can also generate a WebVTT file to add *Preview Thumbnails* to your video player. This is supported out-of-the-box by [JW player](https://support.jwplayer.com/articles/how-to-add-preview-thumbnails) and there is a [Video.js plugin](https://www.npmjs.com/package/videojs-vtt-thumbnails) available as well. You may call the `generateVTT` method on the `TileFactory` with the desired filename:
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->exportTile(function (TileFactory $factory) {
+        $factory->interval(10)
+            ->scale(320, 180)
+            ->grid(5, 5)
+            ->generateVTT('thumbnails.vtt');
+    })
+    ->save('tile_%05d.jpg');
 ```
 
 ### Multiple exports using loops
