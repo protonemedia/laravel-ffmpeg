@@ -4,7 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\FFMpeg;
 
 use FFMpeg\Format\Video\DefaultVideo;
 
-class VideoNullFormat extends DefaultVideo
+class ImageFormat extends DefaultVideo
 {
     public function __construct()
     {
@@ -76,7 +76,7 @@ class VideoNullFormat extends DefaultVideo
      */
     public function getAdditionalParameters()
     {
-        return [];
+        return ['-f', 'image2'];
     }
 
     /**

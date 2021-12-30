@@ -15,6 +15,8 @@ class TileFactory
     public int $padding = 0;
     public int $margin  = 0;
 
+    public ?int $quality = null;
+
     public ?string $vttOutputPath       = null;
     public ?Closure $vttSequnceFilename = null;
 
@@ -90,6 +92,13 @@ class TileFactory
         return $this;
     }
 
+    public function quality(int $quality = null): self
+    {
+        $this->quality = $quality;
+
+        return $this;
+    }
+
     /**
      * Returns a new instance of the TileFilter.
      *
@@ -104,7 +113,8 @@ class TileFactory
             $this->columns,
             $this->rows,
             $this->padding,
-            $this->margin
+            $this->margin,
+            $this->quality
         );
     }
 }

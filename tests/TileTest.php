@@ -3,7 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Support\Facades\Storage;
-use ProtoneMedia\LaravelFFMpeg\FFMpeg\VideoNullFormat;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\ImageFormat;
 use ProtoneMedia\LaravelFFMpeg\Filters\TileFactory;
 use ProtoneMedia\LaravelFFMpeg\Filters\TileFilter;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
@@ -19,7 +19,7 @@ class TileTest extends TestCase
             ->open('video3.mp4')
             ->export()
             ->addFilter(new TileFilter(2, 160, 90, 2, 2))
-            ->inFormat(new VideoNullFormat)
+            ->inFormat(new ImageFormat)
             ->save('2x2_%05d.jpg');
 
         $this->assertTrue(Storage::disk('local')->has('2x2_00001.jpg'));
@@ -62,6 +62,35 @@ class TileTest extends TestCase
             $amount + 1,    // count video3.mp4 as well
             $files = Storage::disk('local')->allFiles(),
             "Requested amount: {$amount}, files found: " . implode(', ', $files)
+        );
+    }
+
+    /** @test */
+    public function it_can_generate_thumbnails_with_a_specified_quality()
+    {
+        $this->fakeLongLocalVideoFile();
+
+        (new MediaOpener)
+            ->open('video3.mp4')
+            ->exportFramesByAmount(1)
+            ->save('loseless.png');
+
+        (new MediaOpener)
+            ->open('video3.mp4')
+            ->exportFramesByAmount(1, null, null, 2)
+            ->save('high_quality.jpg');
+
+        (new MediaOpener)
+            ->open('video3.mp4')
+            ->exportFramesByAmount(1, null, null, 32)
+            ->save('low_quality.jpg');
+
+        $this->assertTrue(
+            Storage::disk('local')->size('loseless.png') > Storage::disk('local')->size('high_quality.jpg')
+        );
+
+        $this->assertTrue(
+            Storage::disk('local')->size('high_quality.jpg') > Storage::disk('local')->size('low_quality.jpg')
         );
     }
 
@@ -169,5 +198,33 @@ class TileTest extends TestCase
 
         $this->assertEquals(89, $imageSpecs[0]);
         $this->assertEquals(100, $imageSpecs[1]);
+    }
+
+    /** @test */
+    public function it_can_set_the_quality_of_the_jpeg()
+    {
+        $this->fakeLongLocalVideoFile();
+
+        (new MediaOpener)
+            ->open('video3.mp4')
+            ->exportTile(function (TileFactory $factory) {
+                $factory->interval(10)
+                    ->grid(1, 1)
+                    ->quality(2);
+            })
+            ->save('high_quality.jpg');
+
+        (new MediaOpener)
+            ->open('video3.mp4')
+            ->exportTile(function (TileFactory $factory) {
+                $factory->interval(10)
+                    ->grid(1, 1)
+                    ->quality(32);
+            })
+            ->save('low_quality.jpg');
+
+        $this->assertTrue(
+            Storage::disk('local')->size('high_quality.jpg') > Storage::disk('local')->size('low_quality.jpg')
+        );
     }
 }

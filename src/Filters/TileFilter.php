@@ -20,6 +20,7 @@ class TileFilter implements VideoFilterInterface
     public int $rows;
     public int $padding  = 0;
     public int $margin   = 0;
+    public ?int $quality = null;
     public int $priority = 0;
 
     public function __construct(
@@ -30,6 +31,7 @@ class TileFilter implements VideoFilterInterface
         int $rows,
         int $padding = 0,
         int $margin = 0,
+        ?int $quality = null,
         int $priority = 0
     ) {
         $this->interval = $interval;
@@ -39,6 +41,7 @@ class TileFilter implements VideoFilterInterface
         $this->rows     = $rows;
         $this->padding  = $padding;
         $this->margin   = $margin;
+        $this->quality  = $quality;
         $this->priority = $priority;
     }
 
@@ -97,11 +100,23 @@ class TileFilter implements VideoFilterInterface
             ? "select=not(mod(n\,{$frameRateInterval}))"
             : "select=not(mod(t\,{$this->interval}))";
 
-        return [
+        $commands = [
             '-vsync',
             '0',
+        ];
+
+        if (!is_null($this->quality)) {
+            $commands = array_merge($commands, [
+                '-qscale:v',
+                $this->quality,
+            ]);
+        }
+
+        $commands = array_merge($commands, [
             '-vf',
             "{$select},scale={$this->width}:{$this->height},tile={$this->columns}x{$this->rows}:margin={$this->margin}:padding={$this->padding}",
-        ];
+        ]);
+
+        return $commands;
     }
 }
