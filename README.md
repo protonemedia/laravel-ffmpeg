@@ -21,7 +21,7 @@ Hey! We've built a Docker-based deployment tool to launch apps and sites fully c
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
 * Built-in support for creating a mosaic/sprite/tile from a video.
-* Built-in support for creating *VTT Preview Thumbnail* files.
+* Built-in support for generating *VTT Preview Thumbnail* files.
 * PHP 7.4, 8.0 and 8.1.
 * Lots of integration tests, GitHub Actions with both Ubuntu and Windows.
 

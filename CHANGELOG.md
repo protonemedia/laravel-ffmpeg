@@ -2,11 +2,13 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
-## 7.7.0 - 2021-12-xx
+## 7.7.0 - 2021-12-31
 
 ### Added
 
 -   Added Tile filter and factory
+-   Support for exporting frames using the Tile filter
+-   Bugfix for exporting loops using external disks
 
 ## 7.6.0 - 2021-12-20
 
