@@ -86,6 +86,11 @@ class TileFilter implements VideoFilterInterface
         );
     }
 
+    private function getCalculatedDimension(): Dimension
+    {
+        return $this->calculatedDimension ?: new Dimension($this->width, $this->height);
+    }
+
     private function calculateDimension(Dimension $streamDimension): Dimension
     {
         $width  = $this->width;
