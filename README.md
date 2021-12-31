@@ -20,6 +20,8 @@ Hey! We've built a Docker-based deployment tool to launch apps and sites fully c
 * Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
+* Built-in support for creating a mosaic/sprite/tile from a video.
+* Built-in support for creating *VTT Preview Thumbnail* files.
 * PHP 7.4, 8.0 and 8.1.
 * Lots of integration tests, GitHub Actions with both Ubuntu and Windows.
 
@@ -420,7 +422,7 @@ FFMpeg::open('steve_howe.mp4')
 
 Instead of passing both the width and height, you may also pass just one of them like `scale(160)` or `scale(null, 90)`. The aspect ratio will be respected. The `TileFactory` has `margin`, `padding`, `width`, and `height` methods as well. There's also a `quality` method to specify the quality when exporting to a lossy format like JPEG. The range for JPEG is `2-31`, with `2` being the best quality and `31` being the worst.
 
-This package can also generate a WebVTT file to add *Preview Thumbnails* to your video player. This is supported out-of-the-box by [JW player](https://support.jwplayer.com/articles/how-to-add-preview-thumbnails) and there is a [Video.js plugin](https://www.npmjs.com/package/videojs-vtt-thumbnails) available as well. You may call the `generateVTT` method on the `TileFactory` with the desired filename:
+This package can also generate a WebVTT file to add *Preview Thumbnails* to your video player. This is supported out-of-the-box by [JW player](https://support.jwplayer.com/articles/how-to-add-preview-thumbnails) and there are community-driven plugins for Video.js available as well. You may call the `generateVTT` method on the `TileFactory` with the desired filename:
 
 ```php
 FFMpeg::open('steve_howe.mp4')

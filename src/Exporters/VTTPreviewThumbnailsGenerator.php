@@ -31,9 +31,12 @@ class VTTPreviewThumbnailsGenerator
 
         $column = ($thumbKey - ($row * $this->tileFilter->columns)) % $this->tileFilter->columns;
 
+        $width  = $this->tileFilter->calculatedDimension->getWidth();
+        $height = $this->tileFilter->calculatedDimension->getHeight();
+
         // base position
-        $x = $column * $this->tileFilter->width;
-        $y = $row    * $this->tileFilter->height;
+        $x = $column * $width;
+        $y = $row    * $height;
 
         // add margin
         $x += $this->tileFilter->margin;
@@ -43,7 +46,7 @@ class VTTPreviewThumbnailsGenerator
         $x += $this->tileFilter->padding * $column;
         $y += $this->tileFilter->padding * $row;
 
-        return implode(',', [$x, $y, $this->tileFilter->width, $this->tileFilter->height]);
+        return implode(',', [$x, $y, $width, $height]);
     }
 
     /**

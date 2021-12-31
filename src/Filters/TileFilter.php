@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Filters;
 
+use FFMpeg\Coordinate\Dimension;
 use FFMpeg\FFProbe\DataMapping\Stream;
 use FFMpeg\Filters\Video\VideoFilterInterface;
 use FFMpeg\Format\VideoInterface;
@@ -22,6 +23,8 @@ class TileFilter implements VideoFilterInterface
     public int $margin   = 0;
     public ?int $quality = null;
     public int $priority = 0;
+
+    public ?Dimension $calculatedDimension = null;
 
     public function __construct(
         float $interval,
@@ -83,18 +86,35 @@ class TileFilter implements VideoFilterInterface
         );
     }
 
+    private function calculateDimension(Dimension $streamDimension): Dimension
+    {
+        $width  = $this->width;
+        $height = $this->height;
+
+        if ($width > 0 && $height < 1) {
+            $height = $streamDimension->getRatio()->calculateHeight($width);
+        } elseif ($height > 0 && $width < 1) {
+            $width = $streamDimension->getRatio()->calculateWidth($height);
+        } elseif ($width < 1 && $height < 1) {
+            $width  = $streamDimension->getWidth();
+            $height = $streamDimension->getHeight();
+        }
+
+        return $this->calculatedDimension = new Dimension($width, $height);
+    }
+
     /**
      * @return array
      */
-    protected function getCommands(Stream $stream = null)
+    protected function getCommands(Stream $stream)
     {
         $frameRateInterval = null;
 
-        if ($stream) {
-            if ($frameRate = StreamParser::new($stream)->getFrameRate()) {
-                $frameRateInterval = round($frameRate * $this->interval);
-            }
+        if ($frameRate = StreamParser::new($stream)->getFrameRate()) {
+            $frameRateInterval = round($frameRate * $this->interval);
         }
+
+        $dimension = $this->calculateDimension($stream->getDimensions());
 
         $select = $frameRateInterval
             ? "select=not(mod(n\,{$frameRateInterval}))"
@@ -114,7 +134,7 @@ class TileFilter implements VideoFilterInterface
 
         $commands = array_merge($commands, [
             '-vf',
-            "{$select},scale={$this->width}:{$this->height},tile={$this->columns}x{$this->rows}:margin={$this->margin}:padding={$this->padding}",
+            "{$select},scale={$dimension->getWidth()}:{$dimension->getHeight()},tile={$this->columns}x{$this->rows}:margin={$this->margin}:padding={$this->padding}",
         ]);
 
         return $commands;
