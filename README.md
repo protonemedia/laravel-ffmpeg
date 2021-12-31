@@ -3,7 +3,6 @@
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](LICENSE.md)
 ![run-tests](https://github.com/protonemedia/laravel-ffmpeg/workflows/run-tests/badge.svg)
-[![Quality Score](https://img.shields.io/scrutinizer/g/protonemedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/protonemedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
 This package provides an integration with FFmpeg for Laravel 6.0 and higher. [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem) handles the storage of the files.
