@@ -31,8 +31,10 @@ class VTTPreviewThumbnailsGenerator
 
         $column = ($thumbKey - ($row * $this->tileFilter->columns)) % $this->tileFilter->columns;
 
-        $width  = $this->tileFilter->calculatedDimension->getWidth();
-        $height = $this->tileFilter->calculatedDimension->getHeight();
+        $dimension = $this->tileFilter->getCalculatedDimension();
+
+        $width  = $dimension->getWidth();
+        $height = $dimension->getHeight();
 
         // base position
         $x = $column * $width;
