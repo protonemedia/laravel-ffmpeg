@@ -5,7 +5,7 @@
 ![run-tests](https://github.com/protonemedia/laravel-ffmpeg/workflows/run-tests/badge.svg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This package provides an integration with FFmpeg for Laravel 8. [Laravel's Filesystem](http://laravel.com/docs/8.0/filesystem) handles the storage of the files.
+This package provides an integration with FFmpeg for Laravel 8. [Laravel's Filesystem](http://laravel.com/docs/8.x/filesystem) handles the storage of the files.
 
 ## Launcher 🚀
 
@@ -13,8 +13,8 @@ Hey! We've built a Docker-based deployment tool to launch apps and sites fully c
 
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
-* Integration with [Laravel's Filesystem](http://laravel.com/docs/8.0/filesystem), [configuration system](https://laravel.com/docs/8.0/configuration) and [logging handling](https://laravel.com/docs/8.0/errors).
-* Compatible with Laravel 8, support for [Package Discovery](https://laravel.com/docs/8.0/packages#package-discovery).
+* Integration with [Laravel's Filesystem](http://laravel.com/docs/8.x/filesystem), [configuration system](https://laravel.com/docs/8.x/configuration) and [logging handling](https://laravel.com/docs/8.x/errors).
+* Compatible with Laravel 8, support for [Package Discovery](https://laravel.com/docs/8.x/packages#package-discovery).
 * Built-in support for HLS.
 * Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
