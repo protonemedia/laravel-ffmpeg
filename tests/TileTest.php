@@ -82,7 +82,7 @@ class TileTest extends TestCase
 
         (new MediaOpener)
             ->open('video3.mp4')
-            ->exportFramesByAmount(1, null, null, 32)
+            ->exportFramesByAmount(1, null, null, 31)
             ->save('low_quality.jpg');
 
         $this->assertTrue(
@@ -219,7 +219,7 @@ class TileTest extends TestCase
             ->exportTile(function (TileFactory $factory) {
                 $factory->interval(10)
                     ->grid(1, 1)
-                    ->quality(32);
+                    ->quality(31);
             })
             ->save('low_quality.jpg');
 
