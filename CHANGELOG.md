@@ -2,6 +2,12 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.7.1 - 2021-01-03
+
+### Fixed
+
+-   Fix for missing `$remaining` and `$rate` values when using the progress handler on exports with multiple inputs/outputs.
+
 ## 7.7.0 - 2021-12-31
 
 ### Added

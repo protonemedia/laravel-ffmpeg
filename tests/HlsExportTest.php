@@ -234,6 +234,8 @@ class HlsExportTest extends TestCase
             ->addFormat($midBitrate)
             ->setSegmentLength(5)
             ->setKeyFrameInterval(24)
+            ->onProgress(function ($percentage, $remaining, $rate) {
+            })
             ->withPlaylistGenerator(new HLSPlaylistGenerator)
             ->useSegmentFilenameGenerator(function ($name, $format, $key, callable $segments, callable $playlist) {
                 $segments("N{$name}B{$format->getKiloBitrate()}K{$key}_%02d.ts");
