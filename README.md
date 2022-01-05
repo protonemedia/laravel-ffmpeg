@@ -654,8 +654,8 @@ FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->exportForHLS()
     ->useSegmentFilenameGenerator(function ($name, $format, $key, callable $segments, callable $playlist) {
-        $segments("{$name}-{$format}-{$key}-%03d.ts");
-        $playlist("{$name}-{$format}-{$key}.m3u8");
+        $segments("{$name}-{$format->getKiloBitrate()}-{$key}-%03d.ts");
+        $playlist("{$name}-{$format->getKiloBitrate()}-{$key}.m3u8");
     });
 ```
 
