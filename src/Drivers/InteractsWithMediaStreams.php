@@ -20,7 +20,7 @@ trait InteractsWithMediaStreams
             return iterator_to_array($this->media->getStreams());
         }
 
-        return $this->mediaCollection->map(function (Media $media) {
+        return $this->mediaCollection->map(function ($media) {
             return $this->fresh()->open(MediaCollection::make([$media]))->getStreams();
         })->collapse()->all();
     }

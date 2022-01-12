@@ -2,6 +2,12 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.7.2 - 2021-01-12
+
+### Fixed
+
+-   Fix for getting the duration of a file opened with the `openUrl` method.
+
 ## 7.7.1 - 2021-01-03
 
 ### Fixed
