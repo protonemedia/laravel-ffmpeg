@@ -5,9 +5,13 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Media\AbstractMediaType;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
+use League\Flysystem\Adapter\Local;
+use League\Flysystem\Filesystem as FlysystemFilesystem;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
 use ProtoneMedia\LaravelFFMpeg\Exporters\MediaExporter;
@@ -87,13 +91,32 @@ class MediaOpener
         return $this->fromDisk($filesystem);
     }
 
+    private static function makeLocalDiskFromPath(string $path): Disk
+    {
+        $localAdapter = new Local($path);
+
+        $filesystem = new FlysystemFilesystem($localAdapter);
+
+        $adapter = new FilesystemAdapter($filesystem);
+
+        return Disk::make($adapter);
+    }
+
     /**
      * Instantiates a Media object for each given path.
      */
     public function open($paths): self
     {
         foreach (Arr::wrap($paths) as $path) {
-            $this->collection->push(Media::make($this->disk, $path));
+            if ($path instanceof UploadedFile) {
+                $disk = static::makeLocalDiskFromPath($path->getPath());
+
+                $media = Media::make($disk, $path->getFilename());
+            } else {
+                $media = Media::make($this->disk, $path);
+            }
+
+            $this->collection->push($media);
         }
 
         return $this;

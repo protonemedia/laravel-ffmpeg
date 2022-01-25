@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use FFMpeg\Exception\RuntimeException;
 use FFMpeg\Media\Video;
 use FFMpeg\Media\Waveform;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
@@ -30,6 +31,16 @@ class MediaOpenerTest extends TestCase
 
         $this->assertEquals('video.mp4', $media->getPath());
         $this->assertEquals('local', $media->getDisk()->getName());
+    }
+
+    /** @test */
+    public function it_can_open_an_upload_file()
+    {
+        $file = UploadedFile::fake()->createWithContent('video.mp4', file_get_contents(__DIR__ . "/src/video.mp4"));
+
+        $media = (new MediaOpener)->open($file);
+
+        $this->assertEquals(5, $media->getDurationInSeconds());
     }
 
     /** @test */
