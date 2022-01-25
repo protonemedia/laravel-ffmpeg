@@ -157,13 +157,14 @@ trait EncryptsHLSSegments
         $normalizedKeyPath = Disk::normalizePath($keyPath);
 
         // store the encryption key
-        file_put_contents($keyPath, $encryptionKey);
+        $fp = fopen($keyPath, 'w+');
+        fwrite($fp, $encryptionKey);
+        fclose($fp);
 
         // store an info file with a reference to the encryption key and IV
-        file_put_contents(
-            $hlsKeyInfoPath,
-            $normalizedKeyPath . PHP_EOL . $normalizedKeyPath . PHP_EOL . $this->encryptionIV
-        );
+        $fp = fopen($hlsKeyInfoPath, 'w+');
+        fwrite($fp, $normalizedKeyPath . PHP_EOL . $normalizedKeyPath . PHP_EOL . $this->encryptionIV);
+        fclose($fp);
 
         // prepare for the next round
         if ($this->rotateEncryptiongKey) {
