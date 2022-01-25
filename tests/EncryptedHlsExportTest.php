@@ -14,8 +14,6 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
  */
 class EncryptedHlsExportTest extends TestCase
 {
-    use RetryTrait;
-
     public static function keyLinePattern($key = null)
     {
         return '#EXT-X-KEY:METHOD=AES-128,URI="' . ($key ?: '[~a-zA-Z0-9-_\/:]+.key') . '",IV=[a-z0-9]+';
