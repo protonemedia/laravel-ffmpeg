@@ -33,7 +33,7 @@ jobs:
       - name: Install FFmpeg
         uses: Iamshankhadeep/setup-ffmpeg@v1
         with:
-          version: ${{ matrix.ffmpeg }}
+          version: "${{ matrix.ffmpeg }}"
         id: setup-ffmpeg
 
       - name: Install dependencies
