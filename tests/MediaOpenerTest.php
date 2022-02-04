@@ -81,8 +81,10 @@ class MediaOpenerTest extends TestCase
     /** @test */
     public function it_downloads_a_remote_file_before_opening()
     {
+        Storage::disk('memory')->put('guitar.m4a', file_get_contents(__DIR__ . "/src/guitar.m4a"));
+
         $mediaCollection = (new MediaOpener)
-            ->fromDisk('http')
+            ->fromDisk('memory')
             ->open('guitar.m4a')
             ->getDriver()
             ->getMediaCollection();
@@ -94,7 +96,7 @@ class MediaOpenerTest extends TestCase
         $this->assertInstanceOf(Disk::class, $media->getDisk());
 
         $this->assertEquals('guitar.m4a', $media->getPath());
-        $this->assertEquals('http', $media->getDisk()->getName());
+        $this->assertEquals('memory', $media->getDisk()->getName());
 
         $this->assertFileExists($tempPath = $media->getLocalPath());
 

@@ -5,13 +5,12 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
-use League\Flysystem\Filesystem as FlysystemFilesystem;
-use League\Flysystem\Memory\MemoryAdapter;
+use League\Flysystem\Filesystem;
+use League\Flysystem\InMemory\InMemoryFilesystemAdapter;
 use Orchestra\Testbench\TestCase as BaseTestCase;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider;
-use Twistor\Flysystem\Http\HttpAdapter;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -34,27 +33,18 @@ abstract class TestCase extends BaseTestCase
         $app['config']->set('filesystems.default', 'local');
 
         $app['config']->set('filesystems.disks', array_merge($app['config']->get('filesystems.disks'), [
-            'http' => [
-                'driver' => 'http',
-            ],
             'memory' => [
                 'driver' => 'memory',
             ],
         ]));
 
-        Storage::extend('http', function ($app, $config) {
-            return new FilesystemAdapter(
-                new FlysystemFilesystem(
-                    new HttpAdapter('https://raw.githubusercontent.com/protonemedia/laravel-ffmpeg/master/tests/src/')
-                )
-            );
-        });
-
         Storage::extend('memory', function ($app, $config) {
+            $adapter = new InMemoryFilesystemAdapter;
+
             return new FilesystemAdapter(
-                new FlysystemFilesystem(
-                    new MemoryAdapter
-                )
+                new Filesystem($adapter, $config),
+                $adapter,
+                $config
             );
         });
     }

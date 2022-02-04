@@ -2,6 +2,8 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Exception;
+use PHPUnit\Util\Annotation\Registry;
 use Throwable;
 
 /**
@@ -56,5 +58,29 @@ trait RetryTrait
         }
 
         return 1;
+    }
+
+    public function getAnnotations(): array
+    {
+        $className  = get_class($this);
+        $methodName = '';
+
+        $registry = Registry::getInstance();
+
+        if ($methodName !== null) {
+            try {
+                return [
+                    'method' => $registry->forMethod($className, $methodName)->symbolAnnotations(),
+                    'class'  => $registry->forClassName($className)->symbolAnnotations(),
+                ];
+            } catch (Exception $methodNotFound) {
+                // ignored
+            }
+        }
+
+        return [
+            'method' => null,
+            'class'  => $registry->forClassName($className)->symbolAnnotations(),
+        ];
     }
 }
