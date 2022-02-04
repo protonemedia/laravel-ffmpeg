@@ -25,11 +25,11 @@
     "require": {
         "php": "^8.0|^8.1",
         "evenement/evenement": "^3.0",
-        "illuminate/bus": "^9.0",
-        "illuminate/config": "^9.0",
-        "illuminate/filesystem": "^9.0",
-        "illuminate/log": "^9.0",
-        "illuminate/support": "^9.0",
+        "illuminate/bus": "^v9.0.0-beta.3",
+        "illuminate/config": "^v9.0.0-beta.3",
+        "illuminate/filesystem": "^v9.0.0-beta.3",
+        "illuminate/log": "^v9.0.0-beta.3",
+        "illuminate/support": "^v9.0.0-beta.3",
         "protonemedia/php-ffmpeg": "^1.2"
     },
     "require-dev": {
