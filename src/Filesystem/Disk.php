@@ -94,7 +94,7 @@ class Disk
             return $this->disk;
         }
 
-        return get_class($this->getFlysystemAdapter()) . "_" . md5(json_encode(serialize($this->getFlysystemAdapter())));
+        return get_class($this->getFlysystemAdapter()) . "_" . md5(spl_object_id($this->getFlysystemAdapter()));
     }
 
     public function getFilesystemAdapter(): FilesystemAdapter

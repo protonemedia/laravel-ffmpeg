@@ -167,7 +167,7 @@ class MediaOpenerTest extends TestCase
             ->open('video.mp4');
 
         $this->assertEquals(5, $media->getDurationInSeconds());
-        $this->assertStringContainsString('League\Flysystem\Adapter\Local_', $media->get()->first()->getDisk()->getName());
+        $this->assertStringContainsString('League\Flysystem\Local\LocalFilesystemAdapter_', $media->get()->first()->getDisk()->getName());
     }
 
     /** @test */
