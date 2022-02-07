@@ -52,6 +52,6 @@ jobs:
           key: dependencies-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}-dep-${{ matrix.dependency-version }}
 
       - name: Execute tests
-        run: vendor/bin/phpunit
+        run: vendor/bin/phpunit --stop-on-error --stop-on-failure
         env:
           FFMPEG_TEMPORARY_FILES_ROOT: ${{ github.workspace }}
