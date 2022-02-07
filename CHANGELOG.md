@@ -2,6 +2,37 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.7.2 - 2021-01-12
+
+### Fixed
+
+-   Fix for getting the duration of a file opened with the `openUrl` method.
+
+## 7.7.1 - 2021-01-03
+
+### Fixed
+
+-   Fix for missing `$remaining` and `$rate` values when using the progress handler on exports with multiple inputs/outputs.
+
+## 7.7.0 - 2021-12-31
+
+### Added
+
+-   Added Tile filter and factory
+-   Support for exporting frames using the Tile filter
+-   Bugfix for exporting loops using external disks
+
+## 7.6.0 - 2021-12-20
+
+### Added
+
+-   Support for PHP 8.1
+
+### Removed
+
+-   Support for PHP 7.3
+-   Support for Laravel 6 and 7
+
 ## 7.5.12 - 2021-07-05
 
 ### Added

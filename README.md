@@ -3,20 +3,25 @@
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](LICENSE.md)
 ![run-tests](https://github.com/protonemedia/laravel-ffmpeg/workflows/run-tests/badge.svg)
-[![Quality Score](https://img.shields.io/scrutinizer/g/protonemedia/laravel-ffmpeg.svg?style=flat-square)](https://scrutinizer-ci.com/g/protonemedia/laravel-ffmpeg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This package provides an integration with FFmpeg for Laravel 6.0 and higher. [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem) handles the storage of the files.
+This package provides an integration with FFmpeg for Laravel 8. [Laravel's Filesystem](http://laravel.com/docs/8.x/filesystem) handles the storage of the files.
+
+## Launcher 🚀
+
+Hey! We've built a Docker-based deployment tool to launch apps and sites fully containerized. You can find all features and the roadmap on our [website](https://uselauncher.com), and we are on [Twitter](https://twitter.com/uselauncher) as well!
 
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
-* Integration with [Laravel's Filesystem](http://laravel.com/docs/7.0/filesystem), [configuration system](https://laravel.com/docs/7.0/configuration) and [logging handling](https://laravel.com/docs/7.0/errors).
-* Compatible with Laravel 6.0 and higher, support for [Package Discovery](https://laravel.com/docs/7.0/packages#package-discovery).
+* Integration with [Laravel's Filesystem](http://laravel.com/docs/8.x/filesystem), [configuration system](https://laravel.com/docs/8.x/configuration) and [logging handling](https://laravel.com/docs/8.x/errors).
+* Compatible with Laravel 8, support for [Package Discovery](https://laravel.com/docs/8.x/packages#package-discovery).
 * Built-in support for HLS.
 * Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
-* PHP 7.3 and higher.
+* Built-in support for creating a mosaic/sprite/tile from a video.
+* Built-in support for generating *VTT Preview Thumbnail* files.
+* PHP 7.4, 8.0 and 8.1.
 * Lots of integration tests, GitHub Actions with both Ubuntu and Windows.
 
 ## Support
@@ -187,7 +192,9 @@ Since resizing is a common operation, we've added a dedicated method for it:
 ```php
 FFMpeg::open('steve_howe.mp4')
     ->export()
-    ->resize(640, 480);
+    ->inFormat(new \FFMpeg\Format\Video\X264)
+    ->resize(640, 480)
+    ->save('steve_howe_resized.mp4');
 ```
 The first argument is the width, and the second argument the height. The optional third argument is the mode. You can choose between `fit` (default), `inset`, `width` or `height`. The optional fourth argument is a boolean whether or not to force the use of standards ratios. You can find about these modes in the `FFMpeg\Filters\Video\ResizeFilter` class.
 
@@ -338,7 +345,7 @@ FFMpeg::open('my_movie.mov')
     ->save('my_movie.webm')
 ```
 
-### Create a frame from a video
+### Export a frame from a video
 
 ```php
 FFMpeg::fromDisk('videos')
@@ -368,6 +375,63 @@ $contents = FFMpeg::open('video.mp4')
     ->getFrameFromSeconds(2)
     ->export()
     ->getFrameContents();
+```
+
+### Export multiple frames at once
+
+As of version 7.7, there is a `TileFilter` that powers the [Tile-feature](#creates-tiles-of-frames). To make exporting multiple frames faster and simpler, we leveraged this feature to add some helper methods. For example, you may use the `exportFramesByInterval` method to export frames by a fixed interval. Alternatively, you may pass the number of frames you want to export to the `exportFramesByAmount` method, which will then calculate the interval based on the duration of the video.
+
+```php
+FFMpeg::open('video.mp4')
+    ->exportFramesByInterval(2)
+    ->save('thumb_%05d.jpg');
+```
+
+Both methods accept an optional second and third argument to specify to width and height of the frames. Instead of passing both the width and height, you may also pass just one of them. FFmpeg will respect the aspect ratio of the source.
+
+```php
+FFMpeg::open('video.mp4')
+    ->exportFramesByAmount(10, 320, 180)
+    ->save('thumb_%05d.png');
+```
+
+Both methods accept an optional fourth argument to specify the quality of the image when you're exporting to a lossy format like JPEG. The range for JPEG is `2-31`, with `2` being the best quality and `31` being the worst.
+
+```php
+FFMpeg::open('video.mp4')
+    ->exportFramesByInterval(2, 640, 360, 5)
+    ->save('thumb_%05d.jpg');
+```
+
+### Creates tiles of frames
+
+As of version 7.7, you can create tiles from a video. You may call the `exportTile` method to specify how your tiles should be generated. In the example below, each generated image consists of a 3x5 grid (thus containing 15 frames) and each frame is 160x90 pixels. A frame will be taken every 5 seconds from the video. Instead of passing both the width and height, you may also pass just one of them. FFmpeg will respect the aspect ratio of the source.
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Filters\TileFactory;
+
+FFMpeg::open('steve_howe.mp4')
+    ->exportTile(function (TileFactory $factory) {
+        $factory->interval(5)
+            ->scale(160, 90)
+            ->grid(3, 5);
+    })
+    ->save('tile_%05d.jpg');
+```
+
+Instead of passing both the width and height, you may also pass just one of them like `scale(160)` or `scale(null, 90)`. The aspect ratio will be respected. The `TileFactory` has `margin`, `padding`, `width`, and `height` methods as well. There's also a `quality` method to specify the quality when exporting to a lossy format like JPEG. The range for JPEG is `2-31`, with `2` being the best quality and `31` being the worst.
+
+This package can also generate a WebVTT file to add *Preview Thumbnails* to your video player. This is supported out-of-the-box by [JW player](https://support.jwplayer.com/articles/how-to-add-preview-thumbnails) and there are community-driven plugins for Video.js available as well. You may call the `generateVTT` method on the `TileFactory` with the desired filename:
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->exportTile(function (TileFactory $factory) {
+        $factory->interval(10)
+            ->scale(320, 180)
+            ->grid(5, 5)
+            ->generateVTT('thumbnails.vtt');
+    })
+    ->save('tile_%05d.jpg');
 ```
 
 ### Multiple exports using loops
@@ -590,8 +654,8 @@ FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->exportForHLS()
     ->useSegmentFilenameGenerator(function ($name, $format, $key, callable $segments, callable $playlist) {
-        $segments("{$name}-{$format}-{$key}-%03d.ts");
-        $playlist("{$name}-{$format}-{$key}.m3u8");
+        $segments("{$name}-{$format->getKiloBitrate()}-{$key}-%03d.ts");
+        $playlist("{$name}-{$format->getKiloBitrate()}-{$key}.m3u8");
     });
 ```
 

@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 
+use Illuminate\Support\Collection;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\InteractsWithHttpHeaders;
 
 class MediaOnNetwork
@@ -76,7 +77,11 @@ class MediaOnNetwork
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 
         if (!empty($this->headers)) {
-            curl_setopt($curl, CURLOPT_HTTPHEADER, $this->headers);
+            $headers = Collection::make($this->headers)->map(function($value, $header) {
+                return "{$header}: {$value}";
+            })->all();
+
+            curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
         }
 
         if ($withCurl) {

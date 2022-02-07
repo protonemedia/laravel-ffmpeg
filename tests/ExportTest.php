@@ -220,6 +220,23 @@ class ExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_chain_multiple_exports_using_the_each_method_on_an_external_disk()
+    {
+        $this->addTestFile('video.mp4', 'memory');
+
+        (new MediaOpener)
+            ->fromDisk('memory')
+            ->open('video.mp4')
+            ->each([1, 2, 3], function (MediaOpener $ffmpeg, $seconds, $key) {
+                $ffmpeg->getFrameFromSeconds($seconds)->export()->save("thumb_{$key}.png");
+            });
+
+        $this->assertTrue(Storage::disk('memory')->has('thumb_0.png'));
+        $this->assertTrue(Storage::disk('memory')->has('thumb_1.png'));
+        $this->assertTrue(Storage::disk('memory')->has('thumb_2.png'));
+    }
+
+    /** @test */
     public function it_can_export_a_with_a_single_filter()
     {
         $this->fakeLocalVideoFile();
