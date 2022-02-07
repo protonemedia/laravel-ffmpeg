@@ -22,6 +22,6 @@ class NoThreadsConfigTest extends TestCase
             ->export()
             ->getCommand('test.mp4');
 
-        $this->assertStringNotContainsString('-threads 12', $command[0]);
+        $this->assertStringNotContainsString('-threads', $command[0]);
     }
 }

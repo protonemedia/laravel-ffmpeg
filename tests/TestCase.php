@@ -32,6 +32,8 @@ abstract class TestCase extends BaseTestCase
     {
         $app['config']->set('filesystems.default', 'local');
 
+        $app['config']->set('laravel-ffmpeg.ffmpeg.threads', 1);
+
         $app['config']->set('filesystems.disks', array_merge($app['config']->get('filesystems.disks'), [
             'memory' => [
                 'driver' => 'memory',
