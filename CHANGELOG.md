@@ -2,6 +2,12 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.7.3 - 2022-02-07
+
+### Added
+
+-   Abilty to disable the threads filter from the config (thanks @ibrainventures)
+
 ## 7.7.2 - 2021-01-12
 
 ### Fixed
