@@ -5,13 +5,11 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Media\AbstractMediaType;
 use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Filesystem\FilesystemManager;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
-use League\Flysystem\Adapter\Local;
-use League\Flysystem\Filesystem as FlysystemFilesystem;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
 use ProtoneMedia\LaravelFFMpeg\Exporters\MediaExporter;
@@ -93,11 +91,9 @@ class MediaOpener
 
     private static function makeLocalDiskFromPath(string $path): Disk
     {
-        $localAdapter = new Local($path);
-
-        $filesystem = new FlysystemFilesystem($localAdapter);
-
-        $adapter = new FilesystemAdapter($filesystem);
+        $adapter = (new FilesystemManager(app()))->createLocalDriver([
+            'root' => $path,
+        ]);
 
         return Disk::make($adapter);
     }
