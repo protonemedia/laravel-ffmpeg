@@ -115,21 +115,11 @@ class EncryptedHlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
 
-        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive_0_250.m3u8'), [
-            '#EXTM3U',
-            '#EXT-X-VERSION:3',
-            '#EXT-X-TARGETDURATION:2',
-            '#EXT-X-MEDIA-SEQUENCE:0',
-            '#EXT-X-PLAYLIST-TYPE:VOD',
-            static::keyLinePattern(),
-            '#EXTINF:2.000000,',
-            'adaptive_0_250_00000.ts',
-            '#EXTINF:2.000000,',
-            'adaptive_0_250_00001.ts',
-            static::keyLinePattern(),
-            '#EXTINF:0.[0-9]+,',
-            'adaptive_0_250_00002.ts',
-            '#EXT-X-ENDLIST',
-        ], $listener);
+        $playlist = Storage::disk('local')->get('adaptive_0_250.m3u8');
+
+        preg_match_all(static::keyLinePattern() . '#', $playlist, $matches);
+
+        $this->assertNotEmpty($matches);
+        $this->assertCount(2, $matches[0]);
     }
 }
