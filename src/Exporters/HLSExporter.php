@@ -51,7 +51,7 @@ class HLSExporter extends MediaExporter
      */
     public function setSegmentLength(int $length): self
     {
-        $this->segmentLength = $length;
+        $this->segmentLength = max(2, $length);
 
         return $this;
     }
@@ -64,7 +64,7 @@ class HLSExporter extends MediaExporter
      */
     public function setKeyFrameInterval(int $interval): self
     {
-        $this->keyFrameInterval = $interval;
+        $this->keyFrameInterval = max(2, $interval);
 
         return $this;
     }
