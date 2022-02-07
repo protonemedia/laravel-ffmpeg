@@ -20,7 +20,7 @@ class DynamicHLSPlaylistTest extends TestCase
         FFMpeg::open('video.mp4')
             ->exportForHLS()
             ->setKeyFrameInterval(1)
-            ->setSegmentLength(1)
+            ->setSegmentLength(2)
             ->withRotatingEncryptionKey(function ($filename, $contents) {
                 Storage::disk('local')->put("keys/{$filename}", $contents);
             })
