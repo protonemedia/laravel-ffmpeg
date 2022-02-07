@@ -36,7 +36,7 @@ class ExportTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        FFMpeg::openUrl('https://ffmpeg.protone.media/video.mp4', [
+        FFMpeg::openUrl('https://openffmpeg.protone.media/1/video.mp4', [
             'Authorization' => 'Basic YWRtaW46MTIzNA==',
         ])
             ->export()
@@ -320,8 +320,8 @@ class ExportTest extends TestCase
         $this->fakeLocalVideoFile();
 
         FFMpeg::openUrl([
-            'https://ffmpeg.protone.media/video.mp4',
-            'https://ffmpeg.protone.media/video.mp4',
+            'https://openffmpeg.protone.media/1/video.mp4',
+            'https://openffmpeg.protone.media/1/video.mp4',
         ], [
             'Authorization' => 'Basic YWRtaW46MTIzNA==',
         ])
@@ -344,9 +344,9 @@ class ExportTest extends TestCase
         $this->fakeLocalVideoFile();
 
         FFMpeg::new()
-            ->openUrl('https://ffmpeg.protone.media/video.mp4', [
+            ->openUrl('https://openffmpeg.protone.media/1/video.mp4', [
                 'Authorization' => 'Basic YWRtaW46MTIzNA==',
-            ])->openUrl('https://ffmpeg.protone.media/video2.mp4', [
+            ])->openUrl('https://openffmpeg.protone.media/2/video2.mp4', [
                 'Authorization' => 'Basic YWRtaW46NDMyMQ==',
             ])
             ->export()
