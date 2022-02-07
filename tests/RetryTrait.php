@@ -63,7 +63,7 @@ trait RetryTrait
     public function getAnnotations(): array
     {
         $className  = get_class($this);
-        $methodName = '';
+        $methodName = $this->getName() ?: '';
 
         $registry = Registry::getInstance();
 
