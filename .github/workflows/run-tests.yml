@@ -11,6 +11,7 @@ jobs:
         os: [ubuntu-20.04, windows-2019]
         php: [8.1, 8.0]
         laravel: [9.*]
+        ffmpeg: [5.0, 4.4]
         dependency-version: [prefer-lowest, prefer-stable]
         include:
           - laravel: 9.*
@@ -30,7 +31,9 @@ jobs:
           coverage: none
 
       - name: Install FFmpeg
-        uses: FedericoCarboni/setup-ffmpeg@v1-beta
+        uses: Iamshankhadeep/setup-ffmpeg@ffmpeg-5.0-20220119
+        with:
+          version: ${{ matrix.ffmpeg }}
         id: setup-ffmpeg
 
       - name: Install dependencies
