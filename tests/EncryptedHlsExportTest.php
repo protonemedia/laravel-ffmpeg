@@ -117,9 +117,6 @@ class EncryptedHlsExportTest extends TestCase
 
         $playlist = Storage::disk('local')->get('adaptive_0_250.m3u8');
 
-        preg_match_all(static::keyLinePattern() . '#', $playlist, $matches);
-
-        $this->assertNotEmpty($matches);
-        $this->assertCount(2, $matches[0]);
+        $this->assertMatchesRegularExpression(static::keyLinePattern() . '#', $playlist);
     }
 }
