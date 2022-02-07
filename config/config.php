@@ -3,7 +3,8 @@
 return [
     'ffmpeg' => [
         'binaries' => env('FFMPEG_BINARIES', 'ffmpeg'),
-        'threads'  => 12,
+
+        'threads' => 12,   // set to false to disable the default 'threads' filter
     ],
 
     'ffprobe' => [
@@ -13,7 +14,6 @@ return [
     'timeout' => 3600,
 
     'enable_logging' => true,
-    'enable_threads_control_by_add_filter' => false,
 
     'set_command_and_error_output_on_exception' => false,
 

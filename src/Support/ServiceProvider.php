@@ -41,14 +41,19 @@ class ServiceProvider extends BaseServiceProvider
         $this->app->singleton('laravel-ffmpeg-configuration', function () {
             $config = $this->app['config'];
 
-            return array_merge([
-                'ffmpeg.binaries' => $config->get('laravel-ffmpeg.ffmpeg.binaries'),
+            $baseConfig = [
+                'ffmpeg.binaries'  => $config->get('laravel-ffmpeg.ffmpeg.binaries'),
                 'ffprobe.binaries' => $config->get('laravel-ffmpeg.ffprobe.binaries'),
-                'timeout' => $config->get('laravel-ffmpeg.timeout'),
-            ], $config->get('laravel-ffmpeg.enable_threads_control_by_add_filter', false)
-                ? []
-                : ['ffmpeg.threads' => $config->get('laravel-ffmpeg.ffmpeg.threads', 12)]
-            );
+                'timeout'          => $config->get('laravel-ffmpeg.timeout'),
+            ];
+
+            $configuredThreads = $config->get('laravel-ffmpeg.ffmpeg.threads', 12);
+
+            if ($configuredThreads !== false) {
+                $baseConfig['ffmpeg.threads'] = $configuredThreads;
+            }
+
+            return $baseConfig;
         });
 
         $this->app->singleton(FFProbe::class, function () {
