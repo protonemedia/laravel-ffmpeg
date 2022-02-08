@@ -65,6 +65,8 @@ class ExportTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
+        config(['laravel-ffmpeg.set_command_and_error_output_on_exception' => false]);
+
         try {
             (new MediaOpener)
                 ->open('video.mp4')

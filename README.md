@@ -5,7 +5,7 @@
 ![run-tests](https://github.com/protonemedia/laravel-ffmpeg/workflows/run-tests/badge.svg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This package provides an integration with FFmpeg for Laravel 8. [Laravel's Filesystem](http://laravel.com/docs/8.x/filesystem) handles the storage of the files.
+This package provides an integration with FFmpeg for Laravel 9. [Laravel's Filesystem](http://laravel.com/docs/9.x/filesystem) handles the storage of the files.
 
 ## Launcher 🚀
 
@@ -13,15 +13,16 @@ Hey! We've built a Docker-based deployment tool to launch apps and sites fully c
 
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
-* Integration with [Laravel's Filesystem](http://laravel.com/docs/8.x/filesystem), [configuration system](https://laravel.com/docs/8.x/configuration) and [logging handling](https://laravel.com/docs/8.x/errors).
-* Compatible with Laravel 8, support for [Package Discovery](https://laravel.com/docs/8.x/packages#package-discovery).
+* Integration with [Laravel's Filesystem](http://laravel.com/docs/9.x/filesystem), [configuration system](https://laravel.com/docs/9.x/configuration) and [logging handling](https://laravel.com/docs/9.x/errors).
+* Compatible with Laravel 9, support for [Package Discovery](https://laravel.com/docs/9.x/packages#package-discovery).
 * Built-in support for HLS.
 * Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
 * Built-in support for creating a mosaic/sprite/tile from a video.
 * Built-in support for generating *VTT Preview Thumbnail* files.
-* PHP 7.4, 8.0 and 8.1.
+* Requires PHP 8.0 and 8.1.
+* Tested with FFmpeg 4.4 and 5.0.
 * Lots of integration tests, GitHub Actions with both Ubuntu and Windows.
 
 ## Support
@@ -59,6 +60,12 @@ Publish the config file using the artisan CLI tool:
 ```bash
 php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider"
 ```
+
+## Upgrading to v8
+
+* The `set_command_and_error_output_on_exception` configuration key now defaults to `true`. See the [Handling exceptions](#handling-exceptions);
+* The `enable_logging` configuration key has been replaced by `log_channel`. If you still want to disable logging, you may set the new configuration key to `false`.
+* The *segment length* and *key frame interval* of HLS exports should be `2` or more, less is not supported anymore.
 
 ## Upgrading to v7
 
@@ -98,7 +105,7 @@ FFMpeg::open('steve_howe.mp4')
     });
 ```
 
-As of version 7.0, the callback also exposes `$remaining` (in seconds) and `$rate`:
+The callback may also expose `$remaining` (in seconds) and `$rate`:
 
 ```php
 FFMpeg::open('steve_howe.mp4')
@@ -106,6 +113,20 @@ FFMpeg::open('steve_howe.mp4')
     ->onProgress(function ($percentage, $remaining, $rate) {
         echo "{$remaining} seconds left at rate: {$rate}";
     });
+```
+
+### Opening uploaded files
+
+You can open uploaded files directly from the `Request` instance. It's probably better to first save the uploaded file in case the request aborts, but if you want to, you can open a `UploadedFile` instance:
+
+```php
+class UploadVideoController
+{
+    public function __invoke(Request $request)
+    {
+        FFMpeg::open($request->file('video'));
+    }
+}
 ```
 
 ### Open files from the web
@@ -124,7 +145,7 @@ FFMpeg::openUrl('https://videocoursebuilder.com/lesson-2.mp4', [
 
 When the encoding fails, a `ProtoneMedia\LaravelFFMpeg\Exporters\EncodingException` shall be thrown, which extends the underlying `FFMpeg\Exception\RuntimeException` class. This class has two methods that can help you identify the problem. Using the `getCommand` method, you can get the executed command with all parameters. The `getErrorOutput` method gives you a full output log.
 
-For legacy reasons, the message of the exception is always *Encoding failed*. You can replace this message with a more informative message by updating the `set_command_and_error_output_on_exception` configuration key to `true`.
+In previous versions of this package, the message of the exception was always *Encoding failed*. You can downgrade to this message by updating the `set_command_and_error_output_on_exception` configuration key to `false`.
 
 ```php
 try {
@@ -169,7 +190,7 @@ FFMpeg::fromDisk('videos')
     ->save('short_steve.mkv');
 ```
 
-As of version 7.0, you can also call the `addFilter` method *after* the `export` method:
+You can also call the `addFilter` method *after* the `export` method:
 
 ```php
 use FFMpeg\Filters\Video\VideoFilters;
@@ -216,7 +237,7 @@ FFMpeg::fromDisk('videos')
 
 ### Watermark filter
 
-As of version 7.3, you can easily add a watermark using the `addWatermark` method. With the `WatermarkFactory`, you can open your watermark file from a specific disk, just like opening an audio or video file. When you discard the `fromDisk` method, it uses the default disk specified in the `filesystems.php` configuration file.
+You can easily add a watermark using the `addWatermark` method. With the `WatermarkFactory`, you can open your watermark file from a specific disk, just like opening an audio or video file. When you discard the `fromDisk` method, it uses the default disk specified in the `filesystems.php` configuration file.
 
 After opening your watermark file, you can position it with the `top`, `right`, `bottom`, and `left` methods. The first parameter of these methods is the offset, which is optional and can be negative.
 
@@ -379,7 +400,7 @@ $contents = FFMpeg::open('video.mp4')
 
 ### Export multiple frames at once
 
-As of version 7.7, there is a `TileFilter` that powers the [Tile-feature](#creates-tiles-of-frames). To make exporting multiple frames faster and simpler, we leveraged this feature to add some helper methods. For example, you may use the `exportFramesByInterval` method to export frames by a fixed interval. Alternatively, you may pass the number of frames you want to export to the `exportFramesByAmount` method, which will then calculate the interval based on the duration of the video.
+There is a `TileFilter` that powers the [Tile-feature](#creates-tiles-of-frames). To make exporting multiple frames faster and simpler, we leveraged this feature to add some helper methods. For example, you may use the `exportFramesByInterval` method to export frames by a fixed interval. Alternatively, you may pass the number of frames you want to export to the `exportFramesByAmount` method, which will then calculate the interval based on the duration of the video.
 
 ```php
 FFMpeg::open('video.mp4')
@@ -405,7 +426,7 @@ FFMpeg::open('video.mp4')
 
 ### Creates tiles of frames
 
-As of version 7.7, you can create tiles from a video. You may call the `exportTile` method to specify how your tiles should be generated. In the example below, each generated image consists of a 3x5 grid (thus containing 15 frames) and each frame is 160x90 pixels. A frame will be taken every 5 seconds from the video. Instead of passing both the width and height, you may also pass just one of them. FFmpeg will respect the aspect ratio of the source.
+You can create tiles from a video. You may call the `exportTile` method to specify how your tiles should be generated. In the example below, each generated image consists of a 3x5 grid (thus containing 15 frames) and each frame is 160x90 pixels. A frame will be taken every 5 seconds from the video. Instead of passing both the width and height, you may also pass just one of them. FFmpeg will respect the aspect ratio of the source.
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Filters\TileFactory;
@@ -470,7 +491,7 @@ FFMpeg::open('feature_%04d.png')
 
 ### Multiple inputs
 
-As of version 7.0 you can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method of by using an array. You can mix inputs from different disks.
+You can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method of by using an array. You can mix inputs from different disks.
 
 ```php
 FFMpeg::open('video1.mp4')->open('video2.mp4');
@@ -616,7 +637,7 @@ The ```addFormat``` method of the HLS exporter takes an optional second paramete
 
 You can use the `addFilter` method to add a complex filter (see `$lowBitrate` example). Since the `scale` filter is used a lot, there is a helper method (see `$midBitrate` example). You can also use a callable to get access to the `ComplexFilters` instance. The package provides the `$in` and `$out` arguments so you don't have to worry about it (see `$highBitrate` example).
 
-As of version 7.0, HLS export is built using FFMpeg's `map` and `filter_complex` features. This is a breaking change from previous versions which performed a single export for each format. If you're upgrading, replace the `addFilter` calls with `addLegacyFilter` calls and verify the result (see `$superBitrate` example). Not all filters will work this way and some need to be upgraded manually.
+HLS export is built using FFMpeg's `map` and `filter_complex` features. This is a breaking change from earlier versions (1.x - 6.x) which performed a single export for each format. If you're upgrading, replace the `addFilter` calls with `addLegacyFilter` calls and verify the result (see `$superBitrate` example). Not all filters will work this way and some need to be upgraded manually.
 
 ```php
 $lowBitrate = (new X264)->setKiloBitrate(250);
@@ -661,7 +682,7 @@ FFMpeg::fromDisk('videos')
 
 ### Encrypted HLS
 
-As of version 7.5, you can encrypt each HLS segment using AES-128 encryption. To do this, call the `withEncryptionKey` method on the HLS exporter with a key. We provide a `generateEncryptionKey` helper method on the `HLSExporter` class to generate a key. Make sure you store the key well, as the exported result is worthless without the key. By default, the filename of the key is `secret.key`, but you can change that with the optional second parameter of the `withEncryptionKey` method.
+You can encrypt each HLS segment using AES-128 encryption. To do this, call the `withEncryptionKey` method on the HLS exporter with a key. We provide a `generateEncryptionKey` helper method on the `HLSExporter` class to generate a key. Make sure you store the key well, as the exported result is worthless without the key. By default, the filename of the key is `secret.key`, but you can change that with the optional second parameter of the `withEncryptionKey` method.
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
