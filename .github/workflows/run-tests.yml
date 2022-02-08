@@ -2,10 +2,6 @@ name: run-tests
 
 on: [push, pull_request]
 
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   test:
     runs-on: ${{ matrix.os }}

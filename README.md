@@ -63,9 +63,11 @@ php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\Servic
 
 ## Upgrading to v8
 
-* The `set_command_and_error_output_on_exception` configuration key now defaults to `true`. See the [Handling exceptions](#handling-exceptions);
-* The `enable_logging` configuration key has been replaced by `log_channel`. If you still want to disable logging, you may set the new configuration key to `false`.
-* The *segment length* and *key frame interval* of HLS exports should be `2` or more, less is not supported anymore.
+* The `set_command_and_error_output_on_exception` configuration key now defaults to `true`, making exceptions more informative. Read more at the [Handling exceptions](#handling-exceptions) section.
+* The `enable_logging` configuration key has been replaced by `log_channel` to choose the log channel used when writing messages to the logs. If you still want to disable logging entirely, you may set the new configuration key to `false`.
+* The *segment length* and *keyframe interval* of [HLS exports](#HLS) should be `2` or more; less is not supported anymore.
+* As Laravel 9 has migrated from [Flysystem 1.x to 3.x](https://laravel.com/docs/9.x/upgrade#flysystem-3), this version is not compatible with Laravel 8 or earlier.
+* If you're using the [Watermark manipulation](#watermark-manipulation) feature, make sure you upgrade [`spatie/image`](https://github.com/spatie/image) to v2.
 
 ## Upgrading to v7
 
