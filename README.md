@@ -108,6 +108,20 @@ FFMpeg::open('steve_howe.mp4')
     });
 ```
 
+### Opening uploaded files
+
+You can open uploaded files directly from the `Request` instance. It's probably better to first save the uploaded file in case the request aborts, but if you want to, you can open a `UploadedFile` instance:
+
+```php
+class UploadVideoController
+{
+    public function __invoke(Request $request)
+    {
+        FFMpeg::open($request->file('video'));
+    }
+}
+```
+
 ### Open files from the web
 
 You can open files from the web by using the `openUrl` method. You can specify custom HTTP headers with the optional second parameter:
