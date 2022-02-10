@@ -5,3 +5,4 @@ vendor
 .phpunit.result.cache
 src/EncryptedHLSExporter.php
 .DS_Store
+ffmpeg-passes*

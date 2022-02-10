@@ -5,18 +5,10 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
-/**
- * Due to slow I/O on the CI platform, we need to retry this test
- * every now and then. Sometimes the I/O is too slow to pickup
- * the rotating key.
- */
 class DynamicHLSPlaylistTest extends TestCase
 {
-    use RetryTrait;
-
     /**
      * @test
-     * @retry 5
      */
     public function it_can_export_a_single_media_file_into_an_encryped_hls_export()
     {
@@ -28,7 +20,7 @@ class DynamicHLSPlaylistTest extends TestCase
         FFMpeg::open('video.mp4')
             ->exportForHLS()
             ->setKeyFrameInterval(1)
-            ->setSegmentLength(1)
+            ->setSegmentLength(2)
             ->withRotatingEncryptionKey(function ($filename, $contents) {
                 Storage::disk('local')->put("keys/{$filename}", $contents);
             })

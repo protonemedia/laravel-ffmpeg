@@ -8,7 +8,6 @@ use FFMpeg\FFProbe;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\TemporaryDirectories;
-use Psr\Log\LoggerInterface;
 
 class ServiceProvider extends BaseServiceProvider
 {
@@ -33,9 +32,13 @@ class ServiceProvider extends BaseServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../../config/config.php', 'laravel-ffmpeg');
 
         $this->app->singleton('laravel-ffmpeg-logger', function () {
-            return $this->app['config']->get('laravel-ffmpeg.enable_logging', true)
-                ? app(LoggerInterface::class)
-                : null;
+            $logChannel = $this->app['config']->get('laravel-ffmpeg.log_channel');
+
+            if ($logChannel === false) {
+                return null;
+            }
+
+            return $this->app['log']->channel($logChannel ?: $this->app['config']->get('logging.default'));
         });
 
         $this->app->singleton('laravel-ffmpeg-configuration', function () {

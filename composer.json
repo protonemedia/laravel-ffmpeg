@@ -2,16 +2,13 @@
     "name": "pbmedia/laravel-ffmpeg",
     "description": "FFMpeg for Laravel",
     "keywords": [
-        "pbmedia",
         "laravel",
         "laravel-ffmpeg",
         "ffmpeg",
         "protonemedia",
-        "protone media",
-        "pascal baljet media",
-        "pascalbaljetmedia"
+        "protone media"
     ],
-    "homepage": "https://github.com/pascalbaljetmedia/laravel-ffmpeg",
+    "homepage": "https://github.com/protonemedia/laravel-ffmpeg",
     "license": "MIT",
     "type": "library",
     "authors": [
@@ -23,24 +20,17 @@
         }
     ],
     "require": {
-        "php": "^7.4 || ^8.0 || ^8.1",
-        "evenement/evenement": "^3.0",
-        "league/flysystem": "^1.1.4",
-        "illuminate/bus": "^8.67",
-        "illuminate/config": "^8.67",
-        "illuminate/filesystem": "^8.67",
-        "illuminate/log": "^8.67",
-        "illuminate/support": "^8.67",
-        "php-ffmpeg/php-ffmpeg": "^0.19 || ^1.0"
+        "php": "^8.0|^8.1",
+        "illuminate/contracts": "^9.0",
+        "php-ffmpeg/php-ffmpeg": " ^1.0"
     },
     "require-dev": {
-        "league/flysystem-memory": "^1.0",
+        "league/flysystem-memory": "^3.0",
         "mockery/mockery": "^1.3.3",
-        "orchestra/testbench": "^6.0",
-        "phpunit/phpunit": "9.4.*",
-        "spatie/image": "^1.7",
-        "spatie/phpunit-snapshot-assertions": "^4.2",
-        "twistor/flysystem-http": "^0.2.0"
+        "orchestra/testbench": "^7.0",
+        "phpunit/phpunit": "^9.5.10",
+        "spatie/image": "^2.0",
+        "spatie/phpunit-snapshot-assertions": "^4.2"
     },
     "autoload": {
         "psr-4": {

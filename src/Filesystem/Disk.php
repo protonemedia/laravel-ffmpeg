@@ -6,9 +6,9 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Traits\ForwardsCalls;
-use League\Flysystem\Adapter\Local;
-use League\Flysystem\AdapterInterface;
 use League\Flysystem\Filesystem as LeagueFilesystem;
+use League\Flysystem\FilesystemAdapter as FlysystemFilesystemAdapter;
+use League\Flysystem\Local\LocalFilesystemAdapter;
 
 /**
  * @mixin \Illuminate\Filesystem\FilesystemAdapter
@@ -94,7 +94,7 @@ class Disk
             return $this->disk;
         }
 
-        return get_class($this->getFlysystemAdapter()) . "_" . md5(json_encode(serialize($this->getFlysystemAdapter())));
+        return get_class($this->getFlysystemAdapter()) . "_" . md5(spl_object_id($this->getFlysystemAdapter()));
     }
 
     public function getFilesystemAdapter(): FilesystemAdapter
@@ -115,14 +115,14 @@ class Disk
         return $this->getFilesystemAdapter()->getDriver();
     }
 
-    private function getFlysystemAdapter(): AdapterInterface
+    private function getFlysystemAdapter(): FlysystemFilesystemAdapter
     {
-        return $this->getFlysystemDriver()->getAdapter();
+        return $this->getFilesystemAdapter()->getAdapter();
     }
 
     public function isLocalDisk(): bool
     {
-        return $this->getFlysystemAdapter() instanceof Local;
+        return $this->getFlysystemAdapter() instanceof LocalFilesystemAdapter;
     }
 
     /**
