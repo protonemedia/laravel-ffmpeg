@@ -43,7 +43,7 @@ class WatermarkFactoryTest extends TestCase
     public function it_downloads_a_remote_logo_to_a_temporary_filesystem()
     {
         $factory = new WatermarkFactory;
-        $factory->openUrl('https://ffmpeg.protone.media/1/logo.png', [
+        $factory->openUrl('https://ffmpeg.protone.media/logo.png', [
             'Authorization' => 'Basic YWRtaW46MTIzNA==',
         ]);
 

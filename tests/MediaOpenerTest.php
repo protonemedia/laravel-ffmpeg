@@ -134,7 +134,7 @@ class MediaOpenerTest extends TestCase
     /** @test */
     public function it_can_transform_a_media_on_network_object_to_a_media_object()
     {
-        $mediaOnNetwerk = MediaOnNetwork::make('https://ffmpeg.protone.media/1/logo.png', [
+        $mediaOnNetwerk = MediaOnNetwork::make('https://ffmpeg.protone.media/logo.png', [
             'Authorization' => 'Basic YWRtaW46MTIzNA==',
         ]);
 
@@ -151,7 +151,7 @@ class MediaOpenerTest extends TestCase
     public function it_can_open_a_remote_url_with_headers()
     {
         try {
-            (new MediaOpener)->openUrl('https://ffmpeg.protone.media/1/video.mp4')->getDriver();
+            (new MediaOpener)->openUrl('https://ffmpeg.protone.media/video.mp4')->getDriver();
 
             $this->fail('Should have thrown 401 exception');
         } catch (RuntimeException $exception) {
@@ -161,7 +161,7 @@ class MediaOpenerTest extends TestCase
             );
         }
 
-        $driver = FFMpeg::openUrl('https://ffmpeg.protone.media/1/video.mp4', [
+        $driver = FFMpeg::openUrl('https://ffmpeg.protone.media/video.mp4', [
             'Authorization' => 'Basic YWRtaW46MTIzNA==',
         ])->getDriver();
 
