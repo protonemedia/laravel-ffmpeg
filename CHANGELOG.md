@@ -2,6 +2,18 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 7.8.1 - 2022-02-10
+
+### Added
+
+-   Support for opening uploaded files
+
+## 7.8.0 - 2022-02-09
+
+### Added
+
+-   Support for the [modernized php-ffmpeg release](https://github.com/PHP-FFMpeg/PHP-FFMpeg/releases/tag/v1.0.0)
+
 ## 7.7.3 - 2022-02-07
 
 ### Added
