@@ -2,16 +2,13 @@
     "name": "pbmedia/laravel-ffmpeg",
     "description": "FFMpeg for Laravel",
     "keywords": [
-        "pbmedia",
         "laravel",
         "laravel-ffmpeg",
         "ffmpeg",
         "protonemedia",
-        "protone media",
-        "pascal baljet media",
-        "pascalbaljetmedia"
+        "protone media"
     ],
-    "homepage": "https://github.com/pascalbaljetmedia/laravel-ffmpeg",
+    "homepage": "https://github.com/protonemedia/laravel-ffmpeg",
     "license": "MIT",
     "type": "library",
     "authors": [
@@ -24,13 +21,8 @@
     ],
     "require": {
         "php": "^8.0|^8.1",
-        "evenement/evenement": "^3.0",
-        "illuminate/bus": "^v9.0.0-beta.3",
-        "illuminate/config": "^v9.0.0-beta.3",
-        "illuminate/filesystem": "^v9.0.0-beta.3",
-        "illuminate/log": "^v9.0.0-beta.3",
-        "illuminate/support": "^v9.0.0-beta.3",
-        "protonemedia/php-ffmpeg": "^1.2"
+        "illuminate/contracts": "^9.0",
+        "php-ffmpeg/php-ffmpeg": " ^1.0"
     },
     "require-dev": {
         "league/flysystem-memory": "^3.0",
