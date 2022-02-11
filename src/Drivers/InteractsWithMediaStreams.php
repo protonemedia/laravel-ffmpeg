@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Drivers;
 
+use Exception;
 use FFMpeg\FFProbe\DataMapping\Stream;
 use Illuminate\Support\Arr;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
@@ -41,6 +42,8 @@ trait InteractsWithMediaStreams
         if ($format->has('duration')) {
             return $format->get('duration') * 1000;
         }
+
+        throw new Exception('Opened media is not a video file.');
     }
 
     public function getDurationInSeconds(): int
