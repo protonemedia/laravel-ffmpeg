@@ -22,7 +22,7 @@
     "require": {
         "php": "^8.0|^8.1",
         "illuminate/contracts": "^9.0",
-        "php-ffmpeg/php-ffmpeg": " ^1.0"
+        "php-ffmpeg/php-ffmpeg": "^1.0.1"
     },
     "require-dev": {
         "league/flysystem-memory": "^3.0",
