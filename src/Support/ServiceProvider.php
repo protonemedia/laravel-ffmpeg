@@ -56,6 +56,10 @@ class ServiceProvider extends BaseServiceProvider
                 $baseConfig['ffmpeg.threads'] = $configuredThreads;
             }
 
+            if ($configuredTemporaryRoot = $config->get('laravel-ffmpeg.temporary_files_root')) {
+                $baseConfig['temporary_directory'] = $configuredTemporaryRoot;
+            }
+
             return $baseConfig;
         });
 

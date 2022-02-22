@@ -2,6 +2,22 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 8.0.1 - 2022-02-22
+
+-   The configured temporary directory is now passed to the underlying driver.
+
+## 8.0.0 - 2022-02-10
+
+Support for Laravel 9, dropped support for Laravel 8 and earlier.
+
+### Upgrading to v8
+
+* As Laravel 9 has migrated from [Flysystem 1.x to 3.x](https://laravel.com/docs/9.x/upgrade#flysystem-3), this version is not compatible with Laravel 8 or earlier.
+* If you're using the [Watermark manipulation](#watermark-manipulation) feature, make sure you upgrade [`spatie/image`](https://github.com/spatie/image) to v2.
+* The `set_command_and_error_output_on_exception` configuration key now defaults to `true`, making exceptions more informative. Read more at the [Handling exceptions](#handling-exceptions) section.
+* The `enable_logging` configuration key has been replaced by `log_channel` to choose the log channel used when writing messages to the logs. If you still want to disable logging entirely, you may set the new configuration key to `false`.
+* The *segment length* and *keyframe interval* of [HLS exports](#HLS) should be `2` or more; less is not supported anymore.
+
 ## 7.8.1 - 2022-02-10
 
 ### Added
