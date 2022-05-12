@@ -111,7 +111,9 @@ trait EncryptsHLSSegments
         $this->encryptionIV  = bin2hex(static::generateEncryptionKey());
 
         $this->encryptionKeyFilename = $filename;
-        $this->encryptionSecretsRoot = app(TemporaryDirectories::class)->create();
+        $this->encryptionSecretsRoot = (new TemporaryDirectories(
+            config('laravel-ffmpeg.temporary_files_encrypted_hls', sys_get_temp_dir())
+        ))->create();
 
         return $this;
     }
