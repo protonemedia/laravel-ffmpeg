@@ -2,6 +2,14 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 8.1.0 - 2022-05-12
+
+-   You may now specify a separate temporary disk for processing HLS exports.
+
+## 8.0.2 - 2022-05-12
+
+-   Fix for getting the previous exception while it doesn't exist.
+
 ## 8.0.1 - 2022-02-22
 
 -   The configured temporary directory is now passed to the underlying driver.
