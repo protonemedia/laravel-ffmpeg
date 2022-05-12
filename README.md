@@ -734,6 +734,18 @@ FFMpeg::open('steve_howe.mp4')
     ->withRotatingEncryptionKey($callable, 10);
 ```
 
+Some filesystems, especially on cheap and slow VPSs, are not fast enough to handle the rotating key. This may lead to encoding exceptions, like `No key URI specified in key info file`. One possible solution is to use a different storage for the keys, which you can specify using the `temporary_files_encrypted_hls` configuration key. On UNIX-based systems, you may use a `tmpfs` filesystem to increase read/write speeds:
+
+```php
+// config/laravel-ffmpeg.php
+
+return [
+        
+    'temporary_files_encrypted_hls' => '/dev/shm'
+    
+];
+```
+
 ### Protecting your HLS encryption keys
 
 To make working with encrypted HLS even better, we've added a `DynamicHLSPlaylist` class that modifies playlists on-the-fly and specifically for your application. This way, you can add your authentication and authorization logic. As we're using a plain Laravel controller, you can use features like [Gates](https://laravel.com/docs/master/authorization#gates) and [Middleware](https://laravel.com/docs/master/middleware#introduction).
