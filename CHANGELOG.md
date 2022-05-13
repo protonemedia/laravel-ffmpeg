@@ -2,6 +2,10 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 8.1.1 - 2022-05-13
+
+-   Bugfix for parsing the average frame rate.
+
 ## 8.1.0 - 2022-05-12
 
 -   You may now specify a separate temporary disk for processing HLS exports.
