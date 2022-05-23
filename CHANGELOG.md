@@ -2,6 +2,10 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 8.1.2 - 2022-05-23
+
+-   Don't resolve driver until needed.
+
 ## 8.1.1 - 2022-05-13
 
 -   Bugfix for parsing the average frame rate.

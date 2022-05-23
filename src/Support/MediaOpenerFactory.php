@@ -13,16 +13,29 @@ class MediaOpenerFactory
 
     private $defaultDisk;
     private $driver;
+    private $driverResolver;
 
-    public function __construct(string $defaultDisk, PHPFFMpeg $driver)
+    public function __construct(string $defaultDisk, PHPFFMpeg $driver = null, callable $driverResolver = null)
     {
-        $this->defaultDisk = $defaultDisk;
-        $this->driver      = $driver;
+        $this->defaultDisk    = $defaultDisk;
+        $this->driver         = $driver;
+        $this->driverResolver = $driverResolver;
+    }
+
+    private function driver(): PHPFFMpeg
+    {
+        if ($this->driver) {
+            return $this->driver;
+        }
+
+        $resolver = $this->driverResolver;
+
+        return $this->driver = $resolver();
     }
 
     public function new(): MediaOpener
     {
-        return new MediaOpener($this->defaultDisk, $this->driver);
+        return new MediaOpener($this->defaultDisk, $this->driver());
     }
 
     public function dynamicHLSPlaylist(): DynamicHLSPlaylist

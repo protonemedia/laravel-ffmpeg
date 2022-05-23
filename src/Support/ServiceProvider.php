@@ -98,7 +98,8 @@ class ServiceProvider extends BaseServiceProvider
         $this->app->singleton('laravel-ffmpeg', function () {
             return new MediaOpenerFactory(
                 $this->app['config']->get('filesystems.default'),
-                $this->app->make(PHPFFMpeg::class)
+                null,
+                fn () => $this->app->make(PHPFFMpeg::class)
             );
         });
     }
