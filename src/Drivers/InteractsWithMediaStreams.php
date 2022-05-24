@@ -33,13 +33,13 @@ trait InteractsWithMediaStreams
         $stream = Arr::first($this->getStreams());
 
         if ($stream->has('duration')) {
-            return $stream->get('duration') * 1000;
+            return intval(round($stream->get('duration') * 1000));
         }
 
         $format = $this->getFormat();
 
         if ($format->has('duration')) {
-            return $format->get('duration') * 1000;
+            return intval(round($format->get('duration') * 1000));
         }
     }
 
