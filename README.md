@@ -31,6 +31,11 @@ We proudly support the community by developing Laravel packages and giving them 
 
 ## Installation
 
+First of all, don't forget to install original ffmpeg on your system. Check the version:
+```bash
+ffmpeg -version
+```
+
 You can install the package via composer:
 
 ```bash
