@@ -28,7 +28,7 @@ trait InteractsWithMediaStreams
     /**
      * Gets the duration of the media from the first stream or from the format.
      */
-    public function getDurationInMiliseconds(): int
+    public function getDurationInMiliseconds(): float
     {
         $stream = Arr::first($this->getStreams());
 
@@ -43,9 +43,9 @@ trait InteractsWithMediaStreams
         }
     }
 
-    public function getDurationInSeconds(): int
+    public function getDurationInSeconds(): float
     {
-        return round($this->getDurationInMiliseconds() / 1000);
+        return $this->getDurationInMiliseconds() / 1000;
     }
 
     /**
