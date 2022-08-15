@@ -9,10 +9,10 @@ use ProtoneMedia\LaravelFFMpeg\Filters\TileFilter;
 class VTTPreviewThumbnailsGenerator
 {
     private TileFilter $tileFilter;
-    private int $durationInSeconds;
+    private float $durationInSeconds;
     private Closure $sequenceFilenameResolver;
 
-    public function __construct(TileFilter $tileFilter, int $durationInSeconds, Closure $sequenceFilenameResolver)
+    public function __construct(TileFilter $tileFilter, float $durationInSeconds, Closure $sequenceFilenameResolver)
     {
         $this->tileFilter               = $tileFilter;
         $this->durationInSeconds        = $durationInSeconds;
