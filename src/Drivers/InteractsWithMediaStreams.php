@@ -36,10 +36,10 @@ trait InteractsWithMediaStreams
             return $stream->get('duration') * 1000;
         }
 
-        $format = $this->getFormat();
+        $duration = $this->extractDurationAllformat($this->getVideoStream());
 
-        if ($format->has('duration')) {
-            return $format->get('duration') * 1000;
+        if ($duration) {
+            return $duration;
         }
     }
 
@@ -66,5 +66,37 @@ trait InteractsWithMediaStreams
         return Arr::first($this->getStreams(), function (Stream $stream) {
             return $stream->isVideo();
         });
+    }
+
+    /**
+     * Extract video duration when not came standard property
+     *
+     * @param  Stream $stream
+     * @return mixed
+     */
+    public function extractDurationAllformat(Stream $stream): mixed
+    {
+        $duration = '';
+        $array = $stream->all();
+        array_walk_recursive($array, function ($value, $index) use (&$duration) {
+            if (strtolower($index) === 'duration') {
+                $duration = $value;
+            }
+        }, $duration);
+
+        $duration = $this->formatDuration($duration);
+        $stream->set('duration', $duration);
+        return $duration * 1000;
+    }
+
+    private function formatDuration(string $duration): mixed
+    {
+        $nums = explode(':', $duration);
+        if (count($nums) === 2) {
+            return (int) $nums[0] * 60 + (float) $nums[1];
+        }
+        if (count($nums) === 3) {
+            return (int) $nums[0] * 3600 + (float) $nums[1] * 60 + (float) $nums[2];
+        }
     }
 }
