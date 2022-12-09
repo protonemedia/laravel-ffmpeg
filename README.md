@@ -7,7 +7,7 @@
 
 This package provides an integration with FFmpeg for Laravel 9. [Laravel's Filesystem](http://laravel.com/docs/9.x/filesystem) handles the storage of the files.
 
-## Support this package!
+## Sponsor this package!
 
 ❤️ We proudly support the community by developing Laravel packages and giving them away for free. If this package saves you time or if you're relying on it professionally, please consider [sponsoring the maintenance and development](https://github.com/sponsors/pascalbaljet). Keeping track of issues and pull requests takes time, but we're happy to help!
 
@@ -27,7 +27,7 @@ It's the *magic* of Inertia.js with the *simplicity* of Blade. [Splade](https://
 * Built-in support for watermarks (positioning and manipulation).
 * Built-in support for creating a mosaic/sprite/tile from a video.
 * Built-in support for generating *VTT Preview Thumbnail* files.
-* Requires PHP 8.0 and 8.1.
+* Requires PHP 8.0, 8.1, and 8.2.
 * Tested with FFmpeg 4.4 and 5.0.
 * Lots of integration tests, GitHub Actions with both Ubuntu and Windows.
 
@@ -742,9 +742,9 @@ Some filesystems, especially on cheap and slow VPSs, are not fast enough to hand
 // config/laravel-ffmpeg.php
 
 return [
-        
+
     'temporary_files_encrypted_hls' => '/dev/shm'
-    
+
 ];
 ```
 
