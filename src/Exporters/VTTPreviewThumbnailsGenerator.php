@@ -74,7 +74,7 @@ class VTTPreviewThumbnailsGenerator
      */
     public static function eol(): string
     {
-        return windows_os() ? "\n" : PHP_EOL;
+        return windows_os() ? "\r\n" : PHP_EOL;
     }
 
     /**
