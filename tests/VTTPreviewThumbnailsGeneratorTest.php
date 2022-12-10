@@ -10,6 +10,18 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
 {
     use MatchesSnapshots;
 
+    private function updateWindowsNewLines($content)
+    {
+        if (!windows_os()) {
+            return $content;
+        }
+
+        $content = str_replace("\r\n", "\n", $content);
+        $content = str_replace("\n", "\r\n", $content);
+
+        return $content;
+    }
+
     /** @test */
     public function it_can_generate_a_vtt_file()
     {
@@ -22,7 +34,7 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
 
         $generator = new VTTPreviewThumbnailsGenerator($tile, 250, fn () => "sprite_%d.jpg");
 
-        $this->assertMatchesTextSnapshot($generator->getContents());
+        $this->assertMatchesTextSnapshot($this->updateWindowsNewLines($generator->getContents()));
     }
 
     /** @test */
@@ -39,7 +51,7 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
             return "sprite_{$i}.jpg";
         });
 
-        $this->assertMatchesTextSnapshot($generator->getContents());
+        $this->assertMatchesTextSnapshot($this->updateWindowsNewLines($generator->getContents()));
     }
 
     /** @test */
@@ -58,6 +70,6 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
             return "sprite_{$i}.jpg";
         });
 
-        $this->assertMatchesTextSnapshot($generator->getContents());
+        $this->assertMatchesTextSnapshot($this->updateWindowsNewLines($generator->getContents()));
     }
 }
