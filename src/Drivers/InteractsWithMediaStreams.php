@@ -41,6 +41,8 @@ trait InteractsWithMediaStreams
         if ($format->has('duration')) {
             return intval(round($format->get('duration') * 1000));
         }
+
+        throw new UnknownDurationException('Could not determine the duration of the media.');
     }
 
     public function getDurationInSeconds(): int
