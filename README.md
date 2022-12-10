@@ -33,6 +33,12 @@ It's the *magic* of Inertia.js with the *simplicity* of Blade. [Splade](https://
 
 ## Installation
 
+Verify you have the latest version of FFmpeg installed:
+
+```bash
+ffmpeg -version
+```
+
 You can install the package via composer:
 
 ```bash
@@ -742,9 +748,9 @@ Some filesystems, especially on cheap and slow VPSs, are not fast enough to hand
 // config/laravel-ffmpeg.php
 
 return [
-        
+
     'temporary_files_encrypted_hls' => '/dev/shm'
-    
+
 ];
 ```
 
