@@ -31,7 +31,8 @@ We proudly support the community by developing Laravel packages and giving them 
 
 ## Installation
 
-First of all, don't forget to install original ffmpeg on your system. Check the version:
+Verify you have the latest version of FFmpeg installed:
+
 ```bash
 ffmpeg -version
 ```
@@ -745,9 +746,9 @@ Some filesystems, especially on cheap and slow VPSs, are not fast enough to hand
 // config/laravel-ffmpeg.php
 
 return [
-        
+
     'temporary_files_encrypted_hls' => '/dev/shm'
-    
+
 ];
 ```
 
