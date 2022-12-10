@@ -63,7 +63,7 @@ class VTTPreviewThumbnailsGenerator
             '%02d:%02d:%02d.000',
             ($thumbKey * $this->tileFilter->interval) / 3600,
             ($thumbKey * $this->tileFilter->interval) / 60 % 60,
-            ($thumbKey * $this->tileFilter->interval) % 60
+            ($thumbKey * $this->tileFilter->interval)      % 60
         );
     }
 
@@ -83,7 +83,7 @@ class VTTPreviewThumbnailsGenerator
         return Collection::range(1, $totalFiles * $thumbsPerTile)
             ->map(function ($thumb) use ($thumbsPerTile) {
                 $start = $this->getTimestamp($thumb - 1, $this->tileFilter->interval);
-                $end = $this->getTimestamp($thumb, $this->tileFilter->interval);
+                $end   = $this->getTimestamp($thumb, $this->tileFilter->interval);
 
                 $fileKey = ceil($thumb / $thumbsPerTile);
 
@@ -93,7 +93,7 @@ class VTTPreviewThumbnailsGenerator
                 );
 
                 $positionOnTile = ($thumb - 1) % $thumbsPerTile;
-                $position = $this->getPositionOnTile($positionOnTile);
+                $position       = $this->getPositionOnTile($positionOnTile);
 
                 return implode(PHP_EOL, [
                     "{$start} --> {$end}",
