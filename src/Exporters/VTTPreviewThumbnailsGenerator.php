@@ -68,16 +68,6 @@ class VTTPreviewThumbnailsGenerator
     }
 
     /**
-     * End of line symbol.
-     *
-     * @return string
-     */
-    public static function eol(): string
-    {
-        return windows_os() ? "\n" : PHP_EOL;
-    }
-
-    /**
      * Generates the WebVTT contents.
      *
      * @return string
@@ -105,12 +95,12 @@ class VTTPreviewThumbnailsGenerator
                 $positionOnTile = ($thumb - 1) % $thumbsPerTile;
                 $position       = $this->getPositionOnTile($positionOnTile);
 
-                return implode(static::eol(), [
+                return implode(PHP_EOL, [
                     "{$start} --> {$end}",
                     "{$filename}#xywh={$position}",
                 ]);
             })
             ->prepend("WEBVTT")
-            ->implode(static::eol() . static::eol());
+            ->implode(PHP_EOL . PHP_EOL);
     }
 }
