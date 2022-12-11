@@ -29,9 +29,14 @@ It's the *magic* of Inertia.js with the *simplicity* of Blade. [Splade](https://
 * Built-in support for generating *VTT Preview Thumbnail* files.
 * Requires PHP 8.0, 8.1, and 8.2.
 * Tested with FFmpeg 4.4 and 5.0.
-* Lots of integration tests, GitHub Actions with both Ubuntu and Windows.
 
 ## Installation
+
+Verify you have the latest version of FFmpeg installed:
+
+```bash
+ffmpeg -version
+```
 
 You can install the package via composer:
 

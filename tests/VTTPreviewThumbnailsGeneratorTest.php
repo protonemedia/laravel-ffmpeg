@@ -10,6 +10,7 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
 {
     use MatchesSnapshots;
 
+
     /** @test */
     public function it_can_generate_a_vtt_file()
     {
