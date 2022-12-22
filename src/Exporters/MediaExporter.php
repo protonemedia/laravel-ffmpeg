@@ -239,7 +239,7 @@ class MediaExporter
 
         if ($outputMedia) {
             $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
-            $outputMedia->setVisibility($this->visibility);
+            $outputMedia->setVisibility($path, $this->visibility);
         }
 
         if ($this->onProgressCallback) {
