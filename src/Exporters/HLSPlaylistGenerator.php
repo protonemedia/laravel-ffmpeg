@@ -49,8 +49,10 @@ class HLSPlaylistGenerator implements PlaylistGenerator
             $media = (new MediaOpener($segmentPlaylist->getDisk(), $driver))
                 ->openWithInputOptions($segmentPlaylist->getPath(), ['-allowed_extensions', 'ALL']);
 
-            if ($frameRate = StreamParser::new($media->getVideoStream())->getFrameRate()) {
-                $streamInfoLine .= ",FRAME-RATE={$frameRate}";
+            if ($media->getVideoStream()) {
+                if ($frameRate = StreamParser::new($media->getVideoStream())->getFrameRate()) {
+                    $streamInfoLine .= ",FRAME-RATE={$frameRate}";
+                }
             }
 
             return [$streamInfoLine, $segmentPlaylist->getFilename()];
