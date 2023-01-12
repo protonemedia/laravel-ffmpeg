@@ -34,7 +34,7 @@ class NoThreadsConfigTest extends TestCase
 
         $command = FFMpeg::open('video.mp4')
             ->export()
-            ->inFormat(new X264)
+            ->inFormat(new X264())
             ->getCommand('test.mp4');
 
         $this->assertStringContainsString('/laravel-custom-temp', $command[0]);

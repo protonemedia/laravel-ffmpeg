@@ -22,7 +22,7 @@ class AddFilter extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $media = (new MediaOpener)->open('video.mp4');
+        $media = (new MediaOpener())->open('video.mp4');
 
         $this->assertCount(0, $media->getFilters());
 
@@ -39,7 +39,7 @@ class AddFilter extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $media = (new MediaOpener)->open('video.mp4')->resize(640, 360);
+        $media = (new MediaOpener())->open('video.mp4')->resize(640, 360);
 
         $this->assertCount(1, $media->getFilters());
         $this->assertInstanceOf(ResizeFilter::class, $filter = $media->getFilters()[0]);
@@ -53,7 +53,7 @@ class AddFilter extends TestCase
         $this->fakeLocalVideoFile();
         $this->addTestFile('logo.png');
 
-        $media = (new MediaOpener)->open('video.mp4');
+        $media = (new MediaOpener())->open('video.mp4');
 
         $this->assertCount(0, $media->getFilters());
 
@@ -74,7 +74,7 @@ class AddFilter extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $media = (new MediaOpener)->open('video.mp4');
+        $media = (new MediaOpener())->open('video.mp4');
 
         $clipFilter = new \FFMpeg\Filters\Video\ClipFilter(
             \FFMpeg\Coordinate\TimeCode::fromSeconds(5)
@@ -90,7 +90,7 @@ class AddFilter extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $media = (new MediaOpener)->open('video.mp4')
+        $media = (new MediaOpener())->open('video.mp4')
             ->addFilter(['-itsoffset', 1]);
 
         $this->assertCount(1, $filters = $media->getFilters());
@@ -109,7 +109,7 @@ class AddFilter extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $media = (new MediaOpener)->open('video.mp4')
+        $media = (new MediaOpener())->open('video.mp4')
             ->addFilter('-itsoffset', 1);
 
         $this->assertCount(1, $filters = $media->getFilters());
@@ -151,7 +151,7 @@ class AddFilter extends TestCase
     {
         $this->fakeLocalVideoFiles();
 
-        (new MediaOpener)->fromDisk('local')
+        (new MediaOpener())->fromDisk('local')
             ->open(['video.mp4', 'video2.mp4'])
             ->addFilter(function ($filters) {
                 $this->assertInstanceOf(ComplexFilters::class, $filters);
@@ -163,7 +163,7 @@ class AddFilter extends TestCase
     {
         $this->fakeLocalVideoFiles();
 
-        $command = (new MediaOpener)->fromDisk('local')
+        $command = (new MediaOpener())->fromDisk('local')
             ->open(['video.mp4', 'video2.mp4'])
             ->addFilter('[0:v][1:v]', 'hstack', '[v]')
             ->export()
@@ -182,7 +182,7 @@ class AddFilter extends TestCase
             new \FFMpeg\Coordinate\Dimension(640, 480)
         );
 
-        (new MediaOpener)->fromDisk('local')
+        (new MediaOpener())->fromDisk('local')
             ->open(['video.mp4', 'video2.mp4'])
             ->addFilterAsComplexFilter('[0]', '[v0]', $resizeFilter)
             ->export()
@@ -191,7 +191,7 @@ class AddFilter extends TestCase
 
         $this->assertEquals(
             640,
-            (new MediaOpener)->fromDisk('local')->open('output.mp4')->getStreams()[0]->get('width')
+            (new MediaOpener())->fromDisk('local')->open('output.mp4')->getStreams()[0]->get('width')
         );
     }
 
@@ -200,7 +200,7 @@ class AddFilter extends TestCase
     {
         $this->fakeLocalVideoFiles();
 
-        (new MediaOpener)->fromDisk('local')
+        (new MediaOpener())->fromDisk('local')
             ->open(['video.mp4', 'video2.mp4'])
             ->addFilterAsComplexFilter('[0]', '[v0]', function ($filters) {
                 $filters->resize(new \FFMpeg\Coordinate\Dimension(1280, 960));
@@ -211,7 +211,7 @@ class AddFilter extends TestCase
 
         $this->assertEquals(
             1280,
-            (new MediaOpener)->fromDisk('local')->open('output.mp4')->getStreams()[0]->get('width')
+            (new MediaOpener())->fromDisk('local')->open('output.mp4')->getStreams()[0]->get('width')
         );
     }
 }

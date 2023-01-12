@@ -21,7 +21,7 @@ class MediaOpenerTest extends TestCase
     /** @test */
     public function it_can_open_a_single_file_from_the_default_disk()
     {
-        $mediaCollection = (new MediaOpener)->open('video.mp4')->get();
+        $mediaCollection = (new MediaOpener())->open('video.mp4')->get();
 
         $this->assertInstanceOf(MediaCollection::class, $mediaCollection);
         $this->assertEquals(1, $mediaCollection->count());
@@ -38,7 +38,7 @@ class MediaOpenerTest extends TestCase
     {
         $file = UploadedFile::fake()->createWithContent('video.mp4', file_get_contents(__DIR__ . "/src/video.mp4"));
 
-        $media = (new MediaOpener)->open($file);
+        $media = (new MediaOpener())->open($file);
 
         $this->assertEquals(5, $media->getDurationInSeconds());
     }
@@ -48,7 +48,7 @@ class MediaOpenerTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $media = (new MediaOpener)->open('video.mp4');
+        $media = (new MediaOpener())->open('video.mp4');
 
         $this->assertEquals(5, $media->getDurationInSeconds());
         $this->assertEquals(4720, $media->getDurationInMiliseconds());
@@ -57,7 +57,7 @@ class MediaOpenerTest extends TestCase
     /** @test */
     public function it_can_open_multiple_files_from_the_same_disk()
     {
-        $mediaCollection = (new MediaOpener)->open(
+        $mediaCollection = (new MediaOpener())->open(
             ['video1.mp4', 'video2.mp4']
         )->get();
 
@@ -73,7 +73,7 @@ class MediaOpenerTest extends TestCase
     /** @test */
     public function it_can_open_multiple_files_from_different_disks()
     {
-        $mediaCollection = (new MediaOpener)
+        $mediaCollection = (new MediaOpener())
             ->fromDisk('public')
             ->open('video1.mp4')
             ->fromDisk('local')
@@ -94,7 +94,7 @@ class MediaOpenerTest extends TestCase
     {
         Storage::disk('memory')->put('guitar.m4a', file_get_contents(__DIR__ . "/src/guitar.m4a"));
 
-        $mediaCollection = (new MediaOpener)
+        $mediaCollection = (new MediaOpener())
             ->fromDisk('memory')
             ->open('guitar.m4a')
             ->getDriver()
@@ -119,7 +119,7 @@ class MediaOpenerTest extends TestCase
     /** @test */
     public function it_can_open_a_remote_url_without_opening()
     {
-        $mediaCollection = (new MediaOpener)
+        $mediaCollection = (new MediaOpener())
             ->openUrl($url = 'https://raw.githubusercontent.com/protonemedia/laravel-ffmpeg/master/tests/src/guitar.m4a')
             ->getDriver()
             ->getMediaCollection();
@@ -151,7 +151,7 @@ class MediaOpenerTest extends TestCase
     public function it_can_open_a_remote_url_with_headers()
     {
         try {
-            (new MediaOpener)->openUrl('https://ffmpeg.protone.media/video.mp4')->getDriver();
+            (new MediaOpener())->openUrl('https://ffmpeg.protone.media/video.mp4')->getDriver();
 
             $this->fail('Should have thrown 401 exception');
         } catch (RuntimeException $exception) {
@@ -173,7 +173,7 @@ class MediaOpenerTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $media = (new MediaOpener)
+        $media = (new MediaOpener())
             ->fromFilesystem(Storage::disk('local'))
             ->open('video.mp4');
 
@@ -186,7 +186,7 @@ class MediaOpenerTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $media = (new MediaOpener)->open('video.mp4');
+        $media = (new MediaOpener())->open('video.mp4');
 
         $this->assertInstanceOf(Video::class, $media());
         $this->assertInstanceOf(Video::class, $media->getDriver()());

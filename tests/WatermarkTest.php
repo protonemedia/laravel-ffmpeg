@@ -14,7 +14,7 @@ class WatermarkTest extends TestCase
         $this->fakeLocalVideoFile();
         $this->addTestFile('logo.png');
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->export()
             ->addWatermark(function (WatermarkFactory $watermarkFactory) {

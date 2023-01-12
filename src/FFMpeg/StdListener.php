@@ -9,7 +9,7 @@ use Symfony\Component\Process\Process;
 
 class StdListener extends EventEmitter implements ListenerInterface
 {
-    const TYPE_ALL = 'all';
+    public const TYPE_ALL = 'all';
 
     /**
      * Name of the emitted event.

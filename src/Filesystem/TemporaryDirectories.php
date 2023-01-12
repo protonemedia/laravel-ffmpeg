@@ -49,7 +49,7 @@ class TemporaryDirectories
      */
     public function deleteAll(): void
     {
-        $filesystem = new Filesystem;
+        $filesystem = new Filesystem();
 
         foreach ($this->directories as $directory) {
             $filesystem->deleteDirectory($directory);

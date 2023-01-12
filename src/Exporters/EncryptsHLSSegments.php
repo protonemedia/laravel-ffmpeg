@@ -293,7 +293,7 @@ trait EncryptsHLSSegments
     private function cleanupHLSEncryption(): self
     {
         if ($this->encryptionSecretsRoot) {
-            (new Filesystem)->deleteDirectory($this->encryptionSecretsRoot);
+            (new Filesystem())->deleteDirectory($this->encryptionSecretsRoot);
         }
 
         return $this;

@@ -77,7 +77,7 @@ class MediaOnNetwork
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 
         if (!empty($this->headers)) {
-            $headers = Collection::make($this->headers)->map(function($value, $header) {
+            $headers = Collection::make($this->headers)->map(function ($value, $header) {
                 return "{$header}: {$value}";
             })->all();
 

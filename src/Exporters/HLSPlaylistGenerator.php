@@ -11,8 +11,8 @@ use ProtoneMedia\LaravelFFMpeg\Support\StreamParser;
 
 class HLSPlaylistGenerator implements PlaylistGenerator
 {
-    const PLAYLIST_START = '#EXTM3U';
-    const PLAYLIST_END   = '#EXT-X-ENDLIST';
+    public const PLAYLIST_START = '#EXTM3U';
+    public const PLAYLIST_END   = '#EXT-X-ENDLIST';
 
     /**
      * Return the line from the master playlist that references the given segment playlist.

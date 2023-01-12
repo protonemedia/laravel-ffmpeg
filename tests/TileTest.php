@@ -15,11 +15,11 @@ class TileTest extends TestCase
     {
         $this->fakeLongLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->export()
             ->addFilter(new TileFilter(2, 160, 90, 2, 2))
-            ->inFormat(new ImageFormat)
+            ->inFormat(new ImageFormat())
             ->save('2x2_%05d.jpg');
 
         $this->assertTrue(Storage::disk('local')->has('2x2_00001.jpg'));
@@ -32,7 +32,7 @@ class TileTest extends TestCase
     {
         $this->fakeLongLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportFramesByInterval(2)
             ->save('thumb_%d.jpg');
@@ -53,7 +53,7 @@ class TileTest extends TestCase
     {
         $this->fakeLongLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportFramesByAmount($amount)
             ->save('thumb_%d.jpg');
@@ -70,17 +70,17 @@ class TileTest extends TestCase
     {
         $this->fakeLongLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportFramesByAmount(1)
             ->save('loseless.png');
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportFramesByAmount(1, null, null, 2)
             ->save('high_quality.jpg');
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportFramesByAmount(1, null, null, 31)
             ->save('low_quality.jpg');
@@ -104,7 +104,7 @@ class TileTest extends TestCase
     {
         $this->fakeLongLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportTile(function (TileFactory $factory) {
                 $factory->interval(1)
@@ -124,7 +124,7 @@ class TileTest extends TestCase
     {
         $this->fakeLongLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportTile(function (TileFactory $factory) {
                 $factory->interval(2)
@@ -144,7 +144,7 @@ class TileTest extends TestCase
     {
         $this->fakeLongLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportTile(function (TileFactory $factory) {
                 $factory->interval(1)
@@ -174,7 +174,7 @@ class TileTest extends TestCase
     {
         $this->fakeLongLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportTile(function (TileFactory $factory) {
                 $factory->interval(1)
@@ -205,7 +205,7 @@ class TileTest extends TestCase
     {
         $this->fakeLongLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportTile(function (TileFactory $factory) {
                 $factory->interval(10)
@@ -214,7 +214,7 @@ class TileTest extends TestCase
             })
             ->save('high_quality.jpg');
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video3.mp4')
             ->exportTile(function (TileFactory $factory) {
                 $factory->interval(10)

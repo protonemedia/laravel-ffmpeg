@@ -62,7 +62,7 @@ class PHPFFMpeg
     public function __construct(FFMpeg $ffmpeg)
     {
         $this->ffmpeg                = $ffmpeg;
-        $this->pendingComplexFilters = new Collection;
+        $this->pendingComplexFilters = new Collection();
     }
 
     /**

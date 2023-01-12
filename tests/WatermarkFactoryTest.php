@@ -28,7 +28,7 @@ class WatermarkFactoryTest extends TestCase
     /** @test */
     public function it_gives_the_complete_path_of_the_watermark_to_the_watermark_filter()
     {
-        $factory = new WatermarkFactory;
+        $factory = new WatermarkFactory();
         $factory->open('logo.png');
 
         $this->assertInstanceOf(WatermarkFilter::class, $factory->get());
@@ -42,7 +42,7 @@ class WatermarkFactoryTest extends TestCase
     /** @test */
     public function it_downloads_a_remote_logo_to_a_temporary_filesystem()
     {
-        $factory = new WatermarkFactory;
+        $factory = new WatermarkFactory();
         $factory->openUrl('https://ffmpeg.protone.media/logo.png', [
             'Authorization' => 'Basic YWRtaW46MTIzNA==',
         ]);
@@ -62,7 +62,7 @@ class WatermarkFactoryTest extends TestCase
     /** @test */
     public function it_gives_the_coordinates_to_the_watermark_filter()
     {
-        $factory = new WatermarkFactory;
+        $factory = new WatermarkFactory();
         $factory->open('logo.png')->top(25)->left(50);
 
         $this->assertStringContainsString(
@@ -82,7 +82,7 @@ class WatermarkFactoryTest extends TestCase
     /** @test */
     public function it_gives_the_coordinates_to_a_custom_filter_by_using_the_preset_position()
     {
-        $factory = new WatermarkFactory;
+        $factory = new WatermarkFactory();
         $factory->open('logo.png');
 
         $factory->horizontalAlignment(WatermarkFactory::LEFT, 50)
@@ -108,7 +108,7 @@ class WatermarkFactoryTest extends TestCase
     /** @test */
     public function it_can_manipulate_the_watermark_image()
     {
-        $factory = new WatermarkFactory;
+        $factory = new WatermarkFactory();
 
         $factory->open('logo.png')
             ->width(100)

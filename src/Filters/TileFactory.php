@@ -22,7 +22,7 @@ class TileFactory
 
     public static function make(): TileFactory
     {
-        return new static;
+        return new static();
     }
 
     /**
