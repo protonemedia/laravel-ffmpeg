@@ -109,8 +109,12 @@ class HLSExporter extends MediaExporter
     private function getSegmentFilenameGenerator(): callable
     {
         return $this->segmentFilenameGenerator ?: function ($name, $format, $key, $segments, $playlist) {
-            $segments("{$name}_{$key}_{$format->getKiloBitrate()}_%05d.ts");
-            $playlist("{$name}_{$key}_{$format->getKiloBitrate()}.m3u8");
+            $bitrate = $this->driver->getVideoStream()
+                ? $format->getKiloBitrate()
+                : $format->getAudioKiloBitrate();
+
+            $segments("{$name}_{$key}_{$bitrate}_%05d.ts");
+            $playlist("{$name}_{$key}_{$bitrate}.m3u8");
         };
     }
 
