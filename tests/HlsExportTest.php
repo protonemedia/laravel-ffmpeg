@@ -40,7 +40,7 @@ class HlsExportTest extends TestCase
     }
 
     /** @test */
-    public function it_can_export_a_single_media_file_into_a_hls_export()
+    public function it_can_export_a_single_video_file_into_a_hls_export()
     {
         $this->fakeLocalVideoFile();
 
@@ -81,6 +81,41 @@ class HlsExportTest extends TestCase
             static::streamInfoPattern('1920x1080'),
             'adaptive_1_1000.m3u8',
             static::streamInfoPattern('1920x1080'),
+            'adaptive_2_4000.m3u8',
+            '#EXT-X-ENDLIST',
+        ]);
+    }
+
+    /** @test */
+    public function it_can_export_a_single_audio_file_into_a_hls_export()
+    {
+        $this->fakeLocalAudioFile();
+
+        $lowBitrate  = $this->x264()->setAudioKiloBitrate(250);
+        $midBitrate  = $this->x264()->setAudioKiloBitrate(1000);
+        $highBitrate = $this->x264()->setAudioKiloBitrate(4000);
+
+        (new MediaOpener)
+            ->open('guitar.m4a')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->addFormat($midBitrate)
+            ->addFormat($highBitrate)
+            ->toDisk('local')
+            ->save('adaptive.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_1_1000.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_2_4000.m3u8'));
+
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
+            '#EXTM3U',
+            '#EXT-X-STREAM-INF:BANDWIDTH=275000,CODECS="mp4a.40.34"',
+            'adaptive_0_250.m3u8',
+            '#EXT-X-STREAM-INF:BANDWIDTH=1100000,CODECS="mp4a.40.34"',
+            'adaptive_1_1000.m3u8',
+            '#EXT-X-STREAM-INF:BANDWIDTH=4400000,CODECS="mp4a.40.34"',
             'adaptive_2_4000.m3u8',
             '#EXT-X-ENDLIST',
         ]);
