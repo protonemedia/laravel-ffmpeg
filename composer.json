@@ -20,16 +20,16 @@
         }
     ],
     "require": {
-        "php": "^8.1",
-        "illuminate/contracts": "^10.0",
+        "php": "^8.1|^8.2",
+        "illuminate/contracts": "^9.0|^10.0",
         "php-ffmpeg/php-ffmpeg": "^1.1",
-        "ramsey/collection": "^2.0"
+        "ramsey/collection": "^1.0|^2.0"
     },
     "require-dev": {
         "league/flysystem-memory": "^3.10",
         "mockery/mockery": "^1.4.4",
         "nesbot/carbon": "^2.66",
-        "orchestra/testbench": "^8.0",
+        "orchestra/testbench": "^7.0|^8.0",
         "phpunit/phpunit": "^9.5.10",
         "spatie/image": "^2.2",
         "spatie/phpunit-snapshot-assertions": "^4.2"
