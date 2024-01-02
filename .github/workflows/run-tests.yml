@@ -13,7 +13,7 @@ jobs:
         os: [ubuntu-20.04]
         php: [8.3, 8.2, 8.1]
         laravel: [10.*]
-        ffmpeg: [5.0, 4.4]
+        ffmpeg: [6.1, 5.1, 4.4]
         dependency-version: [prefer-lowest, prefer-stable]
         include:
           - laravel: 10.*
@@ -33,7 +33,7 @@ jobs:
           coverage: none
 
       - name: Install FFmpeg
-        uses: Iamshankhadeep/setup-ffmpeg@ffmpeg-5.0-20220119
+        uses: AnimMouse/setup-ffmpeg@v1
         with:
           token: ${{ secrets.CI_GITHUB_TOKEN }}
           version: ${{ matrix.ffmpeg }}
