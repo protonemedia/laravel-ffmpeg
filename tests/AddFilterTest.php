@@ -15,7 +15,7 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
-class AddFilter extends TestCase
+class AddFilterTest extends TestCase
 {
     /** @test */
     public function it_can_add_a_filter_using_a_closure()
