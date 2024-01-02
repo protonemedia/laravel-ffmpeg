@@ -11,15 +11,13 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-20.04]
-        php: [8.2, 8.1]
-        laravel: [10.*, 9.*]
+        php: [8.3, 8.2, 8.1]
+        laravel: [10.*]
         ffmpeg: [5.0, 4.4]
         dependency-version: [prefer-lowest, prefer-stable]
         include:
           - laravel: 10.*
             testbench: 8.*
-          - laravel: 9.*
-            testbench: 7.*
 
     name: ${{ matrix.os }} - P${{ matrix.php }} - L${{ matrix.laravel }} - FF${{ matrix.ffmpeg }} - ${{ matrix.dependency-version }}
 
@@ -53,15 +51,7 @@ jobs:
           key: dependencies-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}-dep-${{ matrix.dependency-version }}
 
       - name: Execute tests
-        run: vendor/bin/phpunit --stop-on-error --stop-on-failure --order-by random
-        if: matrix.os == 'ubuntu-20.04'
+        run: vendor/bin/phpunit --order-by random
         env:
           FFMPEG_TEMPORARY_FILES_ROOT: ${{ github.workspace }}
           FFMPEG_TEMPORARY_ENCRYPTED_HLS: /dev/shm
-
-      - name: Execute tests
-        run: vendor/bin/phpunit --stop-on-error --stop-on-failure --order-by random
-        if: matrix.os == 'windows-2019'
-        env:
-          FFMPEG_TEMPORARY_FILES_ROOT: ${{ github.workspace }}
-          FFMPEG_TEMPORARY_ENCRYPTED_HLS: ${{ github.workspace }}

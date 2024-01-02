@@ -10,6 +10,11 @@ use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class TileTest extends TestCase
 {
+    public static function provideThumbnailAmount()
+    {
+        return array_map(fn ($i) => [$i], range(1, 10));
+    }
+
     /** @test */
     public function it_has_a_tile_filter()
     {
@@ -92,11 +97,6 @@ class TileTest extends TestCase
         $this->assertTrue(
             Storage::disk('local')->size('high_quality.jpg') > Storage::disk('local')->size('low_quality.jpg')
         );
-    }
-
-    public function provideThumbnailAmount()
-    {
-        return array_map(fn ($i) => [$i], range(1, 10));
     }
 
     /** @test */
