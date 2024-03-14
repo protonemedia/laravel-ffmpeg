@@ -143,12 +143,12 @@ class Media
         return $this;
     }
 
-    public function setVisibility(string $visibility = null)
+    public function setVisibility(string $path, string $visibility = null)
     {
         $disk = $this->getDisk();
 
         if ($visibility && $disk->isLocalDisk()) {
-            $disk->setVisibility($visibility);
+            $disk->setVisibility($path, $visibility);
         }
 
         return $this;
