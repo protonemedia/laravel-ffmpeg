@@ -55,7 +55,7 @@ class DynamicHLSPlaylist implements Responsable
      */
     public function __construct($disk = null)
     {
-        $this->fromDisk($disk ?: config('filesystems.default'));
+        return $this->fromDisk($disk ?: config('filesystems.default'));
     }
 
     /**
