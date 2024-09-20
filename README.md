@@ -817,7 +817,7 @@ $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
 // The 'getStreams' method will be called on the underlying Media object since
 // it doesn't exists on this object.
-$codec = $media->getStreams()->first()->get('codec_name');
+$codec = $media->getVideoStream()->get('codec_name');
 ```
 
 If you want direct access to the underlying object, call the object as a function (invoke):
