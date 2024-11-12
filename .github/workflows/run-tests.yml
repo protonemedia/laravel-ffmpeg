@@ -45,7 +45,6 @@ jobs:
       - name: Install FFmpeg
         uses: Iamshankhadeep/setup-ffmpeg@ffmpeg-5.0-20220119
         with:
-          token: ${{ secrets.CI_GITHUB_TOKEN }}
           version: ${{ matrix.ffmpeg }}
         id: setup-ffmpeg
 
