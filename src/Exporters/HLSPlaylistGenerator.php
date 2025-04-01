@@ -11,8 +11,8 @@ use ProtoneMedia\LaravelFFMpeg\Support\StreamParser;
 
 class HLSPlaylistGenerator implements PlaylistGenerator
 {
-    const PLAYLIST_START = '#EXTM3U';
-    const PLAYLIST_END   = '#EXT-X-ENDLIST';
+    public const PLAYLIST_START = '#EXTM3U';
+    public const PLAYLIST_END   = '#EXT-X-ENDLIST';
 
     /**
      * Return the line from the master playlist that references the given segment playlist.
@@ -49,8 +49,10 @@ class HLSPlaylistGenerator implements PlaylistGenerator
             $media = (new MediaOpener($segmentPlaylist->getDisk(), $driver))
                 ->openWithInputOptions($segmentPlaylist->getPath(), ['-allowed_extensions', 'ALL']);
 
-            if ($frameRate = StreamParser::new($media->getVideoStream())->getFrameRate()) {
-                $streamInfoLine .= ",FRAME-RATE={$frameRate}";
+            if ($media->getVideoStream()) {
+                if ($frameRate = StreamParser::new($media->getVideoStream())->getFrameRate()) {
+                    $streamInfoLine .= ",FRAME-RATE={$frameRate}";
+                }
             }
 
             return [$streamInfoLine, $segmentPlaylist->getFilename()];

@@ -84,7 +84,7 @@ trait InteractsWithFilters
     public function addWatermark(callable $withWatermarkFactory): self
     {
         $withWatermarkFactory(
-            $watermarkFactory = new WatermarkFactory
+            $watermarkFactory = new WatermarkFactory()
         );
 
         return $this->addFilter($watermarkFactory->get());

@@ -36,6 +36,13 @@ class DynamicHLSPlaylist implements Responsable
     private $mediaResolver;
 
     /**
+     * Callable to retrieve the path to the given playlist.
+     *
+     * @var callable
+     */
+    private $playlistResolver;
+
+    /**
      * @var array
      */
     private $keyCache = [];

@@ -20,12 +20,12 @@ use ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput;
  */
 class MediaExporter
 {
-    use ForwardsCalls,
-        HandlesAdvancedMedia,
-        HandlesConcatenation,
-        HandlesFrames,
-        HandlesTimelapse,
-        HasProgressListener;
+    use ForwardsCalls;
+    use HandlesAdvancedMedia;
+    use HandlesConcatenation;
+    use HandlesFrames;
+    use HandlesTimelapse;
+    use HasProgressListener;
 
     /**
      * @var \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
@@ -59,7 +59,7 @@ class MediaExporter
     {
         $this->driver = $driver;
 
-        $this->maps = new Collection;
+        $this->maps = new Collection();
     }
 
     protected function getDisk(): Disk
@@ -107,7 +107,7 @@ class MediaExporter
     public function addTileFilter(callable $withTileFactory): self
     {
         $withTileFactory(
-            $tileFactory = new TileFactory
+            $tileFactory = new TileFactory()
         );
 
         $this->addFilter($filter = $tileFactory->get());
@@ -138,7 +138,7 @@ class MediaExporter
         $media = $this->prepareSaving($path);
 
         return $this->driver->getFinalCommand(
-            $this->format ?: new NullFormat,
+            $this->format ?: new NullFormat(),
             optional($media)->getLocalPath() ?: '/dev/null'
         );
     }
@@ -229,7 +229,7 @@ class MediaExporter
                 }
             } else {
                 $this->driver->save(
-                    $this->format ?: new NullFormat,
+                    $this->format ?: new NullFormat(),
                     optional($outputMedia)->getLocalPath() ?: '/dev/null'
                 );
             }
@@ -253,7 +253,7 @@ class MediaExporter
 
     public function getProcessOutput(): ProcessOutput
     {
-        return tap(new StdListener, function (StdListener $listener) {
+        return tap(new StdListener(), function (StdListener $listener) {
             $this->addListener($listener)->save();
             $listener->removeAllListeners();
             $this->removeListener($listener);

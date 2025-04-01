@@ -3,8 +3,11 @@
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Closure;
+use FFMpeg\Format\Audio\DefaultAudio;
+use FFMpeg\Format\AudioInterface;
 use FFMpeg\Format\FormatInterface;
 use FFMpeg\Format\Video\DefaultVideo;
+use FFMpeg\Format\Video\X264;
 use FFMpeg\Format\VideoInterface;
 use Illuminate\Support\Collection;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
@@ -15,8 +18,8 @@ class HLSExporter extends MediaExporter
 {
     use EncryptsHLSSegments;
 
-    const HLS_KEY_INFO_FILENAME = 'hls_encryption.keyinfo';
-    const ENCRYPTION_LISTENER   = "listen-encryption-key";
+    public const HLS_KEY_INFO_FILENAME = 'hls_encryption.keyinfo';
+    public const ENCRYPTION_LISTENER   = "listen-encryption-key";
 
     /**
      * @var integer
@@ -85,7 +88,7 @@ class HLSExporter extends MediaExporter
 
     private function getPlaylistGenerator(): PlaylistGenerator
     {
-        return $this->playlistGenerator ?: new HLSPlaylistGenerator;
+        return $this->playlistGenerator ?: new HLSPlaylistGenerator();
     }
 
     /**
@@ -109,8 +112,12 @@ class HLSExporter extends MediaExporter
     private function getSegmentFilenameGenerator(): callable
     {
         return $this->segmentFilenameGenerator ?: function ($name, $format, $key, $segments, $playlist) {
-            $segments("{$name}_{$key}_{$format->getKiloBitrate()}_%05d.ts");
-            $playlist("{$name}_{$key}_{$format->getKiloBitrate()}.m3u8");
+            $bitrate = $this->driver->getVideoStream()
+                ? $format->getKiloBitrate()
+                : $format->getAudioKiloBitrate();
+
+            $segments("{$name}_{$key}_{$bitrate}_%05d.ts");
+            $playlist("{$name}_{$key}_{$bitrate}.m3u8");
         };
     }
 
@@ -118,11 +125,11 @@ class HLSExporter extends MediaExporter
      * Calls the generator with the path (without extension), format and key.
      *
      * @param string $baseName
-     * @param \FFMpeg\Format\VideoInterface $format
+     * @param \FFMpeg\Format\AudioInterface $format
      * @param integer $key
      * @return array
      */
-    private function getSegmentPatternAndFormatPlaylistPath(string $baseName, VideoInterface $format, int $key): array
+    private function getSegmentPatternAndFormatPlaylistPath(string $baseName, AudioInterface $format, int $key): array
     {
         $segmentsPattern    = null;
         $formatPlaylistPath = null;
@@ -146,13 +153,13 @@ class HLSExporter extends MediaExporter
     /**
      * Merges the HLS parameters to the given format.
      *
-     * @param \FFMpeg\Format\Video\DefaultVideo $format
+     * @param \FFMpeg\Format\Video\DefaultAudio $format
      * @param string $segmentsPattern
      * @param \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk $disk
      * @param integer $key
      * @return array
      */
-    private function addHLSParametersToFormat(DefaultVideo $format, string $segmentsPattern, Disk $disk, int $key): array
+    private function addHLSParametersToFormat(DefaultAudio $format, string $segmentsPattern, Disk $disk, int $key): array
     {
         $format->setAdditionalParameters(array_merge(
             $format->getAdditionalParameters() ?: [],
@@ -172,6 +179,7 @@ class HLSExporter extends MediaExporter
             ],
             $this->getEncrypedHLSParameters()
         ));
+
 
         return $hlsParameters;
     }
@@ -247,7 +255,7 @@ class HLSExporter extends MediaExporter
     private function prepareSaving(string $path = null): Collection
     {
         if (!$this->pendingFormats) {
-            throw new NoFormatException;
+            throw new NoFormatException();
         }
 
         $media = $this->getDisk()->makeMedia($path);
@@ -262,6 +270,7 @@ class HLSExporter extends MediaExporter
                 $format,
                 $key
             );
+
 
             $disk = $this->getDisk()->clone();
 
@@ -331,8 +340,45 @@ class HLSExporter extends MediaExporter
     public function addFormat(FormatInterface $format, callable $filtersCallback = null): self
     {
         if (!$this->pendingFormats) {
-            $this->pendingFormats = new Collection;
+            $this->pendingFormats = new Collection();
         }
+
+        if (!$format instanceof DefaultVideo && $format instanceof DefaultAudio) {
+            $originalFormat = clone $format;
+
+            $format = new class () extends DefaultVideo {
+                private array $audioCodecs = [];
+
+                public function setAvailableAudioCodecs(array $audioCodecs)
+                {
+                    $this->audioCodecs = $audioCodecs;
+                }
+
+                public function getAvailableAudioCodecs(): array
+                {
+                    return $this->audioCodecs;
+                }
+
+                public function supportBFrames()
+                {
+                    return false;
+                }
+
+                public function getAvailableVideoCodecs()
+                {
+                    return [];
+                }
+            };
+
+            $format->setAvailableAudioCodecs($originalFormat->getAvailableAudioCodecs());
+            $format->setAudioCodec($originalFormat->getAudioCodec());
+            $format->setAudioKiloBitrate($originalFormat->getAudioKiloBitrate());
+
+            if ($originalFormat->getAudioChannels()) {
+                $format->setAudioChannels($originalFormat->getAudioChannels());
+            }
+        }
+
 
         $this->pendingFormats->push([$format, $filtersCallback]);
 

@@ -33,7 +33,7 @@ trait InteractsWithMediaStreams
         $stream = Arr::first($this->getStreams());
 
         if ($stream->has('duration')) {
-            return $stream->get('duration') * 1000;
+            return intval(round($stream->get('duration') * 1000));
         }
 
         $duration = $this->extractDurationAllformat($this->getVideoStream());
@@ -41,6 +41,8 @@ trait InteractsWithMediaStreams
         if ($duration) {
             return $duration;
         }
+
+        throw new UnknownDurationException('Could not determine the duration of the media.');
     }
 
     public function getDurationInSeconds(): int
