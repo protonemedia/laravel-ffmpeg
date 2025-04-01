@@ -29,7 +29,7 @@ class EncryptedHlsExportTest extends TestCase
             ->withEncryptionKey(HLSExporter::generateEncryptionKey())
             ->addFormat($lowBitrate)
             ->addFormat($highBitrate)
-            ->addListener($listener = new StdListener)
+            ->addListener($listener = new StdListener())
             ->save('adaptive.m3u8');
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));

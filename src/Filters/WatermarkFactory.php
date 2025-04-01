@@ -17,11 +17,11 @@ class WatermarkFactory
     use ForwardsCalls;
 
     /** position constants */
-    const LEFT   = 'left';
-    const RIGHT  = 'right';
-    const CENTER = 'center';
-    const TOP    = 'top';
-    const BOTTOM = 'bottom';
+    public const LEFT   = 'left';
+    public const RIGHT  = 'right';
+    public const CENTER = 'center';
+    public const TOP    = 'top';
+    public const BOTTOM = 'bottom';
 
     /**
      * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk

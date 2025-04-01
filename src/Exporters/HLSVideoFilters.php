@@ -11,7 +11,7 @@ use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 
 class HLSVideoFilters
 {
-    const MAPPING_GLUE = "_hls_";
+    public const MAPPING_GLUE = "_hls_";
 
     /**
      * @var \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
@@ -106,7 +106,7 @@ class HLSVideoFilters
      */
     public function addWatermark(callable $withWatermarkFactory): self
     {
-        $withWatermarkFactory($watermarkFactory = new WatermarkFactory);
+        $withWatermarkFactory($watermarkFactory = new WatermarkFactory());
 
         return $this->addLegacyFilter($watermarkFactory->get());
     }

@@ -13,10 +13,10 @@ class CopyTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->export()
-            ->inFormat(new CopyFormat)
+            ->inFormat(new CopyFormat())
             ->save('new_video.mkv');
 
         $this->assertTrue(Storage::disk('local')->has('new_video.mkv'));

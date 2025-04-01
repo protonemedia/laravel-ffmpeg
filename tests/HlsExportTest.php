@@ -27,7 +27,7 @@ class HlsExportTest extends TestCase
         $this->fakeLocalVideoFile();
 
         try {
-            (new MediaOpener)
+            (new MediaOpener())
                 ->open('video.mp4')
                 ->exportForHLS()
                 ->toDisk('local')
@@ -40,7 +40,7 @@ class HlsExportTest extends TestCase
     }
 
     /** @test */
-    public function it_can_export_a_single_media_file_into_a_hls_export()
+    public function it_can_export_a_single_video_file_into_a_hls_export()
     {
         $this->fakeLocalVideoFile();
 
@@ -48,7 +48,7 @@ class HlsExportTest extends TestCase
         $midBitrate  = $this->x264()->setKiloBitrate(1000);
         $highBitrate = $this->x264()->setKiloBitrate(4000);
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate)
@@ -62,15 +62,15 @@ class HlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive_1_1000.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_2_4000.m3u8'));
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_0_250_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_0_250_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_1_1000_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_1_1000_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_2_4000_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_2_4000_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
@@ -87,6 +87,76 @@ class HlsExportTest extends TestCase
     }
 
     /** @test */
+    public function it_can_export_a_single_audio_file_into_a_hls_export()
+    {
+        $this->fakeLocalAudioFile();
+
+        $lowBitrate  = $this->x264()->setAudioKiloBitrate(250);
+        $midBitrate  = $this->x264()->setAudioKiloBitrate(1000);
+        $highBitrate = $this->x264()->setAudioKiloBitrate(4000);
+
+        (new MediaOpener())
+            ->open('guitar.m4a')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->addFormat($midBitrate)
+            ->addFormat($highBitrate)
+            ->toDisk('local')
+            ->save('adaptive.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_1_1000.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_2_4000.m3u8'));
+
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
+            '#EXTM3U',
+            '#EXT-X-STREAM-INF:BANDWIDTH=275000,CODECS="mp4a.40.34"',
+            'adaptive_0_250.m3u8',
+            '#EXT-X-STREAM-INF:BANDWIDTH=1100000,CODECS="mp4a.40.34"',
+            'adaptive_1_1000.m3u8',
+            '#EXT-X-STREAM-INF:BANDWIDTH=4400000,CODECS="mp4a.40.34"',
+            'adaptive_2_4000.m3u8',
+            '#EXT-X-ENDLIST',
+        ]);
+    }
+
+    /** @test */
+    public function it_can_export_a_single_audio_file_into_a_hls_export_with_an_audio_format()
+    {
+        $this->fakeLocalAudioFile();
+
+        $lowBitrate  = $this->Mp3()->setAudioKiloBitrate(250);
+        $midBitrate  = $this->Mp3()->setAudioKiloBitrate(1000);
+        $highBitrate = $this->Mp3()->setAudioKiloBitrate(4000);
+
+        (new MediaOpener())
+            ->open('guitar.m4a')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->addFormat($midBitrate)
+            ->addFormat($highBitrate)
+            ->toDisk('local')
+            ->save('adaptive.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_1_1000.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('adaptive_2_4000.m3u8'));
+
+        $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
+            '#EXTM3U',
+            '#EXT-X-STREAM-INF:BANDWIDTH=275000,CODECS="mp4a.40.34"',
+            'adaptive_0_250.m3u8',
+            '#EXT-X-STREAM-INF:BANDWIDTH=1100000,CODECS="mp4a.40.34"',
+            'adaptive_1_1000.m3u8',
+            '#EXT-X-STREAM-INF:BANDWIDTH=4400000,CODECS="mp4a.40.34"',
+            'adaptive_2_4000.m3u8',
+            '#EXT-X-ENDLIST',
+        ]);
+    }
+
+    /** @test */
     public function it_can_set_additional_parameters_on_the_format()
     {
         $this->fakeLocalVideoFile();
@@ -95,7 +165,7 @@ class HlsExportTest extends TestCase
             '-preset:v', 'ultrafast',
         ]);
 
-        $command = (new MediaOpener)
+        $command = (new MediaOpener())
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate)
@@ -110,17 +180,17 @@ class HlsExportTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->exportForHLS()
-            ->addFormat(new CopyVideoFormat)
+            ->addFormat(new CopyVideoFormat())
             ->toDisk('local')
             ->save('adaptive.m3u8');
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_0.m3u8'));
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_0_0_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_0_0_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
@@ -143,7 +213,7 @@ class HlsExportTest extends TestCase
             "-r",
             16.667,
         ]);
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate)
@@ -153,7 +223,7 @@ class HlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_0_250.m3u8'));
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_0_250_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_0_250_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
@@ -173,7 +243,7 @@ class HlsExportTest extends TestCase
         $lowBitrate = $this->x264()->setKiloBitrate(250);
         $midBitrate = $this->x264()->setKiloBitrate(1000);
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate)
@@ -199,7 +269,7 @@ class HlsExportTest extends TestCase
         $lowBitrate = $this->x264()->setKiloBitrate(250);
         $midBitrate = $this->x264()->setKiloBitrate(1000);
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate)
@@ -227,7 +297,7 @@ class HlsExportTest extends TestCase
         $lowBitrate = $this->x264()->setKiloBitrate(250);
         $midBitrate = $this->x264()->setKiloBitrate(1000);
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate)
@@ -236,7 +306,7 @@ class HlsExportTest extends TestCase
             ->setKeyFrameInterval(24)
             ->onProgress(function ($percentage, $remaining, $rate) {
             })
-            ->withPlaylistGenerator(new HLSPlaylistGenerator)
+            ->withPlaylistGenerator(new HLSPlaylistGenerator())
             ->useSegmentFilenameGenerator(function ($name, $format, $key, callable $segments, callable $playlist) {
                 $segments("N{$name}B{$format->getKiloBitrate()}K{$key}_%02d.ts");
                 $playlist("N{$name}B{$format->getKiloBitrate()}K{$key}.m3u8");
@@ -276,7 +346,7 @@ class HlsExportTest extends TestCase
         $highBitrate  = $this->x264()->setKiloBitrate(1000);
         $superBitrate = $this->x264()->setKiloBitrate(1500);
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate, function (HLSVideoFilters $media) {
@@ -299,19 +369,19 @@ class HlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive_2_1000.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_3_1500.m3u8'));
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_0_250_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_0_250_00000.ts');
         $this->assertEquals(640, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_1_500_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_1_500_00000.ts');
         $this->assertEquals(1280, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_2_1000_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_2_1000_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_3_1500_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_3_1500_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNotNull($media->getAudioStream());
 
@@ -332,7 +402,7 @@ class HlsExportTest extends TestCase
         $highBitrate  = $this->x264()->setKiloBitrate(1000);
         $superBitrate = $this->x264()->setKiloBitrate(1500);
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video_no_audio.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate, function ($media) {
@@ -357,19 +427,19 @@ class HlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive_2_1000.m3u8'));
         $this->assertTrue(Storage::disk('local')->has('adaptive_3_1500.m3u8'));
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_0_250_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_0_250_00000.ts');
         $this->assertEquals(640, $media->getVideoStream()->get('width'));
         $this->assertNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_1_500_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_1_500_00000.ts');
         $this->assertEquals(1280, $media->getVideoStream()->get('width'));
         $this->assertNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_2_1000_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_2_1000_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNull($media->getAudioStream());
 
-        $media = (new MediaOpener)->fromDisk('local')->open('adaptive_3_1500_00000.ts');
+        $media = (new MediaOpener())->fromDisk('local')->open('adaptive_3_1500_00000.ts');
         $this->assertEquals(1920, $media->getVideoStream()->get('width'));
         $this->assertNull($media->getAudioStream());
     }
@@ -384,7 +454,7 @@ class HlsExportTest extends TestCase
         $highBitrate  = $this->x264()->setKiloBitrate(1000);
         $superBitrate = $this->x264()->setKiloBitrate(1500);
 
-        (new MediaOpener)
+        (new MediaOpener())
             ->open('video.mp4')
             ->exportForHLS()
             ->addFormat($lowBitrate, function ($media) {
@@ -410,22 +480,22 @@ class HlsExportTest extends TestCase
 
         $this->assertEquals(
             640,
-            (new MediaOpener)->fromDisk('local')->open('complex_0_250_00000.ts')->getVideoStream()->get('width')
+            (new MediaOpener())->fromDisk('local')->open('complex_0_250_00000.ts')->getVideoStream()->get('width')
         );
 
         $this->assertEquals(
             1280,
-            (new MediaOpener)->fromDisk('local')->open('complex_1_500_00000.ts')->getVideoStream()->get('width')
+            (new MediaOpener())->fromDisk('local')->open('complex_1_500_00000.ts')->getVideoStream()->get('width')
         );
 
         $this->assertEquals(
             1920,
-            (new MediaOpener)->fromDisk('local')->open('complex_2_1000_00000.ts')->getVideoStream()->get('width')
+            (new MediaOpener())->fromDisk('local')->open('complex_2_1000_00000.ts')->getVideoStream()->get('width')
         );
 
         $this->assertEquals(
             2560,
-            (new MediaOpener)->fromDisk('local')->open('complex_3_1500_00000.ts')->getVideoStream()->get('width')
+            (new MediaOpener())->fromDisk('local')->open('complex_3_1500_00000.ts')->getVideoStream()->get('width')
         );
     }
 }

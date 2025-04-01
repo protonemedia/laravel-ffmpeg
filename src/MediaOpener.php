@@ -59,7 +59,7 @@ class MediaOpener
 
         $this->driver = ($driver ?: app(PHPFFMpeg::class))->fresh();
 
-        $this->collection = $mediaCollection ?: new MediaCollection;
+        $this->collection = $mediaCollection ?: new MediaCollection();
     }
 
     public function clone(): self
@@ -214,7 +214,7 @@ class MediaOpener
     {
         return $this->export()
             ->addTileFilter($withTileFactory)
-            ->inFormat(new ImageFormat);
+            ->inFormat(new ImageFormat());
     }
 
     public function exportFramesByAmount(int $amount, int $width = null, int $height = null, int $quality = null): MediaExporter

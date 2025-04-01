@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use FFMpeg\Format\Audio\Mp3;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
@@ -41,7 +42,7 @@ abstract class TestCase extends BaseTestCase
         ]));
 
         Storage::extend('memory', function ($app, $config) {
-            $adapter = new InMemoryFilesystemAdapter;
+            $adapter = new InMemoryFilesystemAdapter();
 
             return new FilesystemAdapter(
                 new Filesystem($adapter, $config),
@@ -54,6 +55,11 @@ abstract class TestCase extends BaseTestCase
     protected function x264(): X264
     {
         return new X264('libmp3lame');
+    }
+
+    protected function Mp3(): Mp3
+    {
+        return new Mp3('libmp3lame');
     }
 
     protected function getPackageProviders($app)
