@@ -94,7 +94,7 @@ class Disk
             return $this->disk;
         }
 
-        return get_class($this->getFlysystemAdapter()) . "_" . md5(spl_object_id($this->getFlysystemAdapter()));
+        return get_class($this->getFlysystemAdapter()).'_'.md5(spl_object_id($this->getFlysystemAdapter()));
     }
 
     public function getFilesystemAdapter(): FilesystemAdapter
@@ -127,9 +127,6 @@ class Disk
 
     /**
      * Replaces backward slashes into forward slashes.
-     *
-     * @param string $path
-     * @return string
      */
     public static function normalizePath(string $path): string
     {
@@ -138,9 +135,6 @@ class Disk
 
     /**
      * Get the full path for the file at the given "short" path.
-     *
-     * @param  string  $path
-     * @return string
      */
     public function path(string $path): string
     {

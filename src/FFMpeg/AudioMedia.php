@@ -10,9 +10,6 @@ class AudioMedia extends Audio
 
     /**
      * Create a new instance of this class with the instance of the underlying library.
-     *
-     * @param \FFMpeg\Media\Audio $audio
-     * @return self
      */
     public static function make(Audio $audio): self
     {

@@ -11,12 +11,10 @@ trait InteractsWithMediaStreams
 {
     /**
      * Returns an array with all streams.
-     *
-     * @return array
      */
     public function getStreams(): array
     {
-        if (!$this->isAdvancedMedia()) {
+        if (! $this->isAdvancedMedia()) {
             return iterator_to_array($this->media->getStreams());
         }
 
@@ -39,7 +37,17 @@ trait InteractsWithMediaStreams
         $format = $this->getFormat();
 
         if ($format->has('duration')) {
-            return intval(round($format->get('duration') * 1000));
+            $duration = $format->get('duration');
+
+            if (! blank($duration)) {
+                return $format->get('duration') * 1000;
+            }
+        }
+
+        $duration = $this->extractDurationFromStream($this->getVideoStream() ?? $this->getAudioStream());
+
+        if ($duration !== null) {
+            return $duration;
         }
 
         throw new UnknownDurationException('Could not determine the duration of the media.');
@@ -68,5 +76,54 @@ trait InteractsWithMediaStreams
         return Arr::first($this->getStreams(), function (Stream $stream) {
             return $stream->isVideo();
         });
+    }
+
+    /**
+     * Extract video duration when it's not a standard property.
+     */
+    public function extractDurationFromStream(Stream $stream): ?int
+    {
+        $duration = $this->findDuration($stream->all());
+
+        if ($duration === null) {
+            return null;
+        }
+
+        return $this->formatDuration($duration) * 1000;
+    }
+
+    /**
+     * Recursively search for the duration key.
+     */
+    public function findDuration(array $array): ?string
+    {
+        foreach ($array as $key => $value) {
+            if (is_array($value)) {
+                if (! is_null($duration = $this->findDuration($value))) {
+                    return $duration;
+                }
+            }
+
+            if (strtolower($key) === 'duration') {
+                return (string) $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Convert duration string to seconds.
+     */
+    public function formatDuration(string $duration): float
+    {
+        $parts = array_map('floatval', explode(':', $duration));
+        $count = count($parts);
+
+        return match ($count) {
+            2 => $parts[0] * 60 + $parts[1],
+            3 => $parts[0] * 3600 + $parts[1] * 60 + $parts[2],
+            default => 0.0,
+        };
     }
 }

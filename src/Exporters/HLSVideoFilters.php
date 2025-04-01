@@ -11,7 +11,7 @@ use ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory;
 
 class HLSVideoFilters
 {
-    public const MAPPING_GLUE = "_hls_";
+    public const MAPPING_GLUE = '_hls_';
 
     /**
      * @var \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
@@ -28,13 +28,13 @@ class HLSVideoFilters
     /**
      * Number of filters added to this video.
      *
-     * @var integer
+     * @var int
      */
     private $filterCount = 0;
 
     public function __construct(PHPFFMpeg $driver, int $formatKey)
     {
-        $this->driver    = $driver;
+        $this->driver = $driver;
         $this->formatKey = $formatKey;
     }
 
@@ -52,8 +52,6 @@ class HLSVideoFilters
 
     /**
      * Generates an input mapping for a new filter.
-     *
-     * @return string
      */
     private function input(): string
     {
@@ -62,8 +60,6 @@ class HLSVideoFilters
 
     /**
      * Generates an output mapping for a new filter.
-     *
-     * @return string
      */
     private function output(): string
     {
@@ -83,11 +79,10 @@ class HLSVideoFilters
     /**
      * Shortcut for the ResizeFilter.
      *
-     * @param int $width
-     * @param int $height
-     * @param string $mode
-     * @param boolean $forceStandards
-     * @return self
+     * @param  int  $width
+     * @param  int  $height
+     * @param  string  $mode
+     * @param  bool  $forceStandards
      */
     public function resize($width, $height, $mode = ResizeFilter::RESIZEMODE_FIT, $forceStandards = true): self
     {
@@ -100,13 +95,10 @@ class HLSVideoFilters
 
     /**
      * Shortcut for the WatermarkFactory.
-     *
-     * @param callable $withWatermarkFactory
-     * @return self
      */
     public function addWatermark(callable $withWatermarkFactory): self
     {
-        $withWatermarkFactory($watermarkFactory = new WatermarkFactory());
+        $withWatermarkFactory($watermarkFactory = new WatermarkFactory);
 
         return $this->addLegacyFilter($watermarkFactory->get());
     }
@@ -114,10 +106,10 @@ class HLSVideoFilters
     /**
      * Adds a scale filter to the video, will be replaced in favor of resize().
      *
-     * @param int $width
-     * @param int $height
+     * @param  int  $width
+     * @param  int  $height
+     *
      * @deprecated 7.4.0
-     * @return self
      */
     public function scale($width, $height): self
     {
@@ -130,7 +122,7 @@ class HLSVideoFilters
      */
     public function addFilter(...$arguments): self
     {
-        if (count($arguments) === 1 && !is_callable($arguments[0])) {
+        if (count($arguments) === 1 && ! is_callable($arguments[0])) {
             $this->driver->addFilter($this->input(), $arguments[0], $this->output());
         } else {
             $this->driver->addFilter(function (ComplexFilters $filters) use ($arguments) {
@@ -143,11 +135,11 @@ class HLSVideoFilters
 
     public static function glue($format, $filter): string
     {
-        return "[v{$format}" . static::MAPPING_GLUE . "{$filter}]";
+        return "[v{$format}".static::MAPPING_GLUE."{$filter}]";
     }
 
     public static function beforeGlue($input): string
     {
         return Str::before($input, static::MAPPING_GLUE);
     }
-};
+}

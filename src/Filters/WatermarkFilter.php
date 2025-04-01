@@ -31,9 +31,6 @@ class WatermarkFilter extends FFMpegWatermarkFilter
 
     /**
      * Normalizes the path when running on Windows.
-     *
-     * @param string $path
-     * @return string
      */
     public static function normalizePath(string $path): string
     {
@@ -46,9 +43,6 @@ class WatermarkFilter extends FFMpegWatermarkFilter
      * Replaces the slashes and escapes the colon. For some
      * reason, this filter doesn't work on Windows with
      * absolute paths that contain forward slashes.
-     *
-     * @param string $path
-     * @return string
      */
     public static function normalizeWindowsPath(string $path): string
     {

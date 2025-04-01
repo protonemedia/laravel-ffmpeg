@@ -82,9 +82,9 @@ class DynamicHLSPlaylist implements Responsable
     {
         $this->media = Media::make($this->disk, $path);
 
-        $this->keyCache      = [];
+        $this->keyCache = [];
         $this->playlistCache = [];
-        $this->mediaCache    = [];
+        $this->mediaCache = [];
 
         return $this;
     }
@@ -112,9 +112,6 @@ class DynamicHLSPlaylist implements Responsable
 
     /**
      * Returns the resolved key filename from the cache or resolves it.
-     *
-     * @param string $key
-     * @return string
      */
     private function resolveKeyFilename(string $key): string
     {
@@ -128,8 +125,7 @@ class DynamicHLSPlaylist implements Responsable
     /**
      * Returns the resolved media filename from the cache or resolves it.
      *
-     * @param string $key
-     * @return string
+     * @param  string  $key
      */
     private function resolveMediaFilename(string $media): string
     {
@@ -143,8 +139,7 @@ class DynamicHLSPlaylist implements Responsable
     /**
      * Returns the resolved playlist filename from the cache or resolves it.
      *
-     * @param string $key
-     * @return string
+     * @param  string  $key
      */
     private function resolvePlaylistFilename(string $playlist): string
     {
@@ -157,9 +152,6 @@ class DynamicHLSPlaylist implements Responsable
 
     /**
      * Parses the lines into a Collection
-     *
-     * @param string $lines
-     * @return \Illuminate\Support\Collection
      */
     public static function parseLines(string $lines): Collection
     {
@@ -169,20 +161,14 @@ class DynamicHLSPlaylist implements Responsable
     /**
      * Returns a boolean wether the line contains a .M3U8 playlist filename
      * or a .TS segment filename.
-     *
-     * @param string $line
-     * @return boolean
      */
     private static function lineHasMediaFilename(string $line): bool
     {
-        return !Str::startsWith($line, '#') && Str::endsWith($line, ['.m3u8', '.ts']);
+        return ! Str::startsWith($line, '#') && Str::endsWith($line, ['.m3u8', '.ts']);
     }
 
     /**
      * Returns the filename of the encryption key.
-     *
-     * @param string $line
-     * @return string|null
      */
     private static function extractKeyFromExtLine(string $line): ?string
     {
@@ -193,8 +179,6 @@ class DynamicHLSPlaylist implements Responsable
 
     /**
      * Returns the processed content of the playlist.
-     *
-     * @return string
      */
     public function get(): string
     {
@@ -204,8 +188,6 @@ class DynamicHLSPlaylist implements Responsable
     /**
      * Returns a collection of all processed segment playlists
      * and the processed main playlist.
-     *
-     * @return \Illuminate\Support\Collection
      */
     public function all(): Collection
     {
@@ -223,9 +205,6 @@ class DynamicHLSPlaylist implements Responsable
 
     /**
      * Processes the given playlist.
-     *
-     * @param string $playlistPath
-     * @return string
      */
     public function getProcessedPlaylist(string $playlistPath): string
     {
@@ -238,13 +217,13 @@ class DynamicHLSPlaylist implements Responsable
 
             $key = static::extractKeyFromExtLine($line);
 
-            if (!$key) {
+            if (! $key) {
                 return $line;
             }
 
             return str_replace(
-                '#EXT-X-KEY:METHOD=AES-128,URI="' . $key . '"',
-                '#EXT-X-KEY:METHOD=AES-128,URI="' . $this->resolveKeyFilename($key) . '"',
+                '#EXT-X-KEY:METHOD=AES-128,URI="'.$key.'"',
+                '#EXT-X-KEY:METHOD=AES-128,URI="'.$this->resolveKeyFilename($key).'"',
                 $line
             );
         })->implode(PHP_EOL);

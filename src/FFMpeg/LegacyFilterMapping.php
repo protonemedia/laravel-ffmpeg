@@ -11,6 +11,7 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection;
 class LegacyFilterMapping
 {
     private $in;
+
     private $out;
 
     /**
@@ -20,8 +21,8 @@ class LegacyFilterMapping
 
     public function __construct($in, $out, ...$arguments)
     {
-        $this->in        = $in;
-        $this->out       = $out;
+        $this->in = $in;
+        $this->out = $out;
         $this->arguments = $arguments;
     }
 
@@ -30,7 +31,7 @@ class LegacyFilterMapping
      */
     public function normalizeIn(): int
     {
-        return preg_replace("/[^0-9]/", "", HLSVideoFilters::beforeGlue($this->in));
+        return preg_replace('/[^0-9]/', '', HLSVideoFilters::beforeGlue($this->in));
     }
 
     /**
@@ -59,7 +60,7 @@ class LegacyFilterMapping
             $parameters = $filter->apply($freshDriver->get(), $format);
 
             $parameters = Arr::where($parameters, function ($parameter) {
-                return !in_array($parameter, ['-vf', '-filter:v', '-filter_complex']);
+                return ! in_array($parameter, ['-vf', '-filter:v', '-filter_complex']);
             });
 
             return implode(' ', $parameters);

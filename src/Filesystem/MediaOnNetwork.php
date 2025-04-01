@@ -17,7 +17,7 @@ class MediaOnNetwork
 
     public function __construct(string $path, array $headers = [])
     {
-        $this->path    = $path;
+        $this->path = $path;
         $this->headers = $headers;
     }
 
@@ -64,11 +64,8 @@ class MediaOnNetwork
     /**
      * Downloads the Media from the internet and stores it in
      * a temporary directory.
-     *
-     * @param callable $withCurl
-     * @return \ProtoneMedia\LaravelFFMpeg\Filesystem\Media
      */
-    public function toMedia(callable $withCurl = null): Media
+    public function toMedia(?callable $withCurl = null): Media
     {
         $disk = Disk::makeTemporaryDisk();
 
@@ -76,7 +73,7 @@ class MediaOnNetwork
         curl_setopt($curl, CURLOPT_URL, $this->path);
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 
-        if (!empty($this->headers)) {
+        if (! empty($this->headers)) {
             $headers = Collection::make($this->headers)->map(function ($value, $header) {
                 return "{$header}: {$value}";
             })->all();

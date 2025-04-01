@@ -21,7 +21,7 @@ trait InteractsWithBeforeSavingCallbacks
         foreach ($this->beforeSavingCallbacks as $key => $callback) {
             $newCommand = call_user_func($callback, $command);
 
-            $command = !is_null($newCommand) ? $newCommand : $command;
+            $command = ! is_null($newCommand) ? $newCommand : $command;
 
             unset($this->beforeSavingCallbacks[$key]);
         }

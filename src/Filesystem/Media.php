@@ -65,7 +65,7 @@ class Media
     {
         $disk = $this->getDisk();
 
-        if (!$disk->isLocalDisk()) {
+        if (! $disk->isLocalDisk()) {
             $disk = $this->temporaryDirectoryDisk();
         }
 
@@ -95,7 +95,7 @@ class Media
 
     private function temporaryDirectoryAdapter(): FilesystemAdapter
     {
-        if (!$this->temporaryDirectory) {
+        if (! $this->temporaryDirectory) {
             $this->temporaryDirectory = $this->getDisk()->getTemporaryDirectory();
         }
 
@@ -115,16 +115,16 @@ class Media
 
         $temporaryDirectoryDisk = $this->temporaryDirectoryDisk();
 
-        if ($disk->exists($path) && !$temporaryDirectoryDisk->exists($path)) {
+        if ($disk->exists($path) && ! $temporaryDirectoryDisk->exists($path)) {
             $temporaryDirectoryDisk->writeStream($path, $disk->readStream($path));
         }
 
         return $temporaryDirectoryDisk->path($path);
     }
 
-    public function copyAllFromTemporaryDirectory(string $visibility = null)
+    public function copyAllFromTemporaryDirectory(?string $visibility = null)
     {
-        if (!$this->temporaryDirectory) {
+        if (! $this->temporaryDirectory) {
             return $this;
         }
 

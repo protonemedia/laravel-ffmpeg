@@ -18,7 +18,7 @@ class ServiceProvider extends BaseServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                __DIR__ . '/../../config/config.php' => config_path('laravel-ffmpeg.php'),
+                __DIR__.'/../../config/config.php' => config_path('laravel-ffmpeg.php'),
             ], 'config');
         }
     }
@@ -29,7 +29,7 @@ class ServiceProvider extends BaseServiceProvider
     public function register()
     {
         // Automatically apply the package configuration
-        $this->mergeConfigFrom(__DIR__ . '/../../config/config.php', 'laravel-ffmpeg');
+        $this->mergeConfigFrom(__DIR__.'/../../config/config.php', 'laravel-ffmpeg');
 
         $this->app->singleton('laravel-ffmpeg-logger', function () {
             $logChannel = $this->app['config']->get('laravel-ffmpeg.log_channel');
@@ -45,9 +45,9 @@ class ServiceProvider extends BaseServiceProvider
             $config = $this->app['config'];
 
             $baseConfig = [
-                'ffmpeg.binaries'  => $config->get('laravel-ffmpeg.ffmpeg.binaries'),
+                'ffmpeg.binaries' => $config->get('laravel-ffmpeg.ffmpeg.binaries'),
                 'ffprobe.binaries' => $config->get('laravel-ffmpeg.ffprobe.binaries'),
-                'timeout'          => $config->get('laravel-ffmpeg.timeout'),
+                'timeout' => $config->get('laravel-ffmpeg.timeout'),
             ];
 
             $configuredThreads = $config->get('laravel-ffmpeg.ffmpeg.threads', 12);

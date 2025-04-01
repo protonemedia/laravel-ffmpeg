@@ -5,12 +5,12 @@ namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 trait HandlesFrames
 {
     /**
-     * @var boolean
+     * @var bool
      */
     protected $mustBeAccurate = false;
 
     /**
-     * @var boolean
+     * @var bool
      */
     protected $returnFrameContents = false;
 

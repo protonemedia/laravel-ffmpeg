@@ -14,7 +14,7 @@ class FrameTest extends TestCase
         $this->fakeLocalAudioFile();
 
         try {
-            (new MediaOpener())
+            (new MediaOpener)
                 ->open('guitar.m4a')
                 ->getFrameFromSeconds(2)
                 ->export();
@@ -30,7 +30,7 @@ class FrameTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        (new MediaOpener())
+        (new MediaOpener)
             ->open('video.mp4')
             ->getFrameFromSeconds(2)
             ->export()
@@ -47,7 +47,7 @@ class FrameTest extends TestCase
 
         $ffmpeg = FFMpeg::open('video.mp4');
 
-        foreach ([1,2,3] as $key => $frame) {
+        foreach ([1, 2, 3] as $key => $frame) {
             $ffmpeg = $ffmpeg->getFrameFromSeconds($frame)
                 ->export()
                 ->save("thumb_{$key}.png");
@@ -77,7 +77,7 @@ class FrameTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $contents = (new MediaOpener())
+        $contents = (new MediaOpener)
             ->open('video.mp4')
             ->getFrameFromSeconds(2)
             ->export()
@@ -91,7 +91,7 @@ class FrameTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        (new MediaOpener())
+        (new MediaOpener)
             ->open('video.mp4')
             ->getFrameFromString('00:00:03.14')
             ->export()
@@ -106,7 +106,7 @@ class FrameTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        (new MediaOpener())
+        (new MediaOpener)
             ->open('video.mp4')
             ->getFrameFromTimecode(
                 \FFMpeg\Coordinate\TimeCode::fromString('00:00:03.14')

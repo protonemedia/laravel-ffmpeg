@@ -26,6 +26,7 @@
         "ramsey/collection": "^2.0"
     },
     "require-dev": {
+        "laravel/pint": "^1.21",
         "league/flysystem-memory": "^3.10",
         "mockery/mockery": "^1.4.4",
         "nesbot/carbon": "^2.66|^3.0",

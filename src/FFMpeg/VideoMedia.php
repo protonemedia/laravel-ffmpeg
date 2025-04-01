@@ -10,9 +10,6 @@ class VideoMedia extends Video
 
     /**
      * Create a new instance of this class with the instance of the underlying library.
-     *
-     * @param \FFMpeg\Media\Video $video
-     * @return self
      */
     public static function make(Video $video): self
     {

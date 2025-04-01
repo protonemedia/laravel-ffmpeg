@@ -31,20 +31,20 @@ class AdvancedOutputMapping
     private $output;
 
     /**
-     * @var boolean
+     * @var bool
      */
     private $forceDisableAudio = false;
 
     /**
-     * @var boolean
+     * @var bool
      */
     private $forceDisableVideo = false;
 
     public function __construct(array $outs, FormatInterface $format, Media $output, bool $forceDisableAudio = false, bool $forceDisableVideo = false)
     {
-        $this->outs              = $outs;
-        $this->format            = $format;
-        $this->output            = $output;
+        $this->outs = $outs;
+        $this->format = $format;
+        $this->output = $output;
         $this->forceDisableAudio = $forceDisableAudio;
         $this->forceDisableVideo = $forceDisableVideo;
     }
@@ -58,8 +58,8 @@ class AdvancedOutputMapping
         if ($this->format instanceof DefaultVideo) {
             $parameters = $this->format->getAdditionalParameters() ?: [];
 
-            if (!in_array('-b:v', $parameters) && $this->format->getKiloBitrate() !== 0) {
-                $parameters = array_merge(['-b:v', $this->format->getKiloBitrate() . 'k'], $parameters);
+            if (! in_array('-b:v', $parameters) && $this->format->getKiloBitrate() !== 0) {
+                $parameters = array_merge(['-b:v', $this->format->getKiloBitrate().'k'], $parameters);
             }
 
             $this->format->setAdditionalParameters($parameters);
