@@ -88,7 +88,23 @@ class HLSExporter extends MediaExporter
 
     private function getPlaylistGenerator(): PlaylistGenerator
     {
-        return $this->playlistGenerator ?: new HLSPlaylistGenerator();
+        return $this->playlistGenerator ??= new HLSPlaylistGenerator();
+    }
+
+    /**
+     * Method to not add the #EXT-X-ENDLIST line to the playlist.
+     *
+     * @return self
+     */
+    public function withoutPlaylistEndLine(): self
+    {
+        $playlistGenerator = $this->getPlaylistGenerator();
+
+        if ($playlistGenerator instanceof HLSPlaylistGenerator) {
+            $playlistGenerator->withoutEndLine();
+        }
+
+        return $this;
     }
 
     /**
