@@ -15,6 +15,20 @@ class HLSPlaylistGenerator implements PlaylistGenerator
 
     public const PLAYLIST_END = '#EXT-X-ENDLIST';
 
+    protected bool $withEndLine = true;
+
+    /**
+     * Adds the #EXT-X-ENDLIST tag to the end of the playlist.
+     *
+     * @return $this
+     */
+    public function withoutEndLine(): self
+    {
+        $this->withEndLine = false;
+
+        return $this;
+    }
+
     /**
      * Return the line from the master playlist that references the given segment playlist.
      *
@@ -53,7 +67,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
             return [$streamInfoLine, $segmentPlaylist->getFilename()];
         })->collapse()
             ->prepend(static::PLAYLIST_START)
-            ->push(static::PLAYLIST_END)
+            ->when($this->withEndLine, fn (Collection $lines) => $lines->push(static::PLAYLIST_END))
             ->implode(PHP_EOL);
     }
 }
