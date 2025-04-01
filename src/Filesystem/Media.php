@@ -143,7 +143,7 @@ class Media
         return $this;
     }
 
-    public function setVisibility(string $path, string $visibility = null)
+    public function setVisibility(string $path, ?string $visibility = null)
     {
         $disk = $this->getDisk();
 
