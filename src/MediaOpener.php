@@ -53,13 +53,13 @@ class MediaOpener
      * Gets the underlying PHPFFMpeg instance from the container if none is given.
      * Instantiates a fresh MediaCollection if none is given.
      */
-    public function __construct($disk = null, PHPFFMpeg $driver = null, MediaCollection $mediaCollection = null)
+    public function __construct($disk = null, ?PHPFFMpeg $driver = null, ?MediaCollection $mediaCollection = null)
     {
         $this->fromDisk($disk ?: config('filesystems.default'));
 
         $this->driver = ($driver ?: app(PHPFFMpeg::class))->fresh();
 
-        $this->collection = $mediaCollection ?: new MediaCollection();
+        $this->collection = $mediaCollection ?: new MediaCollection;
     }
 
     public function clone(): self
@@ -120,10 +120,6 @@ class MediaOpener
 
     /**
      * Instantiates a single Media object and sets the given options on the object.
-     *
-     * @param string $path
-     * @param array $options
-     * @return self
      */
     public function openWithInputOptions(string $path, array $options = []): self
     {
@@ -214,17 +210,17 @@ class MediaOpener
     {
         return $this->export()
             ->addTileFilter($withTileFactory)
-            ->inFormat(new ImageFormat());
+            ->inFormat(new ImageFormat);
     }
 
-    public function exportFramesByAmount(int $amount, int $width = null, int $height = null, int $quality = null): MediaExporter
+    public function exportFramesByAmount(int $amount, ?int $width = null, ?int $height = null, ?int $quality = null): MediaExporter
     {
         $interval = ($this->getDurationInSeconds() + 1) / $amount;
 
         return $this->exportFramesByInterval($interval, $width, $height, $quality);
     }
 
-    public function exportFramesByInterval(float $interval, int $width = null, int $height = null, int $quality = null): MediaExporter
+    public function exportFramesByInterval(float $interval, ?int $width = null, ?int $height = null, ?int $quality = null): MediaExporter
     {
         return $this->exportTile(
             fn (TileFactory $tileFactory) => $tileFactory
@@ -261,6 +257,7 @@ class MediaOpener
 
     /**
      * Forwards all calls to the underlying driver.
+     *
      * @return void
      */
     public function __call($method, $arguments)

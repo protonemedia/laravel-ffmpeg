@@ -11,12 +11,10 @@ trait InteractsWithMediaStreams
 {
     /**
      * Returns an array with all streams.
-     *
-     * @return array
      */
     public function getStreams(): array
     {
-        if (!$this->isAdvancedMedia()) {
+        if (! $this->isAdvancedMedia()) {
             return iterator_to_array($this->media->getStreams());
         }
 
@@ -36,9 +34,19 @@ trait InteractsWithMediaStreams
             return intval(round($stream->get('duration') * 1000));
         }
 
-        $duration = $this->extractDurationAllformat($this->getVideoStream());
+        $format = $this->getFormat();
 
-        if ($duration) {
+        if ($format->has('duration')) {
+            $duration = $format->get('duration');
+
+            if (! blank($duration)) {
+                return $format->get('duration') * 1000;
+            }
+        }
+
+        $duration = $this->extractDurationFromStream($this->getVideoStream() ?? $this->getAudioStream());
+
+        if ($duration !== null) {
             return $duration;
         }
 
@@ -71,34 +79,51 @@ trait InteractsWithMediaStreams
     }
 
     /**
-     * Extract video duration when not came standard property
-     *
-     * @param  Stream $stream
-     * @return mixed
+     * Extract video duration when it's not a standard property.
      */
-    public function extractDurationAllformat(Stream $stream): mixed
+    public function extractDurationFromStream(Stream $stream): ?int
     {
-        $duration = '';
-        $array = $stream->all();
-        array_walk_recursive($array, function ($value, $index) use (&$duration) {
-            if (strtolower($index) === 'duration') {
-                $duration = $value;
-            }
-        }, $duration);
+        $duration = $this->findDuration($stream->all());
 
-        $duration = $this->formatDuration($duration);
-        $stream->set('duration', $duration);
-        return $duration * 1000;
+        if ($duration === null) {
+            return null;
+        }
+
+        return $this->formatDuration($duration) * 1000;
     }
 
-    private function formatDuration(string $duration): mixed
+    /**
+     * Recursively search for the duration key.
+     */
+    public function findDuration(array $array): ?string
     {
-        $nums = explode(':', $duration);
-        if (count($nums) === 2) {
-            return (int) $nums[0] * 60 + (float) $nums[1];
+        foreach ($array as $key => $value) {
+            if (is_array($value)) {
+                if (! is_null($duration = $this->findDuration($value))) {
+                    return $duration;
+                }
+            }
+
+            if (strtolower($key) === 'duration') {
+                return (string) $value;
+            }
         }
-        if (count($nums) === 3) {
-            return (int) $nums[0] * 3600 + (float) $nums[1] * 60 + (float) $nums[2];
-        }
+
+        return null;
+    }
+
+    /**
+     * Convert duration string to seconds.
+     */
+    public function formatDuration(string $duration): float
+    {
+        $parts = array_map('floatval', explode(':', $duration));
+        $count = count($parts);
+
+        return match ($count) {
+            2 => $parts[0] * 60 + $parts[1],
+            3 => $parts[0] * 3600 + $parts[1] * 60 + $parts[2],
+            default => 0.0,
+        };
     }
 }

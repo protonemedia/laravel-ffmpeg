@@ -25,8 +25,8 @@ class StdListener extends EventEmitter implements ListenerInterface
      */
     private $data = [
         self::TYPE_ALL => [],
-        Process::ERR   => [],
-        Process::OUT   => [],
+        Process::ERR => [],
+        Process::OUT => [],
     ];
 
     public function __construct(string $eventName = 'listen')
@@ -37,8 +37,8 @@ class StdListener extends EventEmitter implements ListenerInterface
     /**
      * Handler for a new line of data.
      *
-     * @param string $type
-     * @param string $data
+     * @param  string  $type
+     * @param  string  $data
      * @return void
      */
     public function handle($type, $data)

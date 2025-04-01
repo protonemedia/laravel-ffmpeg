@@ -15,13 +15,21 @@ use ProtoneMedia\LaravelFFMpeg\Support\StreamParser;
 class TileFilter implements VideoFilterInterface
 {
     public float $interval;
+
     public int $width;
+
     public int $height;
+
     public int $columns;
+
     public int $rows;
-    public int $padding  = 0;
-    public int $margin   = 0;
+
+    public int $padding = 0;
+
+    public int $margin = 0;
+
     public ?int $quality = null;
+
     public int $priority = 0;
 
     public ?Dimension $calculatedDimension = null;
@@ -38,13 +46,13 @@ class TileFilter implements VideoFilterInterface
         int $priority = 0
     ) {
         $this->interval = $interval;
-        $this->width    = $width;
-        $this->height   = $height;
-        $this->columns  = $columns;
-        $this->rows     = $rows;
-        $this->padding  = $padding;
-        $this->margin   = $margin;
-        $this->quality  = $quality;
+        $this->width = $width;
+        $this->height = $height;
+        $this->columns = $columns;
+        $this->rows = $rows;
+        $this->padding = $padding;
+        $this->margin = $margin;
+        $this->quality = $quality;
         $this->priority = $priority;
     }
 
@@ -93,7 +101,7 @@ class TileFilter implements VideoFilterInterface
 
     private function calculateDimension(Dimension $streamDimension): Dimension
     {
-        $width  = $this->width;
+        $width = $this->width;
         $height = $this->height;
 
         if ($width > 0 && $height < 1) {
@@ -101,7 +109,7 @@ class TileFilter implements VideoFilterInterface
         } elseif ($height > 0 && $width < 1) {
             $width = $streamDimension->getRatio()->calculateWidth($height);
         } elseif ($width < 1 && $height < 1) {
-            $width  = $streamDimension->getWidth();
+            $width = $streamDimension->getWidth();
             $height = $streamDimension->getHeight();
         }
 
@@ -130,7 +138,7 @@ class TileFilter implements VideoFilterInterface
             '0',
         ];
 
-        if (!is_null($this->quality)) {
+        if (! is_null($this->quality)) {
             $commands = array_merge($commands, [
                 '-qscale:v',
                 $this->quality,

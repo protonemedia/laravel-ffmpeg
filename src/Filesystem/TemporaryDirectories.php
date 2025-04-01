@@ -22,8 +22,6 @@ class TemporaryDirectories
 
     /**
      * Sets the root and removes the trailing slash.
-     *
-     * @param string $root
      */
     public function __construct(string $root)
     {
@@ -32,12 +30,10 @@ class TemporaryDirectories
 
     /**
      * Returns the full path a of new temporary directory.
-     *
-     * @return string
      */
     public function create(): string
     {
-        $directory = $this->root . '/' . bin2hex(random_bytes(8));
+        $directory = $this->root.'/'.bin2hex(random_bytes(8));
 
         mkdir($directory, 0777, true);
 
@@ -49,7 +45,7 @@ class TemporaryDirectories
      */
     public function deleteAll(): void
     {
-        $filesystem = new Filesystem();
+        $filesystem = new Filesystem;
 
         foreach ($this->directories as $directory) {
             $filesystem->deleteDirectory($directory);

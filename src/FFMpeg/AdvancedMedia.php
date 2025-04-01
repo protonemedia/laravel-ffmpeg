@@ -12,9 +12,6 @@ class AdvancedMedia extends MediaAdvancedMedia
 
     /**
      * Create a new instance of this class with the instance of the underlying library.
-     *
-     * @param \FFMpeg\Media\AdvancedMedia $media
-     * @return self
      */
     public static function make(MediaAdvancedMedia $media): self
     {
@@ -38,6 +35,7 @@ class AdvancedMedia extends MediaAdvancedMedia
 
             if (empty($headers)) {
                 $inputKey += 2;
+
                 continue;
             }
 

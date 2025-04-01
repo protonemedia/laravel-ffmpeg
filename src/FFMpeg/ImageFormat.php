@@ -8,15 +8,15 @@ class ImageFormat extends DefaultVideo
 {
     public function __construct()
     {
-        $this->kiloBitrate      = 0;
+        $this->kiloBitrate = 0;
         $this->audioKiloBitrate = null;
     }
 
     /**
-    * Gets the kiloBitrate value.
-    *
-    * @return int
-    */
+     * Gets the kiloBitrate value.
+     *
+     * @return int
+     */
     public function getKiloBitrate()
     {
         return $this->kiloBitrate;

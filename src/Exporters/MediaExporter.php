@@ -59,7 +59,7 @@ class MediaExporter
     {
         $this->driver = $driver;
 
-        $this->maps = new Collection();
+        $this->maps = new Collection;
     }
 
     protected function getDisk(): Disk
@@ -100,19 +100,16 @@ class MediaExporter
     /**
      * Calls the callable with a TileFactory instance and
      * adds the freshly generated TileFilter.
-     *
-     * @param callable $withTileFactory
-     * @return self
      */
     public function addTileFilter(callable $withTileFactory): self
     {
         $withTileFactory(
-            $tileFactory = new TileFactory()
+            $tileFactory = new TileFactory
         );
 
         $this->addFilter($filter = $tileFactory->get());
 
-        if (!$tileFactory->vttOutputPath) {
+        if (! $tileFactory->vttOutputPath) {
             return $this;
         }
 
@@ -130,15 +127,14 @@ class MediaExporter
     /**
      * Returns the final command, useful for debugging purposes.
      *
-     * @param string $path
      * @return mixed
      */
-    public function getCommand(string $path = null)
+    public function getCommand(?string $path = null)
     {
         $media = $this->prepareSaving($path);
 
         return $this->driver->getFinalCommand(
-            $this->format ?: new NullFormat(),
+            $this->format ?: new NullFormat,
             optional($media)->getLocalPath() ?: '/dev/null'
         );
     }
@@ -146,19 +142,15 @@ class MediaExporter
     /**
      * Dump the final command and end the script.
      *
-     * @param string $path
      * @return void
      */
-    public function dd(string $path = null)
+    public function dd(?string $path = null)
     {
         dd($this->getCommand($path));
     }
 
     /**
      * Adds a callable to the callbacks array.
-     *
-     * @param callable $callback
-     * @return self
      */
     public function afterSaving(callable $callback): self
     {
@@ -167,7 +159,7 @@ class MediaExporter
         return $this;
     }
 
-    private function prepareSaving(string $path = null): ?Media
+    private function prepareSaving(?string $path = null): ?Media
     {
         $outputMedia = $path ? $this->getDisk()->makeMedia($path) : null;
 
@@ -194,7 +186,7 @@ class MediaExporter
         return $outputMedia;
     }
 
-    protected function runAfterSavingCallbacks(Media $outputMedia = null)
+    protected function runAfterSavingCallbacks(?Media $outputMedia = null)
     {
         foreach ($this->afterSavingCallbacks as $key => $callback) {
             call_user_func($callback, $this, $outputMedia);
@@ -203,7 +195,7 @@ class MediaExporter
         }
     }
 
-    public function save(string $path = null)
+    public function save(?string $path = null)
     {
         $outputMedia = $this->prepareSaving($path);
 
@@ -225,11 +217,12 @@ class MediaExporter
 
                 if ($this->returnFrameContents) {
                     $this->runAfterSavingCallbacks($outputMedia);
+
                     return $data;
                 }
             } else {
                 $this->driver->save(
-                    $this->format ?: new NullFormat(),
+                    $this->format ?: new NullFormat,
                     optional($outputMedia)->getLocalPath() ?: '/dev/null'
                 );
             }
@@ -253,7 +246,7 @@ class MediaExporter
 
     public function getProcessOutput(): ProcessOutput
     {
-        return tap(new StdListener(), function (StdListener $listener) {
+        return tap(new StdListener, function (StdListener $listener) {
             $this->addListener($listener)->save();
             $listener->removeAllListeners();
             $this->removeListener($listener);

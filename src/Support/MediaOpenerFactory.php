@@ -12,13 +12,15 @@ class MediaOpenerFactory
     use ForwardsCalls;
 
     private $defaultDisk;
+
     private $driver;
+
     private $driverResolver;
 
-    public function __construct(string $defaultDisk, PHPFFMpeg $driver = null, callable $driverResolver = null)
+    public function __construct(string $defaultDisk, ?PHPFFMpeg $driver = null, ?callable $driverResolver = null)
     {
-        $this->defaultDisk    = $defaultDisk;
-        $this->driver         = $driver;
+        $this->defaultDisk = $defaultDisk;
+        $this->driver = $driver;
         $this->driverResolver = $driverResolver;
     }
 
@@ -44,12 +46,12 @@ class MediaOpenerFactory
     }
 
     /**
-    * Handle dynamic method calls into the MediaOpener.
-    *
-    * @param  string  $method
-    * @param  array  $parameters
-    * @return mixed
-    */
+     * Handle dynamic method calls into the MediaOpener.
+     *
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
     public function __call($method, $parameters)
     {
         return $this->forwardCallTo($this->new(), $method, $parameters);

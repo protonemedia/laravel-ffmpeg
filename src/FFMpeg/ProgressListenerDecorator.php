@@ -13,7 +13,7 @@ use Illuminate\Support\Traits\ForwardsCalls;
  * Use this decorator to get access to the AbstractProgressListeners0
  * with the `getListeners` method.
  */
-class ProgressListenerDecorator implements ProgressableInterface, AudioInterface
+class ProgressListenerDecorator implements AudioInterface, ProgressableInterface
 {
     use ForwardsCalls;
 

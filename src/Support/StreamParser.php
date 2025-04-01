@@ -23,7 +23,7 @@ class StreamParser
     {
         $frameRate = trim(optional($this->stream)->get('avg_frame_rate'));
 
-        if (!$frameRate || Str::endsWith($frameRate, '/0')) {
+        if (! $frameRate || Str::endsWith($frameRate, '/0')) {
             return null;
         }
 

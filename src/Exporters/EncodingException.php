@@ -15,7 +15,7 @@ class EncodingException extends RuntimeException
             $runtimeException->getPrevious()
         ), function (self $exception) {
             if (config('laravel-ffmpeg.set_command_and_error_output_on_exception', true)) {
-                $exception->message = $exception->getAlchemyException()?->getMessage() ?: "";
+                $exception->message = $exception->getAlchemyException()?->getMessage() ?: '';
             }
         });
     }
