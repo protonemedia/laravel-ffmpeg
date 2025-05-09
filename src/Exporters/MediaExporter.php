@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use FFMpeg\Exception\RuntimeException;
 use FFMpeg\Format\FormatInterface;
+use FFMpeg\Format\Video\X264;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
@@ -58,8 +59,34 @@ class MediaExporter
     public function __construct(PHPFFMpeg $driver)
     {
         $this->driver = $driver;
-
         $this->maps = new Collection;
+    }
+
+    /**
+     * Enable hardware acceleration with specified codec.
+     *
+     * @param string $codec e.g., 'h264_nvenc', 'hevc_nvenc'
+     * @return $this
+     */
+    public function withHardwareAcceleration(string $codec): self
+    {
+        $this->driver->get()->getVideoStream()->setVideoCodec($codec);
+        return $this;
+    }
+
+    /**
+     * Convert an image to a video with specified duration.
+     *
+     * @param string $outputPath
+     * @param float $duration
+     * @param FormatInterface|null $format
+     * @return $this
+     */
+    public function toVideoFromImage(string $outputPath, float $duration, ?FormatInterface $format = null): self
+    {
+        $this->driver->addFilter(['-loop', '1']);
+        $this->driver->addFilter(['-t', $duration]);
+        return $this->save($outputPath, $format ?: new X264);
     }
 
     protected function getDisk(): Disk
@@ -76,9 +103,13 @@ class MediaExporter
         return $this->toDisk = $disk->clone();
     }
 
-    public function inFormat(FormatInterface $format): self
+    public function inFormat(FormatInterface $format, bool $useX265 = false): self
     {
         $this->format = $format;
+
+        if ($useX265 && $format instanceof X264) {
+            $format->setVideoCodec('libx265');
+        }
 
         return $this;
     }
@@ -86,14 +117,12 @@ class MediaExporter
     public function toDisk($disk)
     {
         $this->toDisk = Disk::make($disk);
-
         return $this;
     }
 
     public function withVisibility(string $visibility)
     {
         $this->visibility = $visibility;
-
         return $this;
     }
 
@@ -155,7 +184,6 @@ class MediaExporter
     public function afterSaving(callable $callback): self
     {
         $this->afterSavingCallbacks[] = $callback;
-
         return $this;
     }
 
@@ -169,9 +197,7 @@ class MediaExporter
 
         if ($this->maps->isNotEmpty()) {
             $this->driver->getPendingComplexFilters()->each->apply($this->driver, $this->maps);
-
             $this->maps->map->apply($this->driver->get());
-
             return $outputMedia;
         }
 
@@ -190,12 +216,11 @@ class MediaExporter
     {
         foreach ($this->afterSavingCallbacks as $key => $callback) {
             call_user_func($callback, $this, $outputMedia);
-
             unset($this->afterSavingCallbacks[$key]);
         }
     }
 
-    public function save(?string $path = null)
+    public function save(?string $path = null, ?FormatInterface $format = null)
     {
         $outputMedia = $this->prepareSaving($path);
 
@@ -217,22 +242,30 @@ class MediaExporter
 
                 if ($this->returnFrameContents) {
                     $this->runAfterSavingCallbacks($outputMedia);
-
                     return $data;
                 }
             } else {
                 $this->driver->save(
-                    $this->format ?: new NullFormat,
+                    $format ?: $this->format ?: new NullFormat,
                     optional($outputMedia)->getLocalPath() ?: '/dev/null'
                 );
             }
         } catch (RuntimeException $exception) {
-            throw EncodingException::decorate($exception);
+            $errorOutput = $this->driver->getErrorOutput() ?? 'No error output available';
+            throw new RuntimeException(
+                sprintf(
+                    "Failed to encode media: %s. FFmpeg error output: %s",
+                    $exception->getMessage(),
+                    $errorOutput
+                ),
+                0,
+                $exception
+            );
         }
 
         if ($outputMedia) {
             $outputMedia->copyAllFromTemporaryDirectory($this->visibility);
-            $outputMedia->setVisibility($path, $this->visibility);
+            $outputMedia->setVisibility($this->visibility);
         }
 
         if ($this->onProgressCallback) {
@@ -262,7 +295,16 @@ class MediaExporter
         try {
             $this->driver->save();
         } catch (RuntimeException $exception) {
-            throw EncodingException::decorate($exception);
+            $errorOutput = $this->driver->getErrorOutput() ?? 'No error output available';
+            throw new RuntimeException(
+                sprintf(
+                    "Failed to encode media with mappings: %s. FFmpeg error output: %s",
+                    $exception->getMessage(),
+                    $errorOutput
+                ),
+                0,
+                $exception
+            );
         }
 
         if ($this->onProgressCallback) {
@@ -290,7 +332,6 @@ class MediaExporter
     public function __call($method, $arguments)
     {
         $result = $this->forwardCallTo($driver = $this->driver, $method, $arguments);
-
         return ($result === $driver) ? $this : $result;
     }
 }

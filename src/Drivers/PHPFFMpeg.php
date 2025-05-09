@@ -66,6 +66,20 @@ class PHPFFMpeg
     }
 
     /**
+     * Enable hardware acceleration with specified codec.
+     *
+     * @param string $codec e.g., 'h264_nvenc', 'hevc_nvenc'
+     * @return $this
+     */
+    public function withHardwareAcceleration(string $codec): self
+    {
+        if ($this->isVideo()) {
+            $this->get()->getVideoStream()->setVideoCodec($codec);
+        }
+        return $this;
+    }
+
+    /**
      * Returns a fresh instance of itself with only the underlying FFMpeg instance.
      */
     public function fresh(): self
@@ -117,29 +131,53 @@ class PHPFFMpeg
         if ($mediaCollection->count() === 1 && ! $this->forceAdvanced) {
             $media = Arr::first($mediaCollection->collection());
 
-            $this->ffmpeg->setFFProbe(
-                FFProbe::make($this->ffmpeg->getFFProbe())->setMedia($media)
-            );
+            try {
+                $this->ffmpeg->setFFProbe(
+                    FFProbe::make($this->ffmpeg->getFFProbe())->setMedia($media)
+                );
 
-            $ffmpegMedia = $this->ffmpeg->open($media->getLocalPath());
+                $ffmpegMedia = $this->ffmpeg->open($media->getLocalPath());
 
-            // this should be refactored to a factory...
-            if ($ffmpegMedia instanceof Video) {
-                $this->media = VideoMedia::make($ffmpegMedia);
-            } elseif ($ffmpegMedia instanceof Audio) {
-                $this->media = AudioMedia::make($ffmpegMedia);
-            } else {
-                $this->media = $ffmpegMedia;
-            }
+                // this should be refactored to a factory...
+                if ($ffmpegMedia instanceof Video) {
+                    $this->media = VideoMedia::make($ffmpegMedia);
+                } elseif ($ffmpegMedia instanceof Audio) {
+                    $this->media = AudioMedia::make($ffmpegMedia);
+                } else {
+                    $this->media = $ffmpegMedia;
+                }
 
-            if (method_exists($this->media, 'setHeaders')) {
-                $this->media->setHeaders(Arr::first($mediaCollection->getHeaders()) ?: []);
+                if (method_exists($this->media, 'setHeaders')) {
+                    $this->media->setHeaders(Arr::first($mediaCollection->getHeaders()) ?: []);
+                }
+            } catch (Exception $exception) {
+                throw new \RuntimeException(
+                    sprintf(
+                        "Failed to open media file: %s. Error: %s",
+                        $media->getLocalPath(),
+                        $exception->getMessage()
+                    ),
+                    0,
+                    $exception
+                );
             }
         } else {
-            $ffmpegMedia = $this->ffmpeg->openAdvanced($mediaCollection->getLocalPaths());
+            try {
+                $ffmpegMedia = $this->ffmpeg->openAdvanced($mediaCollection->getLocalPaths());
 
-            $this->media = AdvancedMedia::make($ffmpegMedia)
-                ->setHeaders($mediaCollection->getHeaders());
+                $this->media = AdvancedMedia::make($ffmpegMedia)
+                    ->setHeaders($mediaCollection->getHeaders());
+            } catch (Exception $exception) {
+                throw new \RuntimeException(
+                    sprintf(
+                        "Failed to open advanced media: %s. Error: %s",
+                        implode(', ', $mediaCollection->getLocalPaths()),
+                        $exception->getMessage()
+                    ),
+                    0,
+                    $exception
+                );
+            }
         }
 
         return $this;

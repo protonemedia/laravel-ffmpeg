@@ -6,6 +6,8 @@ use FFMpeg\Format\Video\DefaultVideo;
 
 class ImageFormat extends DefaultVideo
 {
+    protected $duration = null;
+
     public function __construct()
     {
         $this->kiloBitrate = 0;
@@ -13,11 +15,26 @@ class ImageFormat extends DefaultVideo
     }
 
     /**
+     * Set the duration for image-to-video conversion.
+     *
+     * @param float $duration
+     * @return $this
+     */
+    public function setDuration(float $duration): self
+    {
+        if ($duration <= 0) {
+            throw new \InvalidArgumentException('Duration must be greater than 0.');
+        }
+        $this->duration = $duration;
+        return $this;
+    }
+
+    /**
      * Gets the kiloBitrate value.
      *
      * @return int
      */
-    public function getKiloBitrate()
+    public function getKiloBitrate(): int
     {
         return $this->kiloBitrate;
     }
@@ -32,7 +49,7 @@ class ImageFormat extends DefaultVideo
      *
      * @return int
      */
-    public function getModulus()
+    public function getModulus(): int
     {
         return 0;
     }
@@ -40,9 +57,9 @@ class ImageFormat extends DefaultVideo
     /**
      * Returns the video codec.
      *
-     * @return string
+     * @return string|null
      */
-    public function getVideoCodec()
+    public function getVideoCodec(): ?string
     {
         return null;
     }
@@ -54,7 +71,7 @@ class ImageFormat extends DefaultVideo
      *
      * @return bool
      */
-    public function supportBFrames()
+    public function supportBFrames(): bool
     {
         return false;
     }
@@ -64,7 +81,7 @@ class ImageFormat extends DefaultVideo
      *
      * @return array
      */
-    public function getAvailableVideoCodecs()
+    public function getAvailableVideoCodecs(): array
     {
         return [];
     }
@@ -74,9 +91,18 @@ class ImageFormat extends DefaultVideo
      *
      * @return array
      */
-    public function getAdditionalParameters()
+    public function getAdditionalParameters(): array
     {
-        return ['-f', 'image2'];
+        $parameters = ['-f', 'image2'];
+
+        if ($this->duration !== null) {
+            $parameters[] = '-loop';
+            $parameters[] = '1';
+            $parameters[] = '-t';
+            $parameters[] = $this->duration;
+        }
+
+        return $parameters;
     }
 
     /**
@@ -84,7 +110,7 @@ class ImageFormat extends DefaultVideo
      *
      * @return array
      */
-    public function getInitialParameters()
+    public function getInitialParameters(): array
     {
         return [];
     }
@@ -92,7 +118,7 @@ class ImageFormat extends DefaultVideo
     /**
      * {@inheritdoc}
      */
-    public function getExtraParams()
+    public function getExtraParams(): array
     {
         return [];
     }
@@ -100,7 +126,7 @@ class ImageFormat extends DefaultVideo
     /**
      * {@inheritDoc}
      */
-    public function getAvailableAudioCodecs()
+    public function getAvailableAudioCodecs(): array
     {
         return [];
     }

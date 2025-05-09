@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Closure;
+use FFMpeg\Exception\RuntimeException;
 use FFMpeg\Format\Audio\DefaultAudio;
 use FFMpeg\Format\AudioInterface;
 use FFMpeg\Format\FormatInterface;
@@ -17,7 +18,6 @@ class HLSExporter extends MediaExporter
     use EncryptsHLSSegments;
 
     public const HLS_KEY_INFO_FILENAME = 'hls_encryption.keyinfo';
-
     public const ENCRYPTION_LISTENER = 'listen-encryption-key';
 
     /**
@@ -46,12 +46,38 @@ class HLSExporter extends MediaExporter
     private $segmentFilenameGenerator = null;
 
     /**
+     * Enable x265 codec for HLS encoding.
+     *
+     * @return $this
+     */
+    public function useX265(): self
+    {
+        if ($this->format instanceof DefaultVideo) {
+            $this->format->setVideoCodec('libx265');
+        }
+        return $this;
+    }
+
+    /**
+     * Enable hardware acceleration with specified codec.
+     *
+     * @param string $codec e.g., 'h264_nvenc', 'hevc_nvenc'
+     * @return $this
+     */
+    public function withHardwareAcceleration(string $codec): self
+    {
+        if ($this->driver->isVideo()) {
+            $this->driver->get()->getVideoStream()->setVideoCodec($codec);
+        }
+        return $this;
+    }
+
+    /**
      * Setter for the segment length
      */
     public function setSegmentLength(int $length): self
     {
         $this->segmentLength = max(2, $length);
-
         return $this;
     }
 
@@ -61,7 +87,6 @@ class HLSExporter extends MediaExporter
     public function setKeyFrameInterval(int $interval): self
     {
         $this->keyFrameInterval = max(2, $interval);
-
         return $this;
     }
 
@@ -72,7 +97,6 @@ class HLSExporter extends MediaExporter
     public function withPlaylistGenerator(PlaylistGenerator $playlistGenerator): self
     {
         $this->playlistGenerator = $playlistGenerator;
-
         return $this;
     }
 
@@ -87,11 +111,9 @@ class HLSExporter extends MediaExporter
     public function withoutPlaylistEndLine(): self
     {
         $playlistGenerator = $this->getPlaylistGenerator();
-
         if ($playlistGenerator instanceof HLSPlaylistGenerator) {
             $playlistGenerator->withoutEndLine();
         }
-
         return $this;
     }
 
@@ -101,7 +123,6 @@ class HLSExporter extends MediaExporter
     public function useSegmentFilenameGenerator(Closure $callback): self
     {
         $this->segmentFilenameGenerator = $callback;
-
         return $this;
     }
 
@@ -185,7 +206,6 @@ class HLSExporter extends MediaExporter
         );
 
         $filterCount = $hlsVideoFilters->count();
-
         $outs = [$filterCount ? HLSVideoFilters::glue($formatKey, $filterCount) : '0:v'];
 
         if ($this->getAudioStream()) {
@@ -236,7 +256,6 @@ class HLSExporter extends MediaExporter
         }
 
         $media = $this->getDisk()->makeMedia($path);
-
         $baseName = $media->getDirectory().$media->getFilenameWithoutExtension();
 
         return $this->pendingFormats->map(function (array $formatAndCallback, $key) use ($baseName) {
@@ -249,7 +268,6 @@ class HLSExporter extends MediaExporter
             );
 
             $disk = $this->getDisk()->clone();
-
             $this->addHLSParametersToFormat($format, $segmentsPattern, $disk, $key);
 
             if ($filtersCallback) {
@@ -272,7 +290,6 @@ class HLSExporter extends MediaExporter
     public function getCommand(?string $path = null)
     {
         $this->prepareSaving($path);
-
         return parent::getCommand(null);
     }
 
@@ -285,7 +302,20 @@ class HLSExporter extends MediaExporter
     public function save(?string $mainPlaylistPath = null): MediaOpener
     {
         return $this->prepareSaving($mainPlaylistPath)->pipe(function ($segmentPlaylists) use ($mainPlaylistPath) {
-            $result = parent::save();
+            try {
+                $result = parent::save();
+            } catch (RuntimeException $exception) {
+                $errorOutput = $this->driver->getErrorOutput() ?? 'No error output available';
+                throw new RuntimeException(
+                    sprintf(
+                        "Failed to encode HLS playlist: %s. FFmpeg error output: %s",
+                        $exception->getMessage(),
+                        $errorOutput
+                    ),
+                    0,
+                    $exception
+                );
+            }
 
             $playlist = $this->getPlaylistGenerator()->get(
                 $segmentPlaylists->all(),
@@ -351,7 +381,6 @@ class HLSExporter extends MediaExporter
         }
 
         $this->pendingFormats->push([$format, $filtersCallback]);
-
         return $this;
     }
 }

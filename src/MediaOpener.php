@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use FFMpeg\Coordinate\TimeCode;
+use FFMpeg\Format\FormatInterface;
 use FFMpeg\Media\AbstractMediaType;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemManager;
@@ -62,6 +63,46 @@ class MediaOpener
         $this->collection = $mediaCollection ?: new MediaCollection;
     }
 
+    /**
+     * Enable x265 codec for video encoding.
+     *
+     * @return $this
+     * @throws \RuntimeException If no exporter is initialized
+     */
+    public function useX265(): self
+    {
+        $this->export()->useX265();
+        return $this;
+    }
+
+    /**
+     * Enable hardware acceleration with specified codec.
+     *
+     * @param string $codec e.g., 'h264_nvenc', 'hevc_nvenc'
+     * @return $this
+     * @throws \RuntimeException If no exporter is initialized
+     */
+    public function withHardwareAcceleration(string $codec): self
+    {
+        $this->export()->withHardwareAcceleration($codec);
+        return $this;
+    }
+
+    /**
+     * Convert an image to a video with specified duration.
+     *
+     * @param string $outputPath
+     * @param float $duration
+     * @param FormatInterface|null $format
+     * @return $this
+     * @throws \RuntimeException If no exporter is initialized
+     */
+    public function toVideoFromImage(string $outputPath, float $duration, ?FormatInterface $format = null): self
+    {
+        $this->export()->toVideoFromImage($outputPath, $duration, $format);
+        return $this;
+    }
+
     public function clone(): self
     {
         return new MediaOpener(
@@ -77,7 +118,6 @@ class MediaOpener
     public function fromDisk($disk): self
     {
         $this->disk = Disk::make($disk);
-
         return $this;
     }
 
@@ -106,7 +146,6 @@ class MediaOpener
         foreach (Arr::wrap($paths) as $path) {
             if ($path instanceof UploadedFile) {
                 $disk = static::makeLocalDiskFromPath($path->getPath());
-
                 $media = Media::make($disk, $path->getFilename());
             } else {
                 $media = Media::make($this->disk, $path);
@@ -179,7 +218,6 @@ class MediaOpener
     public function getFrameFromTimecode(TimeCode $timecode): self
     {
         $this->timecode = $timecode;
-
         return $this;
     }
 
@@ -216,7 +254,6 @@ class MediaOpener
     public function exportFramesByAmount(int $amount, ?int $width = null, ?int $height = null, ?int $quality = null): MediaExporter
     {
         $interval = ($this->getDurationInSeconds() + 1) / $amount;
-
         return $this->exportFramesByInterval($interval, $width, $height, $quality);
     }
 
@@ -234,7 +271,6 @@ class MediaOpener
     public function cleanupTemporaryFiles(): self
     {
         app(TemporaryDirectories::class)->deleteAll();
-
         return $this;
     }
 
@@ -257,13 +293,10 @@ class MediaOpener
 
     /**
      * Forwards all calls to the underlying driver.
-     *
-     * @return void
      */
     public function __call($method, $arguments)
     {
         $result = $this->forwardCallTo($driver = $this->getDriver(), $method, $arguments);
-
         return ($result === $driver) ? $this : $result;
     }
 }
