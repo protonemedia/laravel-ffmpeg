@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Filesystem;
 
 use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Support\Str;
 
 class Media
 {
@@ -26,9 +27,26 @@ class Media
     public function __construct(Disk $disk, string $path)
     {
         $this->disk = $disk;
-        $this->path = $path;
-
+        $this->path = $this->resolveTemporaryPath($path);
         $this->makeDirectory();
+    }
+
+    /**
+     * Resolve and validate temporary paths to prevent incorrect path generation.
+     *
+     * @param string $path
+     * @return string
+     */
+    private function resolveTemporaryPath(string $path): string
+    {
+        if (Str::startsWith($path, sys_get_temp_dir())) {
+            $resolvedPath = realpath($path);
+            if ($resolvedPath === false) {
+                throw new \InvalidArgumentException("Invalid temporary path: {$path}");
+            }
+            return $resolvedPath;
+        }
+        return $path;
     }
 
     public static function make($disk, string $path): self
@@ -116,7 +134,13 @@ class Media
         $temporaryDirectoryDisk = $this->temporaryDirectoryDisk();
 
         if ($disk->exists($path) && ! $temporaryDirectoryDisk->exists($path)) {
-            $temporaryDirectoryDisk->writeStream($path, $disk->readStream($path));
+            try {
+                $temporaryDirectoryDisk->writeStream($path, $disk->readStream($path));
+            } catch (\Exception $e) {
+                throw new \RuntimeException("Failed to copy file to temporary directory: {$e->getMessage()}");
+            }
+        } elseif (! $disk->exists($path)) {
+            throw new \InvalidArgumentException("File does not exist: {$path}");
         }
 
         return $temporaryDirectoryDisk->path($path);
@@ -129,28 +153,32 @@ class Media
         }
 
         $temporaryDirectoryDisk = $this->temporaryDirectoryDisk();
-
-        $destinationAdapater = $this->getDisk()->getFilesystemAdapter();
+        $destinationAdapter = $this->getDisk()->getFilesystemAdapter();
 
         foreach ($temporaryDirectoryDisk->allFiles() as $path) {
-            $destinationAdapater->writeStream($path, $temporaryDirectoryDisk->readStream($path));
+            try {
+                $destinationAdapter->writeStream($path, $temporaryDirectoryDisk->readStream($path));
 
-            if ($visibility) {
-                $destinationAdapater->setVisibility($path, $visibility);
+                if ($visibility) {
+                    $destinationAdapter->setVisibility($path, $visibility);
+                }
+            } catch (\Exception $e) {
+                throw new \RuntimeException("Failed to copy file {$path} from temporary directory: {$e->getMessage()}");
             }
         }
 
         return $this;
     }
 
-    public function setVisibility(string $path, ?string $visibility = null)
+    /**
+     * Set the visibility of the media file.
+     *
+     * @param string $visibility
+     * @return $this
+     */
+    public function setVisibility(string $visibility)
     {
-        $disk = $this->getDisk();
-
-        if ($visibility && $disk->isLocalDisk()) {
-            $disk->setVisibility($path, $visibility);
-        }
-
+        $this->getDisk()->setVisibility($this->getPath(), $visibility);
         return $this;
     }
 }
