@@ -28,62 +28,29 @@ class MediaOpener
 {
     use ForwardsCalls;
 
-    /**
-     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
-     */
-    private $disk;
+    private Disk $disk;
+    private PHPFFMpeg $driver;
+    private MediaCollection $collection;
+    private ?TimeCode $timecode = null;
 
-    /**
-     * @var \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
-     */
-    private $driver;
-
-    /**
-     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\MediaCollection
-     */
-    private $collection;
-
-    /**
-     * @var \FFMpeg\Coordinate\TimeCode
-     */
-    private $timecode;
-
-    /**
-     * Uses the 'filesystems.default' disk from the config if none is given.
-     * Gets the underlying PHPFFMpeg instance from the container if none is given.
-     * Instantiates a fresh MediaCollection if none is given.
-     */
     public function __construct($disk = null, ?PHPFFMpeg $driver = null, ?MediaCollection $mediaCollection = null)
     {
         $this->fromDisk($disk ?: config('filesystems.default'));
-
         $this->driver = ($driver ?: app(PHPFFMpeg::class))->fresh();
-
         $this->collection = $mediaCollection ?: new MediaCollection;
     }
 
-    public function clone(): self
+    public function cloneOpener(): self
     {
-        return new MediaOpener(
-            $this->disk,
-            $this->driver,
-            $this->collection
-        );
+        return new self($this->disk, $this->driver, $this->collection);
     }
 
-    /**
-     * Set the disk to open files from.
-     */
     public function fromDisk($disk): self
     {
         $this->disk = Disk::make($disk);
-
         return $this;
     }
 
-    /**
-     * Alias for 'fromDisk', mostly for backwards compatibility.
-     */
     public function fromFilesystem(Filesystem $filesystem): self
     {
         return $this->fromDisk($filesystem);
@@ -91,22 +58,15 @@ class MediaOpener
 
     private static function makeLocalDiskFromPath(string $path): Disk
     {
-        $adapter = (new FilesystemManager(app()))->createLocalDriver([
-            'root' => $path,
-        ]);
-
+        $adapter = (new FilesystemManager(app()))->createLocalDriver(['root' => $path]);
         return Disk::make($adapter);
     }
 
-    /**
-     * Instantiates a Media object for each given path.
-     */
     public function open($paths): self
     {
         foreach (Arr::wrap($paths) as $path) {
             if ($path instanceof UploadedFile) {
-                $disk = static::makeLocalDiskFromPath($path->getPath());
-
+                $disk = self::makeLocalDiskFromPath($path->getPath());
                 $media = Media::make($disk, $path->getFilename());
             } else {
                 $media = Media::make($this->disk, $path);
@@ -118,9 +78,6 @@ class MediaOpener
         return $this;
     }
 
-    /**
-     * Instantiates a single Media object and sets the given options on the object.
-     */
     public function openWithInputOptions(string $path, array $options = []): self
     {
         $this->collection->push(
@@ -130,9 +87,6 @@ class MediaOpener
         return $this;
     }
 
-    /**
-     * Instantiates a MediaOnNetwork object for each given url.
-     */
     public function openUrl($paths, array $headers = []): self
     {
         foreach (Arr::wrap($paths) as $path) {
@@ -152,25 +106,16 @@ class MediaOpener
         return $this->driver->open($this->collection);
     }
 
-    /**
-     * Forces the driver to open the collection with the `openAdvanced` method.
-     */
     public function getAdvancedDriver(): PHPFFMpeg
     {
         return $this->driver->openAdvanced($this->collection);
     }
 
-    /**
-     * Shortcut to set the timecode by string.
-     */
     public function getFrameFromString(string $timecode): self
     {
         return $this->getFrameFromTimecode(TimeCode::fromString($timecode));
     }
 
-    /**
-     * Shortcut to set the timecode by seconds.
-     */
     public function getFrameFromSeconds(float $seconds): self
     {
         return $this->getFrameFromTimecode(TimeCode::fromSeconds($seconds));
@@ -179,13 +124,9 @@ class MediaOpener
     public function getFrameFromTimecode(TimeCode $timecode): self
     {
         $this->timecode = $timecode;
-
         return $this;
     }
 
-    /**
-     * Returns an instance of MediaExporter with the driver and timecode (if set).
-     */
     public function export(): MediaExporter
     {
         return tap(new MediaExporter($this->getDriver()), function (MediaExporter $mediaExporter) {
@@ -195,17 +136,11 @@ class MediaOpener
         });
     }
 
-    /**
-     * Returns an instance of HLSExporter with the driver forced to AdvancedMedia.
-     */
     public function exportForHLS(): HLSExporter
     {
         return new HLSExporter($this->getAdvancedDriver());
     }
 
-    /**
-     * Returns an instance of MediaExporter with a TileFilter and ImageFormat.
-     */
     public function exportTile(callable $withTileFactory): MediaExporter
     {
         return $this->export()
@@ -216,54 +151,42 @@ class MediaOpener
     public function exportFramesByAmount(int $amount, ?int $width = null, ?int $height = null, ?int $quality = null): MediaExporter
     {
         $interval = ($this->getDurationInSeconds() + 1) / $amount;
-
         return $this->exportFramesByInterval($interval, $width, $height, $quality);
     }
 
     public function exportFramesByInterval(float $interval, ?int $width = null, ?int $height = null, ?int $quality = null): MediaExporter
     {
-        return $this->exportTile(
-            fn (TileFactory $tileFactory) => $tileFactory
-                ->interval($interval)
-                ->grid(1, 1)
-                ->scale($width, $height)
-                ->quality($quality)
+        return $this->exportTile(fn (TileFactory $tileFactory) =>
+            $tileFactory->interval($interval)
+                        ->grid(1, 1)
+                        ->scale($width, $height)
+                        ->quality($quality)
         );
     }
 
     public function cleanupTemporaryFiles(): self
     {
         app(TemporaryDirectories::class)->deleteAll();
-
         return $this;
     }
 
     public function each($items, callable $callback): self
     {
         Collection::make($items)->each(function ($item, $key) use ($callback) {
-            return $callback($this->clone(), $item, $key);
+            return $callback($this->cloneOpener(), $item, $key);
         });
 
         return $this;
     }
 
-    /**
-     * Returns the Media object from the driver.
-     */
     public function __invoke(): AbstractMediaType
     {
         return $this->getDriver()->get();
     }
 
-    /**
-     * Forwards all calls to the underlying driver.
-     *
-     * @return void
-     */
     public function __call($method, $arguments)
     {
         $result = $this->forwardCallTo($driver = $this->getDriver(), $method, $arguments);
-
         return ($result === $driver) ? $this : $result;
     }
 }

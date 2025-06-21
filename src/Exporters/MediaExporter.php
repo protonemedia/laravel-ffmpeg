@@ -27,38 +27,21 @@ class MediaExporter
     use HandlesTimelapse;
     use HasProgressListener;
 
-    /**
-     * @var \ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg
-     */
-    protected $driver;
+    protected PHPFFMpeg $driver;
+    private ?FormatInterface $format = null;
+    protected ?string $visibility = null;
+    private ?Disk $toDisk = null;
 
     /**
-     * @var \FFMpeg\Format\FormatInterface
-     */
-    private $format;
-
-    /**
-     * @var string
-     */
-    protected $visibility;
-
-    /**
-     * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
-     */
-    private $toDisk;
-
-    /**
-     * Callbacks that should be called directly after the
-     * underlying library completed the save method.
+     * Callbacks to execute after saving.
      *
-     * @var array
+     * @var array<callable>
      */
-    private $afterSavingCallbacks = [];
+    private array $afterSavingCallbacks = [];
 
     public function __construct(PHPFFMpeg $driver)
     {
         $this->driver = $driver;
-
         $this->maps = new Collection;
     }
 
@@ -68,38 +51,32 @@ class MediaExporter
             return $this->toDisk;
         }
 
-        $media = $this->driver->getMediaCollection();
-
         /** @var Disk $disk */
-        $disk = $media->first()->getDisk();
+        $disk = $this->driver->getMediaCollection()->first()->getDisk();
 
-        return $this->toDisk = $disk->clone();
+        return $this->toDisk = $disk->cloneDisk(); // updated to match Disk.php changes
     }
 
     public function inFormat(FormatInterface $format): self
     {
         $this->format = $format;
-
         return $this;
     }
 
-    public function toDisk($disk)
+    public function toDisk($disk): self
     {
         $this->toDisk = Disk::make($disk);
-
         return $this;
     }
 
-    public function withVisibility(string $visibility)
+    public function withVisibility(string $visibility): self
     {
         $this->visibility = $visibility;
-
         return $this;
     }
 
     /**
-     * Calls the callable with a TileFactory instance and
-     * adds the freshly generated TileFilter.
+     * Add tile filter and generate VTT thumbnails.
      */
     public function addTileFilter(callable $withTileFactory): self
     {
@@ -109,7 +86,7 @@ class MediaExporter
 
         $this->addFilter($filter = $tileFactory->get());
 
-        if (! $tileFactory->vttOutputPath) {
+        if (!$tileFactory->vttOutputPath) {
             return $this;
         }
 
@@ -117,7 +94,7 @@ class MediaExporter
             $generator = new VTTPreviewThumbnailsGenerator(
                 $filter,
                 $mediaExporter->driver->getDurationInSeconds(),
-                $tileFactory->vttSequnceFilename ?: fn () => $outputMedia->getPath()
+                $tileFactory->vttSequenceFilename ?: fn () => $outputMedia->getPath() // fixed typo
             );
 
             $this->toDisk->put($tileFactory->vttOutputPath, $generator->getContents());
@@ -125,9 +102,7 @@ class MediaExporter
     }
 
     /**
-     * Returns the final command, useful for debugging purposes.
-     *
-     * @return mixed
+     * Get the final FFMpeg command string.
      */
     public function getCommand(?string $path = null)
     {
@@ -139,23 +114,14 @@ class MediaExporter
         );
     }
 
-    /**
-     * Dump the final command and end the script.
-     *
-     * @return void
-     */
-    public function dd(?string $path = null)
+    public function dd(?string $path = null): void
     {
         dd($this->getCommand($path));
     }
 
-    /**
-     * Adds a callable to the callbacks array.
-     */
     public function afterSaving(callable $callback): self
     {
         $this->afterSavingCallbacks[] = $callback;
-
         return $this;
     }
 
@@ -169,9 +135,7 @@ class MediaExporter
 
         if ($this->maps->isNotEmpty()) {
             $this->driver->getPendingComplexFilters()->each->apply($this->driver, $this->maps);
-
             $this->maps->map->apply($this->driver->get());
-
             return $outputMedia;
         }
 
@@ -186,11 +150,10 @@ class MediaExporter
         return $outputMedia;
     }
 
-    protected function runAfterSavingCallbacks(?Media $outputMedia = null)
+    protected function runAfterSavingCallbacks(?Media $outputMedia = null): void
     {
         foreach ($this->afterSavingCallbacks as $key => $callback) {
             call_user_func($callback, $this, $outputMedia);
-
             unset($this->afterSavingCallbacks[$key]);
         }
     }
@@ -217,7 +180,6 @@ class MediaExporter
 
                 if ($this->returnFrameContents) {
                     $this->runAfterSavingCallbacks($outputMedia);
-
                     return $data;
                 }
             } else {
@@ -283,14 +245,9 @@ class MediaExporter
         );
     }
 
-    /**
-     * Forwards the call to the driver object and returns the result
-     * if it's something different than the driver object itself.
-     */
     public function __call($method, $arguments)
     {
         $result = $this->forwardCallTo($driver = $this->driver, $method, $arguments);
-
         return ($result === $driver) ? $this : $result;
     }
 }

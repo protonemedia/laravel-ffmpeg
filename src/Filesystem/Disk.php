@@ -23,12 +23,12 @@ class Disk
     private $disk;
 
     /**
-     * @var string
+     * @var string|null
      */
     private $temporaryDirectory;
 
     /**
-     * @var \Illuminate\Filesystem\FilesystemAdapter
+     * @var \Illuminate\Filesystem\FilesystemAdapter|null
      */
     private $filesystemAdapter;
 
@@ -61,7 +61,7 @@ class Disk
     /**
      * Creates a fresh instance, mostly used to force a new TemporaryDirectory.
      */
-    public function clone(): self
+    public function cloneDisk(): self
     {
         return new Disk($this->disk);
     }
@@ -79,6 +79,9 @@ class Disk
         return $this->temporaryDirectory = app(TemporaryDirectories::class)->create();
     }
 
+    /**
+     * Creates a Media instance for the given path.
+     */
     public function makeMedia(string $path): Media
     {
         return Media::make($this, $path);
@@ -94,9 +97,12 @@ class Disk
             return $this->disk;
         }
 
-        return get_class($this->getFlysystemAdapter()).'_'.md5(spl_object_id($this->getFlysystemAdapter()));
+        return get_class($this->getFlysystemAdapter()) . '_' . md5(spl_object_id($this->getFlysystemAdapter()));
     }
 
+    /**
+     * Returns the Laravel FilesystemAdapter, initializing if not already set.
+     */
     public function getFilesystemAdapter(): FilesystemAdapter
     {
         if ($this->filesystemAdapter) {
@@ -110,16 +116,25 @@ class Disk
         return $this->filesystemAdapter = Storage::disk($this->disk);
     }
 
+    /**
+     * Returns the underlying Flysystem driver.
+     */
     private function getFlysystemDriver(): LeagueFilesystem
     {
         return $this->getFilesystemAdapter()->getDriver();
     }
 
+    /**
+     * Returns the Flysystem adapter (e.g., Local, S3).
+     */
     private function getFlysystemAdapter(): FlysystemFilesystemAdapter
     {
         return $this->getFilesystemAdapter()->getAdapter();
     }
 
+    /**
+     * Returns true if the disk is using a LocalFilesystemAdapter.
+     */
     public function isLocalDisk(): bool
     {
         return $this->getFlysystemAdapter() instanceof LocalFilesystemAdapter;
@@ -144,8 +159,24 @@ class Disk
     }
 
     /**
+     * Check if the file exists on the disk.
+     */
+    public function fileExists(string $path): bool
+    {
+        return $this->getFilesystemAdapter()->exists($path);
+    }
+
+    /**
+     * Deletes the file if it exists.
+     */
+    public function deleteIfExists(string $path): bool
+    {
+        return $this->fileExists($path) ? $this->getFilesystemAdapter()->delete($path) : false;
+    }
+
+    /**
      * Forwards all calls to Laravel's FilesystemAdapter which will pass
-     * dynamic methods call onto Flysystem.
+     * dynamic method calls onto Flysystem.
      */
     public function __call($method, $parameters)
     {
