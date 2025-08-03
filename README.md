@@ -25,8 +25,9 @@ This package provides an integration with FFmpeg for Laravel 10. [Laravel's File
 * Built-in support for watermarks (positioning and manipulation).
 * Built-in support for creating a mosaic/sprite/tile from a video.
 * Built-in support for generating *VTT Preview Thumbnail* files.
+* **Laravel Event System integration** for real-time progress monitoring and workflow automation.
 * Requires PHP 8.1 or higher.
-* Tested with FFmpeg 4.4 and 5.0.
+* Tested with FFmpeg 4.4, 5.0, and 7.x.
 
 ## Installation
 
@@ -120,6 +121,94 @@ FFMpeg::open('steve_howe.mp4')
     ->onProgress(function ($percentage, $remaining, $rate) {
         echo "{$remaining} seconds left at rate: {$rate}";
     });
+```
+
+### Laravel Events
+
+The package fires Laravel events during media processing, enabling you to build reactive workflows and real-time progress monitoring. You can listen for these events to trigger notifications, update databases, or integrate with WebSocket broadcasting.
+
+#### Available Events
+
+- **`MediaProcessingStarted`** - Fired when encoding begins
+- **`MediaProcessingProgress`** - Fired during encoding with real-time progress updates  
+- **`MediaProcessingCompleted`** - Fired when encoding completes successfully
+- **`MediaProcessingFailed`** - Fired when encoding encounters an error
+
+#### Event Properties
+
+Each event contains:
+- `inputMedia` - Collection of input media files
+- `outputPath` - The target output file path (when available)
+- `metadata` - Additional processing context
+
+Progress events additionally include:
+- `percentage` - Completion percentage (0-100)
+- `remainingSeconds` - Estimated time remaining
+- `rate` - Processing rate
+
+#### Listening for Events
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Events\MediaProcessingCompleted;
+use ProtoneMedia\LaravelFFMpeg\Events\MediaProcessingProgress;
+
+// Listen for completion to send notifications
+Event::listen(MediaProcessingCompleted::class, function ($event) {
+    // Notify user that their video is ready
+    $user->notify(new VideoReadyNotification($event->outputPath));
+    
+    // Update database status
+    Video::where('path', $event->inputMedia->first()->getPath())
+          ->update(['status' => 'completed']);
+});
+
+// Real-time progress for WebSocket updates
+Event::listen(MediaProcessingProgress::class, function ($event) {
+    broadcast(new EncodingProgressUpdate([
+        'percentage' => $event->percentage,
+        'remaining' => $event->remainingSeconds,
+        'rate' => $event->rate
+    ]));
+});
+```
+
+#### Event Listeners
+
+You can create dedicated event listeners:
+
+```php
+php artisan make:listener ProcessVideoCompleted --event=MediaProcessingCompleted
+```
+
+```php
+class ProcessVideoCompleted
+{
+    public function handle(MediaProcessingCompleted $event): void
+    {
+        // Send email notification
+        Mail::to($event->user)->send(new VideoProcessedMail($event->outputPath));
+        
+        // Generate thumbnail
+        FFMpeg::open($event->outputPath)
+              ->getFrameFromSeconds(1)
+              ->export()->save('thumbnail.jpg');
+    }
+}
+```
+
+#### Configuration
+
+Events are enabled by default. You can disable them in your configuration:
+
+```php
+// config/laravel-ffmpeg.php
+'enable_events' => env('FFMPEG_ENABLE_EVENTS', false),
+```
+
+Or via environment variable:
+
+```bash
+FFMPEG_ENABLE_EVENTS=false
 ```
 
 ### Opening uploaded files

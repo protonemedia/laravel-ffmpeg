@@ -285,6 +285,7 @@ class HLSExporter extends MediaExporter
     public function save(?string $mainPlaylistPath = null): MediaOpener
     {
         return $this->prepareSaving($mainPlaylistPath)->pipe(function ($segmentPlaylists) use ($mainPlaylistPath) {
+            $this->outputPath = $mainPlaylistPath;
             $result = parent::save();
 
             $playlist = $this->getPlaylistGenerator()->get(

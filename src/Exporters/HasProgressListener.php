@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Exporters;
 
 use Closure;
 use Evenement\EventEmitterInterface;
+use ProtoneMedia\LaravelFFMpeg\Events\MediaProcessingProgress;
 
 trait HasProgressListener
 {
@@ -47,7 +48,19 @@ trait HasProgressListener
                 $this->lastPercentage = $percentage;
                 $this->lastRemaining = $remaining ?: $this->lastRemaining;
 
-                call_user_func($this->onProgressCallback, $this->lastPercentage, $this->lastRemaining, $rate);
+                if ($this->onProgressCallback) {
+                    call_user_func($this->onProgressCallback, $this->lastPercentage, $this->lastRemaining, $rate);
+                }
+
+                if (config('laravel-ffmpeg.enable_events', true)) {
+                    MediaProcessingProgress::dispatch(
+                        $this->driver->getMediaCollection(),
+                        $this->lastPercentage,
+                        $this->lastRemaining,
+                        $rate,
+                        $this->getOutputPath()
+                    );
+                }
             }
         });
     }
