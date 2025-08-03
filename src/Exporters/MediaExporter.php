@@ -11,6 +11,9 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\NullFormat;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Disk;
 use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
+use ProtoneMedia\LaravelFFMpeg\Events\MediaProcessingCompleted;
+use ProtoneMedia\LaravelFFMpeg\Events\MediaProcessingFailed;
+use ProtoneMedia\LaravelFFMpeg\Events\MediaProcessingStarted;
 use ProtoneMedia\LaravelFFMpeg\Filters\TileFactory;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 use ProtoneMedia\LaravelFFMpeg\Support\ProcessOutput;
@@ -46,6 +49,11 @@ class MediaExporter
      * @var \ProtoneMedia\LaravelFFMpeg\Filesystem\Disk
      */
     private $toDisk;
+
+    /**
+     * @var string|null
+     */
+    private $outputPath;
 
     /**
      * Callbacks that should be called directly after the
@@ -159,6 +167,11 @@ class MediaExporter
         return $this;
     }
 
+    protected function getOutputPath(): ?string
+    {
+        return $this->outputPath;
+    }
+
     private function prepareSaving(?string $path = null): ?Media
     {
         $outputMedia = $path ? $this->getDisk()->makeMedia($path) : null;
@@ -197,7 +210,15 @@ class MediaExporter
 
     public function save(?string $path = null)
     {
+        $this->outputPath = $path;
         $outputMedia = $this->prepareSaving($path);
+
+        if (config('laravel-ffmpeg.enable_events', true)) {
+            MediaProcessingStarted::dispatch(
+                $this->driver->getMediaCollection(),
+                $this->outputPath
+            );
+        }
 
         $this->driver->applyBeforeSavingCallbacks();
 
@@ -218,6 +239,13 @@ class MediaExporter
                 if ($this->returnFrameContents) {
                     $this->runAfterSavingCallbacks($outputMedia);
 
+                    if (config('laravel-ffmpeg.enable_events', true)) {
+                        MediaProcessingCompleted::dispatch(
+                            $this->driver->getMediaCollection(),
+                            $this->outputPath
+                        );
+                    }
+
                     return $data;
                 }
             } else {
@@ -227,6 +255,14 @@ class MediaExporter
                 );
             }
         } catch (RuntimeException $exception) {
+            if (config('laravel-ffmpeg.enable_events', true)) {
+                MediaProcessingFailed::dispatch(
+                    $this->driver->getMediaCollection(),
+                    $exception,
+                    $this->outputPath
+                );
+            }
+
             throw EncodingException::decorate($exception);
         }
 
@@ -240,6 +276,13 @@ class MediaExporter
         }
 
         $this->runAfterSavingCallbacks($outputMedia);
+
+        if (config('laravel-ffmpeg.enable_events', true)) {
+            MediaProcessingCompleted::dispatch(
+                $this->driver->getMediaCollection(),
+                $this->outputPath
+            );
+        }
 
         return $this->getMediaOpener();
     }
@@ -262,6 +305,14 @@ class MediaExporter
         try {
             $this->driver->save();
         } catch (RuntimeException $exception) {
+            if (config('laravel-ffmpeg.enable_events', true)) {
+                MediaProcessingFailed::dispatch(
+                    $this->driver->getMediaCollection(),
+                    $exception,
+                    $this->outputPath
+                );
+            }
+
             throw EncodingException::decorate($exception);
         }
 
@@ -270,6 +321,13 @@ class MediaExporter
         }
 
         $this->maps->map->getOutputMedia()->each->copyAllFromTemporaryDirectory($this->visibility);
+
+        if (config('laravel-ffmpeg.enable_events', true)) {
+            MediaProcessingCompleted::dispatch(
+                $this->driver->getMediaCollection(),
+                $this->outputPath
+            );
+        }
 
         return $this->getMediaOpener();
     }
