@@ -11,7 +11,7 @@ class EncryptedHlsExportTest extends TestCase
 {
     public static function keyLinePattern($key = null)
     {
-        return '#EXT-X-KEY:METHOD=AES-128,URI="' . ($key ?: '[~a-zA-Z0-9-_\/:]+.key') . '",IV=[a-z0-9]+';
+        return '#EXT-X-KEY:METHOD=AES-128,URI="'.($key ?: '[~a-zA-Z0-9-_\/:]+.key').'",IV=[a-z0-9]+';
     }
 
     /**
@@ -21,7 +21,7 @@ class EncryptedHlsExportTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $lowBitrate  = $this->x264()->setKiloBitrate(250);
+        $lowBitrate = $this->x264()->setKiloBitrate(250);
         $highBitrate = $this->x264()->setKiloBitrate(500);
 
         FFMpeg::open('video.mp4')
@@ -29,7 +29,7 @@ class EncryptedHlsExportTest extends TestCase
             ->withEncryptionKey(HLSExporter::generateEncryptionKey())
             ->addFormat($lowBitrate)
             ->addFormat($highBitrate)
-            ->addListener($listener = new StdListener())
+            ->addListener($listener = new StdListener)
             ->save('adaptive.m3u8');
 
         $this->assertTrue(Storage::disk('local')->has('adaptive.m3u8'));
@@ -72,7 +72,7 @@ class EncryptedHlsExportTest extends TestCase
         foreach (range(1, 3) as $i) {
             FFMpeg::open('video.mp4')
                 ->exportForHLS()
-                ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys, $i) {
+                ->withRotatingEncryptionKey(function ($filename, $contents) use (&$keys) {
                     $keys[] = $filename;
                 })
                 ->addFormat($lowBitrate)
@@ -95,7 +95,7 @@ class EncryptedHlsExportTest extends TestCase
 
         $lowBitrate = $this->x264()->setKiloBitrate(250);
 
-        $keys     = [];
+        $keys = [];
         $listener = null;
 
         FFMpeg::open('video.mp4')
@@ -117,6 +117,6 @@ class EncryptedHlsExportTest extends TestCase
 
         $playlist = Storage::disk('local')->get('adaptive_0_250.m3u8');
 
-        $this->assertMatchesRegularExpression(static::keyLinePattern() . '#', $playlist);
+        $this->assertMatchesRegularExpression(static::keyLinePattern().'#', $playlist);
     }
 }

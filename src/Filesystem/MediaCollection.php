@@ -52,8 +52,6 @@ class MediaCollection
 
     /**
      * Count the number of items in the collection.
-     *
-     * @return int
      */
     public function count(): int
     {

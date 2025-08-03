@@ -28,9 +28,6 @@ trait InteractsWithHttpHeaders
     /**
      * Maps the headers into a key-value string for FFmpeg. Returns
      * an array of arguments to pass into the command.
-     *
-     * @param array $headers
-     * @return array
      */
     public static function compileHeaders(array $headers = []): array
     {
@@ -40,7 +37,7 @@ trait InteractsWithHttpHeaders
 
         $headers = Collection::make($headers)->map(function ($value, $key) {
             return "{$key}: {$value}";
-        })->filter()->push("")->implode("\r\n");
+        })->filter()->push('')->implode("\r\n");
 
         return ['-headers', $headers];
     }

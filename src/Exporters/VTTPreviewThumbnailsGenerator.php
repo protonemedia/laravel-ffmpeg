@@ -9,21 +9,20 @@ use ProtoneMedia\LaravelFFMpeg\Filters\TileFilter;
 class VTTPreviewThumbnailsGenerator
 {
     private TileFilter $tileFilter;
+
     private int $durationInSeconds;
+
     private Closure $sequenceFilenameResolver;
 
     public function __construct(TileFilter $tileFilter, int $durationInSeconds, Closure $sequenceFilenameResolver)
     {
-        $this->tileFilter               = $tileFilter;
-        $this->durationInSeconds        = $durationInSeconds;
+        $this->tileFilter = $tileFilter;
+        $this->durationInSeconds = $durationInSeconds;
         $this->sequenceFilenameResolver = $sequenceFilenameResolver;
     }
 
     /**
      * Returns the x,y,w,h position of the given thumb key.
-     *
-     * @param integer $thumbKey
-     * @return string
      */
     private function getPositionOnTile(int $thumbKey): string
     {
@@ -33,12 +32,12 @@ class VTTPreviewThumbnailsGenerator
 
         $dimension = $this->tileFilter->getCalculatedDimension();
 
-        $width  = $dimension->getWidth();
+        $width = $dimension->getWidth();
         $height = $dimension->getHeight();
 
         // base position
         $x = $column * $width;
-        $y = $row    * $height;
+        $y = $row * $height;
 
         // add margin
         $x += $this->tileFilter->margin;
@@ -53,9 +52,6 @@ class VTTPreviewThumbnailsGenerator
 
     /**
      * Returns the formatted timestamp of the given thumb key.
-     *
-     * @param integer $thumbKey
-     * @return string
      */
     private function getTimestamp(int $thumbKey): string
     {
@@ -63,14 +59,12 @@ class VTTPreviewThumbnailsGenerator
             '%02d:%02d:%02d.000',
             ($thumbKey * $this->tileFilter->interval) / 3600,
             ($thumbKey * $this->tileFilter->interval) / 60 % 60,
-            ($thumbKey * $this->tileFilter->interval)      % 60
+            ($thumbKey * $this->tileFilter->interval) % 60
         );
     }
 
     /**
      * Generates the WebVTT contents.
-     *
-     * @return string
      */
     public function getContents(): string
     {
@@ -83,7 +77,7 @@ class VTTPreviewThumbnailsGenerator
         return Collection::range(1, $totalFiles * $thumbsPerTile)
             ->map(function ($thumb) use ($thumbsPerTile) {
                 $start = $this->getTimestamp($thumb - 1, $this->tileFilter->interval);
-                $end   = $this->getTimestamp($thumb, $this->tileFilter->interval);
+                $end = $this->getTimestamp($thumb, $this->tileFilter->interval);
 
                 $fileKey = ceil($thumb / $thumbsPerTile);
 
@@ -93,14 +87,14 @@ class VTTPreviewThumbnailsGenerator
                 );
 
                 $positionOnTile = ($thumb - 1) % $thumbsPerTile;
-                $position       = $this->getPositionOnTile($positionOnTile);
+                $position = $this->getPositionOnTile($positionOnTile);
 
                 return implode(PHP_EOL, [
                     "{$start} --> {$end}",
                     "{$filename}#xywh={$position}",
                 ]);
             })
-            ->prepend("WEBVTT")
-            ->implode(PHP_EOL . PHP_EOL);
+            ->prepend('WEBVTT')
+            ->implode(PHP_EOL.PHP_EOL);
     }
 }

@@ -22,9 +22,6 @@ class FFProbe extends FFMpegFFProbe
 
     /**
      * Create a new instance of this class with the instance of the underlying library.
-     *
-     * @param \FFMpeg\FFProbe $probe
-     * @return self
      */
     public static function make(FFMpegFFProbe $probe): self
     {
@@ -37,7 +34,7 @@ class FFProbe extends FFMpegFFProbe
 
     private function shouldUseCustomProbe($pathfile): bool
     {
-        if (!$this->media) {
+        if (! $this->media) {
             return false;
         }
 
@@ -49,7 +46,7 @@ class FFProbe extends FFMpegFFProbe
             return false;
         }
 
-        if (!$this->getOptionsTester()->has('-show_streams')) {
+        if (! $this->getOptionsTester()->has('-show_streams')) {
             throw new RuntimeException('This version of ffprobe is too old and does not support `-show_streams` option, please upgrade');
         }
 
@@ -59,14 +56,15 @@ class FFProbe extends FFMpegFFProbe
     /**
      * Probes the streams contained in a given file.
      *
-     * @param string $pathfile
+     * @param  string  $pathfile
      * @return \FFMpeg\FFProbe\DataMapping\StreamCollection
+     *
      * @throws \FFMpeg\Exception\InvalidArgumentException
      * @throws \FFMpeg\Exception\RuntimeException
      */
     public function streams($pathfile)
     {
-        if (!$this->shouldUseCustomProbe($pathfile)) {
+        if (! $this->shouldUseCustomProbe($pathfile)) {
             return parent::streams($pathfile);
         }
 
@@ -76,14 +74,15 @@ class FFProbe extends FFMpegFFProbe
     /**
      * Probes the format of a given file.
      *
-     * @param string $pathfile
+     * @param  string  $pathfile
      * @return \FFMpeg\FFProbe\DataMapping\Format A Format object
+     *
      * @throws \FFMpeg\Exception\InvalidArgumentException
      * @throws \FFMpeg\Exception\RuntimeException
      */
     public function format($pathfile)
     {
-        if (!$this->shouldUseCustomProbe($pathfile)) {
+        if (! $this->shouldUseCustomProbe($pathfile)) {
             return parent::format($pathfile);
         }
 
@@ -127,7 +126,7 @@ class FFProbe extends FFMpegFFProbe
             try {
                 $data = @json_decode($output, true);
 
-                if (JSON_ERROR_NONE !== json_last_error()) {
+                if (json_last_error() !== JSON_ERROR_NONE) {
                     throw new RuntimeException(sprintf('Unable to parse json %s', $output));
                 }
             } catch (RuntimeException $e) {

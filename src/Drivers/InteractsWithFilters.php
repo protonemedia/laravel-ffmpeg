@@ -22,8 +22,6 @@ trait InteractsWithFilters
 
     /**
      * Returns an array with the filters applied to the underlying media object.
-     *
-     * @return array
      */
     public function getFilters(): array
     {
@@ -33,8 +31,6 @@ trait InteractsWithFilters
     /**
      * Helper method to provide multiple ways to add a filter to the underlying
      * media object.
-     *
-     * @return self
      */
     public function addFilter(): self
     {
@@ -77,14 +73,11 @@ trait InteractsWithFilters
     /**
      * Calls the callable with a WatermarkFactory instance and
      * adds the freshly generated WatermarkFilter.
-     *
-     * @param callable $withWatermarkFactory
-     * @return self
      */
     public function addWatermark(callable $withWatermarkFactory): self
     {
         $withWatermarkFactory(
-            $watermarkFactory = new WatermarkFactory()
+            $watermarkFactory = new WatermarkFactory
         );
 
         return $this->addFilter($watermarkFactory->get());
@@ -93,11 +86,10 @@ trait InteractsWithFilters
     /**
      * Shortcut for adding a Resize filter.
      *
-     * @param int $width
-     * @param int $height
-     * @param string $mode
-     * @param boolean $forceStandards
-     * @return self
+     * @param  int  $width
+     * @param  int  $height
+     * @param  string  $mode
+     * @param  bool  $forceStandards
      */
     public function resize($width, $height, $mode = ResizeFilter::RESIZEMODE_FIT, $forceStandards = true): self
     {
@@ -126,8 +118,6 @@ trait InteractsWithFilters
 
     /**
      * Getter for the pending complex filters.
-     *
-     * @return \Illuminate\Support\Collection
      */
     public function getPendingComplexFilters(): Collection
     {

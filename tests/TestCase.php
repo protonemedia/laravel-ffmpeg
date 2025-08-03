@@ -42,7 +42,7 @@ abstract class TestCase extends BaseTestCase
         ]));
 
         Storage::extend('memory', function ($app, $config) {
-            $adapter = new InMemoryFilesystemAdapter();
+            $adapter = new InMemoryFilesystemAdapter;
 
             return new FilesystemAdapter(
                 new Filesystem($adapter, $config),
@@ -86,6 +86,12 @@ abstract class TestCase extends BaseTestCase
         $this->addTestFile('video.mp4');
     }
 
+    protected function fakeLocalWebmFile()
+    {
+        $this->fakeLocalDisk();
+        $this->addTestFile('video.webm');
+    }
+
     protected function fakeLocalLogoFile()
     {
         $this->fakeLocalDisk();
@@ -94,22 +100,22 @@ abstract class TestCase extends BaseTestCase
 
     protected function addTestFile($file, $disk = 'local')
     {
-        Storage::disk($disk)->put($file, file_get_contents(__DIR__ . "/src/{$file}"));
+        Storage::disk($disk)->put($file, file_get_contents(__DIR__."/src/{$file}"));
     }
 
     protected function fakeLocalImageFiles()
     {
         $disk = $this->fakeLocalDisk();
 
-        $disk->put('feature_0001.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
-        $disk->put('feature_0002.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
-        $disk->put('feature_0003.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
-        $disk->put('feature_0004.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
-        $disk->put('feature_0005.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
-        $disk->put('feature_0006.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
-        $disk->put('feature_0007.png', file_get_contents(__DIR__ . '/src/feature_0001.png'));
-        $disk->put('feature_0008.png', file_get_contents(__DIR__ . '/src/feature_0002.png'));
-        $disk->put('feature_0009.png', file_get_contents(__DIR__ . '/src/feature_0003.png'));
+        $disk->put('feature_0001.png', file_get_contents(__DIR__.'/src/feature_0001.png'));
+        $disk->put('feature_0002.png', file_get_contents(__DIR__.'/src/feature_0002.png'));
+        $disk->put('feature_0003.png', file_get_contents(__DIR__.'/src/feature_0003.png'));
+        $disk->put('feature_0004.png', file_get_contents(__DIR__.'/src/feature_0001.png'));
+        $disk->put('feature_0005.png', file_get_contents(__DIR__.'/src/feature_0002.png'));
+        $disk->put('feature_0006.png', file_get_contents(__DIR__.'/src/feature_0003.png'));
+        $disk->put('feature_0007.png', file_get_contents(__DIR__.'/src/feature_0001.png'));
+        $disk->put('feature_0008.png', file_get_contents(__DIR__.'/src/feature_0002.png'));
+        $disk->put('feature_0009.png', file_get_contents(__DIR__.'/src/feature_0003.png'));
     }
 
     protected function fakeLocalVideoFiles()
@@ -124,18 +130,18 @@ abstract class TestCase extends BaseTestCase
         $this->addTestFile('video3.mp4');
     }
 
-    protected function assertPlaylistPattern(string $playlist, array $patternLines, StdListener $listener = null): self
+    protected function assertPlaylistPattern(string $playlist, array $patternLines, ?StdListener $listener = null): self
     {
         $playlist = preg_replace('/\n|\r\n?/', "\n", $playlist);
 
-        $pattern = '/' . implode("\n", $patternLines) . '/';
+        $pattern = '/'.implode("\n", $patternLines).'/';
 
         $assertMethod = method_exists($this, 'assertMatchesRegularExpression')
             ? 'assertMatchesRegularExpression'
             : 'assertRegExp';
 
-        $this->{$assertMethod}($pattern, $playlist, implode(PHP_EOL . PHP_EOL, [
-            "Playlist does not match pattern",
+        $this->{$assertMethod}($pattern, $playlist, implode(PHP_EOL.PHP_EOL, [
+            'Playlist does not match pattern',
             $listener ? implode(PHP_EOL, $listener->get()->all()) : null,
         ]));
 

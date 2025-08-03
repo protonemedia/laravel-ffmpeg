@@ -14,7 +14,7 @@ class DynamicHLSPlaylistTest extends TestCase
     {
         $this->fakeLocalVideoFile();
 
-        $lowBitrate  = $this->x264()->setKiloBitrate(250);
+        $lowBitrate = $this->x264()->setKiloBitrate(250);
         $highBitrate = $this->x264()->setKiloBitrate(500);
 
         FFMpeg::open('video.mp4')

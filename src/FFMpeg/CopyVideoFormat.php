@@ -11,7 +11,7 @@ class CopyVideoFormat extends DefaultVideo
         $this->audioCodec = 'copy';
         $this->videoCodec = 'copy';
 
-        $this->kiloBitrate      = 0;
+        $this->kiloBitrate = 0;
         $this->audioKiloBitrate = null;
     }
 

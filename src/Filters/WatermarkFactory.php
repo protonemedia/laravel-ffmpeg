@@ -17,10 +17,14 @@ class WatermarkFactory
     use ForwardsCalls;
 
     /** position constants */
-    public const LEFT   = 'left';
-    public const RIGHT  = 'right';
+    public const LEFT = 'left';
+
+    public const RIGHT = 'right';
+
     public const CENTER = 'center';
-    public const TOP    = 'top';
+
+    public const TOP = 'top';
+
     public const BOTTOM = 'bottom';
 
     /**
@@ -37,8 +41,11 @@ class WatermarkFactory
      * Offset values.
      */
     private $top;
+
     private $right;
+
     private $bottom;
+
     private $left;
 
     /**
@@ -84,13 +91,8 @@ class WatermarkFactory
     /**
      * Instantiates a MediaOnNetwork object for the given url and transforms
      * it into a Media object.
-     *
-     * @param string $path
-     * @param array $headers
-     * @param callable $withCurl
-     * @return self
      */
-    public function openUrl(string $path, array $headers = [], callable $withCurl = null): self
+    public function openUrl(string $path, array $headers = [], ?callable $withCurl = null): self
     {
         $this->media = MediaOnNetwork::make($path, $headers)->toMedia($withCurl);
 
@@ -100,12 +102,11 @@ class WatermarkFactory
     /**
      * Sets the offset from to top.
      *
-     * @param integer $offset
-     * @return self
+     * @param  int  $offset
      */
     public function top($offset = 0): self
     {
-        $this->top    = $offset;
+        $this->top = $offset;
         $this->bottom = null;
 
         return $this;
@@ -114,13 +115,12 @@ class WatermarkFactory
     /**
      * Sets the offset from the right.
      *
-     * @param integer $offset
-     * @return self
+     * @param  int  $offset
      */
     public function right($offset = 0): self
     {
         $this->right = $offset;
-        $this->left  = null;
+        $this->left = null;
 
         return $this;
     }
@@ -128,13 +128,12 @@ class WatermarkFactory
     /**
      * Sets the offset from the bottom.
      *
-     * @param integer $offset
-     * @return self
+     * @param  int  $offset
      */
     public function bottom($offset = 0): self
     {
         $this->bottom = $offset;
-        $this->top    = null;
+        $this->top = null;
 
         return $this;
     }
@@ -142,12 +141,11 @@ class WatermarkFactory
     /**
      * Sets the offset from the left.
      *
-     * @param integer $offset
-     * @return self
+     * @param  int  $offset
      */
     public function left($offset = 0): self
     {
-        $this->left  = $offset;
+        $this->left = $offset;
         $this->right = null;
 
         return $this;
@@ -156,9 +154,7 @@ class WatermarkFactory
     /**
      * Setter for the horizontal alignment with an optional offset.
      *
-     * @param string $alignment
-     * @param integer $offset
-     * @return self
+     * @param  int  $offset
      */
     public function horizontalAlignment(string $alignment, $offset = 0): self
     {
@@ -180,9 +176,7 @@ class WatermarkFactory
     /**
      * Setter for the vertical alignment with an optional offset.
      *
-     * @param string $alignment
-     * @param integer $offset
-     * @return self
+     * @param  int  $offset
      */
     public function verticalAlignment(string $alignment, $offset = 0): self
     {
@@ -203,12 +197,10 @@ class WatermarkFactory
 
     /**
      * Returns the full path to the watermark file.
-     *
-     * @return string
      */
     public function getPath(): string
     {
-        if (!$this->image) {
+        if (! $this->image) {
             return $this->media->getLocalPath();
         }
 
@@ -230,7 +222,7 @@ class WatermarkFactory
     {
         $path = $this->getPath();
 
-        if (!empty($this->alignments)) {
+        if (! empty($this->alignments)) {
             return new WatermarkFilter($path, $this->alignments);
         }
 
@@ -249,12 +241,10 @@ class WatermarkFactory
 
     /**
      * Returns an instance of Image.
-     *
-     * @return \Spatie\Image\Image
      */
     private function image(): Image
     {
-        if (!$this->image) {
+        if (! $this->image) {
             $this->image = Image::load($this->media->getLocalPath());
         }
 

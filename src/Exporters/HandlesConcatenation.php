@@ -7,25 +7,25 @@ use ProtoneMedia\LaravelFFMpeg\Filesystem\Media;
 trait HandlesConcatenation
 {
     /**
-     * @var boolean
+     * @var bool
      */
     protected $concatWithTranscoding = false;
 
     /**
-     * @var boolean
+     * @var bool
      */
     protected $concatWithVideo = false;
 
     /**
-     * @var boolean
+     * @var bool
      */
     protected $concatWithAudio = false;
 
     public function concatWithTranscoding(bool $hasVideo = true, bool $hasAudio = true): self
     {
         $this->concatWithTranscoding = true;
-        $this->concatWithVideo       = $hasVideo;
-        $this->concatWithAudio       = $hasAudio;
+        $this->concatWithVideo = $hasVideo;
+        $this->concatWithAudio = $hasAudio;
 
         return $this;
     }

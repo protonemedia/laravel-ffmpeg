@@ -42,7 +42,7 @@ class PHPFFMpeg
     private $mediaCollection;
 
     /**
-     * @var boolean
+     * @var bool
      */
     private $forceAdvanced = false;
 
@@ -61,8 +61,8 @@ class PHPFFMpeg
 
     public function __construct(FFMpeg $ffmpeg)
     {
-        $this->ffmpeg                = $ffmpeg;
-        $this->pendingComplexFilters = new Collection();
+        $this->ffmpeg = $ffmpeg;
+        $this->pendingComplexFilters = new Collection;
     }
 
     /**
@@ -114,7 +114,7 @@ class PHPFFMpeg
 
         $this->mediaCollection = $mediaCollection;
 
-        if ($mediaCollection->count() === 1 && !$this->forceAdvanced) {
+        if ($mediaCollection->count() === 1 && ! $this->forceAdvanced) {
             $media = Arr::first($mediaCollection->collection());
 
             $this->ffmpeg->setFFProbe(
@@ -147,7 +147,7 @@ class PHPFFMpeg
 
     public function frame(TimeCode $timecode)
     {
-        if (!$this->isVideo()) {
+        if (! $this->isVideo()) {
             throw new Exception('Opened media is not a video file.');
         }
 
@@ -178,8 +178,6 @@ class PHPFFMpeg
 
     /**
      * Returns the FFMpegDriver of the underlying library.
-     *
-     * @return \FFMpeg\Driver\FFMpegDriver
      */
     private function getFFMpegDriver(): FFMpegDriver
     {
@@ -188,9 +186,6 @@ class PHPFFMpeg
 
     /**
      * Add a Listener to the underlying library.
-     *
-     * @param \Alchemy\BinaryDriver\Listeners\ListenerInterface $listener
-     * @return self
      */
     public function addListener(ListenerInterface $listener): self
     {
@@ -201,9 +196,6 @@ class PHPFFMpeg
 
     /**
      * Remove the Listener from the underlying library.
-     *
-     * @param \Alchemy\BinaryDriver\Listeners\ListenerInterface $listener
-     * @return self
      */
     public function removeListener(ListenerInterface $listener): self
     {
@@ -214,9 +206,6 @@ class PHPFFMpeg
 
     /**
      * Adds a callable to the callbacks array.
-     *
-     * @param callable $callback
-     * @return self
      */
     public function beforeSaving(callable $callback): self
     {
@@ -227,8 +216,6 @@ class PHPFFMpeg
 
     /**
      * Set the callbacks on the Media.
-     *
-     * @return self
      */
     public function applyBeforeSavingCallbacks(): self
     {
@@ -243,10 +230,6 @@ class PHPFFMpeg
 
     /**
      * Add an event handler to the underlying library.
-     *
-     * @param string $event
-     * @param callable $callback
-     * @return self
      */
     public function onEvent(string $event, callable $callback): self
     {

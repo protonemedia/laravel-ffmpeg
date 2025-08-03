@@ -10,7 +10,6 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
 {
     use MatchesSnapshots;
 
-
     /** @test */
     public function it_can_generate_a_vtt_file()
     {
@@ -21,7 +20,7 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
             ->height(90)
             ->get();
 
-        $generator = new VTTPreviewThumbnailsGenerator($tile, 250, fn () => "sprite_%d.jpg");
+        $generator = new VTTPreviewThumbnailsGenerator($tile, 250, fn () => 'sprite_%d.jpg');
 
         $this->assertMatchesTextSnapshot($generator->getContents());
     }

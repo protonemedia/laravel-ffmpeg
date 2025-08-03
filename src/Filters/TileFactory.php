@@ -8,30 +8,34 @@ class TileFactory
 {
     public float $interval = 0;
 
-    public int $width  = -1;
+    public int $width = -1;
+
     public int $height = -1;
+
     public int $columns;
+
     public int $rows;
+
     public int $padding = 0;
-    public int $margin  = 0;
+
+    public int $margin = 0;
 
     public ?int $quality = null;
 
-    public ?string $vttOutputPath       = null;
+    public ?string $vttOutputPath = null;
+
     public ?Closure $vttSequnceFilename = null;
 
     public static function make(): TileFactory
     {
-        return new static();
+        return new static;
     }
 
     /**
      * Setter for the output path of the VTT file and
      * the resolver for the tile sequence.
      *
-     * @param string $outputPath
-     * @param Closure|string $sequnceFilename
-     * @return self
+     * @param  Closure|string  $sequnceFilename
      */
     public function generateVTT(string $outputPath, $sequnceFilename = null): self
     {
@@ -65,7 +69,7 @@ class TileFactory
         return $this;
     }
 
-    public function scale(int $width = null, int $height = null): self
+    public function scale(?int $width = null, ?int $height = null): self
     {
         return $this->width($width ?: -1)->height($height ?: -1);
     }
@@ -73,7 +77,7 @@ class TileFactory
     public function grid(int $columns, int $rows): self
     {
         $this->columns = $columns;
-        $this->rows    = $rows;
+        $this->rows = $rows;
 
         return $this;
     }
@@ -92,7 +96,7 @@ class TileFactory
         return $this;
     }
 
-    public function quality(int $quality = null): self
+    public function quality(?int $quality = null): self
     {
         $this->quality = $quality;
 
@@ -101,8 +105,6 @@ class TileFactory
 
     /**
      * Returns a new instance of the TileFilter.
-     *
-     * @return \ProtoneMedia\LaravelFFMpeg\Filters\TileFilter
      */
     public function get(): TileFilter
     {

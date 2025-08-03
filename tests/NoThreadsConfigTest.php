@@ -12,7 +12,7 @@ class NoThreadsConfigTest extends TestCase
         parent::getEnvironmentSetUp($app);
 
         $app['config']->set('laravel-ffmpeg.ffmpeg.threads', false);
-        $app['config']->set('laravel-ffmpeg.temporary_files_root', sys_get_temp_dir() . '/laravel-custom-temp');
+        $app['config']->set('laravel-ffmpeg.temporary_files_root', sys_get_temp_dir().'/laravel-custom-temp');
     }
 
     /** @test */
@@ -34,7 +34,7 @@ class NoThreadsConfigTest extends TestCase
 
         $command = FFMpeg::open('video.mp4')
             ->export()
-            ->inFormat(new X264())
+            ->inFormat(new X264)
             ->getCommand('test.mp4');
 
         $this->assertStringContainsString('/laravel-custom-temp', $command[0]);

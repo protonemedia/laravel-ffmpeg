@@ -47,21 +47,21 @@ trait EncryptsHLSSegments
     /**
      * Wether to rotate the key on every segment.
      *
-     * @var boolean
+     * @var bool
      */
     private $rotateEncryptiongKey = false;
 
     /**
      * Number of opened segments.
      *
-     * @var integer
+     * @var int
      */
     private $segmentsOpened = 0;
 
     /**
      * Number of segments that can use the same key.
      *
-     * @var integer
+     * @var int
      */
     private $segmentsPerKey = 1;
 
@@ -81,34 +81,30 @@ trait EncryptsHLSSegments
 
     /**
      * Creates a new encryption key.
-     *
-     * @return string
      */
     public static function generateEncryptionKey(): string
     {
         return random_bytes(16);
     }
+
     /**
      * Creates a new encryption key filename.
-     *
-     * @return string
      */
     public static function generateEncryptionKeyFilename(): string
     {
-        return bin2hex(random_bytes(8)) . '.key';
+        return bin2hex(random_bytes(8)).'.key';
     }
 
     /**
      * Initialises the disk, info and IV for encryption and sets the key.
      *
-     * @param string $key
-     * @param string $filename
-     * @return self
+     * @param  string  $key
+     * @param  string  $filename
      */
     public function withEncryptionKey($key, $filename = 'secret.key'): self
     {
         $this->encryptionKey = $key;
-        $this->encryptionIV  = bin2hex(static::generateEncryptionKey());
+        $this->encryptionIV = bin2hex(static::generateEncryptionKey());
 
         $this->encryptionKeyFilename = $filename;
         $this->encryptionSecretsRoot = (new TemporaryDirectories(
@@ -122,16 +118,12 @@ trait EncryptsHLSSegments
      * Enables encryption with rotating keys. The callable will receive every new
      * key and the integer sets the number of segments that can
      * use the same key.
-     *
-     * @param Closure $callback
-     * @param int $segmentsPerKey
-     * @return self
      */
     public function withRotatingEncryptionKey(Closure $callback, int $segmentsPerKey = 1): self
     {
         $this->rotateEncryptiongKey = true;
-        $this->onNewEncryptionKey   = $callback;
-        $this->segmentsPerKey       = $segmentsPerKey;
+        $this->onNewEncryptionKey = $callback;
+        $this->segmentsPerKey = $segmentsPerKey;
 
         return $this->withEncryptionKey(null, null);
     }
@@ -140,21 +132,19 @@ trait EncryptsHLSSegments
      * Rotates the key and returns the absolute path to the info file. This method
      * should be executed as fast as possible, or we might be too late for FFmpeg
      * opening the next segment. That's why we don't use the Disk-class magic.
-     *
-     * @return string
      */
     private function rotateEncryptionKey(): string
     {
         if ($this->nextEncryptionFilenameAndKey) {
             [$keyFilename, $encryptionKey] = $this->nextEncryptionFilenameAndKey;
         } else {
-            $keyFilename   = $this->encryptionKeyFilename ?: static::generateEncryptionKeyFilename();
+            $keyFilename = $this->encryptionKeyFilename ?: static::generateEncryptionKeyFilename();
             $encryptionKey = $this->encryptionKey ?: static::generateEncryptionKey();
         }
 
         // get the absolute path to the info file and encryption key
-        $hlsKeyInfoPath = $this->encryptionSecretsRoot . '/' . HLSExporter::HLS_KEY_INFO_FILENAME;
-        $keyPath        = $this->encryptionSecretsRoot . '/' . $keyFilename;
+        $hlsKeyInfoPath = $this->encryptionSecretsRoot.'/'.HLSExporter::HLS_KEY_INFO_FILENAME;
+        $keyPath = $this->encryptionSecretsRoot.'/'.$keyFilename;
 
         $normalizedKeyPath = Disk::normalizePath($keyPath);
 
@@ -164,7 +154,7 @@ trait EncryptsHLSSegments
         // store an info file with a reference to the encryption key and IV
         file_put_contents(
             $hlsKeyInfoPath,
-            $normalizedKeyPath . PHP_EOL . $normalizedKeyPath . PHP_EOL . $this->encryptionIV
+            $normalizedKeyPath.PHP_EOL.$normalizedKeyPath.PHP_EOL.$this->encryptionIV
         );
 
         // prepare for the next round
@@ -186,17 +176,15 @@ trait EncryptsHLSSegments
 
     /**
      * Returns an array with the encryption parameters.
-     *
-     * @return array
      */
     private function getEncrypedHLSParameters(): array
     {
-        if (!$this->encryptionIV) {
+        if (! $this->encryptionIV) {
             return [];
         }
 
         $keyInfoPath = $this->rotateEncryptionKey();
-        $parameters  = ['-hls_key_info_file', $keyInfoPath];
+        $parameters = ['-hls_key_info_file', $keyInfoPath];
 
         if ($this->rotateEncryptiongKey) {
             $parameters[] = '-hls_flags';
@@ -214,7 +202,7 @@ trait EncryptsHLSSegments
      */
     private function addHandlerToRotateEncryptionKey()
     {
-        if (!$this->rotateEncryptiongKey) {
+        if (! $this->rotateEncryptiongKey) {
             return;
         }
 
@@ -222,7 +210,7 @@ trait EncryptsHLSSegments
 
         $this->addListener($this->listener)
             ->onEvent(HLSExporter::ENCRYPTION_LISTENER, function ($line) {
-                if (!strpos($line, ".keyinfo' for reading")) {
+                if (! strpos($line, ".keyinfo' for reading")) {
                     return;
                 }
 
@@ -237,8 +225,6 @@ trait EncryptsHLSSegments
     /**
      * Remove the listener at the end of the export to
      * prevent duplicate event handlers.
-     *
-     * @return self
      */
     private function removeHandlerThatRotatesEncryptionKey(): self
     {
@@ -257,13 +243,10 @@ trait EncryptsHLSSegments
      * While encoding, the encryption keys are saved to a temporary directory.
      * With this method, we loop through all segment playlists and replace
      * the absolute path to the keys to a relative ones.
-     *
-     * @param \Illuminate\Support\Collection $playlistMedia
-     * @return self
      */
     private function replaceAbsolutePathsHLSEncryption(Collection $playlistMedia): self
     {
-        if (!$this->encryptionSecretsRoot) {
+        if (! $this->encryptionSecretsRoot) {
             return $this;
         }
 
@@ -274,7 +257,7 @@ trait EncryptsHLSSegments
             $prefix = '#EXT-X-KEY:METHOD=AES-128,URI="';
 
             $content = str_replace(
-                $prefix . Disk::normalizePath($this->encryptionSecretsRoot) . '/',
+                $prefix.Disk::normalizePath($this->encryptionSecretsRoot).'/',
                 $prefix,
                 $disk->get($path)
             );
@@ -287,13 +270,11 @@ trait EncryptsHLSSegments
 
     /**
      * Removes the encryption keys from the temporary disk.
-     *
-     * @return self
      */
     private function cleanupHLSEncryption(): self
     {
         if ($this->encryptionSecretsRoot) {
-            (new Filesystem())->deleteDirectory($this->encryptionSecretsRoot);
+            (new Filesystem)->deleteDirectory($this->encryptionSecretsRoot);
         }
 
         return $this;

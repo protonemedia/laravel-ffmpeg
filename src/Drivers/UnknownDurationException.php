@@ -4,6 +4,4 @@ namespace ProtoneMedia\LaravelFFMpeg\Drivers;
 
 use Exception;
 
-class UnknownDurationException extends Exception
-{
-}
+class UnknownDurationException extends Exception {}
