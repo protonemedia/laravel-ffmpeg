@@ -5,7 +5,7 @@
 ![run-tests](https://github.com/protonemedia/laravel-ffmpeg/workflows/run-tests/badge.svg)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-This package provides an integration with FFmpeg for Laravel 10. [Laravel's Filesystem](http://laravel.com/docs/9.x/filesystem) handles the storage of the files.
+This package provides an integration with FFmpeg for Laravel 11. [Laravel's Filesystem](http://laravel.com/docs/11.x/filesystem) handles the storage of the files.
 
 
 ## Sponsor Us
@@ -17,15 +17,15 @@ This package provides an integration with FFmpeg for Laravel 10. [Laravel's File
 
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
-* Integration with [Laravel's Filesystem](http://laravel.com/docs/9.x/filesystem), [configuration system](https://laravel.com/docs/9.x/configuration) and [logging handling](https://laravel.com/docs/9.x/errors).
-* Compatible with Laravel 10, support for [Package Discovery](https://laravel.com/docs/9.x/packages#package-discovery).
+* Integration with [Laravel's Filesystem](http://laravel.com/docs/11.x/filesystem), [configuration system](https://laravel.com/docs/11.x/configuration) and [logging handling](https://laravel.com/docs/11.x/errors).
+* Compatible with Laravel 11, support for [Package Discovery](https://laravel.com/docs/11.x/packages#package-discovery).
 * Built-in support for HLS.
 * Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
 * Built-in support for watermarks (positioning and manipulation).
 * Built-in support for creating a mosaic/sprite/tile from a video.
 * Built-in support for generating *VTT Preview Thumbnail* files.
-* Requires PHP 8.1 or higher.
+* Requires PHP 8.2 or higher.
 * Tested with FFmpeg 4.4 and 5.0.
 
 ## Installation
