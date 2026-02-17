@@ -36,11 +36,10 @@ jobs:
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, mysql, mysqli, pdo_mysql, fileinfo
           coverage: none
 
-      - name: Install FFmpeg 7
-        run: |
-          sudo add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg
+        uses: AnimMouse/setup-ffmpeg@v1
+        with:
+          version: 7.1
 
       - name: Install dependencies
         run: |
