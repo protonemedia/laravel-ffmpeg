@@ -13,10 +13,9 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         php: [8.5, 8.4, 8.3, 8.2]
         laravel: ['11.*', '12.*']
-        ffmpeg: [5.0, 4.4]
         dependency-version: [prefer-lowest, prefer-stable]
         include:
           - laravel: 11.*
@@ -24,7 +23,7 @@ jobs:
           - laravel: 12.*
             testbench: 10.*
 
-    name: ${{ matrix.os }} - P${{ matrix.php }} - L${{ matrix.laravel }} - FF${{ matrix.ffmpeg }} - ${{ matrix.dependency-version }}
+    name: ${{ matrix.os }} - P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.dependency-version }}
 
     steps:
       - name: Checkout code
@@ -38,10 +37,9 @@ jobs:
           coverage: none
 
       - name: Install FFmpeg
-        uses: Iamshankhadeep/setup-ffmpeg@ffmpeg-5.0-20220119
-        with:
-          version: ${{ matrix.ffmpeg }}
-        id: setup-ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
       - name: Install dependencies
         run: |
