@@ -37,9 +37,10 @@ jobs:
           coverage: none
 
       - name: Install FFmpeg
-        uses: AnimMouse/setup-ffmpeg@v1
+        uses: Iamshankhadeep/setup-ffmpeg@ffmpeg-5.0-20220119
         with:
-          version: 6.1
+          version: 5.0
+        id: setup-ffmpeg
 
       - name: Install dependencies
         run: |
