@@ -39,7 +39,7 @@ jobs:
       - name: Install FFmpeg
         uses: AnimMouse/setup-ffmpeg@v1
         with:
-          version: 5.1
+          version: 7.1
 
       - name: Install dependencies
         run: |
