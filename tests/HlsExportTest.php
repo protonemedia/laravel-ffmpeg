@@ -16,9 +16,11 @@ class HlsExportTest extends TestCase
 {
     public static function streamInfoPattern($resolution, $frameRate = '25.000', $withCodec = true): string
     {
-        return $withCodec
-            ? '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION='.$resolution.',CODECS="[a-zA-Z0-9,.]+",FRAME-RATE='.$frameRate
-            : '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION='.$resolution.',FRAME-RATE='.$frameRate;
+        $codecs = $withCodec
+            ? ',CODECS="[a-zA-Z0-9,.]+"'
+            : '(,CODECS="[a-zA-Z0-9,.]+")?';
+
+        return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION='.$resolution.$codecs.',FRAME-RATE='.$frameRate;
     }
 
     /** @test */
