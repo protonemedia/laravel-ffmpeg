@@ -29,7 +29,7 @@
         "league/flysystem-memory": "^3.10",
         "mockery/mockery": "^1.4.4",
         "nesbot/carbon": "^2.66|^3.0",
-        "orchestra/testbench": "^9.0|^10.0",
+        "orchestra/testbench": "^9.10|^10.0",
         "phpunit/phpunit": "^10.4|^11.5.3",
         "spatie/image": "^2.2|^3.3",
         "spatie/phpunit-snapshot-assertions": "^5.0"
