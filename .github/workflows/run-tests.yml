@@ -15,7 +15,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         php: [8.4, 8.3, 8.2, 8.1]
-        laravel: ['10.*', '11.*', '12.*']
+        laravel: ['10.*', '11.*', '12.*', '13.*']
         ffmpeg: [5.0, 4.4]
         dependency-version: [prefer-lowest, prefer-stable]
         include:
@@ -25,12 +25,18 @@ jobs:
             testbench: 9.*
           - laravel: 12.*
             testbench: 10.*
+          - laravel: 13.*
+            testbench: 11.*
         exclude:
           - laravel: 11.*
             php: 8.1
           - laravel: 10.*
             php: 8.4
           - laravel: 12.*
+            php: 8.1
+          - laravel: 13.*
+            php: 8.2
+          - laravel: 13.*
             php: 8.1
 
     name: ${{ matrix.os }} - P${{ matrix.php }} - L${{ matrix.laravel }} - FF${{ matrix.ffmpeg }} - ${{ matrix.dependency-version }}
