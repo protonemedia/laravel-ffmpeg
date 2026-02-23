@@ -37,6 +37,8 @@ trait HandlesFrames
     {
         $this->returnFrameContents = true;
 
-        return $this->save();
+        $tempFile = sys_get_temp_dir() . '/laravel-ffmpeg-frame-' . uniqid() . '.png';
+
+        return $this->save($tempFile);
     }
 }
