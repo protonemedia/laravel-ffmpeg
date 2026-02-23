@@ -18,7 +18,7 @@ This package provides an integration with FFmpeg for Laravel 10. [Laravel's File
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
 * Integration with [Laravel's Filesystem](http://laravel.com/docs/9.x/filesystem), [configuration system](https://laravel.com/docs/9.x/configuration) and [logging handling](https://laravel.com/docs/9.x/errors).
-* Compatible with Laravel 10, support for [Package Discovery](https://laravel.com/docs/9.x/packages#package-discovery).
+* Compatible with Laravel 10, with support for [Package Discovery](https://laravel.com/docs/9.x/packages#package-discovery).
 * Built-in support for HLS.
 * Built-in support for encrypted HLS (AES-128) and rotating keys (optional).
 * Built-in support for concatenation, multiple inputs/outputs, image sequences (timelapse), complex filters (and mapping), frame/thumbnail exports.
@@ -244,7 +244,7 @@ FFMpeg::fromDisk('videos')
 
 ### Watermark filter
 
-You can easily add a watermark using the `addWatermark` method. With the `WatermarkFactory`, you can open your watermark file from a specific disk, just like opening an audio or video file. When you discard the `fromDisk` method, it uses the default disk specified in the `filesystems.php` configuration file.
+You can easily add a watermark using the `addWatermark` method. With the `WatermarkFactory`, you can open your watermark file from a specific disk, just like opening an audio or video file. When you omit the `fromDisk` method, it uses the default disk specified in the `filesystems.php` configuration file.
 
 After opening your watermark file, you can position it with the `top`, `right`, `bottom`, and `left` methods. The first parameter of these methods is the offset, which is optional and can be negative.
 
@@ -308,7 +308,7 @@ This package can manipulate watermarks by using [Spatie's Image package](https:/
 composer require spatie/image
 ```
 
-Now you can chain one more manipulation methods on the `WatermarkFactory` instance:
+Now you can chain one or more manipulation methods on the `WatermarkFactory` instance:
 
 ```php
 FFMpeg::open('steve_howe.mp4')
@@ -337,7 +337,7 @@ FFMpeg::open('video.mp4')
     ->save('video.mkv');
 ```
 
-### Chain multiple convertions
+### Chain multiple conversions
 
 ```php
 // The 'fromDisk()' method is not required, the file will now
@@ -380,7 +380,7 @@ FFMpeg::fromDisk('videos')
     ->open('steve_howe.mp4')
     ->getFrameFromSeconds(10)
     ->export()
-    ->toDisk('thumnails')
+    ->toDisk('thumbnails')
     ->save('FrameAt10sec.png');
 
 // Instead of the 'getFrameFromSeconds()' method, you could
@@ -498,7 +498,7 @@ FFMpeg::open('feature_%04d.png')
 
 ### Multiple inputs
 
-You can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method of by using an array. You can mix inputs from different disks.
+You can open multiple inputs, even from different disks. This uses FFMpeg's `map` and `filter_complex` features. You can open multiple files by chaining the `open` method or by using an array. You can mix inputs from different disks.
 
 ```php
 FFMpeg::open('video1.mp4')->open('video2.mp4');
@@ -528,8 +528,8 @@ FFMpeg::fromDisk('local')
 This is an example [from the underlying library](https://github.com/PHP-FFMpeg/PHP-FFMpeg#base-usage):
 
 ```php
-// This code takes 2 input videos, stacks they horizontally in 1 output video and
-// adds to this new video the audio from the first video. (It is impossible
+// This code takes 2 input videos, stacks them horizontally in 1 output video, and
+// adds the audio from the first video to this new video. (It is impossible
 // with a simple filter graph that has only 1 input and only 1 output).
 
 FFMpeg::fromDisk('local')
@@ -599,9 +599,9 @@ FFMpeg::fromDisk('local')
     ->save('concat.mp4');
 ```
 
-### Determinate duration
+### Determine duration
 
-With the ```Media``` class you can determinate the duration of a file:
+With the ```Media``` class you can determine the duration of a file:
 
 ```php
 $media = FFMpeg::open('wwdc_2006.mp4');
@@ -816,7 +816,7 @@ The Media object you get when you 'open' a file, actually holds the Media object
 $media = FFMpeg::fromDisk('videos')->open('video.mp4');
 
 // The 'getStreams' method will be called on the underlying Media object since
-// it doesn't exists on this object.
+// it doesn't exist on this object.
 $codec = $media->getVideoStream()->get('codec_name');
 ```
 
@@ -917,7 +917,7 @@ Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
 * [`Laravel Paddle`](https://github.com/protonemedia/laravel-paddle): Paddle.com API integration for Laravel with support for webhooks/events.
 * [`Laravel Task Runner`](https://github.com/protonemedia/laravel-task-runner): Write Shell scripts like Blade Components and run them locally or on a remote server.
 * [`Laravel Verify New Email`](https://github.com/protonemedia/laravel-verify-new-email): This package adds support for verifying new email addresses: when a user updates its email address, it won't replace the old one until the new one is verified.
-* [`Laravel XSS Protection`](https://github.com/protonemedia/laravel-xss-protection): Laravel Middleware to protect your app against Cross-site scripting (XSS). It sanitizes request input, and it can sanatize Blade echo statements.
+* [`Laravel XSS Protection`](https://github.com/protonemedia/laravel-xss-protection): Laravel Middleware to protect your app against Cross-site scripting (XSS). It sanitizes request input, and it can sanitize Blade echo statements.
 
 ## Security
 

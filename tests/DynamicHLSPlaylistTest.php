@@ -3,10 +3,12 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class DynamicHLSPlaylistTest extends TestCase
 {
+    #[Test]
     /**
      * @test
      */
