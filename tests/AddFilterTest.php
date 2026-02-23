@@ -1,7 +1,7 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-
+use PHPUnit\Framework\Attributes\Test;
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Audio\SimpleFilter;
 use FFMpeg\Filters\Video\ResizeFilter;
@@ -17,6 +17,7 @@ use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class AddFilterTest extends TestCase
 {
+    #[Test]
     /** @test */
     public function it_can_add_a_filter_using_a_closure()
     {
@@ -34,6 +35,7 @@ class AddFilterTest extends TestCase
         $this->assertCount(1, $media->getFilters());
     }
 
+    #[Test]
     /** @test */
     public function it_can_resize_the_video_by_using_the_resize_method()
     {
@@ -47,6 +49,7 @@ class AddFilterTest extends TestCase
         $this->assertEquals(360, $filter->getDimension()->getHeight());
     }
 
+    #[Test]
     /** @test */
     public function it_can_add_a_watermark_with_the_factory_helper_and_manipulate_it()
     {
@@ -69,6 +72,7 @@ class AddFilterTest extends TestCase
         $this->assertInstanceOf(WatermarkFilter::class, $media->getFilters()[0]);
     }
 
+    #[Test]
     /** @test */
     public function it_can_add_a_filter_using_an_object()
     {
@@ -85,6 +89,7 @@ class AddFilterTest extends TestCase
         $this->assertCount(1, $media->getFilters());
     }
 
+    #[Test]
     /** @test */
     public function it_can_add_a_custom_filter_with_an_array()
     {
@@ -105,6 +110,7 @@ class AddFilterTest extends TestCase
         $this->assertEquals(['-itsoffset', 1], $parameters);
     }
 
+    #[Test]
     /** @test */
     public function it_can_add_a_custom_filter_using_arguments()
     {
@@ -125,6 +131,7 @@ class AddFilterTest extends TestCase
         $this->assertEquals(['-itsoffset', 1], $parameters);
     }
 
+    #[Test]
     /** @test */
     public function it_can_parse_a_complex_filter_input_to_a_integer()
     {
@@ -147,6 +154,7 @@ class AddFilterTest extends TestCase
         $this->assertEquals(2, $mapping->normalizeIn());
     }
 
+    #[Test]
     /** @test */
     public function it_can_use_complex_filters_as_callback_on_advanced_media_objects()
     {
@@ -159,6 +167,7 @@ class AddFilterTest extends TestCase
             });
     }
 
+    #[Test]
     /** @test */
     public function it_can_add_a_complex_filter_object_with_a_input_and_output()
     {
@@ -174,6 +183,7 @@ class AddFilterTest extends TestCase
         $this->assertStringContainsString('-filter_complex [0:v][1:v]hstack[v] -map 0:a -map [v]', $command);
     }
 
+    #[Test]
     /** @test */
     public function it_can_add_a_basic_filter_to_an_advanced_media_object_using_a_filter_class()
     {
@@ -196,6 +206,7 @@ class AddFilterTest extends TestCase
         );
     }
 
+    #[Test]
     /** @test */
     public function it_can_add_a_basic_filter_to_an_advanced_media_object_using_a_closure()
     {
