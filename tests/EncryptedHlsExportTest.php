@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Exporters\HLSExporter;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -14,6 +15,7 @@ class EncryptedHlsExportTest extends TestCase
         return '#EXT-X-KEY:METHOD=AES-128,URI="'.($key ?: '[~a-zA-Z0-9-_\/:]+.key').'",IV=[a-z0-9]+';
     }
 
+    #[Test]
     /**
      * @test
      */
@@ -58,6 +60,7 @@ class EncryptedHlsExportTest extends TestCase
         ], $listener);
     }
 
+    #[Test]
     /**
      * @test
      */
@@ -86,6 +89,7 @@ class EncryptedHlsExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('adaptive3.m3u8'));
     }
 
+    #[Test]
     /**
      * @test
      */
