@@ -191,9 +191,13 @@ class DynamicHLSPlaylist implements Responsable
      */
     public function all(): Collection
     {
-        return static::parseLines(
-            $this->disk->get($this->media->getPath())
-        )->filter(function ($line) {
+        $content = $this->disk->get($this->media->getPath());
+
+        if ($content === null) {
+            throw new \Exception("Playlist file not found: {$this->media->getPath()}");
+        }
+
+        return static::parseLines($content)->filter(function ($line) {
             return static::lineHasMediaFilename($line);
         })->mapWithKeys(function ($segmentPlaylist) {
             return [$segmentPlaylist => $this->getProcessedPlaylist($segmentPlaylist)];
@@ -208,7 +212,13 @@ class DynamicHLSPlaylist implements Responsable
      */
     public function getProcessedPlaylist(string $playlistPath): string
     {
-        return static::parseLines($this->disk->get($playlistPath))->map(function (string $line) {
+        $content = $this->disk->get($playlistPath);
+
+        if ($content === null) {
+            throw new \Exception("Playlist file not found: {$playlistPath}");
+        }
+
+        return static::parseLines($content)->map(function (string $line) {
             if (static::lineHasMediaFilename($line)) {
                 return Str::endsWith($line, '.m3u8')
                     ? $this->resolvePlaylistFilename($line)
