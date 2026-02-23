@@ -44,10 +44,14 @@ trait InteractsWithMediaStreams
             }
         }
 
-        $duration = $this->extractDurationFromStream($this->getVideoStream() ?? $this->getAudioStream());
+        $stream = $this->getVideoStream() ?? $this->getAudioStream();
 
-        if ($duration !== null) {
-            return $duration;
+        if ($stream !== null) {
+            $duration = $this->extractDurationFromStream($stream);
+
+            if ($duration !== null) {
+                return $duration;
+            }
         }
 
         throw new UnknownDurationException('Could not determine the duration of the media.');
