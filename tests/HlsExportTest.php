@@ -1,7 +1,7 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-
+use PHPUnit\Framework\Attributes\Test;
 use FFMpeg\Filters\AdvancedMedia\ComplexFilters;
 use FFMpeg\Filters\Video\VideoFilters;
 use Illuminate\Support\Facades\Storage;
@@ -23,6 +23,7 @@ class HlsExportTest extends TestCase
         return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION='.$resolution.$codecs.',FRAME-RATE='.$frameRate;
     }
 
+    #[Test]
     /** @test */
     public function it_throws_an_exception_when_no_format_has_been_added()
     {
@@ -41,6 +42,7 @@ class HlsExportTest extends TestCase
         $this->fail('Should have thrown NoFormatException.');
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_video_file_into_a_hls_export()
     {
@@ -88,6 +90,7 @@ class HlsExportTest extends TestCase
         ]);
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_audio_file_into_a_hls_export()
     {
@@ -123,6 +126,7 @@ class HlsExportTest extends TestCase
         ]);
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_audio_file_into_a_hls_export_with_an_audio_format()
     {
@@ -158,6 +162,7 @@ class HlsExportTest extends TestCase
         ]);
     }
 
+    #[Test]
     /** @test */
     public function it_can_set_additional_parameters_on_the_format()
     {
@@ -177,6 +182,7 @@ class HlsExportTest extends TestCase
         $this->assertStringContainsString('-preset:v ultrafast', $command);
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_media_file_into_a_hls_export_with_the_copy_format()
     {
@@ -204,6 +210,7 @@ class HlsExportTest extends TestCase
         ]);
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_media_file_into_a_hls_export_with_a_custom_framerate()
     {
@@ -237,6 +244,7 @@ class HlsExportTest extends TestCase
         ]);
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_media_file_into_a_subdirectory()
     {
@@ -263,6 +271,7 @@ class HlsExportTest extends TestCase
         $this->assertStringNotContainsString('sub/dir', $lowPlaylist);
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_media_file_into_a_subdirectory_on_a_remote_disk()
     {
@@ -291,6 +300,7 @@ class HlsExportTest extends TestCase
         $this->assertStringNotContainsString('sub/dir', $lowPlaylist);
     }
 
+    #[Test]
     /** @test */
     public function it_can_use_a_custom_format_for_the_segment_naming()
     {
@@ -336,6 +346,7 @@ class HlsExportTest extends TestCase
         $this->assertEquals(1, preg_match($pattern, $playlist), 'Playlist mismatch:'.PHP_EOL.$playlist);
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_to_hls_with_legacy_filters_for_each_format()
     {
@@ -391,6 +402,7 @@ class HlsExportTest extends TestCase
         $this->assertStringContainsString('RESOLUTION=1920x1080', $playlist);
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_to_hls_with_legacy_filters_without_audio()
     {
@@ -443,6 +455,7 @@ class HlsExportTest extends TestCase
         $this->assertNull($media->getAudioStream());
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_to_hls_with_complex_filters_for_each_format()
     {
