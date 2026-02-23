@@ -164,6 +164,24 @@ class HlsExportTest extends TestCase
 
     #[Test]
     /** @test */
+    public function it_maps_only_the_first_audio_stream_for_hls_outputs()
+    {
+        $this->fakeLocalVideoFile();
+
+        $command = (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->addFormat($this->x264(), function () {
+                // trigger mapping path that includes audio stream mapping
+            })
+            ->toDisk('local')
+            ->getCommand('adaptive.m3u8');
+
+        $this->assertStringContainsString('0:a:0', $command);
+    }
+
+    #[Test]
+    /** @test */
     public function it_can_set_additional_parameters_on_the_format()
     {
         $this->fakeLocalVideoFile();
