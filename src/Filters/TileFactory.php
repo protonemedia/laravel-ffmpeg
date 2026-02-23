@@ -24,7 +24,7 @@ class TileFactory
 
     public ?string $vttOutputPath = null;
 
-    public ?Closure $vttSequnceFilename = null;
+    public ?Closure $vttSequenceFilename = null;
 
     public static function make(): TileFactory
     {
@@ -35,15 +35,15 @@ class TileFactory
      * Setter for the output path of the VTT file and
      * the resolver for the tile sequence.
      *
-     * @param  Closure|string  $sequnceFilename
+     * @param  Closure|string  $sequenceFilename
      */
-    public function generateVTT(string $outputPath, $sequnceFilename = null): self
+    public function generateVTT(string $outputPath, $sequenceFilename = null): self
     {
         $this->vttOutputPath = $outputPath;
 
-        $this->vttSequnceFilename = is_string($sequnceFilename)
-            ? fn () => $sequnceFilename
-            : $sequnceFilename;
+        $this->vttSequenceFilename = is_string($sequenceFilename)
+            ? fn () => $sequenceFilename
+            : $sequenceFilename;
 
         return $this;
     }
