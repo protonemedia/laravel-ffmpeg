@@ -9,6 +9,19 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 class DynamicHLSPlaylistTest extends TestCase
 {
     #[Test]
+    /** @test */
+    public function it_throws_an_exception_when_a_playlist_file_is_missing()
+    {
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Playlist file not found');
+
+        FFMpeg::dynamicHLSPlaylist()
+            ->fromDisk('local')
+            ->open('missing.m3u8')
+            ->all();
+    }
+
+    #[Test]
     /**
      * @test
      */
