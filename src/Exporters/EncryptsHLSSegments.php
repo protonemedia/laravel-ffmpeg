@@ -49,7 +49,7 @@ trait EncryptsHLSSegments
      *
      * @var bool
      */
-    private $rotateEncryptiongKey = false;
+    private $rotateEncryptionKey = false;
 
     /**
      * Number of opened segments.
@@ -121,7 +121,7 @@ trait EncryptsHLSSegments
      */
     public function withRotatingEncryptionKey(Closure $callback, int $segmentsPerKey = 1): self
     {
-        $this->rotateEncryptiongKey = true;
+        $this->rotateEncryptionKey = true;
         $this->onNewEncryptionKey = $callback;
         $this->segmentsPerKey = $segmentsPerKey;
 
@@ -158,7 +158,7 @@ trait EncryptsHLSSegments
         );
 
         // prepare for the next round
-        if ($this->rotateEncryptiongKey) {
+        if ($this->rotateEncryptionKey) {
             $this->nextEncryptionFilenameAndKey = [
                 static::generateEncryptionKeyFilename(),
                 static::generateEncryptionKey(),
@@ -186,7 +186,7 @@ trait EncryptsHLSSegments
         $keyInfoPath = $this->rotateEncryptionKey();
         $parameters = ['-hls_key_info_file', $keyInfoPath];
 
-        if ($this->rotateEncryptiongKey) {
+        if ($this->rotateEncryptionKey) {
             $parameters[] = '-hls_flags';
             $parameters[] = 'periodic_rekey';
         }
@@ -202,7 +202,7 @@ trait EncryptsHLSSegments
      */
     private function addHandlerToRotateEncryptionKey()
     {
-        if (! $this->rotateEncryptiongKey) {
+        if (! $this->rotateEncryptionKey) {
             return;
         }
 
@@ -210,7 +210,7 @@ trait EncryptsHLSSegments
 
         $this->addListener($this->listener)
             ->onEvent(HLSExporter::ENCRYPTION_LISTENER, function ($line) {
-                if (! strpos($line, ".keyinfo' for reading")) {
+                if (strpos($line, ".keyinfo' for reading") === false) {
                     return;
                 }
 
