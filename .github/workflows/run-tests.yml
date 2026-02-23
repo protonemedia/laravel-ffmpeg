@@ -1,60 +1,60 @@
 name: run-tests
 
 on:
-  - push
-  - pull_request
+    - push
+    - pull_request
 
 concurrency: ci-${{ github.ref }}
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
+    test:
+        runs-on: ${{ matrix.os }}
 
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04]
-        php: [8.5, 8.4, 8.3, 8.2]
-        laravel: ['11.*', '12.*']
-        dependency-version: [prefer-lowest, prefer-stable]
-        include:
-          - laravel: 11.*
-            testbench: ^9.10
-          - laravel: 12.*
-            testbench: 10.*
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-22.04]
+                php: [8.5, 8.4, 8.3, 8.2]
+                laravel: ["11.*", "12.*"]
+                dependency-version: [prefer-lowest, prefer-stable]
+                include:
+                    - laravel: 11.*
+                      testbench: ^9.10
+                    - laravel: 12.*
+                      testbench: 10.*
 
-    name: ${{ matrix.os }} - P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.dependency-version }}
+        name: ${{ matrix.os }} - P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.dependency-version }}
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, mysql, mysqli, pdo_mysql, fileinfo
-          coverage: none
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: ${{ matrix.php }}
+                  extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, mysql, mysqli, pdo_mysql, fileinfo
+                  coverage: none
 
-      - name: Install FFmpeg
-        uses: Iamshankhadeep/setup-ffmpeg@ffmpeg-5.0-20220119
-        with:
-          version: 5.0
-        id: setup-ffmpeg
+            - name: Install FFmpeg
+              uses: Iamshankhadeep/setup-ffmpeg@ffmpeg-5.0-20220119
+              with:
+                  version: 5.0
+              id: setup-ffmpeg
 
-      - name: Install dependencies
-        run: |
-          composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
-          composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-suggest
+            - name: Install dependencies
+              run: |
+                  composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+                  composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-suggest
 
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.composer/cache/files
-          key: dependencies-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}-dep-${{ matrix.dependency-version }}
+            - name: Cache dependencies
+              uses: actions/cache@v4
+              with:
+                  path: ~/.composer/cache/files
+                  key: dependencies-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}-dep-${{ matrix.dependency-version }}
 
-      - name: Execute tests
-        run: vendor/bin/phpunit --order-by random
-        env:
-          FFMPEG_TEMPORARY_FILES_ROOT: ${{ github.workspace }}
-          FFMPEG_TEMPORARY_ENCRYPTED_HLS: /dev/shm
+            - name: Execute tests
+              run: vendor/bin/phpunit --order-by random
+              env:
+                  FFMPEG_TEMPORARY_FILES_ROOT: ${{ github.workspace }}
+                  FFMPEG_TEMPORARY_ENCRYPTED_HLS: /dev/shm
