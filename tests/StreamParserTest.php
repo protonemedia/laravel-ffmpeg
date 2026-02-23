@@ -1,12 +1,13 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-
+use PHPUnit\Framework\Attributes\Test;
 use FFMpeg\FFProbe\DataMapping\Stream;
 use ProtoneMedia\LaravelFFMpeg\Support\StreamParser;
 
 class StreamParserTest extends TestCase
 {
+    #[Test]
     /** @test */
     public function it_can_extract_the_average_frame_rate()
     {
