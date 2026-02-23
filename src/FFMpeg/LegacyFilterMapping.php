@@ -31,7 +31,7 @@ class LegacyFilterMapping
      */
     public function normalizeIn(): int
     {
-        return preg_replace('/[^0-9]/', '', HLSVideoFilters::beforeGlue($this->in));
+        return (int) preg_replace('/[^0-9]/', '', HLSVideoFilters::beforeGlue($this->in));
     }
 
     /**
@@ -54,7 +54,13 @@ class LegacyFilterMapping
             ->open($this->singleMediaCollection($driver->getMediaCollection()))
             ->addFilter(...$this->arguments);
 
-        $format = $maps->filter->hasOut($this->out)->first()->getFormat();
+        $mapping = $maps->filter->hasOut($this->out)->first();
+
+        if (! $mapping) {
+            throw new \Exception("No output mapping found for: {$this->out}");
+        }
+
+        $format = $mapping->getFormat();
 
         Collection::make($freshDriver->getFilters())->map(function ($filter) use ($freshDriver, $format) {
             $parameters = $filter->apply($freshDriver->get(), $format);
