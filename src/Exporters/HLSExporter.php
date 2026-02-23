@@ -189,7 +189,7 @@ class HLSExporter extends MediaExporter
         $outs = [$filterCount ? HLSVideoFilters::glue($formatKey, $filterCount) : '0:v'];
 
         if ($this->getAudioStream()) {
-            $outs[] = '0:a';
+            $outs[] = '0:a:0';
         }
 
         return $outs;
