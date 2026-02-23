@@ -105,6 +105,24 @@ class TileTest extends TestCase
 
     #[Test]
     /** @test */
+    public function it_can_use_a_custom_sequence_filename_for_vtt_generation()
+    {
+        $this->fakeLongLocalVideoFile();
+
+        (new MediaOpener)
+            ->open('video3.mp4')
+            ->exportTile(function (TileFactory $factory) {
+                $factory->interval(2)
+                    ->grid(2, 2)
+                    ->generateVTT('thumbnails.vtt', 'custom_%05d.jpg');
+            })
+            ->save('tile_%05d.jpg');
+
+        $this->assertStringContainsString('custom_00001.jpg', Storage::disk('local')->get('thumbnails.vtt'));
+    }
+
+    #[Test]
+    /** @test */
     public function it_has_a_tile_filter_and_can_store_the_vtt_file()
     {
         $this->fakeLongLocalVideoFile();
