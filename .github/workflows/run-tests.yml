@@ -37,10 +37,9 @@ jobs:
                   coverage: none
 
             - name: Install FFmpeg
-              uses: Iamshankhadeep/setup-ffmpeg@ffmpeg-5.0-20220119
-              with:
-                  version: 5.0
-              id: setup-ffmpeg
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y ffmpeg
 
             - name: Install dependencies
               run: |
