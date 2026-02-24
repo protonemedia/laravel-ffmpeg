@@ -130,13 +130,13 @@ class Media
 
         $temporaryDirectoryDisk = $this->temporaryDirectoryDisk();
 
-        $destinationAdapater = $this->getDisk()->getFilesystemAdapter();
+        $destinationAdapter = $this->getDisk()->getFilesystemAdapter();
 
         foreach ($temporaryDirectoryDisk->allFiles() as $path) {
-            $destinationAdapater->writeStream($path, $temporaryDirectoryDisk->readStream($path));
+            $destinationAdapter->writeStream($path, $temporaryDirectoryDisk->readStream($path));
 
             if ($visibility) {
-                $destinationAdapater->setVisibility($path, $visibility);
+                $destinationAdapter->setVisibility($path, $visibility);
             }
         }
 
