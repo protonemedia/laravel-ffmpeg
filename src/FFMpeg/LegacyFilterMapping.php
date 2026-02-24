@@ -56,7 +56,7 @@ class LegacyFilterMapping
 
         $mapping = $maps->filter->hasOut($this->out)->first();
 
-        if (! $mapping) {
+        if ($mapping === null) {
             throw new \Exception("No output mapping found for: {$this->out}");
         }
 
