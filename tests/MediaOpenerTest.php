@@ -90,12 +90,14 @@ class MediaOpenerTest extends TestCase
     /** @test */
     public function it_updates_the_media_collection_when_forcing_advanced_mode_after_opening()
     {
+        $this->fakeLocalVideoFiles();
+
         $driver = (new MediaOpener)
-            ->open('video1.mp4')
+            ->open('video.mp4')
             ->getDriver();
 
         $driver->openAdvanced(MediaCollection::make([
-            Media::make('local', 'video1.mp4'),
+            Media::make('local', 'video.mp4'),
             Media::make('local', 'video2.mp4'),
         ]));
 
