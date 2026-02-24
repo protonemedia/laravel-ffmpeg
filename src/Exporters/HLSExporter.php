@@ -255,10 +255,18 @@ class HLSExporter extends MediaExporter
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);
             } else {
-                $outs = ['0:v'];
+                $outs = [];
+
+                if ($this->getVideoStream()) {
+                    $outs[] = '0:v';
+                }
 
                 if ($this->getAudioStream()) {
                     $outs[] = '0:a:0';
+                }
+
+                if (empty($outs)) {
+                    $outs[] = '0';
                 }
             }
 
