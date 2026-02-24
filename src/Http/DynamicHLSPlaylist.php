@@ -186,16 +186,30 @@ class DynamicHLSPlaylist implements Responsable
     }
 
     /**
+     * Reads playlist content and throws a consistent exception when unreadable.
+     */
+    private function getPlaylistContent(string $playlistPath): string
+    {
+        try {
+            $content = $this->disk->get($playlistPath);
+        } catch (\Throwable $exception) {
+            throw new \Exception("Invalid or unreadable playlist: {$playlistPath}", 0, $exception);
+        }
+
+        if (! is_string($content) || $content === '') {
+            throw new \Exception("Playlist file not found or invalid: {$playlistPath}");
+        }
+
+        return $content;
+    }
+
+    /**
      * Returns a collection of all processed segment playlists
      * and the processed main playlist.
      */
     public function all(): Collection
     {
-        $content = $this->disk->get($this->media->getPath());
-
-        if ($content === null) {
-            throw new \Exception("Playlist file not found: {$this->media->getPath()}");
-        }
+        $content = $this->getPlaylistContent($this->media->getPath());
 
         return static::parseLines($content)->filter(function ($line) {
             return static::lineHasMediaFilename($line);
@@ -212,11 +226,7 @@ class DynamicHLSPlaylist implements Responsable
      */
     public function getProcessedPlaylist(string $playlistPath): string
     {
-        $content = $this->disk->get($playlistPath);
-
-        if ($content === null) {
-            throw new \Exception("Playlist file not found: {$playlistPath}");
-        }
+        $content = $this->getPlaylistContent($playlistPath);
 
         return static::parseLines($content)->map(function (string $line) {
             if (static::lineHasMediaFilename($line)) {
