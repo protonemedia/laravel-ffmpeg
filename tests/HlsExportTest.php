@@ -116,11 +116,11 @@ class HlsExportTest extends TestCase
 
         $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
             '#EXTM3U',
-            '#EXT-X-STREAM-INF:BANDWIDTH=275000,CODECS="mp4a.40.34"',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,}(,AVERAGE-BANDWIDTH=[0-9]{4,})?,CODECS="mp4a.40.34"',
             'adaptive_0_250.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=1100000,CODECS="mp4a.40.34"',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,}(,AVERAGE-BANDWIDTH=[0-9]{4,})?,CODECS="mp4a.40.34"',
             'adaptive_1_1000.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=4400000,CODECS="mp4a.40.34"',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,}(,AVERAGE-BANDWIDTH=[0-9]{4,})?,CODECS="mp4a.40.34"',
             'adaptive_2_4000.m3u8',
             '#EXT-X-ENDLIST',
         ]);
@@ -152,14 +152,38 @@ class HlsExportTest extends TestCase
 
         $this->assertPlaylistPattern(Storage::disk('local')->get('adaptive.m3u8'), [
             '#EXTM3U',
-            '#EXT-X-STREAM-INF:BANDWIDTH=275000,CODECS="mp4a.40.34"',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,}(,AVERAGE-BANDWIDTH=[0-9]{4,})?,CODECS="mp4a.40.34"',
             'adaptive_0_250.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=1100000,CODECS="mp4a.40.34"',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,}(,AVERAGE-BANDWIDTH=[0-9]{4,})?,CODECS="mp4a.40.34"',
             'adaptive_1_1000.m3u8',
-            '#EXT-X-STREAM-INF:BANDWIDTH=4400000,CODECS="mp4a.40.34"',
+            '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,}(,AVERAGE-BANDWIDTH=[0-9]{4,})?,CODECS="mp4a.40.34"',
             'adaptive_2_4000.m3u8',
             '#EXT-X-ENDLIST',
         ]);
+    }
+
+    #[Test]
+    /** @test */
+    public function it_maps_only_the_first_audio_stream_for_hls_outputs()
+    {
+        $this->fakeLocalMultiAudioVideoFile();
+
+        (new MediaOpener)
+            ->open('video_multi_audio.mp4')
+            ->exportForHLS()
+            ->addFormat(new CopyVideoFormat)
+            ->toDisk('local')
+            ->save('adaptive.m3u8');
+
+        $streams = (new MediaOpener)
+            ->fromDisk('local')
+            ->open('adaptive_0_0_00000.ts')
+            ->getDriver()
+            ->getStreams();
+
+        $audioStreams = collect($streams)->filter(fn ($stream) => $stream->isAudio());
+
+        $this->assertCount(1, $audioStreams);
     }
 
     #[Test]

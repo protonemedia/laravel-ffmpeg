@@ -189,7 +189,7 @@ class HLSExporter extends MediaExporter
         $outs = [$filterCount ? HLSVideoFilters::glue($formatKey, $filterCount) : '0:v'];
 
         if ($this->getAudioStream()) {
-            $outs[] = '0:a';
+            $outs[] = '0:a:0';
         }
 
         return $outs;
@@ -254,9 +254,24 @@ class HLSExporter extends MediaExporter
 
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);
+            } else {
+                $outs = [];
+
+                if ($this->getVideoStream()) {
+                    $outs[] = '0:v';
+                }
+
+                if ($this->getAudioStream()) {
+                    $outs[] = '0:a:0';
+                }
+
+                if (empty($outs)) {
+                    $outs[] = '0';
+                }
             }
+
             $formatPlaylistOutput = $disk->makeMedia($formatPlaylistPath);
-            $this->addFormatOutputMapping($format, $formatPlaylistOutput, $outs ?? ['0']);
+            $this->addFormatOutputMapping($format, $formatPlaylistOutput, $outs);
 
             return $formatPlaylistOutput;
         })->tap(function () {
