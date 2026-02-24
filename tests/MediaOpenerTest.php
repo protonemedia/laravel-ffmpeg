@@ -88,6 +88,24 @@ class MediaOpenerTest extends TestCase
 
     #[Test]
     /** @test */
+    public function it_updates_the_media_collection_when_forcing_advanced_mode_after_opening()
+    {
+        $this->fakeLocalVideoFiles();
+
+        $driver = (new MediaOpener)
+            ->open('video.mp4')
+            ->getDriver();
+
+        $driver->openAdvanced(MediaCollection::make([
+            Media::make('local', 'video.mp4'),
+            Media::make('local', 'video2.mp4'),
+        ]));
+
+        $this->assertCount(2, $driver->getMediaCollection()->collection());
+    }
+
+    #[Test]
+    /** @test */
     public function it_can_open_multiple_files_from_different_disks()
     {
         $mediaCollection = (new MediaOpener)
