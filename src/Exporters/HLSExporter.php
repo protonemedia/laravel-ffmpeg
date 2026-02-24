@@ -254,9 +254,16 @@ class HLSExporter extends MediaExporter
 
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);
+            } else {
+                $outs = ['0:v'];
+
+                if ($this->getAudioStream()) {
+                    $outs[] = '0:a:0';
+                }
             }
+
             $formatPlaylistOutput = $disk->makeMedia($formatPlaylistPath);
-            $this->addFormatOutputMapping($format, $formatPlaylistOutput, $outs ?? ['0']);
+            $this->addFormatOutputMapping($format, $formatPlaylistOutput, $outs);
 
             return $formatPlaylistOutput;
         })->tap(function () {
