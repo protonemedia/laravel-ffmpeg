@@ -485,6 +485,24 @@ class ExportTest extends TestCase
 
     #[Test]
     /** @test */
+    public function it_can_concatenate_videos_with_transcoding_after_opening_media_sequentially()
+    {
+        $this->fakeLocalVideoFile();
+        $this->addTestFile('video2.mp4');
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->open('video2.mp4')
+            ->export()
+            ->inFormat($this->x264())
+            ->concatWithTranscoding(true, false)
+            ->save('concat-sequential.mp4');
+
+        $this->assertTrue(Storage::disk('local')->has('concat-sequential.mp4'));
+    }
+
+    #[Test]
+    /** @test */
     public function it_can_concatenate_two_videos_using_a_complex_filter()
     {
         $this->fakeLocalVideoFiles();
