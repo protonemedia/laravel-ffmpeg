@@ -796,6 +796,24 @@ Route::get('/video/{playlist}', function ($playlist) {
 })->name('video.playlist');
 ```
 
+If you want short-lived key URLs (for example to reduce key reuse/sharing), generate signed key routes in the key resolver:
+
+```php
+use Illuminate\Support\Facades\URL;
+
+->setKeyUrlResolver(function ($key) {
+    return URL::temporarySignedRoute('video.key', now()->addMinutes(2), ['key' => $key]);
+})
+```
+
+And require signed requests on the key endpoint:
+
+```php
+Route::get('/video/secret/{key}', function ($key) {
+    return Storage::disk('secrets')->download($key);
+})->name('video.key')->middleware('signed');
+```
+
 ### Live Coding Session
 
 Here you can find a Live Coding Session about HLS encryption:
