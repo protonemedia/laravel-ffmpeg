@@ -64,6 +64,25 @@ class EncryptedHlsExportTest extends TestCase
     /**
      * @test
      */
+    public function it_can_rotate_encryption_keys_without_listener_string_parsing_errors()
+    {
+        $this->fakeLocalVideoFile();
+
+        FFMpeg::open('video.mp4')
+            ->exportForHLS()
+            ->setKeyFrameInterval(2)
+            ->setSegmentLength(2)
+            ->addFormat($this->x264()->setKiloBitrate(250))
+            ->withRotatingEncryptionKey(function () {}, 1)
+            ->save('rotating-keys.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('rotating-keys.m3u8'));
+    }
+
+    #[Test]
+    /**
+     * @test
+     */
     public function it_can_export_a_single_media_file_twice_into_an_encryped_hls_export()
     {
         $this->fakeLocalVideoFile();
