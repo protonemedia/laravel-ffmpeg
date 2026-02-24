@@ -697,6 +697,18 @@ FFMpeg::fromDisk('videos')
     });
 ```
 
+You can also place playlists in subdirectories. The generated master playlist will reference those playlist paths relatively.
+
+```php
+->useSegmentFilenameGenerator(function ($name, $format, $key, callable $segments, callable $playlist) {
+    $folder = $format->getKiloBitrate() > 1000 ? '720p' : '480p';
+
+    $segments("stream/{$folder}/segment_%05d.ts");
+    $playlist("stream/{$folder}/playlist.m3u8");
+})
+->save('stream/master.m3u8');
+```
+
 ### Encrypted HLS
 
 You can encrypt each HLS segment using AES-128 encryption. To do this, call the `withEncryptionKey` method on the HLS exporter with a key. We provide a `generateEncryptionKey` helper method on the `HLSExporter` class to generate a key. Make sure you store the key well, as the exported result is worthless without the key. By default, the filename of the key is `secret.key`, but you can change that with the optional second parameter of the `withEncryptionKey` method.

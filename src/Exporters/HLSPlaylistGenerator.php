@@ -17,6 +17,8 @@ class HLSPlaylistGenerator implements PlaylistGenerator
 
     protected bool $withEndLine = true;
 
+    private ?string $sharedPathPrefix = null;
+
     /**
      * Adds the #EXT-X-ENDLIST tag to the end of the playlist.
      *
@@ -55,6 +57,44 @@ class HLSPlaylistGenerator implements PlaylistGenerator
         return $lines->get($index - 1);
     }
 
+    private function resolveSharedPathPrefix(Collection $segmentPlaylists): ?string
+    {
+        $firstPath = $segmentPlaylists->first()?->getPath();
+
+        if (! is_string($firstPath) || $firstPath === '') {
+            return null;
+        }
+
+        $prefix = $firstPath;
+
+        foreach ($segmentPlaylists as $segmentPlaylist) {
+            $path = $segmentPlaylist->getPath();
+
+            while (! str_starts_with($path, $prefix) && $prefix !== '') {
+                $prefix = substr($prefix, 0, -1);
+            }
+
+            if ($prefix === '') {
+                return null;
+            }
+        }
+
+        $lastSlashPosition = strrpos($prefix, '/');
+
+        return $lastSlashPosition === false ? null : substr($prefix, 0, $lastSlashPosition + 1);
+    }
+
+    private function getPlaylistPathForMaster(Media $segmentPlaylist): string
+    {
+        $path = $segmentPlaylist->getPath();
+
+        if (! $this->sharedPathPrefix || ! str_starts_with($path, $this->sharedPathPrefix)) {
+            return $segmentPlaylist->getFilename();
+        }
+
+        return ltrim(substr($path, strlen($this->sharedPathPrefix)), '/');
+    }
+
     /**
      * Loops through all segment playlists and generates a main playlist. It finds
      * the relative paths to the segment playlists and adds the framerate when
@@ -62,7 +102,10 @@ class HLSPlaylistGenerator implements PlaylistGenerator
      */
     public function get(array $segmentPlaylists, PHPFFMpeg $driver): string
     {
-        return Collection::make($segmentPlaylists)->map(function (Media $segmentPlaylist, $key) use ($driver) {
+        $segmentPlaylistsCollection = Collection::make($segmentPlaylists);
+        $this->sharedPathPrefix = $this->resolveSharedPathPrefix($segmentPlaylistsCollection);
+
+        return $segmentPlaylistsCollection->map(function (Media $segmentPlaylist, $key) use ($driver) {
             $streamInfoLine = $this->getStreamInfoLine($segmentPlaylist, $key);
 
             $media = (new MediaOpener($segmentPlaylist->getDisk(), $driver))
@@ -74,7 +117,7 @@ class HLSPlaylistGenerator implements PlaylistGenerator
                 }
             }
 
-            return [$streamInfoLine, $segmentPlaylist->getFilename()];
+            return [$streamInfoLine, $this->getPlaylistPathForMaster($segmentPlaylist)];
         })->collapse()
             ->prepend(static::PLAYLIST_START)
             ->when($this->withEndLine, fn (Collection $lines) => $lines->push(static::PLAYLIST_END))
