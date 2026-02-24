@@ -640,6 +640,8 @@ FFMpeg::fromDisk('videos')
     ->save('adaptive_steve.m3u8');
 ```
 
+By default, HLS exports use `vod` playlist type. You can change this with `setPlaylistType('event')` or `setPlaylistType('live')`.
+
 By default, HLS exports include the first audio stream (`0:a:0`) when audio is present. If you want to keep all audio streams, call `keepAllAudioStreams()`.
 
 ```php
