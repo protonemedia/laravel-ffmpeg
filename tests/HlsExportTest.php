@@ -188,31 +188,6 @@ class HlsExportTest extends TestCase
 
     #[Test]
     /** @test */
-    public function it_can_keep_all_audio_streams_for_hls_outputs()
-    {
-        $this->fakeLocalMultiAudioVideoFile();
-
-        (new MediaOpener)
-            ->open('video_multi_audio.mp4')
-            ->exportForHLS()
-            ->keepAllAudioStreams()
-            ->addFormat(new CopyVideoFormat)
-            ->toDisk('local')
-            ->save('adaptive_all_audio.m3u8');
-
-        $streams = (new MediaOpener)
-            ->fromDisk('local')
-            ->open('adaptive_all_audio_0_0_00000.ts')
-            ->getDriver()
-            ->getStreams();
-
-        $audioStreams = collect($streams)->filter(fn ($stream) => $stream->isAudio());
-
-        $this->assertCount(2, $audioStreams);
-    }
-
-    #[Test]
-    /** @test */
     public function it_can_set_additional_parameters_on_the_format()
     {
         $this->fakeLocalVideoFile();

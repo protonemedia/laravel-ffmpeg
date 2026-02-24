@@ -46,11 +46,6 @@ class HLSExporter extends MediaExporter
     private $segmentFilenameGenerator = null;
 
     /**
-     * @var bool
-     */
-    private $keepAllAudioStreams = false;
-
-    /**
      * Setter for the segment length
      */
     public function setSegmentLength(int $length): self
@@ -106,16 +101,6 @@ class HLSExporter extends MediaExporter
     public function useSegmentFilenameGenerator(Closure $callback): self
     {
         $this->segmentFilenameGenerator = $callback;
-
-        return $this;
-    }
-
-    /**
-     * Keep all audio streams in the HLS output instead of only the first one.
-     */
-    public function keepAllAudioStreams(): self
-    {
-        $this->keepAllAudioStreams = true;
 
         return $this;
     }
@@ -189,18 +174,6 @@ class HLSExporter extends MediaExporter
     }
 
     /**
-     * Returns the audio stream mappings for output mappings.
-     */
-    private function getAudioOutMappings(): array
-    {
-        if (! $this->getAudioStream()) {
-            return [];
-        }
-
-        return [$this->keepAllAudioStreams ? '0:a' : '0:a:0'];
-    }
-
-    /**
      * Gives the callback an HLSVideoFilters object that provides addFilter(),
      * addLegacyFilter(), addWatermark() and resize() helper methods. It
      * returns a mapping for the video and (optional) audio stream.
@@ -213,10 +186,13 @@ class HLSExporter extends MediaExporter
 
         $filterCount = $hlsVideoFilters->count();
 
-        return array_merge(
-            [$filterCount ? HLSVideoFilters::glue($formatKey, $filterCount) : '0:v'],
-            $this->getAudioOutMappings()
-        );
+        $outs = [$filterCount ? HLSVideoFilters::glue($formatKey, $filterCount) : '0:v'];
+
+        if ($this->getAudioStream()) {
+            $outs[] = '0:a:0';
+        }
+
+        return $outs;
     }
 
     /**
@@ -279,7 +255,11 @@ class HLSExporter extends MediaExporter
             if ($filtersCallback) {
                 $outs = $this->applyFiltersCallback($filtersCallback, $key);
             } else {
-                $outs = array_merge(['0:v'], $this->getAudioOutMappings());
+                $outs = ['0:v'];
+
+                if ($this->getAudioStream()) {
+                    $outs[] = '0:a:0';
+                }
             }
 
             $formatPlaylistOutput = $disk->makeMedia($formatPlaylistPath);
