@@ -796,6 +796,15 @@ Route::get('/video/{playlist}', function ($playlist) {
 })->name('video.playlist');
 ```
 
+If you want to remove an HLS export and all generated files (master playlist, variant playlists, segments, and keys), you can use `deleteAllFiles()`.
+
+```php
+FFMpeg::dynamicHLSPlaylist()
+    ->fromDisk('public')
+    ->open('adaptive_steve.m3u8')
+    ->deleteAllFiles();
+```
+
 ### Live Coding Session
 
 Here you can find a Live Coding Session about HLS encryption:
