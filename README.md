@@ -640,6 +640,16 @@ FFMpeg::fromDisk('videos')
     ->save('adaptive_steve.m3u8');
 ```
 
+By default, HLS exports include the first audio stream (`0:a:0`) when audio is present. If you want to keep all audio streams, call `keepAllAudioStreams()`.
+
+```php
+FFMpeg::open('steve_howe.mp4')
+    ->exportForHLS()
+    ->keepAllAudioStreams()
+    ->addFormat($lowBitrate)
+    ->save('adaptive_steve.m3u8');
+```
+
 The ```addFormat``` method of the HLS exporter takes an optional second parameter which can be a callback method. This allows you to add different filters per format. First, check out the *Multiple inputs* section to understand how complex filters are handled.
 
 You can use the `addFilter` method to add a complex filter (see `$lowBitrate` example). Since the `scale` filter is used a lot, there is a helper method (see `$midBitrate` example). You can also use a callable to get access to the `ComplexFilters` instance. The package provides the `$in` and `$out` arguments so you don't have to worry about it (see `$highBitrate` example).
