@@ -89,6 +89,7 @@ class FrameTest extends TestCase
             ->getFrameContents();
 
         $this->assertIsString($contents);
+        $this->assertNotEmpty($contents);
     }
 
     #[Test]
