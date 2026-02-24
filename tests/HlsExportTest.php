@@ -166,18 +166,24 @@ class HlsExportTest extends TestCase
     /** @test */
     public function it_maps_only_the_first_audio_stream_for_hls_outputs()
     {
-        $this->fakeLocalVideoFile();
+        $this->fakeLocalMultiAudioVideoFile();
 
-        $command = (new MediaOpener)
-            ->open('video.mp4')
+        (new MediaOpener)
+            ->open('video_multi_audio.mp4')
             ->exportForHLS()
-            ->addFormat($this->x264(), function () {
-                // trigger mapping path that includes audio stream mapping
-            })
+            ->addFormat(new CopyVideoFormat)
             ->toDisk('local')
-            ->getCommand('adaptive.m3u8');
+            ->save('adaptive.m3u8');
 
-        $this->assertStringContainsString('0:a:0', $command);
+        $streams = (new MediaOpener)
+            ->fromDisk('local')
+            ->open('adaptive_0_0_00000.ts')
+            ->getDriver()
+            ->getStreams();
+
+        $audioStreams = collect($streams)->filter(fn ($stream) => $stream->isAudio());
+
+        $this->assertCount(1, $audioStreams);
     }
 
     #[Test]

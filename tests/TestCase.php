@@ -130,6 +130,12 @@ abstract class TestCase extends BaseTestCase
         $this->addTestFile('video3.mp4');
     }
 
+    protected function fakeLocalMultiAudioVideoFile()
+    {
+        $this->fakeLocalDisk();
+        $this->addTestFile('video_multi_audio.mp4');
+    }
+
     protected function assertPlaylistPattern(string $playlist, array $patternLines, ?StdListener $listener = null): self
     {
         $playlist = preg_replace('/\n|\r\n?/', "\n", $playlist);
