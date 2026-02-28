@@ -1,19 +1,15 @@
-# laravel-ffmpeg development guide
+# Laravel FFmpeg Reference
 
-For full documentation, see the README: https://github.com/protonemedia/laravel-ffmpeg#readme
+Complete reference for `protonemedia/laravel-ffmpeg`. Full documentation: https://github.com/protonemedia/laravel-ffmpeg#readme
 
-## At a glance
-This package integrates **FFmpeg** into Laravel using Laravel's filesystem disks.
+## Start Here
+- README / docs: https://github.com/protonemedia/laravel-ffmpeg#readme
 
-## Local setup
-- Install dependencies: `composer install`
-- Keep the dev loop package-focused (avoid adding app-only scaffolding).
+## Notes for AI Assistants
+- Treat the README as the source of truth for the supported public API.
+- Keep changes backward-compatible unless the change is explicitly a breaking change.
 
 ## Testing
-- Run: `composer test` (preferred) or the repository’s configured test runner.
-- Add regression tests for bug fixes.
+- Run the repository test command (see README / composer scripts).
 
-## Notes & conventions
-- Requires FFmpeg/FFprobe binaries in CI/dev; avoid tests that depend on local machine state.
-- Be careful with disk configuration and path handling (local vs cloud).
-- Prefer integration tests around the public fluent API (facades/builders) instead of internal classes.
+For detailed usage examples and the full API surface, refer to the README.
