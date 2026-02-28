@@ -1,14 +1,13 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
+
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\CopyFormat;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class CopyTest extends TestCase
 {
-    #[Test]
     /** @test */
     public function it_can_export_a_single_video_file_in_the_same_codec_in_a_different_container()
     {

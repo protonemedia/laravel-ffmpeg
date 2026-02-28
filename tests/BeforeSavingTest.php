@@ -1,13 +1,12 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
+
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class BeforeSavingTest extends TestCase
 {
-    #[Test]
     /** @test */
     public function it_can_edit_the_commands_before_the_underlying_save_method_is_hit()
     {
@@ -36,7 +35,6 @@ class BeforeSavingTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('video_3.mp4'));
     }
 
-    #[Test]
     /** @test */
     public function it_can_edit_the_commands_before_the_underlying_save_method_is_hit_with_hls()
     {

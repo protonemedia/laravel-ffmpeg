@@ -1,12 +1,11 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
+
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class VolumeDetectTest extends TestCase
 {
-    #[Test]
     /** @test */
     public function it_can_fetch_the_results_from_volume_detection()
     {

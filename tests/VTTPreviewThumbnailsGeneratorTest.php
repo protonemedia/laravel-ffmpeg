@@ -1,7 +1,7 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
+
 use ProtoneMedia\LaravelFFMpeg\Exporters\VTTPreviewThumbnailsGenerator;
 use ProtoneMedia\LaravelFFMpeg\Filters\TileFactory;
 use Spatie\Snapshots\MatchesSnapshots;
@@ -10,7 +10,6 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
 {
     use MatchesSnapshots;
 
-    #[Test]
     /** @test */
     public function it_can_generate_a_vtt_file()
     {
@@ -26,7 +25,6 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
         $this->assertMatchesTextSnapshot($generator->getContents());
     }
 
-    #[Test]
     /** @test */
     public function it_can_generate_a_vtt_file_with_a_non_sqaure_grid()
     {
@@ -44,7 +42,6 @@ class VTTPreviewThumbnailsGeneratorTest extends TestCase
         $this->assertMatchesTextSnapshot($generator->getContents());
     }
 
-    #[Test]
     /** @test */
     public function it_can_generate_a_vtt_file_and_keep_the_margin_and_padding_in_account()
     {

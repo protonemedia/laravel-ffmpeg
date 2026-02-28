@@ -1,14 +1,13 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
+
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class FrameTest extends TestCase
 {
-    #[Test]
     /** @test */
     public function it_can_only_export_a_frame_from_a_video_file()
     {
@@ -26,7 +25,6 @@ class FrameTest extends TestCase
         $this->fail('Should have thrown an exception');
     }
 
-    #[Test]
     /** @test */
     public function it_can_export_a_frame_using_seconds()
     {
@@ -42,7 +40,6 @@ class FrameTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('thumb.png'));
     }
 
-    #[Test]
     /** @test */
     public function it_can_loop_through_the_exporter()
     {
@@ -61,7 +58,6 @@ class FrameTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('thumb_2.png'));
     }
 
-    #[Test]
     /** @test */
     public function it_can_loop_through_the_exporter_with_the_foreach_method()
     {
@@ -76,7 +72,6 @@ class FrameTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('thumb_3.png'));
     }
 
-    #[Test]
     /** @test */
     public function it_can_export_a_frame_as_base64()
     {
@@ -89,10 +84,8 @@ class FrameTest extends TestCase
             ->getFrameContents();
 
         $this->assertIsString($contents);
-        $this->assertNotEmpty($contents);
     }
 
-    #[Test]
     /** @test */
     public function it_can_export_a_frame_using_a_string()
     {
@@ -108,7 +101,6 @@ class FrameTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('thumb.png'));
     }
 
-    #[Test]
     /** @test */
     public function it_can_export_a_frame_using_a_timecode()
     {

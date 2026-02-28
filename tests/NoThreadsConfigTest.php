@@ -1,7 +1,7 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
+
 use FFMpeg\Format\Video\X264;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
@@ -15,7 +15,6 @@ class NoThreadsConfigTest extends TestCase
         $app['config']->set('laravel-ffmpeg.temporary_files_root', sys_get_temp_dir().'/laravel-custom-temp');
     }
 
-    #[Test]
     /** @test */
     public function it_can_disable_the_threads_by_setting_it_to_false()
     {
@@ -28,7 +27,6 @@ class NoThreadsConfigTest extends TestCase
         $this->assertStringNotContainsString('-threads', $command[0]);
     }
 
-    #[Test]
     /** @test */
     public function it_passes_the_default_temporary_root_to_the_underlying_driver()
     {

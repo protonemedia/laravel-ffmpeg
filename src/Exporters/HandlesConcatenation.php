@@ -32,11 +32,6 @@ trait HandlesConcatenation
 
     private function addConcatFilterAndMapping(Media $outputMedia)
     {
-        // Ensure the driver is using AdvancedMedia for concat with transcoding
-        if (! $this->driver->get() instanceof \FFMpeg\Media\AdvancedMedia) {
-            $this->driver->openAdvanced($this->driver->getMediaCollection());
-        }
-
         $sources = $this->driver->getMediaCollection()->map(function ($media, $key) {
             return "[{$key}]";
         });

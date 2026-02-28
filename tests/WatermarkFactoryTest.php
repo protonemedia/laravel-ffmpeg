@@ -1,7 +1,7 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
+
 use FFMpeg\Format\VideoInterface;
 use FFMpeg\Media\Video;
 use Illuminate\Support\Facades\Storage;
@@ -25,7 +25,6 @@ class WatermarkFactoryTest extends TestCase
         )[1];
     }
 
-    #[Test]
     /** @test */
     public function it_gives_the_complete_path_of_the_watermark_to_the_watermark_filter()
     {
@@ -40,7 +39,6 @@ class WatermarkFactoryTest extends TestCase
         );
     }
 
-    #[Test]
     /** @test */
     public function it_downloads_a_remote_logo_to_a_temporary_filesystem()
     {
@@ -61,7 +59,6 @@ class WatermarkFactoryTest extends TestCase
         $this->assertStringContainsString('logo.png', $command);
     }
 
-    #[Test]
     /** @test */
     public function it_gives_the_coordinates_to_the_watermark_filter()
     {
@@ -82,7 +79,6 @@ class WatermarkFactoryTest extends TestCase
         );
     }
 
-    #[Test]
     /** @test */
     public function it_gives_the_coordinates_to_a_custom_filter_by_using_the_preset_position()
     {
@@ -109,7 +105,6 @@ class WatermarkFactoryTest extends TestCase
         $this->assertStringContainsString('overlay=W-w+50:H-h+25', $this->getSecondCommand($factory));
     }
 
-    #[Test]
     /** @test */
     public function it_can_manipulate_the_watermark_image()
     {
@@ -134,7 +129,6 @@ class WatermarkFactoryTest extends TestCase
         $this->assertEquals(100, $width);
     }
 
-    #[Test]
     /** @test */
     public function it_can_normalize_a_windows_path()
     {

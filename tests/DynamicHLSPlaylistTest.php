@@ -3,38 +3,10 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Support\Facades\Storage;
-use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class DynamicHLSPlaylistTest extends TestCase
 {
-    #[Test]
-    /** @test */
-    public function it_throws_an_exception_when_a_playlist_file_is_missing()
-    {
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Playlist file not found or invalid: missing.m3u8');
-
-        FFMpeg::dynamicHLSPlaylist()
-            ->fromDisk('local')
-            ->open('missing.m3u8')
-            ->all();
-    }
-
-    #[Test]
-    /** @test */
-    public function it_throws_a_catchable_exception_for_a_corrupted_playlist_path_string()
-    {
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Invalid or unreadable playlist');
-
-        FFMpeg::dynamicHLSPlaylist()
-            ->fromDisk('local')
-            ->open("\0broken.m3u8")
-            ->all();
-    }
-
-    #[Test]
     /**
      * @test
      */

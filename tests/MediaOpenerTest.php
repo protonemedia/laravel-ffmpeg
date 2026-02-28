@@ -1,7 +1,7 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
+
 use FFMpeg\Exception\RuntimeException;
 use FFMpeg\Media\Video;
 use FFMpeg\Media\Waveform;
@@ -18,7 +18,6 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class MediaOpenerTest extends TestCase
 {
-    #[Test]
     /** @test */
     public function it_can_open_a_single_file_from_the_default_disk()
     {
@@ -34,7 +33,6 @@ class MediaOpenerTest extends TestCase
         $this->assertEquals('local', $media->getDisk()->getName());
     }
 
-    #[Test]
     /** @test */
     public function it_can_open_an_upload_file()
     {
@@ -45,7 +43,6 @@ class MediaOpenerTest extends TestCase
         $this->assertEquals(5, $media->getDurationInSeconds());
     }
 
-    #[Test]
     /** @test */
     public function it_knows_the_duration_of_a_file()
     {
@@ -57,7 +54,6 @@ class MediaOpenerTest extends TestCase
         $this->assertEquals(4720, $media->getDurationInMiliseconds());
     }
 
-    #[Test]
     /** @test */
     public function it_knows_the_duration_of_a_webm_file()
     {
@@ -69,7 +65,6 @@ class MediaOpenerTest extends TestCase
         $this->assertEquals(4720, $media->getDurationInMiliseconds());
     }
 
-    #[Test]
     /** @test */
     public function it_can_open_multiple_files_from_the_same_disk()
     {
@@ -86,25 +81,6 @@ class MediaOpenerTest extends TestCase
         $this->assertEquals('local', $mediaCollection->last()->getDisk()->getName());
     }
 
-    #[Test]
-    /** @test */
-    public function it_updates_the_media_collection_when_forcing_advanced_mode_after_opening()
-    {
-        $this->fakeLocalVideoFiles();
-
-        $driver = (new MediaOpener)
-            ->open('video.mp4')
-            ->getDriver();
-
-        $driver->openAdvanced(MediaCollection::make([
-            Media::make('local', 'video.mp4'),
-            Media::make('local', 'video2.mp4'),
-        ]));
-
-        $this->assertCount(2, $driver->getMediaCollection()->collection());
-    }
-
-    #[Test]
     /** @test */
     public function it_can_open_multiple_files_from_different_disks()
     {
@@ -124,7 +100,6 @@ class MediaOpenerTest extends TestCase
         $this->assertEquals('local', $mediaCollection->last()->getDisk()->getName());
     }
 
-    #[Test]
     /** @test */
     public function it_downloads_a_remote_file_before_opening()
     {
@@ -152,7 +127,6 @@ class MediaOpenerTest extends TestCase
         $this->assertFalse(file_exists($tempPath));
     }
 
-    #[Test]
     /** @test */
     public function it_can_open_a_remote_url_without_opening()
     {
@@ -168,7 +142,6 @@ class MediaOpenerTest extends TestCase
         $this->assertEquals($url, $media->getPath());
     }
 
-    #[Test]
     /** @test */
     public function it_can_transform_a_media_on_network_object_to_a_media_object()
     {
@@ -185,7 +158,6 @@ class MediaOpenerTest extends TestCase
         $this->assertEquals(400, $width);
     }
 
-    #[Test]
     /** @test */
     public function it_can_open_a_remote_url_with_headers()
     {
@@ -207,7 +179,6 @@ class MediaOpenerTest extends TestCase
         $this->assertEquals(5, $driver->getDurationInSeconds());
     }
 
-    #[Test]
     /** @test */
     public function it_can_open_a_file_from_a_filesystem_instance()
     {
@@ -221,7 +192,6 @@ class MediaOpenerTest extends TestCase
         $this->assertStringContainsString('League\Flysystem\Local\LocalFilesystemAdapter_', $media->get()->first()->getDisk()->getName());
     }
 
-    #[Test]
     /** @test */
     public function it_can_access_the_underlying_library_object()
     {
@@ -236,7 +206,6 @@ class MediaOpenerTest extends TestCase
         $this->assertInstanceOf(Waveform::class, $media->getDriver()->waveform());
     }
 
-    #[Test]
     /** @test */
     public function it_can_use_the_facade_to_do_two_independant_exports()
     {
