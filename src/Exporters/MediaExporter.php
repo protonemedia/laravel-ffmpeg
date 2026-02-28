@@ -117,7 +117,7 @@ class MediaExporter
             $generator = new VTTPreviewThumbnailsGenerator(
                 $filter,
                 $mediaExporter->driver->getDurationInSeconds(),
-                $tileFactory->vttSequnceFilename ?: fn () => $outputMedia->getPath()
+                $tileFactory->vttSequenceFilename ?: fn () => $outputMedia->getPath()
             );
 
             $this->toDisk->put($tileFactory->vttOutputPath, $generator->getContents());

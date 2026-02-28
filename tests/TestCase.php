@@ -1,7 +1,7 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-
+use PHPUnit\Framework\Attributes\Test;
 use FFMpeg\Format\Audio\Mp3;
 use FFMpeg\Format\Video\X264;
 use Illuminate\Filesystem\FilesystemAdapter;
@@ -128,6 +128,12 @@ abstract class TestCase extends BaseTestCase
     {
         $this->fakeLocalDisk();
         $this->addTestFile('video3.mp4');
+    }
+
+    protected function fakeLocalMultiAudioVideoFile()
+    {
+        $this->fakeLocalDisk();
+        $this->addTestFile('video_multi_audio.mp4');
     }
 
     protected function assertPlaylistPattern(string $playlist, array $patternLines, ?StdListener $listener = null): self

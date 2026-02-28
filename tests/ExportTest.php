@@ -1,7 +1,7 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-
+use PHPUnit\Framework\Attributes\Test;
 use FFMpeg\Coordinate\TimeCode;
 use FFMpeg\Exception\RuntimeException;
 use FFMpeg\Filters\Video\ClipFilter;
@@ -17,6 +17,7 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class ExportTest extends TestCase
 {
+    #[Test]
     /** @test */
     public function it_can_export_a_single_video_file()
     {
@@ -31,6 +32,7 @@ class ExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_remote_video_file()
     {
@@ -46,6 +48,7 @@ class ExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_audio_file()
     {
@@ -60,6 +63,7 @@ class ExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('guitar.mp3'));
     }
 
+    #[Test]
     /** @test */
     public function it_decorates_the_original_exception()
     {
@@ -93,6 +97,7 @@ class ExportTest extends TestCase
         $this->fail('Should have thrown exception.');
     }
 
+    #[Test]
     /** @test */
     public function it_can_bind_a_progress_listener_to_the_format()
     {
@@ -114,6 +119,7 @@ class ExportTest extends TestCase
         $this->assertNotEmpty($percentages);
     }
 
+    #[Test]
     /** @test */
     public function it_can_decorate_the_format_to_get_access_to_the_progress_listener()
     {
@@ -136,6 +142,7 @@ class ExportTest extends TestCase
         $this->assertNotEmpty($times);
     }
 
+    #[Test]
     /** @test */
     public function it_can_bind_a_dedicated_progress_listener_to_the_exporter()
     {
@@ -161,6 +168,7 @@ class ExportTest extends TestCase
         $this->assertNotEmpty($rates);
     }
 
+    #[Test]
     /** @test */
     public function it_can_only_bind_one_progress_listener_to_the_exporter()
     {
@@ -188,6 +196,7 @@ class ExportTest extends TestCase
         $this->assertEquals(count($firstListener), $completeKey + 1);
     }
 
+    #[Test]
     /** @test */
     public function it_can_chain_multiple_exports()
     {
@@ -206,6 +215,7 @@ class ExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('new_video2.mp4'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_chain_multiple_exports_using_the_each_method()
     {
@@ -221,6 +231,7 @@ class ExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('new_video2.mp4'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_chain_multiple_exports_using_the_each_method_on_an_external_disk()
     {
@@ -238,6 +249,7 @@ class ExportTest extends TestCase
         $this->assertTrue(Storage::disk('memory')->has('thumb_2.png'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_with_a_single_filter()
     {
@@ -254,6 +266,7 @@ class ExportTest extends TestCase
         $this->assertEquals(2, (new MediaOpener)->open('new_video.mp4')->getDurationInSeconds());
     }
 
+    #[Test]
     /** @test */
     public function it_can_add_the_filter_after_calling_the_export_method()
     {
@@ -270,6 +283,7 @@ class ExportTest extends TestCase
         $this->assertEquals(2, (new MediaOpener)->open('new_video.mp4')->getDurationInSeconds());
     }
 
+    #[Test]
     /** @test */
     public function it_doesnt_migrate_filters_from_a_previous_export()
     {
@@ -293,6 +307,7 @@ class ExportTest extends TestCase
         $this->assertEquals(5, (new MediaOpener)->open('long_video.mp4')->getDurationInSeconds());
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_two_files_into_a_two_files_with_filters_and_a_progress_listener()
     {
@@ -316,6 +331,7 @@ class ExportTest extends TestCase
         $this->assertTrue(Storage::disk('memory')->has('new_video2.wmv'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_merge_two_remote_video_files_with_the_same_headers()
     {
@@ -340,6 +356,7 @@ class ExportTest extends TestCase
         );
     }
 
+    #[Test]
     /** @test */
     public function it_can_merge_two_remote_video_files_with_different_headers()
     {
@@ -364,6 +381,7 @@ class ExportTest extends TestCase
         );
     }
 
+    #[Test]
     /** @test */
     public function it_can_stack_two_videos_horizontally()
     {
@@ -384,6 +402,7 @@ class ExportTest extends TestCase
         );
     }
 
+    #[Test]
     /** @test */
     public function it_can_mix_audio_and_video_files()
     {
@@ -400,6 +419,7 @@ class ExportTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('new_video.mp4'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_export_a_single_media_file_to_an_external_location()
     {
@@ -415,6 +435,7 @@ class ExportTest extends TestCase
         $this->assertTrue(Storage::disk('memory')->has('new_video.mp4'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_create_a_timelapse_from_images()
     {
@@ -435,6 +456,7 @@ class ExportTest extends TestCase
         );
     }
 
+    #[Test]
     /** @test */
     public function it_can_concatenate_two_videos_using_the_concat_method()
     {
@@ -461,6 +483,25 @@ class ExportTest extends TestCase
         );
     }
 
+    #[Test]
+    /** @test */
+    public function it_can_concatenate_videos_with_transcoding_after_opening_media_sequentially()
+    {
+        $this->fakeLocalVideoFile();
+        $this->addTestFile('video2.mp4');
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->open('video2.mp4')
+            ->export()
+            ->inFormat($this->x264())
+            ->concatWithTranscoding(true, false)
+            ->save('concat-sequential.mp4');
+
+        $this->assertTrue(Storage::disk('local')->has('concat-sequential.mp4'));
+    }
+
+    #[Test]
     /** @test */
     public function it_can_concatenate_two_videos_using_a_complex_filter()
     {

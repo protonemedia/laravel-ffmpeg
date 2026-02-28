@@ -21,18 +21,22 @@ class StreamParser
 
     public function getFrameRate(): ?string
     {
-        $frameRate = trim(optional($this->stream)->get('avg_frame_rate'));
+        $frameRate = trim($this->stream->get('avg_frame_rate'));
 
         if (! $frameRate || Str::endsWith($frameRate, '/0')) {
             return null;
         }
 
         if (Str::contains($frameRate, '/')) {
-            [$numerator, $denominator] = explode('/', $frameRate);
+            $parts = explode('/', $frameRate);
 
-            $frameRate = $numerator / $denominator;
+            if (count($parts) !== 2 || ! is_numeric($parts[0]) || ! is_numeric($parts[1])) {
+                return null;
+            }
+
+            $frameRate = $parts[0] / $parts[1];
         }
 
-        return $frameRate ? number_format($frameRate, 3, '.', '') : null;
+        return is_numeric($frameRate) ? number_format($frameRate, 3, '.', '') : null;
     }
 }

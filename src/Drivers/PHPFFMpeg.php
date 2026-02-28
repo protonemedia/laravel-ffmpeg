@@ -108,11 +108,11 @@ class PHPFFMpeg
      */
     public function open(MediaCollection $mediaCollection): self
     {
+        $this->mediaCollection = $mediaCollection;
+
         if ($this->media) {
             return $this;
         }
-
-        $this->mediaCollection = $mediaCollection;
 
         if ($mediaCollection->count() === 1 && ! $this->forceAdvanced) {
             $media = Arr::first($mediaCollection->collection());

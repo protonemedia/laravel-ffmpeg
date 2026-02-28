@@ -40,9 +40,19 @@ class HLSPlaylistGenerator implements PlaylistGenerator
             $segmentPlaylistMedia->getDirectory().HLSExporter::generateTemporarySegmentPlaylistFilename($key)
         );
 
+        if ($segmentPlaylist === null) {
+            throw new \Exception("Segment playlist not found: {$segmentPlaylistMedia->getDirectory()}".HLSExporter::generateTemporarySegmentPlaylistFilename($key));
+        }
+
         $lines = DynamicHLSPlaylist::parseLines($segmentPlaylist)->filter();
 
-        return $lines->get($lines->search($segmentPlaylistMedia->getFilename()) - 1);
+        $index = $lines->search($segmentPlaylistMedia->getFilename());
+
+        if ($index === false || $index === 0) {
+            throw new \Exception("Could not find stream info line for: {$segmentPlaylistMedia->getFilename()}");
+        }
+
+        return $lines->get($index - 1);
     }
 
     /**

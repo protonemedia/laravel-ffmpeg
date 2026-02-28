@@ -1,7 +1,7 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-
+use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\ImageFormat;
 use ProtoneMedia\LaravelFFMpeg\Filters\TileFactory;
@@ -15,6 +15,7 @@ class TileTest extends TestCase
         return array_map(fn ($i) => [$i], range(1, 10));
     }
 
+    #[Test]
     /** @test */
     public function it_has_a_tile_filter()
     {
@@ -32,6 +33,7 @@ class TileTest extends TestCase
         $this->assertFalse(Storage::disk('local')->has('2x2_00003.jpg'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_generate_thumbnails()
     {
@@ -71,6 +73,7 @@ class TileTest extends TestCase
         );
     }
 
+    #[Test]
     /** @test */
     public function it_can_generate_thumbnails_with_a_specified_quality()
     {
@@ -100,6 +103,25 @@ class TileTest extends TestCase
         );
     }
 
+    #[Test]
+    /** @test */
+    public function it_can_use_a_custom_sequence_filename_for_vtt_generation()
+    {
+        $this->fakeLongLocalVideoFile();
+
+        (new MediaOpener)
+            ->open('video3.mp4')
+            ->exportTile(function (TileFactory $factory) {
+                $factory->interval(2)
+                    ->grid(2, 2)
+                    ->generateVTT('thumbnails.vtt', 'custom_%05d.jpg');
+            })
+            ->save('tile_%05d.jpg');
+
+        $this->assertStringContainsString('custom_00001.jpg', Storage::disk('local')->get('thumbnails.vtt'));
+    }
+
+    #[Test]
     /** @test */
     public function it_has_a_tile_filter_and_can_store_the_vtt_file()
     {
@@ -120,6 +142,7 @@ class TileTest extends TestCase
         $this->assertTrue(Storage::disk('local')->has('thumbnails.vtt'));
     }
 
+    #[Test]
     /** @test */
     public function it_can_generate_the_tiles_and_vtt_on_an_external_disk()
     {
@@ -140,6 +163,7 @@ class TileTest extends TestCase
         $this->assertTrue(Storage::disk('memory')->has('thumbnails.vtt'));
     }
 
+    #[Test]
     /** @test */
     public function it_has_a_tile_factory()
     {
@@ -170,6 +194,7 @@ class TileTest extends TestCase
         $this->assertEquals(360, $imageSpecs[1]); // 30 + 90 + 15 + 90 + 15 + 90 + 30
     }
 
+    #[Test]
     /** @test */
     public function it_has_a_tile_factory_that_can_set_the_width_by_the_given_height()
     {
@@ -201,6 +226,7 @@ class TileTest extends TestCase
         $this->assertEquals(100, $imageSpecs[1]);
     }
 
+    #[Test]
     /** @test */
     public function it_can_set_the_quality_of_the_jpeg()
     {
