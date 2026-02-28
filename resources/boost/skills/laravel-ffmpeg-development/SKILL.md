@@ -4,34 +4,40 @@ description: Application integration guidance for protonemedia/laravel-ffmpeg.
 license: MIT
 metadata:
   author: ProtoneMedia
-  source: https://github.com/protonemedia/laravel-ffmpeg
 ---
 
-# Laravel FFMPEG
+# Laravel FFMPEG Development
 
-Guidance for **application developers** using `protonemedia/laravel-ffmpeg` in a Laravel app.
+## Overview
+Use `protonemedia/laravel-ffmpeg.` in a Laravel application.
 
 ## When to Activate
-
-- You’re adding this package to an app, wiring it into routes/controllers/jobs/commands, or writing tests that use it.
-- You’re debugging runtime behaviour coming from this package (configuration, environment requirements, expected outputs).
+- Activate when adding, configuring, or using this package in application code (controllers, jobs, commands, tests, config, routes, Blade, etc.).
+- Activate when code references `protonemedia/laravel-ffmpeg.` classes, facades, config, or documented features.
 
 ## Scope
+- In scope: documented public API usage, configuration, testing patterns, and common integration recipes.
+- Out of scope: modifying this package’s internal source code unless the user explicitly says they are contributing to the package.
 
-- Focus on **how to use the package’s public API** from a Laravel application.
-- Prefer patterns shown in the README and reference doc.
+## Workflow
+1. Identify the task (install/setup, configuration, feature usage, debugging, tests, etc.).
+2. Read `references/laravel-ffmpeg-guide.md` and focus on the relevant section.
+3. Apply the documented patterns and keep examples minimal and Laravel-native.
 
-## Do
+## Core Concepts
+- Prefer the patterns shown in the full documentation and reference.
+- Keep examples copy-pastable and aligned with typical Laravel conventions.
 
-- Follow the package’s documented configuration steps (publishing config, env vars, middleware, etc.).
-- Provide copy-pastable examples that compile in a typical Laravel project.
-- Call out common pitfalls (permissions, queueing, test fakes, disk configuration) when relevant.
+## Do and Don't
 
-## Don’t
+Do:
+- Follow the package’s documented installation and configuration steps.
+- Provide examples that compile in a typical Laravel project.
+- Call out relevant pitfalls (configuration, queues, filesystem, permissions, testing) when applicable.
 
-- Don’t suggest changing this package’s internal source code unless the user explicitly says they are contributing to the package.
-- Don’t invent undocumented methods/options; stick to the README/reference.
+Don't:
+- Don't invent undocumented methods/options; stick to the docs and reference.
+- Don't suggest changing package internals unless the user explicitly wants to contribute upstream.
 
-## Reference
-
-- references/laravel-ffmpeg-guide.md
+## References
+- `references/laravel-ffmpeg-guide.md`
