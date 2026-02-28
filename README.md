@@ -7,13 +7,11 @@
 
 This package provides an integration with FFmpeg for Laravel 10. [Laravel's Filesystem](http://laravel.com/docs/9.x/filesystem) handles the storage of the files.
 
-
 ## Sponsor Us
 
 [<img src="https://inertiaui.com/visit-card.jpg" />](https://inertiaui.com/inertia-table?utm_source=github&utm_campaign=laravel-ffmpeg)
 
 ❤️ We proudly support the community by developing Laravel packages and giving them away for free. If this package saves you time or if you're relying on it professionally, please consider [sponsoring the maintenance and development](https://github.com/sponsors/pascalbaljet) and check out our latest premium package: [Inertia Table](https://inertiaui.com/inertia-table?utm_source=github&utm_campaign=laravel-ffmpeg). Keeping track of issues and pull requests takes time, but we're happy to help!
-
 
 ## Features
 * Super easy wrapper around [PHP-FFMpeg](https://github.com/PHP-FFMpeg/PHP-FFMpeg), including support for filters and other advanced features.
@@ -918,6 +916,7 @@ Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
 * [`Laravel Task Runner`](https://github.com/protonemedia/laravel-task-runner): Write Shell scripts like Blade Components and run them locally or on a remote server.
 * [`Laravel Verify New Email`](https://github.com/protonemedia/laravel-verify-new-email): This package adds support for verifying new email addresses: when a user updates its email address, it won't replace the old one until the new one is verified.
 * [`Laravel XSS Protection`](https://github.com/protonemedia/laravel-xss-protection): Laravel Middleware to protect your app against Cross-site scripting (XSS). It sanitizes request input, and it can sanatize Blade echo statements.
+- [Inertia Modal](https://inertiaui.com/inertia-modal/docs/introduction): With Inertia Modal, you can easily open any route in a Modal or Slideover without having to change anything about your existing routes or controllers.
 
 ## Security
 
@@ -934,4 +933,3 @@ The MIT License (MIT). Please see [License File](LICENSE.md) for more informatio
 
 ## Related
 
-- [Inertia Modal](https://inertiaui.com/inertia-modal/docs/introduction): With Inertia Modal, you can easily open any route in a modal or slideover without having to change anything about your existing routes or controllers.
