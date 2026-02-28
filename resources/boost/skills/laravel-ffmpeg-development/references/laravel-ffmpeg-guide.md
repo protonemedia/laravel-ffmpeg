@@ -1,6 +1,6 @@
 # Laravel FFmpeg Reference
 
-Complete reference for `protonemedia/laravel-ffmpeg`. Full documentation: https://github.com/protonemedia/laravel-ffmpeg#readme
+Complete reference for protonemedia/laravel-ffmpeg. Full documentation: https://github.com/protonemedia/laravel-ffmpeg#readme
 
 ## Start Here
 - README / docs: https://github.com/protonemedia/laravel-ffmpeg#readme
