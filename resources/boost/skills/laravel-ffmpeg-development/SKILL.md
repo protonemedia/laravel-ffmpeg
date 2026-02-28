@@ -1,26 +1,20 @@
 ---
 name: laravel-ffmpeg-development
-description: Development guidance for protonemedia/laravel-ffmpeg. Integrates FFmpeg / PHP-FFMpeg workflows into Laravel.
+description: Development guidance for protonemedia/laravel-ffmpeg (FFmpeg facade + filesystem-backed media processing).
 license: MIT
 metadata:
   author: ProtoneMedia
   source: https://github.com/protonemedia/laravel-ffmpeg
 ---
 
-# Laravel FFmpeg Development
+# Laravel FFMpeg Development
 
-## Overview
-Use this skill when changing package code, docs, tests, or release tooling for protonemedia/laravel-ffmpeg.
-
-## When to Activate
-- You are modifying code in this repository.
-- You are reviewing/triaging issues or PRs for this package.
-- You are preparing a release (version bump, tag, changelog).
+Use this skill when changing code/docs/tests in `protonemedia/laravel-ffmpeg`.
 
 ## Workflow
-1. Skim the README / docs to confirm the public contract.
-2. Read references/laravel-ffmpeg-guide.md for common patterns and pitfalls.
-3. Keep changes small, add/update tests when behavior changes, and avoid breaking API changes.
+1. Treat the README/wiki as the public API contract (facade chain, exporters, filters).
+2. Consult `references/laravel-ffmpeg-guide.md` for common recipes (HLS, frames, tiles, multiple inputs, encryption).
+3. Be careful with backwards compatibility: method chaining order and return types are part of the API.
 
-## References
+## Reference
 - references/laravel-ffmpeg-guide.md
