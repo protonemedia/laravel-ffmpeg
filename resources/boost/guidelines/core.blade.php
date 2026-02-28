@@ -1,10 +1,10 @@
-{{-- Laravel FFMpeg Guidelines for AI Code Assistants --}}
-{{-- Source: https://github.com/protonemedia/laravel-ffmpeg --}}
-{{-- License: MIT | (c) ProtoneMedia --}}
+{-- Laravel FFMPEG Guidelines for AI Code Assistants --}
+{-- Source: https://github.com/protonemedia/laravel-ffmpeg --}
+{-- License: MIT | (c) ProtoneMedia --}
 
-## Laravel FFMpeg
+## Laravel FFMPEG
 
-- Provides an FFmpeg integration for Laravel via the `FFMpeg` facade, backed by PHP-FFMpeg and Laravel’s filesystem.
-- Always activate the `laravel-ffmpeg-development` skill when making package-specific changes.
-- For the supported fluent API, HLS features, and common pitfalls, consult:
+- This project uses **Laravel FFMPEG** (ProtoneMedia) in a Laravel application.
+- Activate the **`laravel-ffmpeg-development`** skill when you are **integrating, configuring, or using** this package in app code (controllers, jobs, tests, config, routes, Blade, etc.).
+- Use the reference doc for the package’s public API and common recipes:
   - `resources/boost/skills/laravel-ffmpeg-development/references/laravel-ffmpeg-guide.md`

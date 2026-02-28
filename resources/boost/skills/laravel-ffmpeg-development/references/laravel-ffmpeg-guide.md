@@ -403,9 +403,3 @@ $base = $media(); // FFMpeg\Media\MediaTypeInterface
 - **Chaining semantics:** `save()` returning a fresh opener enables chaining; don’t break this.
 - **Remote disks:** temp files are involved; cleanup/configuration matters.
 - **HLS constraints:** segment length/keyframe interval have lower bounds in newer versions (see README Upgrading notes).
-
-## Testing
-
-```bash
-composer test
-```
