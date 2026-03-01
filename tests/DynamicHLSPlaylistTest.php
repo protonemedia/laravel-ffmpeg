@@ -35,6 +35,45 @@ class DynamicHLSPlaylistTest extends TestCase
     }
 
     #[Test]
+    /** @test */
+    public function it_can_delete_an_hls_playlist_and_all_generated_files()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate = $this->x264()->setKiloBitrate(250);
+        $highBitrate = $this->x264()->setKiloBitrate(500);
+
+        FFMpeg::open('video.mp4')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->addFormat($highBitrate)
+            ->save('cleanup/adaptive.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('cleanup/adaptive.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('cleanup/adaptive_0_250.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('cleanup/adaptive_1_500.m3u8'));
+
+        $segmentFilesBeforeCleanup = collect(Storage::disk('local')->allFiles('cleanup'))
+            ->filter(fn ($path) => str_ends_with($path, '.ts'));
+
+        $this->assertNotEmpty($segmentFilesBeforeCleanup);
+
+        FFMpeg::dynamicHLSPlaylist()
+            ->fromDisk('local')
+            ->open('cleanup/adaptive.m3u8')
+            ->deleteAllFiles();
+
+        $this->assertFalse(Storage::disk('local')->has('cleanup/adaptive.m3u8'));
+        $this->assertFalse(Storage::disk('local')->has('cleanup/adaptive_0_250.m3u8'));
+        $this->assertFalse(Storage::disk('local')->has('cleanup/adaptive_1_500.m3u8'));
+
+        $segmentFilesAfterCleanup = collect(Storage::disk('local')->allFiles('cleanup'))
+            ->filter(fn ($path) => str_ends_with($path, '.ts'));
+
+        $this->assertEmpty($segmentFilesAfterCleanup);
+    }
+
+    #[Test]
     /**
      * @test
      */
