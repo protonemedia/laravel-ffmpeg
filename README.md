@@ -771,6 +771,8 @@ The second route (`video.playlist`) uses the `DynamicHLSPlaylist` class. Call th
 
 The first callback (KeyUrlResolver) gives you the relative path to an encryption key. The second callback (MediaUrlResolver) gives you the relative path to a media segment (.ts files). The third callback (PlaylistUrlResolver) gives you the relative path to a playlist.
 
+When playlists are nested in subdirectories, these callbacks receive the resolved subdirectory path (for example `videos/480p/segment_00001.ts`).
+
 Now instead of using `Storage::disk('public')->url('adaptive_steve.m3u8')` to get the full url to your primary playlist, you can use `route('video.playlist', ['playlist' => 'adaptive_steve.m3u8'])`. The `DynamicHLSPlaylist` class takes care of all the paths and urls.
 
 ```php

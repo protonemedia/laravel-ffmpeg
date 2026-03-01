@@ -178,6 +178,20 @@ class DynamicHLSPlaylist implements Responsable
     }
 
     /**
+     * Resolves a relative media/key/playlist line to the path from the opened playlist root.
+     */
+    private static function resolvePathFromPlaylist(string $playlistPath, string $entry): string
+    {
+        if (Str::startsWith($entry, '/')) {
+            return ltrim($entry, '/');
+        }
+
+        $directory = trim(pathinfo($playlistPath, PATHINFO_DIRNAME), '.');
+
+        return ltrim(($directory ? $directory.'/' : '').$entry, '/');
+    }
+
+    /**
      * Returns the processed content of the playlist.
      */
     public function get(): string
@@ -209,15 +223,18 @@ class DynamicHLSPlaylist implements Responsable
      */
     public function all(): Collection
     {
-        $content = $this->getPlaylistContent($this->media->getPath());
+        $mainPlaylistPath = $this->media->getPath();
+        $content = $this->getPlaylistContent($mainPlaylistPath);
 
         return static::parseLines($content)->filter(function ($line) {
-            return static::lineHasMediaFilename($line);
-        })->mapWithKeys(function ($segmentPlaylist) {
-            return [$segmentPlaylist => $this->getProcessedPlaylist($segmentPlaylist)];
+            return static::lineHasMediaFilename($line) && Str::endsWith($line, '.m3u8');
+        })->mapWithKeys(function ($segmentPlaylist) use ($mainPlaylistPath) {
+            $resolvedSegmentPlaylist = static::resolvePathFromPlaylist($mainPlaylistPath, $segmentPlaylist);
+
+            return [$resolvedSegmentPlaylist => $this->getProcessedPlaylist($resolvedSegmentPlaylist)];
         })->prepend(
-            $this->getProcessedPlaylist($this->media->getPath()),
-            $this->media->getPath()
+            $this->getProcessedPlaylist($mainPlaylistPath),
+            $mainPlaylistPath
         );
     }
 
@@ -228,11 +245,13 @@ class DynamicHLSPlaylist implements Responsable
     {
         $content = $this->getPlaylistContent($playlistPath);
 
-        return static::parseLines($content)->map(function (string $line) {
+        return static::parseLines($content)->map(function (string $line) use ($playlistPath) {
             if (static::lineHasMediaFilename($line)) {
+                $resolvedPath = static::resolvePathFromPlaylist($playlistPath, $line);
+
                 return Str::endsWith($line, '.m3u8')
-                    ? $this->resolvePlaylistFilename($line)
-                    : $this->resolveMediaFilename($line);
+                    ? $this->resolvePlaylistFilename($resolvedPath)
+                    : $this->resolveMediaFilename($resolvedPath);
             }
 
             $key = static::extractKeyFromExtLine($line);
@@ -241,9 +260,11 @@ class DynamicHLSPlaylist implements Responsable
                 return $line;
             }
 
+            $resolvedKeyPath = static::resolvePathFromPlaylist($playlistPath, $key);
+
             return str_replace(
                 '#EXT-X-KEY:METHOD=AES-128,URI="'.$key.'"',
-                '#EXT-X-KEY:METHOD=AES-128,URI="'.$this->resolveKeyFilename($key).'"',
+                '#EXT-X-KEY:METHOD=AES-128,URI="'.$this->resolveKeyFilename($resolvedKeyPath).'"',
                 $line
             );
         })->implode(PHP_EOL);
