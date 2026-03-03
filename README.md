@@ -240,6 +240,29 @@ FFMpeg::fromDisk('videos')
     ->addFilter('-itsoffset', 1);
 ```
 
+#### Combining many filters
+
+When you need to apply many filters (for example, drawing many shapes or overlays across a video), combine them into a single `addFilter` call rather than calling `addFilter` multiple times in a loop. Each `addFilter` call creates a separate filter segment in the FFmpeg command, and chaining too many segments can produce an overly complex filter graph that may cause FFmpeg to fail.
+
+```php
+// Bad - each iteration creates a separate filter segment:
+foreach ($timestamps as $timestamp) {
+    $media->addFilter(function ($filters) use ($timestamp) {
+        $filters->custom("drawbox=x=100:y=100:w=10:h=10:t=fill:enable='between(t,{$timestamp},{$timestamp}+0.5)'");
+    });
+}
+
+// Good - combine all filters into a single call:
+$filterParts = [];
+foreach ($timestamps as $timestamp) {
+    $filterParts[] = "drawbox=x=100:y=100:w=10:h=10:t=fill:enable='between(t,{$timestamp},{$timestamp}+0.5)'";
+}
+
+$media->addFilter(function ($filters) use ($filterParts) {
+    $filters->custom(implode(',', $filterParts));
+});
+```
+
 ### Watermark filter
 
 You can easily add a watermark using the `addWatermark` method. With the `WatermarkFactory`, you can open your watermark file from a specific disk, just like opening an audio or video file. When you omit the `fromDisk` method, it uses the default disk specified in the `filesystems.php` configuration file.
