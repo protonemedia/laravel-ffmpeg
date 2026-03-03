@@ -64,6 +64,22 @@ Publish the config file using the artisan CLI tool:
 php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider"
 ```
 
+Set the paths to your FFmpeg and FFProbe binaries in your `.env` file. If the binaries are available in your system's PATH (e.g., you can run `ffmpeg` from the terminal), you can skip this step:
+
+```
+FFMPEG_BINARIES=/usr/local/bin/ffmpeg
+FFPROBE_BINARIES=/usr/local/bin/ffprobe
+```
+
+On Windows, use the full path including the `.exe` extension:
+
+```
+FFMPEG_BINARIES=C:\ffmpeg\bin\ffmpeg.exe
+FFPROBE_BINARIES=C:\ffmpeg\bin\ffprobe.exe
+```
+
+**Note:** The environment variable names are `FFMPEG_BINARIES` and `FFPROBE_BINARIES` (plural). Using `FFMPEG_BINARY` or `FFPROBE_BINARY` (singular) will not work.
+
 ## Upgrading to v8
 
 * The `set_command_and_error_output_on_exception` configuration key now defaults to `true`, making exceptions more informative. Read more at the [Handling exceptions](#handling-exceptions) section.
