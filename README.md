@@ -64,6 +64,26 @@ Publish the config file using the artisan CLI tool:
 php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider"
 ```
 
+## Configuration
+
+The published config file (`config/laravel-ffmpeg.php`) allows you to configure the binary paths, timeout, and other settings. By default, the package will try to find `ffmpeg` and `ffprobe` in your system's PATH. If you get an `ExecutableNotFoundException` ("Unable to load FFMpeg"), you should set the full paths to the binaries in your `.env` file:
+
+```
+FFMPEG_BINARIES=/usr/bin/ffmpeg
+FFPROBE_BINARIES=/usr/bin/ffprobe
+```
+
+You can find the correct paths by running `which ffmpeg` and `which ffprobe` (Unix) or `where ffmpeg` and `where ffprobe` (Windows) in your terminal.
+
+If you are using `php artisan config:cache`, make sure the `.env` values are set **before** caching the configuration. After changing `.env` values, always re-cache:
+
+```bash
+php artisan config:clear
+php artisan config:cache
+```
+
+Note: in containerized environments (Docker, etc.), the PATH available to your PHP process may differ from your shell's PATH, so setting absolute binary paths in `.env` is recommended.
+
 ## Upgrading to v8
 
 * The `set_command_and_error_output_on_exception` configuration key now defaults to `true`, making exceptions more informative. Read more at the [Handling exceptions](#handling-exceptions) section.
