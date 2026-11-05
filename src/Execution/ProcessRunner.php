@@ -9,6 +9,17 @@ use Throwable;
 /** @internal */
 class ProcessRunner
 {
+    public function version(string $binary, string $tool, string $directory): string
+    {
+        $result = $this->run([$binary, '-version'], $directory, outputLimit: 65536);
+
+        if ($result->exitCode !== 0 || ! preg_match('/^'.preg_quote($tool, '/').' version (?:n)?(9\.0\.\d+)(?:\s|-|$)/', $result->output, $matches)) {
+            throw new MediaException(($tool === 'ffprobe' ? 'FFprobe' : 'FFmpeg').' 9.0.x is required.', 'probing', 'version');
+        }
+
+        return $matches[1];
+    }
+
     public function run(array $command, string $directory, array $redactions = [], int $outputLimit = 16777216): ProcessOutput
     {
         $output = $diagnostics = '';

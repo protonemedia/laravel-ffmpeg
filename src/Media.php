@@ -38,44 +38,23 @@ readonly class Media
 
     public function probe(): Metadata
     {
+        return $this->withInput(function (string $path, Workspace $workspace) {
+            (new ProcessRunner)->version(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), 'ffprobe', $workspace->path);
+
+            return $this->probePath($path, $workspace);
+        });
+    }
+
+    /** @internal */
+    public function withInput(callable $operation): mixed
+    {
         $workspace = new Workspace;
         $failure = null;
 
         try {
             $path = $this->localPath($workspace);
-            $runner = new ProcessRunner;
-            $binary = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
-            $version = $runner->run([$binary, '-version'], $workspace->path, outputLimit: 65536);
 
-            if ($version->exitCode !== 0 || ! preg_match('/^ffprobe version (?:n)?9\.0\.\d+(?:\s|-|$)/', $version->output)) {
-                throw new MediaException('FFprobe 9.0.x is required.', 'probing', 'version');
-            }
-
-            $result = $runner->run([
-                $binary, '-v', 'error', '-print_format', 'json',
-                '-show_format', '-show_streams', '-show_chapters', $path,
-            ], $workspace->path, [$path => '[input]']);
-
-            if ($result->exitCode !== 0) {
-                throw new MediaException('FFprobe failed (exit '.$result->exitCode.').', 'probing', 'exit', $result->diagnostics);
-            }
-
-            try {
-                $data = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
-            } catch (JsonException) {
-                throw new MediaException('FFprobe returned invalid JSON.', 'probing', 'metadata');
-            }
-
-            if (! is_array($data) || ! isset($data['format'], $data['streams'])
-                || ! is_array($data['format']) || ! is_array($data['streams']) || ! array_is_list($data['streams'])
-                || array_any($data['streams'], fn ($stream) => ! is_array($stream))) {
-                throw new MediaException('FFprobe returned invalid metadata.', 'probing', 'metadata');
-            }
-
-            // Do not return a pathname that disappears when staging is released.
-            $data['format']['filename'] = is_string($this->source) ? $this->source : $this->source->getPathname();
-
-            return new Metadata($data);
+            return $operation($path, $workspace);
         } catch (Throwable $exception) {
             $failure = $exception;
 
@@ -89,6 +68,36 @@ readonly class Media
                 }
             }
         }
+    }
+
+    /** @internal */
+    public function probePath(string $path, Workspace $workspace): Metadata
+    {
+        $result = (new ProcessRunner)->run([
+            config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-print_format', 'json',
+            '-show_format', '-show_streams', '-show_chapters', $path,
+        ], $workspace->path, [$path => '[input]']);
+
+        if ($result->exitCode !== 0) {
+            throw new MediaException('FFprobe failed (exit '.$result->exitCode.').', 'probing', 'exit', $result->diagnostics);
+        }
+
+        try {
+            $data = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            throw new MediaException('FFprobe returned invalid JSON.', 'probing', 'metadata');
+        }
+
+        if (! is_array($data) || ! isset($data['format'], $data['streams'])
+            || ! is_array($data['format']) || ! is_array($data['streams']) || ! array_is_list($data['streams'])
+            || array_any($data['streams'], fn ($stream) => ! is_array($stream))) {
+            throw new MediaException('FFprobe returned invalid metadata.', 'probing', 'metadata');
+        }
+
+        // Do not return a pathname that disappears when staging is released.
+        $data['format']['filename'] = is_string($this->source) ? $this->source : $this->source->getPathname();
+
+        return new Metadata($data);
     }
 
     private function localPath(Workspace $workspace): string
