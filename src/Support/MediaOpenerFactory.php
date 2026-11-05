@@ -2,9 +2,11 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Support;
 
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\ForwardsCalls;
 use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Http\DynamicHLSPlaylist;
+use ProtoneMedia\LaravelFFMpeg\InputSelector;
 use ProtoneMedia\LaravelFFMpeg\MediaOpener;
 
 class MediaOpenerFactory
@@ -43,6 +45,11 @@ class MediaOpenerFactory
     public function dynamicHLSPlaylist(): DynamicHLSPlaylist
     {
         return new DynamicHLSPlaylist($this->defaultDisk);
+    }
+
+    public function disk(string|Filesystem $disk): InputSelector
+    {
+        return new InputSelector($disk);
     }
 
     /**

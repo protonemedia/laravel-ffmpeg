@@ -3,13 +3,31 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 SECONDS=0
+temporary_dir=$(mktemp -d)
+trap 'rm -rf "$temporary_dir"' EXIT
 
-echo 'Checking system packages (PHP 8.2, Composer, and FFmpeg)...'
+elevate=()
+if ((EUID != 0)); then
+    elevate=(sudo)
+fi
+
+# Debian 12 does not ship PHP 8.4. Use Sury's signed PHP packages.
+if [[ ! -f /usr/share/keyrings/debsuryorg-archive-keyring.gpg || ! -f /etc/apt/sources.list.d/php.list ]]; then
+    echo 'Configuring the PHP package repository...'
+    "${elevate[@]}" apt-get update
+    "${elevate[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl
+    curl -fsSL https://packages.sury.org/debsuryorg-archive-keyring.deb -o "$temporary_dir/keyring.deb"
+    "${elevate[@]}" dpkg -i "$temporary_dir/keyring.deb"
+    . /etc/os-release
+    echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ ${VERSION_CODENAME} main" | "${elevate[@]}" tee /etc/apt/sources.list.d/php.list >/dev/null
+fi
+
+echo 'Checking system packages (PHP 8.4, Composer, and FFmpeg)...'
 packages=(
-    ca-certificates composer ffmpeg git unzip
-    php8.2-cli php8.2-bcmath php8.2-curl php8.2-gd php8.2-imagick
-    php8.2-intl php8.2-mbstring php8.2-mysql php8.2-soap php8.2-sqlite3
-    php8.2-xml php8.2-zip
+    ca-certificates curl ffmpeg git unzip
+    php8.4-cli php8.4-bcmath php8.4-curl php8.4-gd php8.4-imagick
+    php8.4-intl php8.4-mbstring php8.4-mysql php8.4-soap php8.4-sqlite3
+    php8.4-xml php8.4-zip
 )
 missing=()
 for package in "${packages[@]}"; do
@@ -19,14 +37,21 @@ for package in "${packages[@]}"; do
 done
 
 if ((${#missing[@]})); then
-    elevate=()
-    if ((EUID != 0)); then
-        elevate=(sudo)
-    fi
     "${elevate[@]}" apt-get update
     "${elevate[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
 fi
+"${elevate[@]}" update-alternatives --set php /usr/bin/php8.4
 echo "System packages ready (${SECONDS}s elapsed)."
+
+# Debian 12's Composer predates PHP 8.4 support. Install Composer 2 once.
+if [[ ! -x /usr/local/bin/composer ]]; then
+    echo 'Installing Composer 2...'
+    curl -fsSL https://getcomposer.org/installer -o "$temporary_dir/composer-setup.php"
+    signature=$(curl -fsSL https://composer.github.io/installer.sig)
+    printf '%s  %s\n' "$signature" "$temporary_dir/composer-setup.php" | sha384sum --check
+    php "$temporary_dir/composer-setup.php" --2 --install-dir="$temporary_dir" --filename=composer
+    "${elevate[@]}" install -m 755 "$temporary_dir/composer" /usr/local/bin/composer
+fi
 
 # This library ignores composer.lock. Keep the generated lock and vendor directory
 # in snapshots, but resolve again when composer.json no longer matches the lock.
