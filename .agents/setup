@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+SECONDS=0
+
+echo 'Checking system packages (PHP 8.2, Composer, and FFmpeg)...'
+packages=(
+    ca-certificates composer ffmpeg git unzip
+    php8.2-cli php8.2-bcmath php8.2-curl php8.2-gd php8.2-imagick
+    php8.2-intl php8.2-mbstring php8.2-mysql php8.2-soap php8.2-sqlite3
+    php8.2-xml php8.2-zip
+)
+missing=()
+for package in "${packages[@]}"; do
+    if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -qx 'install ok installed'; then
+        missing+=("$package")
+    fi
+done
+
+if ((${#missing[@]})); then
+    elevate=()
+    if ((EUID != 0)); then
+        elevate=(sudo)
+    fi
+    "${elevate[@]}" apt-get update
+    "${elevate[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+fi
+echo "System packages ready (${SECONDS}s elapsed)."
+
+# This library ignores composer.lock. Keep the generated lock and vendor directory
+# in snapshots, but resolve again when composer.json no longer matches the lock.
+echo 'Installing Composer dependencies...'
+if [[ -f composer.lock ]] && ! composer validate --check-lock --no-check-publish --no-interaction; then
+    composer update --prefer-dist --no-interaction --no-progress
+else
+    composer install --prefer-dist --no-interaction --no-progress
+fi
+echo "Orb setup finished (${SECONDS}s elapsed)."
