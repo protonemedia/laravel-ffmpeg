@@ -85,7 +85,7 @@ class NativeExportTest extends TestCase
         $expected = [
             'ffmpeg', '-hide_banner', '-nostdin', '-nostats', '-y', '-loglevel', 'warning', '-progress', 'pipe:1',
             '-filter_threads', '2', '-protocol_whitelist', 'file', '-probesize', '2000000', '-i', '[input:0]',
-            '-ss', '12.5', '-t', '8', '-map', '0:a:0', '-map', '0:V:0?', '-map', '-0:a:1?',
+            '-ss', '12.5', '-t', '8', '-map', '0:a:0', '-map', '0:V:0:?', '-map', '-0:a:1:?',
             '-map_metadata', '0', '-map_chapters', '-1', '-c:v', 'libx264', '-crf:v', '21', '-preset:v', 'slow',
             '-filter:v', 'crop=120:80:4:2,hflip', '-c:a', 'aac', '-b:a', '96k',
             '-metadata', 'title=A "quoted" title; $HOME', '-fps_mode:v', 'passthrough', '-threads', '1',
@@ -487,6 +487,25 @@ class NativeExportTest extends TestCase
         $this->assertSame(['audio', 'video'], $selected->streams()->map(fn ($stream) => $stream->get('codec_type'))->all());
         $this->assertSame('eng', $selected->audio()->get('tags.language'));
         $this->assertSame(1, $selected->audio()->get('disposition.default'));
+
+        $probed = $media->probe();
+        $english = $probed->audioStreams()->first(fn ($stream) => $stream->get('tags.language') === 'eng');
+        $objectSelection = $media->export()->mapAudio($english)->mapVideo($probed->videoStreams()->first())
+            ->audio('copy')->video('copy')->save('probed-selection.mkv');
+        $objectMetadata = FFMpeg::disk('memory')->open($objectSelection->file()->path)->probe();
+        $this->assertSame(['audio', 'video'], $objectMetadata->streams()->map(fn ($stream) => $stream->get('codec_type'))->all());
+        $this->assertSame('eng', $objectMetadata->audio()->get('tags.language'));
+
+        $numericSelection = $media->export()->mapVideo(0)->mapAudio(0, language: 'fra', optional: true)
+            ->video('copy')->audio('copy')->save('numeric-selection.mkv');
+        $numericMetadata = FFMpeg::disk('memory')->open($numericSelection->file()->path)->probe();
+        $this->assertSame(['video', 'audio'], $numericMetadata->streams()->map(fn ($stream) => $stream->get('codec_type'))->all());
+        $this->assertSame('fra', $numericMetadata->audio()->get('tags.language'));
+
+        $absentSelection = $media->export()->map('0:v:0:?')->mapAudio(0, language: 'deu', optional: true)
+            ->video('copy')->audio('copy')->save('absent-selection.mkv');
+        $absentMetadata = FFMpeg::disk('memory')->open($absentSelection->file()->path)->probe();
+        $this->assertSame(['video'], $absentMetadata->streams()->map(fn ($stream) => $stream->get('codec_type'))->all());
 
         $media->export()->video('copy')->audio('copy')->clip(1.3, duration: 0.6, seek: 'keyframe')->toDisk('local')->save('keyframe.mkv');
         $keyframe = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('keyframe.mkv'), '-map', '0:v:0', '-frames:v', '1', '-f', 'md5', '-']);

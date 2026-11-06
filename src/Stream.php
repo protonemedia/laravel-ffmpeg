@@ -6,7 +6,20 @@ use Illuminate\Support\Arr;
 
 readonly class Stream
 {
-    public function __construct(private array $data) {}
+    public function __construct(private array $data, private ?string $sourceIdentity = null) {}
+
+    public function index(): ?int
+    {
+        $index = $this->get('index');
+
+        return is_int($index) && $index >= 0 ? $index : null;
+    }
+
+    /** @internal Identifies the media descriptor that produced this probe result. */
+    public function sourceIdentity(): ?string
+    {
+        return $this->sourceIdentity;
+    }
 
     public function get(string $key, mixed $default = null): mixed
     {

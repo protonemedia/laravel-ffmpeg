@@ -146,7 +146,7 @@ readonly class Media
         // Do not return a pathname that disappears when staging is released.
         $data['format']['filename'] = is_string($this->source) ? $this->source : $this->source->getPathname();
 
-        return new Metadata($data);
+        return new Metadata($data, $this->identity());
     }
 
     /** @internal */

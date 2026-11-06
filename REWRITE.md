@@ -39,6 +39,30 @@ Input options, `globalOptions()`, and `outputOptions()` accept flat option/value
 
 Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. A per-input `-protocol_whitelist file` prevents direct network protocols, but does not isolate local file access or apply to files opened by filters. Untrusted media still requires process isolation and resource limits. A demuxer allowlist remains under investigation and is not implemented in this checkpoint.
 
+### Stream selection shortcuts
+
+```php
+$media = FFMpeg::disk('uploads')->open('original.mov');
+
+$media->export()
+	->mapVideo(0)
+	->mapAudio(0, language: 'eng', optional: true)
+	->video('copy')->audio('copy')
+	->toDisk('videos')->save('english.mkv');
+
+$metadata = $media->probe();
+$video = $metadata->videoStreams()->first();
+$english = $metadata->audioStreams()
+	->first(fn ($stream) => $stream->get('tags.language') === 'eng');
+
+$media->export()->mapVideo($video)->mapAudio($english)
+	->video('copy')->audio('copy')->toDisk('videos')->save('selected.mkv');
+```
+
+The object example assumes both streams exist. `mapVideo()` and `mapAudio()` accept a numeric input index or a probed `Stream`. The default selects input 0's first stream of that type. `track:` selects a zero-based track within that type. `language:` selects all matching audio tracks and cannot accompany `track:`. `optional: true` omits missing matches, but an entirely empty selection still fails. Raw `map()` remains available for other selectors, negative maps, and graph labels. Optional maps compile with a separator before `?` so FFmpeg 9 does not treat it as part of a metadata value.
+
+A probed stream maps its absolute `index()` and retains its source identity. Its source must be an export input. When the same source occurs more than once, `mapVideo($video, input: 1)` chooses its input position explicitly. A hint referring to different media fails. Object maps cannot accompany `track:` or `language:` and never probe again during inspection. A later `save()` stages and validates the current input as usual. These helpers also work in `output()` callbacks.
+
 ### Geometry shortcuts
 
 ```php
@@ -51,7 +75,25 @@ $media->export()->fit(1280, 720, mode: 'cover'); // Fill with a centered crop.
 
 These settings work inside `output()` callbacks too. They append to the video filter chain in call order and cannot accompany video stream copy. Graph-fed streams follow the same simple-versus-complex filter restrictions as `videoFilter()`.
 
-Both helpers produce square pixels and allow upscaling. A one-dimension resize uses display aspect ratio, including the input's sample aspect ratio, and rounds the inferred dimension to a multiple of two. Two explicit resize dimensions stretch the image. `fit()` preserves display aspect ratio within rounding, requires positive even dimensions, and returns that exact canvas size. `contain` preserves the image with black bars. `cover` removes the edges outside a centered crop. Rotation, standalone crop and pad helpers, and resource shortcuts remain open.
+Both helpers produce square pixels and allow upscaling. A one-dimension resize uses display aspect ratio, including the input's sample aspect ratio, and rounds the inferred dimension to a multiple of two. Two explicit resize dimensions stretch the image. `fit()` preserves display aspect ratio within rounding, requires positive even dimensions, and returns that exact canvas size. `contain` preserves the image with black bars. `cover` removes the edges outside a centered crop. Rotation and standalone crop and pad helpers remain open.
+
+### Text and subtitle shortcuts
+
+```php
+$font = FFMpeg::disk('assets')->open('fonts/Brand.ttf');
+$captions = FFMpeg::disk('assets')->open('captions/English.srt');
+
+$media->export()
+	->resize(width: 1280)
+	->drawText("100%: café 'quoted' %{literal}", font: $font, size: 32, x: 24, y: 24)
+	->burnSubtitles($captions)
+	->clip(4, duration: 2)
+	->video('libx264', crf: 23)->toDisk('videos')->save('captioned.mp4');
+```
+
+`drawText()` stages literal UTF-8 text in a private file with expansion and reload disabled. Font descriptors can use any supported disk. Size must be positive, coordinates are integers, and color accepts a name or `0xRRGGBB` with optional alpha bytes. `burnSubtitles()` uses the subtitle validation described below. Both helpers work in `output()` callbacks and share staged assets across outputs without named placeholders.
+
+Filters run in call order. Burning subtitles before resizing scales the rendered text with the image. Burning them after resizing renders at the final resolution. Any subtitle helper rejects input/keyframe seeking, even when it belongs to another output. Settings freeze at execution, and resource failures identify the output index and helper. Font files must be readable regular files; FFmpeg validates the font contents when rendering.
 
 ### Composition and resources
 

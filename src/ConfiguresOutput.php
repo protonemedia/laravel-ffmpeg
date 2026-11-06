@@ -6,6 +6,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
+use ProtoneMedia\LaravelFFMpeg\Execution\ResourceFilter;
 
 /** @internal */
 trait ConfiguresOutput
@@ -99,6 +100,63 @@ trait ConfiguresOutput
         return $this;
     }
 
+    public function mapVideo(Stream|int|null $stream = null, ?int $input = null, ?int $track = null, bool $optional = false): self
+    {
+        $this->assertOutputMutable();
+
+        if (is_int($stream)) {
+            if ($input !== null) {
+                throw new InvalidArgumentException('Specify an input either positionally or by name, not both.');
+            }
+
+            $input = $stream;
+            $stream = null;
+        }
+
+        if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($stream !== null && $track !== null)) {
+            throw new InvalidArgumentException('Stream input and track indexes must be nonnegative.');
+        }
+
+        return $stream !== null ? $this->mapProbedStream($stream, 'video', $input, $optional)
+            : $this->map(($input ?? 0).':v:'.($track ?? 0).($optional ? '?' : ''));
+    }
+
+    public function mapAudio(Stream|int|null $stream = null, ?int $input = null, ?int $track = null, ?string $language = null, bool $optional = false): self
+    {
+        $this->assertOutputMutable();
+
+        if (is_int($stream)) {
+            if ($input !== null) {
+                throw new InvalidArgumentException('Specify an input either positionally or by name, not both.');
+            }
+
+            $input = $stream;
+            $stream = null;
+        }
+
+        if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($track !== null && $language !== null)
+            || ($stream !== null && ($track !== null || $language !== null))
+            || ($language !== null && ! preg_match('/^[a-zA-Z][a-zA-Z0-9_-]*$/D', $language))) {
+            throw new InvalidArgumentException('Choose a nonnegative audio track or a language tag, not both.');
+        }
+
+        $selector = $language === null ? (string) ($track ?? 0) : 'm:language:'.$language;
+
+        return $stream !== null ? $this->mapProbedStream($stream, 'audio', $input, $optional)
+            : $this->map(($input ?? 0).':a:'.$selector.($optional ? '?' : ''));
+    }
+
+    private function mapProbedStream(Stream $stream, string $type, ?int $input, bool $optional): self
+    {
+        if ($stream->get('codec_type') !== $type || $stream->index() === null || $stream->sourceIdentity() === null) {
+            throw new InvalidArgumentException('Mapping requires a probed '.$type.' stream.');
+        }
+
+        $this->maps[] = compact('stream', 'input', 'optional');
+
+        return $this;
+    }
+
     public function withoutAudio(): self
     {
         $this->assertOutputMutable();
@@ -154,6 +212,28 @@ trait ConfiguresOutput
         $this->videoFilters[] = 'scale=w='.$width.':h='.$height.':force_original_aspect_ratio='.$aspect.':force_divisible_by=2:reset_sar=1,'.$canvas;
 
         return $this;
+    }
+
+    public function drawText(string $text, Media $font, int $size = 24, int $x = 0, int $y = 0, string $color = 'white'): self
+    {
+        $this->assertOutputMutable();
+        $this->videoFilters[] = ResourceFilter::drawText($text, $font, $size, $x, $y, $color);
+
+        return $this;
+    }
+
+    public function burnSubtitles(Media $subtitles): self
+    {
+        $this->assertOutputMutable();
+        $this->videoFilters[] = ResourceFilter::burnSubtitles($subtitles);
+
+        return $this;
+    }
+
+    /** @internal */
+    public function resourceFilters(): array
+    {
+        return array_values(array_filter($this->videoFilters, fn ($filter) => $filter instanceof ResourceFilter));
     }
 
     public function audioFilter(string $expression): self
@@ -254,7 +334,7 @@ trait ConfiguresOutput
         return $this;
     }
 
-    public function outputArguments(): array
+    public function outputArguments(callable $compileFilter, array $maps): array
     {
         if (isset($this->video['bitrate'], $this->video['crf'])) {
             throw new InvalidArgumentException('Choose either a target bitrate or CRF.');
@@ -285,7 +365,12 @@ trait ConfiguresOutput
             array_push($options, '-t', (string) $this->clip['duration']);
         }
 
-        foreach ($this->maps() as $map) {
+        foreach ($maps as $map) {
+            // FFmpeg 9's metadata selector otherwise consumes '?' as part of its value.
+            if (str_ends_with($map, '?') && ! str_ends_with($map, ':?')) {
+                $map = substr($map, 0, -1).':?';
+            }
+
             array_push($options, '-map', $map);
         }
 
@@ -298,7 +383,7 @@ trait ConfiguresOutput
             }
 
             if ($filters !== []) {
-                array_push($options, '-filter:'.$type, implode(',', $filters));
+                array_push($options, '-filter:'.$type, implode(',', array_map($compileFilter, $filters)));
             }
         }
 

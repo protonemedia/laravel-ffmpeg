@@ -7,7 +7,7 @@ use Illuminate\Support\Collection;
 
 readonly class Metadata
 {
-    public function __construct(private array $data) {}
+    public function __construct(private array $data, private ?string $sourceIdentity = null) {}
 
     public function get(string $key, mixed $default = null): mixed
     {
@@ -29,7 +29,7 @@ readonly class Metadata
     /** @return Collection<int, Stream> */
     public function streams(): Collection
     {
-        return collect($this->data['streams'])->map(fn (array $stream) => new Stream($stream));
+        return collect($this->data['streams'])->map(fn (array $stream) => new Stream($stream, $this->sourceIdentity));
     }
 
     /** @return Collection<int, Stream> */

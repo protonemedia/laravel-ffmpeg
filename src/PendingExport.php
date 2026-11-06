@@ -14,6 +14,7 @@ use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProgressParser;
+use ProtoneMedia\LaravelFFMpeg\Execution\ResourceFilter;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use Throwable;
 
@@ -175,13 +176,29 @@ class PendingExport
         return [(new ExportOutput($path ?? 'inspection.mp4', $this->disk))->configure($this->outputConfiguration())];
     }
 
-    private function resourceNames(): array
+    private function resourceNames(array $outputs): array
     {
-        $names = [];
+        $declared = $this->resources;
 
-        foreach ($this->resources as $name => $resource) {
+        foreach ($declared as $name => $resource) {
+            $declared[$name]['context'] = 'filter resource '.$name;
+        }
+
+        foreach ($outputs as $index => $output) {
+            foreach ($output->resourceFilters() as $filter) {
+                foreach ($filter->resources as $role => $resource) {
+                    $declared['helper:'.spl_object_id($filter).':'.$role] = $resource + ['context' => 'output '.$index.' '.$filter->name];
+                }
+            }
+        }
+
+        $names = $paths = [];
+
+        foreach ($declared as $name => $resource) {
             $extension = $resource['type'] === 'text' ? 'txt' : $resource['source']->extension();
-            $names[$name] = ['type' => $resource['type'], 'path' => 'resource-'.count($names).($extension === '' ? '' : '.'.$extension)];
+            $identity = $resource['type'].':'.($resource['source'] instanceof Media ? $resource['source']->identity() : $name);
+            $paths[$identity] ??= 'resource-'.count($paths).($extension === '' ? '' : '.'.$extension);
+            $names[$name] = $resource + ['path' => $paths[$identity]];
         }
 
         return $names;
@@ -191,7 +208,7 @@ class PendingExport
     {
         $composition = count($this->inputs) > 1 || $this->graph !== null;
         $mappedLabels = $used = $compiledOutputs = [];
-        $resources = $this->resourceNames();
+        $resources = $this->resourceNames($outputs);
 
         if (array_any($resources, fn ($resource) => $resource['type'] === 'subtitle')
             && array_any($outputs, fn ($output) => $output->inputSeekOptions() !== [])) {
@@ -217,7 +234,9 @@ class PendingExport
                 throw new InvalidArgumentException('Keyframe clips require one input and one output without a complex graph.');
             }
 
-            foreach ($output->maps() as $map) {
+            $maps = $this->resolveMaps($output);
+
+            foreach ($maps as $map) {
                 if (str_starts_with($map, '[')) {
                     if ($this->graph === null) {
                         throw new InvalidArgumentException('A graph map requires filterComplex().');
@@ -229,13 +248,11 @@ class PendingExport
                 }
             }
 
-            $options = $output->outputArguments();
-
-            for ($i = 0; $i < count($options); $i += 2) {
-                if (in_array($options[$i], ['-filter:v', '-filter:a'], true)) {
-                    $options[$i + 1] = FilterGraph::resources($options[$i + 1], $resources, $used);
-                }
-            }
+            $options = $output->outputArguments(function (string|ResourceFilter $filter) use ($resources, &$used) {
+                return $filter instanceof ResourceFilter
+                    ? $filter->toFilter(fn ($role) => $resources['helper:'.spl_object_id($filter).':'.$role]['path'])
+                    : FilterGraph::resources($filter, $resources, $used);
+            }, $maps);
 
             $compiledOutputs[] = ['path' => $outputPaths[$index] ?? '[output:'.$index.']', 'options' => $options];
         }
@@ -247,7 +264,7 @@ class PendingExport
             array_push($globals, '-filter_complex', FilterGraph::resources($this->graph, $resources, $used));
         }
 
-        if (count($used) !== count($resources)) {
+        if (count($used) !== count($this->resources)) {
             throw new InvalidArgumentException('Every declared resource must be used by a filter.');
         }
 
@@ -293,16 +310,30 @@ class PendingExport
                     $redactions[$path] ??= '[input:'.$index.']';
                 }
 
-                foreach ($this->resourceNames() as $name => $resource) {
-                    $source = $this->resources[$name]['source'];
+                $resources = $this->resourceNames($outputs);
+                $staged = [];
+
+                foreach ($resources as $resource) {
+                    $source = $resource['source'];
                     $target = $workspace->path.'/'.$resource['path'];
-                    $written = $resource['type'] === 'text'
-                        ? @file_put_contents($target, $source) === strlen($source)
-                        : @copy($workspace->stage($source, resource: true), $target);
+
+                    if (isset($staged[$target])) {
+                        continue;
+                    }
+
+                    try {
+                        $written = $resource['type'] === 'text'
+                            ? @file_put_contents($target, $source) === strlen($source)
+                            : @copy($workspace->stage($source, resource: true), $target);
+                    } catch (MediaException $exception) {
+                        throw new MediaException('Cannot stage '.$resource['context'].'.', 'staging', $exception->category);
+                    }
 
                     if (! $written || ! chmod($target, 0600)) {
-                        throw new MediaException('Cannot stage the filter resource.', 'staging', 'transfer');
+                        throw new MediaException('Cannot stage '.$resource['context'].'.', 'staging', 'transfer');
                     }
+
+                    $staged[$target] = true;
                 }
 
                 $runner = new ProcessRunner;
@@ -315,7 +346,7 @@ class PendingExport
                     throw new MediaException('FFmpeg and FFprobe must have matching release versions.', 'probing', 'version');
                 }
 
-                $this->validateResources($workspace, $runner);
+                $this->validateResources($workspace, $runner, $resources);
                 $metadata = array_map(fn ($media) => $workspace->probe($media), $this->inputs);
                 $expected = array_map(fn ($output) => $this->selectedStreams($output, $workspace, $metadata), $outputs);
                 $outputPaths = [];
@@ -429,11 +460,11 @@ class PendingExport
         return $result;
     }
 
-    private function validateResources(Workspace $workspace, ProcessRunner $runner): void
+    private function validateResources(Workspace $workspace, ProcessRunner $runner, array $resources): void
     {
         $required = [];
 
-        foreach ($this->resources as $resource) {
+        foreach ($resources as $resource) {
             if ($resource['type'] !== 'file') {
                 $required[] = $resource['type'] === 'text' ? 'drawtext' : 'subtitles';
             }
@@ -449,13 +480,13 @@ class PendingExport
             }
         }
 
-        foreach ($this->resourceNames() as $name => $resource) {
+        foreach ($resources as $resource) {
             if ($resource['type'] !== 'subtitle') {
                 continue;
             }
 
             if (! mb_check_encoding(file_get_contents($workspace->path.'/'.$resource['path']), 'UTF-8')) {
-                throw new MediaException('Subtitle resources require UTF-8.', 'probing', 'resource');
+                throw new MediaException('Subtitle resources require UTF-8 for '.$resource['context'].'.', 'probing', 'resource');
             }
 
             // Probe the exact filename and bytes the subtitles filter reopens.
@@ -469,7 +500,7 @@ class PendingExport
 
             if ($probe->exitCode !== 0 || ! in_array($data['format']['format_name'] ?? null, ['srt', 'ass', 'webvtt'], true)
                 || ($data['streams'] ?? null) !== [['codec_type' => 'subtitle']]) {
-                throw new MediaException('A subtitle resource must be a standalone SRT, ASS, or WebVTT file.', 'probing', 'resource');
+                throw new MediaException('A subtitle resource must be a standalone SRT, ASS, or WebVTT file for '.$resource['context'].'.', 'probing', 'resource');
             }
 
             // The encoding binary must also accept and decode these unchanged
@@ -481,7 +512,7 @@ class PendingExport
             ], $workspace->path);
 
             if ($decode->exitCode !== 0) {
-                throw new MediaException('Cannot decode the subtitle resource.', 'probing', 'resource');
+                throw new MediaException('Cannot decode '.$resource['context'].'.', 'probing', 'resource');
             }
         }
     }
@@ -511,12 +542,40 @@ class PendingExport
         }
     }
 
+    private function resolveMaps(ExportOutput $output): array
+    {
+        return array_map(function ($map) {
+            if (is_string($map)) {
+                return $map;
+            }
+
+            $source = $map['stream']->sourceIdentity();
+            $input = $map['input'];
+
+            if ($input === null) {
+                $matches = array_keys(array_filter($this->inputs, fn ($media) => $media->identity() === $source));
+
+                if (count($matches) !== 1) {
+                    throw new InvalidArgumentException('A probed stream must match exactly one input. Add its media or specify input explicitly for repeated media.');
+                }
+
+                $input = $matches[0];
+            }
+
+            if (! isset($this->inputs[$input]) || $this->inputs[$input]->identity() !== $source) {
+                throw new InvalidArgumentException('The probed stream does not belong to the selected input.');
+            }
+
+            return $input.':'.$map['stream']->index().($map['optional'] ? '?' : '');
+        }, $output->maps());
+    }
+
     /** Ordered expected stream types; null denotes a graph pad whose type FFmpeg resolves. */
     private function selectedStreams(ExportOutput $output, Workspace $workspace, array $metadata): array
     {
         $selected = [];
 
-        foreach ($output->maps() as $map) {
+        foreach ($this->resolveMaps($output) as $map) {
             if (str_starts_with($map, '[')) {
                 $selected[] = ['identity' => $map, 'type' => null];
 
@@ -527,6 +586,11 @@ class PendingExport
             $exclude = $match[1] === '-';
             $input = (int) $match[2];
             $selector = $match[3] ?? '';
+
+            if (str_ends_with($map, ':?')) {
+                $selector = substr($selector, 0, -1);
+            }
+
             $streams = $selector === '' ? $metadata[$input]->streams() : $workspace->probe($this->inputs[$input], $selector)->streams();
 
             if ($streams->isEmpty() && ! $exclude && ! str_ends_with($map, '?')) {
