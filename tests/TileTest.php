@@ -1,7 +1,6 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\ImageFormat;
@@ -53,8 +52,11 @@ class TileTest extends TestCase
         $this->assertFalse(Storage::disk('local')->has('thumb_6.jpg'));
     }
 
-    #[Test]
-    #[DataProvider('provideThumbnailAmount')]
+    /**
+     * @dataProvider provideThumbnailAmount
+     *
+     * @test
+     */
     public function it_can_generate_thumbnails_by_amount(int $amount)
     {
         $this->fakeLongLocalVideoFile();

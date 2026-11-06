@@ -5,7 +5,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Support;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @method static \ProtoneMedia\LaravelFFMpeg\InputSelector disk(string|\Illuminate\Contracts\Filesystem\Filesystem $disk)
  * @method static \ProtoneMedia\LaravelFFMpeg\Http\DynamicHLSPlaylist dynamicHLSPlaylist($disk)
  * @method static \ProtoneMedia\LaravelFFMpeg\MediaOpener fromDisk($disk)
  * @method static \ProtoneMedia\LaravelFFMpeg\MediaOpener fromFilesystem(\Illuminate\Contracts\Filesystem\Filesystem $filesystem)
