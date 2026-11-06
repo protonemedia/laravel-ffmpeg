@@ -31,6 +31,10 @@ trait ConfiguresOutput
 
     private array $metadata = [];
 
+    private array $streamMetadata = [];
+
+    private array $dispositions = [];
+
     private bool $omitAudio = false;
 
     private bool $omitVideo = false;
@@ -277,14 +281,59 @@ trait ConfiguresOutput
     public function metadata(string $key, string $value): self
     {
         $this->assertOutputMutable();
-
-        if (! preg_match('/^[a-zA-Z0-9_.:-]+$/D', $key) || str_contains($value, "\0")) {
-            throw new InvalidArgumentException('Invalid metadata tag.');
-        }
+        $this->metadataTag($key, $value);
 
         $this->metadata[$key] = $value;
 
         return $this;
+    }
+
+    public function streamMetadata(string|int $stream, string $key, string $value): self
+    {
+        $this->assertOutputMutable();
+        $this->outputStream($stream);
+        $this->metadataTag($key, $value);
+
+        $this->streamMetadata[] = [$stream, $key, $value];
+
+        return $this;
+    }
+
+    public function disposition(string|int $stream, string|array $flags): self
+    {
+        $this->assertOutputMutable();
+        $this->outputStream($stream);
+
+        if (is_string($flags)) {
+            $flags = $flags === '0' ? [] : explode('+', $flags);
+        }
+
+        if (! array_is_list($flags) || array_any($flags, fn ($flag) => ! is_string($flag) || ! in_array($flag, [
+            'default', 'dub', 'original', 'comment', 'lyrics', 'karaoke', 'forced',
+            'hearing_impaired', 'visual_impaired', 'clean_effects', 'attached_pic',
+            'timed_thumbnails', 'non_diegetic', 'captions', 'descriptions', 'metadata',
+            'dependent', 'still_image', 'multilayer',
+        ], true))) {
+            throw new InvalidArgumentException('Dispositions require supported flag names, or an empty list to clear them.');
+        }
+
+        $this->dispositions[] = [$stream, $flags === [] ? '0' : implode('+', array_unique($flags))];
+
+        return $this;
+    }
+
+    private function outputStream(string|int $stream): void
+    {
+        if (! preg_match('/^(?:[0-9]+|[vasdt](?::[0-9]+)?)$/D', (string) $stream)) {
+            throw new InvalidArgumentException('Select an output stream by absolute index, type, or type and track index.');
+        }
+    }
+
+    private function metadataTag(string $key, string $value): void
+    {
+        if (! preg_match('/^[a-zA-Z0-9_.:-]+$/D', $key) || str_contains($value, "\0")) {
+            throw new InvalidArgumentException('Invalid metadata tag.');
+        }
     }
 
     public function chaptersFrom(?int $input): self
@@ -391,6 +440,14 @@ trait ConfiguresOutput
             array_push($options, '-metadata', $key.'='.$value);
         }
 
+        foreach ($this->streamMetadata as [$stream, $key, $value]) {
+            array_push($options, '-metadata:s:'.$stream, $key.'='.$value);
+        }
+
+        foreach ($this->dispositions as [$stream, $flags]) {
+            array_push($options, '-disposition:'.$stream, $flags);
+        }
+
         if (! $this->omitVideo && ($this->video['codec'] ?? null) !== 'copy'
             && ! array_any($this->outputOptions, fn ($token) => preg_match('/^-(?:r|fps_mode)(?::|$)/', $token))) {
             array_push($options, '-fps_mode:v', 'passthrough');
@@ -453,6 +510,8 @@ trait ConfiguresOutput
             'outputOptions' => $this->outputOptions,
             'writeOptions' => $this->writeOptions,
             'metadata' => $this->metadata,
+            'streamMetadata' => $this->streamMetadata,
+            'dispositions' => $this->dispositions,
             'omitAudio' => $this->omitAudio,
             'omitVideo' => $this->omitVideo,
             'metadataSource' => $this->metadataSource,

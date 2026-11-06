@@ -143,6 +143,27 @@ The example uses `ProtoneMedia\LaravelFFMpeg\ExportOutput`. Explicit outputs def
 
 Graph labels are simple identifiers. Each named output label must be consumed or mapped exactly once. Branching requires `split` or `asplit`. A quote-aware lexer ignores brackets inside literal values. FFmpeg remains responsible for filter syntax and pad types. Graph-produced streams do not automatically preserve input language tags or dispositions.
 
+### Output stream tags and dispositions
+
+```php
+$media->export()
+	->filterComplex('[0:a]volume=0.5[commentary]')
+	->map('[commentary]')->mapVideo(0) // Audio is output stream 0, video is stream 1.
+	->audio('aac', bitrate: '128k')->video('copy')
+	->streamMetadata('a:0', 'language', 'eng')
+	->streamMetadata(0, 'title', 'English commentary')
+	->disposition('a:0', ['default', 'comment'])
+	->toDisk('videos')->save('commentary.mkv');
+```
+
+These methods also work in `output()` callbacks and apply to that output only. Their selectors address **output order after mapping**, not input positions or graph labels. `0` selects the first output stream overall, `'a:0'` selects the first output audio stream, and `'a'` selects all output audio streams. Supported types are `v`, `a`, `s`, `d`, and `t`. Input selectors such as `'0:a:0'`, graph labels, and optional `?` suffixes are rejected.
+
+`streamMetadata($stream, $key, $value)` sets an output-stream tag. An empty value removes that tag. Values may contain Unicode and punctuation, but not NUL bytes. Global `metadata()` remains separate. Explicit stream tags can restore language or title on graph-produced streams even when global metadata is omitted.
+
+`disposition($stream, $flags)` replaces all disposition flags for matching output streams. It accepts a supported FFmpeg 9 flag name, a `+`-joined set such as `'default+forced'`, or a list such as `['default', 'forced']`. An empty list or `'0'` clears all flags. Relative `+flag` and `-flag` edits are not accepted by this helper. Raw `outputOptions()` remains available for those edits and is emitted after the named helpers.
+
+Calls preserve declaration order, including overlapping selectors. Later matches override earlier values. These settings do not select streams, and retention depends on the output container. Configuration freezes when execution starts.
+
 Type-scoped encoding settings and simple filters apply to every selected stream of that type, including graph outputs. A graph-filtered video can accompany copied input audio. Copying a graph-fed stream or applying both a simple filter and a complex graph to the same stream fails during FFmpeg output setup. These failures report `MediaException` with phase `encoding` and category `configuration`, without publication. Graph types are not guessed during pure inspection.
 
 `resource($name, Media)` supports `drawtext`'s `fontfile` and `textfile`, and `lut3d`'s `file` option. Every placeholder must be a whole, unquoted named option value, such as `file={{look}}`. The compiler substitutes a generated relative filename, and the process runs inside the workspace. Original keys can contain punctuation or Unicode without entering the graph. Unknown, unused, quoted, or embedded placeholders fail before staging. A logo or other media resource uses `addInput()` and a graph input label, not `movie` or `amovie`.

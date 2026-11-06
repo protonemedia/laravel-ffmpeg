@@ -80,6 +80,8 @@ class NativeExportTest extends TestCase
             ->map('0:a:0')->map('0:V:0?')->map('-0:a:1?')
             ->videoFilter('crop=120:80:4:2')->videoFilter('hflip')
             ->clip(12.5, end: 20.5)->metadata('title', 'A "quoted" title; $HOME')
+            ->streamMetadata(0, 'title', 'First output stream')->streamMetadata('a:0', 'language', 'eng')
+            ->disposition('a:0', 'default+forced')
             ->outputOptions(['-movflags', '+faststart', '-streamid', '0:42', '-streamid', '1:43']);
 
         $expected = [
@@ -88,13 +90,15 @@ class NativeExportTest extends TestCase
             '-ss', '12.5', '-t', '8', '-map', '0:a:0', '-map', '0:V:0:?', '-map', '-0:a:1:?',
             '-map_metadata', '0', '-map_chapters', '-1', '-c:v', 'libx264', '-crf:v', '21', '-preset:v', 'slow',
             '-filter:v', 'crop=120:80:4:2,hflip', '-c:a', 'aac', '-b:a', '96k',
-            '-metadata', 'title=A "quoted" title; $HOME', '-fps_mode:v', 'passthrough', '-threads', '1',
+            '-metadata', 'title=A "quoted" title; $HOME', '-metadata:s:0', 'title=First output stream',
+            '-metadata:s:a:0', 'language=eng', '-disposition:a:0', 'default+forced', '-fps_mode:v', 'passthrough', '-threads', '1',
             '-movflags', '+faststart', '-streamid', '0:42', '-streamid', '1:43', '[output:0]',
         ];
         $this->assertSame($expected, $export->inspect());
         $this->assertSame($expected, $export->inspect());
         $this->assertNotContains('libx264', $media->export()->inspect());
         $this->assertNotContains('-ss', $media->export()->inspect());
+        $this->assertNotContains('language=eng', $media->export()->inspect());
         Process::assertNothingRan();
         $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
@@ -216,6 +220,37 @@ class NativeExportTest extends TestCase
             [['-i', 'other.mp4']], [['-map', '0:a']], [['-passlogfile', '/outside']],
             [['-metadata' => 'title=x']],
         ];
+    }
+
+    #[Test]
+    public function stream_tag_helpers_reject_invalid_output_selectors_and_values_without_io(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('absent.mkv');
+
+        foreach ([
+            fn () => $media->export()->streamMetadata('0:a:0', 'language', 'eng'),
+            fn () => $media->export()->streamMetadata('[audio]', 'language', 'eng'),
+            fn () => $media->export()->streamMetadata('a:0?', 'language', 'eng'),
+            fn () => $media->export()->streamMetadata('a:0', 'bad=key', 'value'),
+            fn () => $media->export()->streamMetadata('a:0', 'title', "bad\0value"),
+            fn () => $media->export()->disposition(-1, 'default'),
+            fn () => $media->export()->disposition('a', 'not_a_flag'),
+            fn () => $media->export()->disposition('a', '+default'),
+            fn () => $media->export()->disposition('a', ['default', '-forced']),
+            fn () => $media->export()->disposition('a', ['default' => true]),
+            fn () => $media->export()->output('one.mkv', fn () => null)->streamMetadata('a', 'language', 'eng'),
+            fn () => $media->export()->disposition('a', 'default')->output('one.mkv', fn () => null),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Invalid stream metadata or disposition settings were accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        Process::assertNothingRan();
     }
 
     #[Test]

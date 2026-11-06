@@ -588,11 +588,43 @@ class NativeCompositionTest extends TestCase
         $this->assertSame($original->output(), $copiedAudio->output());
         $this->assertSame([], glob($this->root.'/workspaces/*'));
 
-        try {
-            $retained->video('copy');
-            $this->fail('A retained output must be frozen when execution starts.');
-        } catch (\LogicException) {
-            $this->addToAssertionCount(1);
+        $title = "English 'mix'; 日本語 = literal";
+        FFMpeg::disk('local')->open('blue.mkv')->export()->filterComplex('[0:a]asplit[english][german]')
+            ->output('tagged-first.mkv', fn ($out) => $out->map('[english]')->mapVideo(0)
+                ->video('copy')->audio('pcm_s16le')->withoutMetadata()->chaptersFrom(null)
+                ->streamMetadata(0, 'language', 'eng')->streamMetadata(0, 'title', $title)
+                ->disposition(0, ['default', 'forced'])->disposition('v:0', '0')->toDisk('memory'))
+            ->output('tagged-second.mkv', fn ($out) => $out->mapVideo(0)->map('[german]')
+                ->video('copy')->audio('pcm_s16le')->withoutMetadata()->chaptersFrom(null)
+                ->streamMetadata('a', 'language', 'fra')->streamMetadata('a:0', 'language', 'spa')
+                ->streamMetadata('a', 'language', 'deu')->streamMetadata('a:0', 'title', 'Remove me')
+                ->streamMetadata('a:0', 'title', '')
+                ->disposition('a', [])->disposition('a:0', 'forced')->disposition('a', [])->toDisk('local'))
+            ->save();
+        $first = FFMpeg::disk('memory')->open('tagged-first.mkv')->probe();
+        $second = FFMpeg::disk('local')->open('tagged-second.mkv')->probe();
+        $this->assertSame(['audio', 'video'], $first->streams()->map->type()->all());
+        $this->assertSame(['video', 'audio'], $second->streams()->map->type()->all());
+        $this->assertSame('eng', $first->audio()->language());
+        $this->assertSame($title, $first->audio()->tag('title'));
+        $this->assertTrue($first->audio()->isDefault());
+        $this->assertTrue($first->audio()->isForced());
+        $this->assertSame('deu', $second->audio()->language());
+        $this->assertNull($second->audio()->tag('title'));
+        $this->assertFalse($second->audio()->isDefault());
+        $this->assertFalse($second->audio()->isForced());
+
+        foreach ([
+            fn () => $retained->video('copy'),
+            fn () => $retained->streamMetadata('a', 'language', 'eng'),
+            fn () => $retained->disposition('a', 'default'),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('A retained output must be frozen when execution starts.');
+            } catch (\LogicException) {
+                $this->addToAssertionCount(1);
+            }
         }
     }
 
