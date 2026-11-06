@@ -363,11 +363,12 @@ class NativeProbeTest extends TestCase
     public function it_requires_the_supported_ffprobe_release_line(): void
     {
         Process::fake(fn () => Process::result(output: 'ffprobe version 5.1.9'));
+        Storage::disk('memory')->put('video.mp4', 'media');
 
         $this->expectException(MediaException::class);
         $this->expectExceptionMessage('FFprobe 9.0.x is required.');
 
-        FFMpeg::disk('local')->open('video.mp4')->probe();
+        FFMpeg::disk('memory')->open('video.mp4')->probe();
     }
 
     #[Test]

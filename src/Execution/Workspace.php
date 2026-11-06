@@ -4,11 +4,21 @@ namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
 use Illuminate\Filesystem\Filesystem;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Media;
+use ProtoneMedia\LaravelFFMpeg\Metadata;
 
 /** @internal */
 class Workspace
 {
     public readonly string $path;
+
+    private array $assets = [];
+
+    private array $metadata = [];
+
+    private array $probeVersions = [];
+
+    private int $nextAsset = 0;
 
     public function __construct()
     {
@@ -18,6 +28,45 @@ class Workspace
         if (! @mkdir($this->path, 0700)) {
             throw new MediaException('Cannot create the media workspace.', 'staging', 'filesystem');
         }
+    }
+
+    public function stage(Media $media, bool $resource = false): string
+    {
+        // Keep purpose entries separate: a resource may contain manifest-like
+        // text, but that must never bypass validation when used as media later.
+        // The trade-off is a second transfer if both purposes use a remote key.
+        $identity = ($resource ? 'resource:' : 'media:').$media->identity();
+
+        if (! isset($this->assets[$identity])) {
+            $extension = $media->extension();
+            $name = 'input-'.$this->nextAsset++.($extension === '' ? '' : '.'.$extension);
+            $path = $media->stage($this, $name, $resource);
+
+            // Retain the descriptor so filesystem object identities cannot be
+            // recycled while their staged entries are still in this execution.
+            $this->assets[$identity] = ['media' => $media, 'path' => $path];
+        }
+
+        return $this->assets[$identity]['path'];
+    }
+
+    public function probe(Media $media, ?string $selector = null): Metadata
+    {
+        $path = $this->stage($media);
+        $identity = $media->identity().':'.serialize($selector);
+
+        if (! isset($this->metadata[$identity])) {
+            $binary = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
+
+            if (! isset($this->probeVersions[$binary])) {
+                (new ProcessRunner)->version($binary, 'ffprobe', $this->path);
+                $this->probeVersions[$binary] = true;
+            }
+
+            $this->metadata[$identity] = $media->probePath($path, $this, $selector);
+        }
+
+        return $this->metadata[$identity];
     }
 
     public function delete(): void

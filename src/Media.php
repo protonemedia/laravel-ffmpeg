@@ -42,7 +42,31 @@ readonly class Media
 
     public function export(): PendingExport
     {
-        return new PendingExport($this, is_string($this->source) ? $this->disk : config('filesystems.default'));
+        return new PendingExport($this, $this->defaultOutputDisk());
+    }
+
+    /** @internal */
+    public function defaultOutputDisk(): string|Filesystem
+    {
+        return is_string($this->source) ? $this->disk : config('filesystems.default');
+    }
+
+    /** @internal */
+    public function identity(): string
+    {
+        return hash('sha256', serialize([
+            is_string($this->disk) ? ['name', $this->disk] : ['object', spl_object_id($this->disk)],
+            is_string($this->source) ? ['key', $this->source] : ['file', $this->source->getPathname()],
+            $this->options,
+        ]));
+    }
+
+    /** @internal */
+    public function extension(): string
+    {
+        $extension = pathinfo(is_string($this->source) ? $this->source : $this->source->getPathname(), PATHINFO_EXTENSION);
+
+        return preg_match('/\A[a-z0-9]{1,32}\z/i', $extension) ? strtolower($extension) : '';
     }
 
     /** @internal */
@@ -54,9 +78,7 @@ readonly class Media
     public function probe(): Metadata
     {
         return $this->withInput(function (string $path, Workspace $workspace) {
-            (new ProcessRunner)->version(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), 'ffprobe', $workspace->path);
-
-            return $this->probePath($path, $workspace);
+            return $workspace->probe($this);
         });
     }
 
@@ -67,7 +89,7 @@ readonly class Media
         $failure = null;
 
         try {
-            $path = $this->localPath($workspace);
+            $path = $workspace->stage($this);
 
             return $operation($path, $workspace);
         } catch (Throwable $exception) {
@@ -127,26 +149,31 @@ readonly class Media
         return new Metadata($data);
     }
 
-    private function localPath(Workspace $workspace): string
+    /** @internal */
+    public function stage(Workspace $workspace, string $name = 'input', bool $resource = false): string
     {
-        if (! is_string($this->source)) {
-            return $this->source->getPathname();
+        if (! preg_match('/\A[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9]+)?\z/i', $name)) {
+            throw new InvalidArgumentException('The staging name must be a safe generated filename.');
         }
 
         $input = $output = null;
 
         try {
+            if (! is_string($this->source)) {
+                return $this->absoluteLocalPath($this->source->getPathname());
+            }
+
             $disk = is_string($this->disk) ? Storage::disk($this->disk) : $this->disk;
 
             if ($disk instanceof LocalFilesystemAdapter) {
-                return $disk->path($this->source);
+                return $this->absoluteLocalPath($disk->path($this->source));
             }
 
-            if (in_array(strtolower(pathinfo($this->source, PATHINFO_EXTENSION)), ['m3u8', 'm3u', 'mpd', 'ffconcat'])) {
+            if (! $resource && in_array($this->extension(), ['m3u8', 'm3u', 'mpd', 'ffconcat'])) {
                 throw new MediaException('Remote manifest dependencies cannot be staged as a single file.', 'staging', 'manifest');
             }
 
-            $path = $workspace->path.DIRECTORY_SEPARATOR.'input';
+            $path = $workspace->path.DIRECTORY_SEPARATOR.$name;
             $output = @fopen($path, 'xb');
 
             if ($output === false || ! chmod($path, 0600)) {
@@ -168,7 +195,7 @@ readonly class Media
 
             $prefix = file_get_contents($path, false, null, 0, 4096);
 
-            if (preg_match('/^(?:\xEF\xBB\xBF)?\s*(?:#EXTM3U|ffconcat\s)|<(?:\w+:)?MPD(?:\s|>)/i', $prefix)) {
+            if (! $resource && preg_match('/^(?:\xEF\xBB\xBF)?\s*(?:#EXTM3U|ffconcat\s)|<(?:\w+:)?MPD(?:\s|>)/i', $prefix)) {
                 throw new MediaException('Remote manifest dependencies cannot be staged as a single file.', 'staging', 'manifest');
             }
 
@@ -188,5 +215,16 @@ readonly class Media
                 fclose($output);
             }
         }
+    }
+
+    private function absoluteLocalPath(string $path): string
+    {
+        $absolute = realpath($path);
+
+        if ($absolute === false || ! is_file($absolute) || ! is_readable($absolute)) {
+            throw new MediaException('Cannot read the local media input.', 'staging', 'filesystem');
+        }
+
+        return $absolute;
     }
 }
