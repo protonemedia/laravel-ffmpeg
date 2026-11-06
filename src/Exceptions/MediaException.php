@@ -11,6 +11,8 @@ class MediaException extends RuntimeException
         public readonly string $phase,
         public readonly string $category,
         public readonly string $diagnostics = '',
+        public readonly array $published = [],
+        public readonly array $destination = [],
     ) {
         // Native process and adapter exceptions may contain credentials or full commands.
         parent::__construct($message);

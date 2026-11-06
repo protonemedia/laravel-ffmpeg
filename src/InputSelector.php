@@ -10,8 +10,8 @@ class InputSelector
 {
     public function __construct(private readonly string|Filesystem $disk) {}
 
-    public function open(string|File|UploadedFile $path): Media
+    public function open(string|File|UploadedFile $path, array $inputOptions = []): Media
     {
-        return new Media($this->disk, $path);
+        return new Media($this->disk, $path, $inputOptions);
     }
 }

@@ -11,6 +11,7 @@ use InvalidArgumentException;
 use JsonException;
 use League\Flysystem\WhitespacePathNormalizer;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use Throwable;
@@ -19,7 +20,9 @@ readonly class Media
 {
     private string|File|UploadedFile $source;
 
-    public function __construct(private string|Filesystem $disk, string|File|UploadedFile $source)
+    private array $options;
+
+    public function __construct(private string|Filesystem $disk, string|File|UploadedFile $source, array $inputOptions = [])
     {
         if (is_string($source)) {
             if ($source === '' || preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $source)) {
@@ -34,6 +37,18 @@ readonly class Media
         }
 
         $this->source = $source;
+        $this->options = CommandCompiler::options($inputOptions, 'input');
+    }
+
+    public function export(): PendingExport
+    {
+        return new PendingExport($this, is_string($this->source) ? $this->disk : config('filesystems.default'));
+    }
+
+    /** @internal */
+    public function inputOptions(): array
+    {
+        return $this->options;
     }
 
     public function probe(): Metadata
@@ -71,11 +86,23 @@ readonly class Media
     }
 
     /** @internal */
-    public function probePath(string $path, Workspace $workspace): Metadata
+    public function probePath(string $path, Workspace $workspace, ?string $selector = null): Metadata
     {
+        $options = [];
+
+        for ($i = 0; $i < count($this->options); $i += 2) {
+            if ($this->options[$i] !== '-thread_queue_size') {
+                array_push($options, $this->options[$i], $this->options[$i + 1]);
+            }
+        }
+
+        if ($selector !== null) {
+            array_push($options, '-select_streams', $selector);
+        }
+
         $result = (new ProcessRunner)->run([
             config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-print_format', 'json',
-            '-show_format', '-show_streams', '-show_chapters', $path,
+            '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', 'file', ...$options, $path,
         ], $workspace->path, [$path => '[input]']);
 
         if ($result->exitCode !== 0) {

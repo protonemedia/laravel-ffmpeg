@@ -83,7 +83,7 @@ class NativeProbeTest extends TestCase
         $this->fakeProbe(inspect: function (PendingProcess $process) use ($disk, $key) {
             $this->assertSame([
                 'ffprobe', '-v', 'error', '-print_format', 'json',
-                '-show_format', '-show_streams', '-show_chapters', $disk->path($key),
+                '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', 'file', $disk->path($key),
             ], $process->command);
             $this->assertSame([], glob($process->path.'/*'));
         });

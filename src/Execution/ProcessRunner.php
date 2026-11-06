@@ -20,13 +20,23 @@ class ProcessRunner
         return $matches[1];
     }
 
-    public function run(array $command, string $directory, array $redactions = [], int $outputLimit = 16777216): ProcessOutput
-    {
+    public function run(
+        array $command,
+        string $directory,
+        array $redactions = [],
+        int $outputLimit = 16777216,
+        string $phase = 'probing',
+        ?ProgressParser $progress = null,
+        ?callable $onProgress = null,
+    ): ProcessOutput {
         $output = $diagnostics = '';
         $overflow = false;
         $started = $lastOutput = hrtime(true);
+        $lastNotification = 0;
         $process = null;
         $failure = null;
+        $applicationFailure = null;
+        $captureFailure = null;
 
         try {
             // An internal callback is required at start: quietly() disables capture,
@@ -36,11 +46,17 @@ class ProcessRunner
                 ->env($this->environment($directory))
                 ->forever()
                 ->quietly()
-                ->start($command, function (string $type, string $buffer) use (&$output, &$diagnostics, &$overflow, &$lastOutput, $outputLimit) {
+                ->start($command, function (string $type, string $buffer) use (&$output, &$diagnostics, &$overflow, &$lastOutput, &$captureFailure, $outputLimit, $progress) {
                     $lastOutput = hrtime(true);
 
                     if ($type === 'err') {
                         $diagnostics = substr($diagnostics.substr($buffer, -65536), -65536);
+                    } elseif ($progress !== null) {
+                        try {
+                            $progress->push($buffer);
+                        } catch (Throwable $exception) {
+                            $captureFailure ??= $exception;
+                        }
                     } elseif (! $overflow) {
                         $overflow = strlen($output) + strlen($buffer) > $outputLimit;
 
@@ -53,17 +69,35 @@ class ProcessRunner
             do {
                 $running = $process->running();
 
+                if ($captureFailure !== null) {
+                    throw $captureFailure;
+                }
+
                 if ($overflow) {
-                    throw new MediaException('FFprobe output exceeds the capture limit.', 'probing', 'output_limit');
+                    throw new MediaException('Media process output exceeds the capture limit.', $phase, 'output_limit');
                 }
 
                 $now = hrtime(true);
-                $timeout = config('laravel-ffmpeg.timeout', 3600);
-                $idleTimeout = config('laravel-ffmpeg.idle_timeout');
+                $totalDeadline = config('laravel-ffmpeg.timeout', 3600);
+                $idleDeadline = config('laravel-ffmpeg.idle_timeout');
 
-                if (($timeout !== null && ($now - $started) / 1e9 >= $timeout)
-                    || ($idleTimeout !== null && ($now - $lastOutput) / 1e9 >= $idleTimeout)) {
-                    throw new MediaException('The media process timed out.', 'probing', 'timeout');
+                if (($totalDeadline !== null && ($now - $started) / 1e9 >= $totalDeadline)
+                    || ($idleDeadline !== null && ($now - $lastOutput) / 1e9 >= $idleDeadline)) {
+                    throw new MediaException('The media process timed out.', $phase, 'timeout');
+                }
+
+                if ($progress !== null && $onProgress !== null && (! $running || $now - $lastNotification >= 100000000)) {
+                    if ($snapshot = $progress->take()) {
+                        try {
+                            $onProgress($snapshot);
+                        } catch (Throwable $exception) {
+                            $applicationFailure = $exception;
+
+                            throw $exception;
+                        }
+
+                        $lastNotification = $now;
+                    }
                 }
 
                 if ($running) {
@@ -77,11 +111,13 @@ class ProcessRunner
                 $result->exitCode(),
                 $output,
                 str_replace(array_keys($redactions), array_values($redactions), $diagnostics),
+                (hrtime(true) - $started) / 1e9,
+                array_map(fn (string $token) => str_replace(array_keys($redactions), array_values($redactions), $token), $command),
             );
         } catch (Throwable $exception) {
-            $failure = $exception instanceof MediaException
+            $failure = $exception instanceof MediaException || $exception === $applicationFailure
                 ? $exception
-                : new MediaException('Cannot execute the media process.', 'probing', 'process');
+                : new MediaException('Cannot execute the media process.', $phase, 'process');
 
             throw $failure;
         } finally {
