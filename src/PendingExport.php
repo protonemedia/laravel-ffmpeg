@@ -77,13 +77,36 @@ class PendingExport
 
     public function resource(string $name, Media $media): self
     {
+        return $this->addResource($name, 'file', $media);
+    }
+
+    public function textResource(string $name, string $text): self
+    {
+        if (! mb_check_encoding($text, 'UTF-8') || str_contains($text, "\0")) {
+            throw new InvalidArgumentException('Text resources require UTF-8 without NUL bytes.');
+        }
+
+        return $this->addResource($name, 'text', $text);
+    }
+
+    public function subtitleResource(string $name, Media $media): self
+    {
+        if ($media->inputOptions() !== []) {
+            throw new InvalidArgumentException('Subtitle resources do not accept media input options.');
+        }
+
+        return $this->addResource($name, 'subtitle', $media);
+    }
+
+    private function addResource(string $name, string $type, Media|string $source): self
+    {
         $this->assertMutable();
 
         if (! preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/D', $name) || isset($this->resources[$name])) {
             throw new InvalidArgumentException('Resource names must be unique simple identifiers.');
         }
 
-        $this->resources[$name] = $media;
+        $this->resources[$name] = compact('type', 'source');
 
         return $this;
     }
@@ -156,9 +179,9 @@ class PendingExport
     {
         $names = [];
 
-        foreach ($this->resources as $name => $media) {
-            $extension = $media->extension();
-            $names[$name] = 'resource-'.count($names).($extension === '' ? '' : '.'.$extension);
+        foreach ($this->resources as $name => $resource) {
+            $extension = $resource['type'] === 'text' ? 'txt' : $resource['source']->extension();
+            $names[$name] = ['type' => $resource['type'], 'path' => 'resource-'.count($names).($extension === '' ? '' : '.'.$extension)];
         }
 
         return $names;
@@ -169,6 +192,11 @@ class PendingExport
         $composition = count($this->inputs) > 1 || $this->graph !== null;
         $mappedLabels = $used = $compiledOutputs = [];
         $resources = $this->resourceNames();
+
+        if (array_any($resources, fn ($resource) => $resource['type'] === 'subtitle')
+            && array_any($outputs, fn ($output) => $output->inputSeekOptions() !== [])) {
+            throw new InvalidArgumentException('Subtitle resources require an unseeked input. Use an accurate output clip.');
+        }
 
         foreach ($outputs as $index => $output) {
             if ($composition && ! $output->hasMaps()) {
@@ -265,11 +293,14 @@ class PendingExport
                     $redactions[$path] ??= '[input:'.$index.']';
                 }
 
-                foreach ($this->resourceNames() as $name => $filename) {
-                    $source = $workspace->stage($this->resources[$name], resource: true);
-                    $target = $workspace->path.'/'.$filename;
+                foreach ($this->resourceNames() as $name => $resource) {
+                    $source = $this->resources[$name]['source'];
+                    $target = $workspace->path.'/'.$resource['path'];
+                    $written = $resource['type'] === 'text'
+                        ? @file_put_contents($target, $source) === strlen($source)
+                        : @copy($workspace->stage($source, resource: true), $target);
 
-                    if (! @copy($source, $target) || ! chmod($target, 0600)) {
+                    if (! $written || ! chmod($target, 0600)) {
                         throw new MediaException('Cannot stage the filter resource.', 'staging', 'transfer');
                     }
                 }
@@ -284,6 +315,7 @@ class PendingExport
                     throw new MediaException('FFmpeg and FFprobe must have matching release versions.', 'probing', 'version');
                 }
 
+                $this->validateResources($workspace, $runner);
                 $metadata = array_map(fn ($media) => $workspace->probe($media), $this->inputs);
                 $expected = array_map(fn ($output) => $this->selectedStreams($output, $workspace, $metadata), $outputs);
                 $outputPaths = [];
@@ -395,6 +427,63 @@ class PendingExport
         Event::dispatch(new Events\ExportCompleted($operationId, $result->files()->map->toArray()->all()));
 
         return $result;
+    }
+
+    private function validateResources(Workspace $workspace, ProcessRunner $runner): void
+    {
+        $required = [];
+
+        foreach ($this->resources as $resource) {
+            if ($resource['type'] !== 'file') {
+                $required[] = $resource['type'] === 'text' ? 'drawtext' : 'subtitles';
+            }
+        }
+
+        if ($required !== []) {
+            $filters = $runner->run([config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), '-hide_banner', '-filters'], $workspace->path);
+
+            foreach (array_unique($required) as $filter) {
+                if ($filters->exitCode !== 0 || ! preg_match('/^\s*\S+\s+'.preg_quote($filter, '/').'\s/m', $filters->output)) {
+                    throw new MediaException('The FFmpeg build requires the '.$filter.' filter.', 'probing', 'capability');
+                }
+            }
+        }
+
+        foreach ($this->resourceNames() as $name => $resource) {
+            if ($resource['type'] !== 'subtitle') {
+                continue;
+            }
+
+            if (! mb_check_encoding(file_get_contents($workspace->path.'/'.$resource['path']), 'UTF-8')) {
+                throw new MediaException('Subtitle resources require UTF-8.', 'probing', 'resource');
+            }
+
+            // Probe the exact filename and bytes the subtitles filter reopens.
+            // Caller input options must not force a different demuxer or seek.
+            $probe = $runner->run([
+                config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-of', 'json',
+                '-show_entries', 'format=format_name:stream=codec_type', '-protocol_whitelist', 'file',
+                '-format_whitelist', 'srt,ass,webvtt', $resource['path'],
+            ], $workspace->path);
+            $data = json_decode($probe->output, true);
+
+            if ($probe->exitCode !== 0 || ! in_array($data['format']['format_name'] ?? null, ['srt', 'ass', 'webvtt'], true)
+                || ($data['streams'] ?? null) !== [['codec_type' => 'subtitle']]) {
+                throw new MediaException('A subtitle resource must be a standalone SRT, ASS, or WebVTT file.', 'probing', 'resource');
+            }
+
+            // The encoding binary must also accept and decode these unchanged
+            // bytes under the whitelist before its filter reopens the file.
+            $decode = $runner->run([
+                config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), '-v', 'error', '-nostdin',
+                '-protocol_whitelist', 'file', '-format_whitelist', 'srt,ass,webvtt', '-i', $resource['path'],
+                '-map', '0:s:0', '-c:s', 'ass', '-f', 'null', '-',
+            ], $workspace->path);
+
+            if ($decode->exitCode !== 0) {
+                throw new MediaException('Cannot decode the subtitle resource.', 'probing', 'resource');
+            }
+        }
     }
 
     private function validateDestinations(array $outputs): void

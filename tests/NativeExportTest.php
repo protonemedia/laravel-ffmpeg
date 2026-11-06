@@ -100,6 +100,103 @@ class NativeExportTest extends TestCase
     }
 
     #[Test]
+    public function geometry_helpers_share_filter_order_output_scopes_and_copy_restrictions(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('absent.mkv');
+        $export = $media->export()->videoFilter('hflip')->resize(width: 80)->videoFilter('vflip');
+        $this->assertContains('hflip,scale=w=80:h=-2:reset_sar=1,vflip', $export->inspect());
+        $this->assertNotContains('hflip,scale=w=80:h=-2:reset_sar=1,vflip', $media->export()->inspect());
+        $command = $media->export()
+            ->output('wide.mkv', fn ($out) => $out->resize(height: 40))
+            ->output('square.mkv', fn ($out) => $out->fit(80, 80))->inspect();
+        $boundary = array_search('[output:0]', $command);
+        $this->assertContains('scale=w=-2:h=40:reset_sar=1', array_slice($command, 0, $boundary));
+        $this->assertContains('scale=w=80:h=80:force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1,pad=w=80:h=80:x=(ow-iw)/2:y=(oh-ih)/2:color=black', array_slice($command, $boundary));
+
+        foreach ([
+            fn () => $media->export()->resize(),
+            fn () => $media->export()->resize(width: 0),
+            fn () => $media->export()->resize(height: -2),
+            fn () => $media->export()->fit(0, 80),
+            fn () => $media->export()->fit(81, 80),
+            fn () => $media->export()->fit(80, 80, mode: 'stretch'),
+            fn () => $media->export()->resize(width: 80)->video('copy')->inspect(),
+            fn () => $media->export()->fit(80, 80)->video('copy')->inspect(),
+            fn () => $media->export()->output('one.mkv', fn () => null)->resize(width: 80),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Invalid geometry configuration was accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        Process::assertNothingRan();
+    }
+
+    #[Test]
+    public function real_geometry_helpers_preserve_display_aspect_or_explicitly_stretch_and_center(): void
+    {
+        $probe = getenv('FFMPEG_9_FFPROBE');
+
+        if (! $probe) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real geometry helper acceptance.');
+        }
+
+        $ffmpeg = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $local = $this->fakeLocalDisk();
+        $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
+            'color=red:size=160x80:rate=10:duration=0.3,drawbox=x=0:y=0:w=40:h=80:color=blue:t=fill,drawbox=x=120:y=0:w=40:h=80:color=green:t=fill,setsar=2',
+            '-c:v', 'ffv1', $local->path('anamorphic.mkv')]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $media = FFMpeg::disk('local')->open('anamorphic.mkv');
+        $media->export()
+            ->output('width.mkv', fn ($out) => $out->map('0:v')->resize(width: 80)->video('ffv1')->toDisk('local'))
+            ->output('height.mkv', fn ($out) => $out->map('0:v')->resize(height: 40)->video('ffv1')->toDisk('local'))
+            ->output('stretch.mkv', fn ($out) => $out->map('0:v')->resize(80, 80)->video('ffv1')->toDisk('local'))
+            ->output('contain.mkv', fn ($out) => $out->map('0:v')->fit(80, 80)->video('ffv1')->toDisk('local'))
+            ->output('cover.mkv', fn ($out) => $out->map('0:v')->fit(80, 80, mode: 'cover')->video('ffv1')->toDisk('local'))
+            ->save();
+
+        foreach (['width' => [80, 20], 'height' => [160, 40], 'stretch' => [80, 80], 'contain' => [80, 80], 'cover' => [80, 80]] as $name => $size) {
+            $video = FFMpeg::disk('local')->open($name.'.mkv')->probe()->video();
+            $this->assertSame($size, [$video->width(), $video->height()], $name);
+            $this->assertSame('1:1', $video->get('sample_aspect_ratio'), $name);
+        }
+
+        foreach (['stretch', 'contain', 'cover'] as $name) {
+            $frame = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path($name.'.mkv'), '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']);
+            $this->assertTrue($frame->successful(), $frame->errorOutput());
+            $pixel = fn ($x, $y) => array_values(unpack('C*', substr($frame->output(), ($y * 80 + $x) * 3, 3)));
+            $middle = $pixel(40, 40);
+            $this->assertGreaterThan(220, $middle[0], $name.' must retain the red center');
+            $this->assertLessThan(25, $middle[2], $name);
+            $top = $pixel(40, 5);
+            $left = $pixel(5, 40);
+            $right = $pixel(75, 40);
+
+            if ($name === 'contain') {
+                $this->assertLessThan(10, max($top), 'Contain pads the top in black.');
+                $this->assertGreaterThan(220, $left[2], 'Contain keeps the blue left edge.');
+                $this->assertGreaterThan(100, $right[1], 'Contain keeps the green right edge.');
+            } elseif ($name === 'cover') {
+                $this->assertGreaterThan(220, $top[0], 'Cover has no letterbox.');
+                $this->assertGreaterThan(220, $left[0], 'Centered cover crops the blue band.');
+                $this->assertGreaterThan(220, $right[0], 'Centered cover crops the green band.');
+            } else {
+                $this->assertGreaterThan(220, $top[0], 'Explicit resize stretches to fill.');
+                $this->assertGreaterThan(220, $left[2]);
+                $this->assertGreaterThan(100, $right[1]);
+            }
+        }
+
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
     #[DataProvider('unsafeOptions')]
     public function unsafe_or_ambiguous_options_fail_before_any_process(array $tokens): void
     {

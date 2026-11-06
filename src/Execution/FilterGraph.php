@@ -32,10 +32,28 @@ class FilterGraph
                     if (! preg_match('/\A\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/', substr($filter, $i), $match)
                         || $quoted || ! preg_match('/(?:^|[:=])([a-z]+)=$/', substr($filter, 0, $i), $key)
                         || ! in_array($key[1], match ($name[1] ?? '') {
-                            'drawtext' => ['fontfile', 'textfile'], 'lut3d' => ['file'], default => [],
+                            'drawtext' => ['fontfile', 'textfile'], 'lut3d' => ['file'], 'subtitles' => ['filename'], default => [],
                         }, true)
                         || ! isset($resources[$match[1]])) {
-                        throw new InvalidArgumentException('Resources require a known, whole unquoted fontfile, textfile, or lut3d file value.');
+                        throw new InvalidArgumentException('Resources require a known, whole unquoted named file value.');
+                    }
+
+                    $resource = $resources[$match[1]];
+
+                    if (($name[1] === 'subtitles') !== ($resource['type'] === 'subtitle')
+                        || ($resource['type'] === 'text' && ($name[1] !== 'drawtext' || $key[1] !== 'textfile'))) {
+                        throw new InvalidArgumentException('The resource type does not match the filter file option.');
+                    }
+
+                    if (in_array($name[1], ['drawtext', 'subtitles'], true)) {
+                        $options = self::resourceOptions($filter);
+
+                        if (($name[1] === 'subtitles' && isset($options['f']))
+                            || ($name[1] === 'drawtext' && isset($options['textfile'], $options['text']))
+                            || ($resource['type'] === 'text' && (($options['expansion'] ?? null) !== 'none'
+                                || ($options['reload'] ?? '0') !== '0'))) {
+                            throw new InvalidArgumentException('File resources require one filename; literal text requires expansion=none and reload=0.');
+                        }
                     }
 
                     $i += strlen($match[0]) - 1;
@@ -45,7 +63,7 @@ class FilterGraph
                     }
 
                     $used[$match[1]] = true;
-                    $compiled .= $resources[$match[1]];
+                    $compiled .= $resource['path'];
 
                     continue;
                 }
@@ -69,6 +87,24 @@ class FilterGraph
         }
 
         return implode('', $result);
+    }
+
+    /** Resource-bearing filters use named, nonduplicate options only. */
+    private static function resourceOptions(string $filter): array
+    {
+        $arguments = substr($filter, strpos($filter, '=') + 1);
+        $arguments = preg_replace('/(?:\[[a-zA-Z_][a-zA-Z0-9_]*\])+\s*$/', '', $arguments);
+        $options = [];
+
+        foreach (self::split($arguments, ':') as [$option]) {
+            if (! preg_match('/^([a-zA-Z_][a-zA-Z0-9_]*)=(.*)$/sD', $option, $match) || isset($options[$match[1]])) {
+                throw new InvalidArgumentException('Resource filters require named, nonduplicate options.');
+            }
+
+            $options[$match[1]] = $match[2];
+        }
+
+        return $options;
     }
 
     /** Check label ownership; FFmpeg validates filter syntax and pad arity. */

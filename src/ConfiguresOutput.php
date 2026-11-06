@@ -124,6 +124,38 @@ trait ConfiguresOutput
         return $this;
     }
 
+    /** One dimension preserves display aspect ratio; two dimensions stretch. */
+    public function resize(?int $width = null, ?int $height = null): self
+    {
+        $this->assertOutputMutable();
+
+        if (($width === null && $height === null) || ($width !== null && $width <= 0) || ($height !== null && $height <= 0)) {
+            throw new InvalidArgumentException('Resize requires at least one positive dimension.');
+        }
+
+        $this->videoFilters[] = 'scale=w='.($width ?? -2).':h='.($height ?? -2).':reset_sar=1';
+
+        return $this;
+    }
+
+    /** Fit display geometry into an exact square-pixel canvas. */
+    public function fit(int $width, int $height, string $mode = 'contain'): self
+    {
+        $this->assertOutputMutable();
+
+        if ($width <= 0 || $height <= 0 || $width % 2 !== 0 || $height % 2 !== 0 || ! in_array($mode, ['contain', 'cover'], true)) {
+            throw new InvalidArgumentException('Fit requires positive even dimensions and contain or cover mode.');
+        }
+
+        $aspect = $mode === 'contain' ? 'decrease' : 'increase';
+        $canvas = $mode === 'contain'
+            ? 'pad=w='.$width.':h='.$height.':x=(ow-iw)/2:y=(oh-ih)/2:color=black'
+            : 'crop=w='.$width.':h='.$height.':x=(iw-ow)/2:y=(ih-oh)/2';
+        $this->videoFilters[] = 'scale=w='.$width.':h='.$height.':force_original_aspect_ratio='.$aspect.':force_divisible_by=2:reset_sar=1,'.$canvas;
+
+        return $this;
+    }
+
     public function audioFilter(string $expression): self
     {
         $this->assertOutputMutable();

@@ -20,7 +20,7 @@ All outputs, including local destinations, are generated in the workspace. Every
 
 `save()` returns generated-file records and bounded, redacted process summaries. Structured progress separates staging, probing, encoding, validation, and publication. Percentage, speed, and remaining time can be unknown. A callback can cancel by throwing `Exceptions\ExportCancelled`; other callback exceptions propagate unchanged as failures. Both stop and reap the child before workspace cleanup. Lifecycle events work without a progress callback, and completion follows publication and cleanup.
 
-The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, display-geometry helpers, two-pass encoding, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
+The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, additional geometry helpers, two-pass encoding, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
 
 ### Current export API
 
@@ -38,6 +38,20 @@ $result = FFMpeg::disk('uploads')
 Input options, `globalOptions()`, and `outputOptions()` accept flat option/value pairs from a closed allowlist. Every allowed option has library-defined arity and value validation. Unknown options, aliases, switches with caller-supplied values, duplicate nonrepeatable options, filename controls, authentication headers, and encoder parameter blobs are rejected. Output `-f` permits only listed single-file muxers. These methods are not unrestricted argv passthrough.
 
 Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. A per-input `-protocol_whitelist file` prevents direct network protocols, but does not isolate local file access or apply to files opened by filters. Untrusted media still requires process isolation and resource limits. A demuxer allowlist remains under investigation and is not implemented in this checkpoint.
+
+### Geometry shortcuts
+
+```php
+$media->export()->resize(width: 1280);          // Preserve display aspect ratio.
+$media->export()->resize(height: 720);          // Infer an even width.
+$media->export()->resize(1280, 720);            // Stretch to both dimensions.
+$media->export()->fit(1280, 720);               // Contain with centered black padding.
+$media->export()->fit(1280, 720, mode: 'cover'); // Fill with a centered crop.
+```
+
+These settings work inside `output()` callbacks too. They append to the video filter chain in call order and cannot accompany video stream copy. Graph-fed streams follow the same simple-versus-complex filter restrictions as `videoFilter()`.
+
+Both helpers produce square pixels and allow upscaling. A one-dimension resize uses display aspect ratio, including the input's sample aspect ratio, and rounds the inferred dimension to a multiple of two. Two explicit resize dimensions stretch the image. `fit()` preserves display aspect ratio within rounding, requires positive even dimensions, and returns that exact canvas size. `contain` preserves the image with black bars. `cover` removes the edges outside a centered crop. Rotation, standalone crop and pad helpers, and resource shortcuts remain open.
 
 ### Composition and resources
 
@@ -64,7 +78,27 @@ Graph labels are simple identifiers. Each named output label must be consumed or
 
 Type-scoped encoding settings and simple filters apply to every selected stream of that type, including graph outputs. A graph-filtered video can accompany copied input audio. Copying a graph-fed stream or applying both a simple filter and a complex graph to the same stream fails during FFmpeg output setup. These failures report `MediaException` with phase `encoding` and category `configuration`, without publication. Graph types are not guessed during pure inspection.
 
-`resource($name, Media)` currently supports `drawtext`'s `fontfile` and `textfile`, and `lut3d`'s `file` option. Every placeholder must be a whole, unquoted named option value, such as `file={{look}}`. The compiler substitutes a generated relative filename, and the process runs inside the workspace. Original keys can contain punctuation or Unicode without entering the graph. Unknown, unused, quoted, or embedded placeholders fail before staging. Literal-text convenience methods and subtitle staging are not implemented. A logo or other media resource uses `addInput()` and a graph input label, not `movie` or `amovie`. Resource placeholders in demuxing filters are rejected.
+`resource($name, Media)` supports `drawtext`'s `fontfile` and `textfile`, and `lut3d`'s `file` option. Every placeholder must be a whole, unquoted named option value, such as `file={{look}}`. The compiler substitutes a generated relative filename, and the process runs inside the workspace. Original keys can contain punctuation or Unicode without entering the graph. Unknown, unused, quoted, or embedded placeholders fail before staging. A logo or other media resource uses `addInput()` and a graph input label, not `movie` or `amovie`.
+
+```php
+$media->export()
+	->resource('font', FFMpeg::disk('assets')->open('fonts/Brand.ttf'))
+	->textResource('title', "100%: café 'quoted' [literal],; %{not_expanded}")
+	->videoFilter('drawtext=fontfile={{font}}:textfile={{title}}:expansion=none:fontcolor=white:fontsize=24')
+	->video('libx264', crf: 23)->toDisk('videos')->save('title.mp4');
+
+$media->export()
+	->subtitleResource('captions', FFMpeg::disk('assets')->open('captions/English.srt'))
+	->videoFilter('subtitles=filename={{captions}}')
+	->clip(4, duration: 2) // A cue at source time 5 appears at output time 1.
+	->video('libx264', crf: 23)->toDisk('videos')->save('captioned.mp4');
+```
+
+`textResource()` writes UTF-8 bytes unchanged. It requires `drawtext`'s `textfile` option with `expansion=none` in that same filter instance. Reloading is disabled. Text never enters the graph or command arguments. Resource-bearing drawtext and subtitles filters require named, nonduplicate options. A second filename, positional filename, or `subtitles`'s `f` alias fails before execution.
+
+`subtitleResource()` accepts UTF-8 standalone SRT, ASS, and WebVTT files without media input options. FFprobe validates the final private filename with `-protocol_whitelist file -format_whitelist srt,ass,webvtt`, requiring one subtitle stream. FFmpeg also decodes that unchanged file under the whitelist before the subtitles filter reopens it. Content disguised as a subtitle, including HLS and concat manifests, fails with `MediaException`, phase `probing`, category `resource`, before encoding or publication. Missing `drawtext` or `subtitles` support for typed resources reports category `capability`. These checks do not isolate developer-trusted filters or libass font discovery.
+
+Subtitle resources reject keyframe clips because input seeks reset the timestamps used for subtitle rendering. Accurate output clips preserve cue timing. Subtitle placeholders work only in `subtitles=filename={{name}}`, not generic file resources, `ass`, `movie`, or `amovie`.
 
 Accurate clips stay output-scoped and do not seek sibling inputs. Keyframe clips remain limited to one input and one output without a complex graph. Graph duration can change arbitrarily, so graph progress reports time and speed without inventing a percentage. Composition validates all files before publication, but publication across disks is not atomic.
 
@@ -81,12 +115,13 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Network inputs | Read explicit public URLs. Stage authenticated finite downloads through Http. Keep per-input headers separate and redact signed URLs. | `MediaOpenerTest`, `ExportTest` | Open |
 | Scoped and read-only filesystems | Preserve prefixes and wrappers. Never write through a read-only adapter or escape a destination root. | `DiskTest`, new wrapper scenarios required | Open |
 | Ordinary encoding | Encode audio and video to different disks. Verify codecs, duration, channels, geometry, and write options. | `NativeExportTest`, `ExportTest` | Basic CRF encode and Storage publication verified; broader media coverage open |
+| Display geometry | Resize by one dimension or stretch explicitly. Contain or cover an exact canvas, preserving anamorphic display aspect ratio. | `NativeExportTest` | Resize, square pixels, centered padding, centered crop, and independent output geometry verified with real media; rotation helpers open |
 | Independent operations | Start two exports from the same media descriptor without inheriting settings or temporary files. | `NativeExportTest`, `ExportTest`, `MediaOpenerTest` | Single-output builders and repeated real exports verified |
 | Stream selection | Use multilingual audio, forced subtitles, cover art, and chapters. Verify ordered, optional, and negative maps and resulting dispositions. | `NativeExportTest`, `HlsExportTest` | Language selection, negative maps, order, dispositions, and absent optional maps verified; subtitle/artwork exports open |
 | Metadata preservation | Copy global tags. Preserve chapters only for an unchanged timeline unless explicitly transformed. Test remove and override controls. | `NativeExportTest` | Copy, override, and clip chapter omission verified; broader removal cases open |
 | Quality and passes | Compare CRF and target-bitrate contracts. Reject conflicts. Prove explicit two-pass encoding with isolated pass logs. | `NativeExportTest`, `ExportTest`, README pass-progress contract | CRF and conflict checks verified; two-pass open |
 | Copy and clipping | Remux without changing codecs. Distinguish accurate transcoding from keyframe copy cuts. Preserve audio offsets and VFR. | `NativeExportTest`, `CopyTest` | Remux, accurate duration, and decoded keyframe identity verified; VFR and offset coverage open |
-| Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `NativeCompositionTest`, `AddFilterTest`, `LegacyFilterMappingTest`, `ExportTest` | Simple filters and staged LUTs verified with real media; font/text resource compilation verified; subtitle staging open |
+| Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `NativeCompositionTest`, `AddFilterTest`, `LegacyFilterMappingTest`, `ExportTest` | Simple filters, LUTs, fonts, literal text, and SRT/ASS/WebVTT rendering verified with real media, including clipped cue timing and manifest rejection |
 | Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `NativeCompositionTest`, `ExportTest` | Mixed-disk overlay, LUT, branching, independent clips, copied audio, validation, and partial publication verified |
 | Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `ExportTest` | Open |
 | Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `FrameTest` | Open |
@@ -117,7 +152,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 
 ## Remaining sequence
 
-1. Complete secondary-resource coverage with font rendering, literal-text convenience, and safely staged subtitles. The multi-input and multi-output execution contract is implemented.
+1. Secondary-resource and composition acceptance now covers fonts, literal text, staged subtitles, and multiple inputs and outputs. Broader stream and filesystem preservation scenarios remain open in the acceptance table.
 2. Preserve ordinary encoding, composition, concatenation, frames, timelapse, watermarks, waveform images, storyboards, and VTT.
 3. Preserve adaptive and encrypted HLS and dynamic playlist responses against the same execution contract.
 4. Replace the README and upgrade guide, then remove the legacy driver and dependency tree. No parallel legacy backend remains in the released package.
@@ -127,6 +162,6 @@ Optional follow-ups remain ordered as loudness normalization, fMP4 HLS and alter
 
 ## Test commands
 
-`vendor/bin/phpunit tests/NativeProbeTest.php tests/NativeExportTest.php tests/NativeCompositionTest.php` runs the native process and Storage contract tests. Real-media cases require `FFMPEG_9_FFPROBE` to identify an installed FFprobe 9.0.x binary and report skips when that variable is absent. Export acceptance uses a matching `ffmpeg` binary in the same directory, built with libx264. This is temporary while the legacy suite still uses the distribution build.
+`vendor/bin/phpunit tests/NativeProbeTest.php tests/NativeExportTest.php tests/NativeCompositionTest.php` runs the native process and Storage contract tests. Real-media cases require `FFMPEG_9_FFPROBE` to identify an installed FFprobe 9.0.x binary and report skips when that variable is absent. Export acceptance uses a matching `ffmpeg` binary in the same directory, built with libx264, libfreetype, libharfbuzz, and libass. Font acceptance requires `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`. This is temporary while the legacy suite still uses the distribution build.
 
 `FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit` runs both suites when that binary is installed. Native acceptance uses FFmpeg and FFprobe 9.0.2. Legacy encoding tests still use the separately configured legacy binaries. Passing legacy tests does not establish native support for their workflows. Pinning the matching native build in setup and CI remains a release gate.

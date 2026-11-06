@@ -49,6 +49,10 @@ class NativeCompositionTest extends TestCase
                 return Process::result(output: $tool.' version 9.0.2');
             }
 
+            if (in_array('-filters', $process->command, true)) {
+                return Process::result(output: " ... drawtext V->V\n ... subtitles V->V\n");
+            }
+
             if ($tool === 'ffprobe') {
                 return Process::result(output: $probe ? $probe($process) : '{"format":{"duration":"2"},"streams":[{"index":0,"codec_type":"video"}]}');
             }
@@ -153,6 +157,97 @@ class NativeCompositionTest extends TestCase
             ->resource('font', $lut)->filterComplex("[0:v]drawtext=text='[not_a_label],;':fontfile={{font}}[out]")
             ->map('[out]')->inspect());
         Process::assertNothingRan();
+    }
+
+    #[Test]
+    public function typed_resources_reject_overrides_expansion_and_input_seeks_without_io(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('source.mkv');
+        $subtitle = FFMpeg::disk('missing')->open('captions.srt');
+
+        $this->assertContains('drawtext=textfile=resource-0.txt:expansion=none', $media->export()
+            ->textResource('title', "100%: café ' [x],; \\ %{not_a_function}")
+            ->videoFilter('drawtext=textfile={{title}}:expansion=none')->inspect());
+        $this->assertContains('[0:v]subtitles=filename=resource-0.srt[out]', $media->export()
+            ->subtitleResource('captions', $subtitle)->filterComplex('[0:v]subtitles=filename={{captions}}[out]')
+            ->map('[out]')->inspect());
+
+        foreach ([
+            'drawtext=textfile={{title}}',
+            'drawtext=expansion=none,drawtext=textfile={{title}}',
+            'drawtext=textfile={{title}}:expansion=none:expansion=normal',
+            'drawtext=textfile={{title}}:expansion=none:reload=1',
+            'drawtext=textfile={{title}}:expansion=none:text=override',
+            'drawtext=textfile={{title}}:expansion=none:textfile=override.txt',
+            'drawtext=positional:textfile={{title}}:expansion=none',
+            'lut3d=file={{title}}',
+        ] as $filter) {
+            try {
+                $media->export()->textResource('title', 'literal')->videoFilter($filter)->inspect();
+                $this->fail('Literal text resource restrictions were bypassed.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        foreach (['subtitles=filename={{captions}}:f=other.ass', 'subtitles=filename={{captions}}:filename=other.ass',
+            'subtitles=other.ass:filename={{captions}}', 'subtitles={{captions}}', 'drawtext=textfile={{captions}}:expansion=none'] as $filter) {
+            try {
+                $media->export()->subtitleResource('captions', $subtitle)->videoFilter($filter)->inspect();
+                $this->fail('A subtitle filename or type restriction was bypassed.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        foreach ([
+            fn () => $media->export()->textResource('bad', "\xff"),
+            fn () => $media->export()->textResource('bad', "a\0b"),
+            fn () => $media->export()->textResource('name', 'literal')->subtitleResource('name', $subtitle),
+            fn () => $media->export()->subtitleResource('captions', $subtitle)->clip(1, duration: 1, seek: 'keyframe')->inspect(),
+            fn () => $media->export()->subtitleResource('captions', FFMpeg::disk('missing')->open('captions.srt', ['-probesize', '2048'])),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Invalid text or subtitle configuration was accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        Process::assertNothingRan();
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function literal_text_is_written_unchanged_and_missing_filter_support_is_typed(): void
+    {
+        $text = "100%: café ' [x],; \\ %{not_a_function}\n";
+        $this->fakePipeline(function (PendingProcess $process) use ($text) {
+            $this->assertSame($text, file_get_contents($process->path.'/resource-0.txt'));
+            $this->assertSame(0600, fileperms($process->path.'/resource-0.txt') & 0777);
+            file_put_contents($process->path.'/output-0.mkv', 'encoded');
+
+            return Process::result();
+        });
+        FFMpeg::disk('memory')->open('source.mkv')->export()->textResource('title', $text)
+            ->videoFilter('drawtext=textfile={{title}}:expansion=none')->toDisk('memory')->save('text.mkv');
+        $this->assertSame('encoded', Storage::disk('memory')->get('text.mkv'));
+
+        Process::fake(function (PendingProcess $process) {
+            return Process::result(output: in_array('-version', $process->command, true) ? basename($process->command[0]).' version 9.0.2' : '');
+        });
+
+        try {
+            FFMpeg::disk('memory')->open('source.mkv')->export()->textResource('title', $text)
+                ->videoFilter('drawtext=textfile={{title}}:expansion=none')->toDisk('memory')->save('unsupported.mkv');
+            $this->fail('A build without drawtext was accepted.');
+        } catch (MediaException $exception) {
+            $this->assertSame('capability', $exception->category);
+            $this->assertFalse(Storage::disk('memory')->exists('unsupported.mkv'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
+        }
     }
 
     #[Test]
@@ -349,6 +444,97 @@ class NativeCompositionTest extends TestCase
             $this->fail('A retained output must be frozen when execution starts.');
         } catch (\LogicException) {
             $this->addToAssertionCount(1);
+        }
+    }
+
+    #[Test]
+    public function real_fonts_and_literal_text_render_without_filter_or_percent_expansion(): void
+    {
+        $probe = getenv('FFMPEG_9_FFPROBE');
+
+        if (! $probe) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real font rendering.');
+        }
+
+        $ffmpeg = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $local = $this->fakeLocalDisk();
+        $font = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
+        $this->assertFileExists($font, 'Native resource acceptance requires DejaVu Sans.');
+        $text = "100% 'quoted': \\ [x],; café\n%{not_a_function}";
+        Storage::disk('memory')->put("fonts/a 'quoted', café.ttf", file_get_contents($font));
+        $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=black:size=480x120:rate=10:duration=0.2',
+            '-c:v', 'ffv1', $local->path('black.mkv')]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        FFMpeg::disk('local')->open('black.mkv')->export()
+            ->resource('font', FFMpeg::disk('memory')->open("fonts/a 'quoted', café.ttf"))->textResource('title', $text)
+            ->videoFilter('drawtext=fontfile={{font}}:textfile={{title}}:expansion=none:fontcolor=white:fontsize=20:x=8:y=8')
+            ->video('ffv1')->toDisk('local')->save('title.mkv');
+
+        // Compare against a direct render from the unchanged literal file, not PHP escaping.
+        file_put_contents($this->root.'/literal.txt', $text);
+        $reference = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('black.mkv'), '-vf',
+            'drawtext=fontfile='.$font.':textfile='.$this->root.'/literal.txt:expansion=none:fontcolor=white:fontsize=20:x=8:y=8',
+            '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
+        $actual = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('title.mkv'), '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
+        $this->assertTrue($reference->successful(), $reference->errorOutput());
+        $this->assertTrue($actual->successful(), $actual->errorOutput());
+        $this->assertSame($reference->output(), $actual->output());
+        $this->assertGreaterThan(200, count(array_filter(unpack('C*', $actual->output()), fn ($pixel) => $pixel > 200)));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function real_subtitles_validate_content_and_keep_cue_timing_through_accurate_clips(): void
+    {
+        $probe = getenv('FFMPEG_9_FFPROBE');
+
+        if (! $probe) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real subtitle resources.');
+        }
+
+        $ffmpeg = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $local = $this->fakeLocalDisk();
+        $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=black:size=160x90:rate=10:duration=6',
+            '-c:v', 'ffv1', $local->path('black.mkv')]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $formats = [
+            'srt' => "1\n00:00:05,000 --> 00:00:05,500\nCaption café\n",
+            'vtt' => "WEBVTT\n\n00:05.000 --> 00:05.500\nCaption café\n",
+            'ass' => "[Script Info]\nScriptType: v4.00+\nPlayResX: 160\nPlayResY: 90\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, Alignment\nStyle: Default,DejaVu Sans,14,&H00FFFFFF,2\n[Events]\nFormat: Layer, Start, End, Style, Text\nDialogue: 0,0:00:05.00,0:00:05.50,Default,Caption café\n",
+        ];
+
+        foreach ($formats as $extension => $content) {
+            $key = "captions/a 'quoted', café.".$extension;
+            Storage::disk('memory')->put($key, $content);
+            FFMpeg::disk('local')->open('black.mkv')->export()
+                ->subtitleResource('captions', FFMpeg::disk('memory')->open($key))
+                ->videoFilter('subtitles=filename={{captions}}')->video('ffv1')->clip(4, duration: 2)
+                ->toDisk('local')->save('caption-'.$extension.'.mkv');
+            $frames = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('caption-'.$extension.'.mkv'), '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
+            $this->assertTrue($frames->successful(), $frames->errorOutput());
+            $this->assertSame(20 * 160 * 90, strlen($frames->output()));
+            foreach ([2 => false, 12 => true, 18 => false] as $index => $visible) {
+                $pixels = unpack('C*', substr($frames->output(), $index * 160 * 90, 160 * 90));
+                $this->assertSame($visible, count(array_filter($pixels, fn ($pixel) => $pixel > 100)) > 10, $extension.' frame '.$index);
+            }
+            $this->assertSame($content, Storage::disk('memory')->get($key));
+        }
+
+        foreach (["#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nsibling.ts\n", "ffconcat version 1.0\nfile 'sibling.ts'\n", "1\n00:00:00,000 --> 00:00:01,000\n\xff\n"] as $invalid) {
+            Storage::disk('memory')->put('forged.srt', $invalid);
+            try {
+                FFMpeg::disk('local')->open('black.mkv')->export()
+                    ->subtitleResource('captions', FFMpeg::disk('memory')->open('forged.srt'))
+                    ->videoFilter('subtitles=filename={{captions}}')->video('ffv1')->toDisk('memory')->save('rejected.mkv');
+                $this->fail('A non-subtitle resource was accepted.');
+            } catch (MediaException $exception) {
+                $this->assertSame('probing', $exception->phase);
+                $this->assertSame('resource', $exception->category);
+                $this->assertFalse(Storage::disk('memory')->exists('rejected.mkv'));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
+            }
         }
     }
 
