@@ -12,13 +12,15 @@ Probing requires FFprobe 9.0.x. It reads format, streams, and chapters together.
 
 The process boundary clears inherited application environment variables, limits JSON capture to 16 MiB, and retains only the last 64 KiB of stderr. Internal callbacks drain both streams without Symfony retaining a second copy. `laravel-ffmpeg.timeout` sets the total deadline. Optional `laravel-ffmpeg.idle_timeout` sets the silence deadline. Both use seconds. Failures expose a `MediaException` with `phase`, `category`, and bounded diagnostics, without a raw credential-bearing exception chain. Workspaces are removed after the child stops, including on failure.
 
-The single-input, single-output export supports codecs, explicit-unit bitrates, CRF and preset settings, ordered stream maps, audio and video filter chains, metadata and chapter controls, and accurate or keyframe clipping. An explicit map replaces default selection. Selector-specific FFprobe queries validate maps against the staged asset without interpreting FFmpeg's selector grammar in PHP. Empty explicit selection fails rather than allowing FFmpeg to select tracks automatically.
+Exports support codecs, explicit-unit bitrates, CRF and preset settings, ordered stream maps, audio and video filter chains, metadata and chapter controls, and accurate or keyframe clipping. An explicit map replaces default selection. Selector-specific FFprobe queries validate maps against the staged asset without interpreting FFmpeg's selector grammar in PHP. Empty explicit selection fails rather than allowing FFmpeg to select tracks automatically.
 
-All outputs, including local destinations, are generated in the workspace and published through Storage after a nonempty-file check. This preserves Storage write options and avoids truncating the source when input and destination keys match. Publication is not atomic. A failed upload can leave a partial object. Failures identify the destination and any object whose write returned success before verification failed.
+`addInput(Media)` returns a stable numeric input index. Repeated descriptors share staging and probe results within an execution, but retain separate `-i` entries. `filterComplex()` compiles one graph argument. `output($path, $callback)` configures independent destinations and encoding settings. Every output in a multi-input or graph operation requires explicit maps. Multiple inputs also require explicit metadata and chapter sources, or explicit omission. Output callbacks run immediately. Settings freeze when execution starts.
+
+All outputs, including local destinations, are generated in the workspace. Every expected file passes validation before any publication begins. Composition outputs are probed for stream counts and for the types of directly mapped streams. Graph-pad types remain FFmpeg's responsibility. This catches extra unlabeled graph outputs without parsing filter pad counts in PHP. Publication preserves Storage write options but is not atomic. A failed upload can leave a partial object or an already-published sibling. Failures identify the destination and all objects whose writes returned success. Already-published objects are not deleted automatically.
 
 `save()` returns generated-file records and bounded, redacted process summaries. Structured progress separates staging, probing, encoding, validation, and publication. Percentage, speed, and remaining time can be unknown. A callback can cancel by throwing `Exceptions\ExportCancelled`; other callback exceptions propagate unchanged as failures. Both stop and reap the child before workspace cleanup. Lifecycle events work without a progress callback, and completion follows publication and cleanup.
 
-The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, display-geometry helpers, two-pass encoding, composition, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
+The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, display-geometry helpers, two-pass encoding, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
 
 ### Current export API
 
@@ -35,7 +37,36 @@ $result = FFMpeg::disk('uploads')
 
 Input options, `globalOptions()`, and `outputOptions()` accept flat option/value pairs from a closed allowlist. Every allowed option has library-defined arity and value validation. Unknown options, aliases, switches with caller-supplied values, duplicate nonrepeatable options, filename controls, authentication headers, and encoder parameter blobs are rejected. Output `-f` permits only listed single-file muxers. These methods are not unrestricted argv passthrough.
 
-Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. The current filters API does not stage fonts, subtitles, LUTs, or other secondary resources. A per-input `-protocol_whitelist file` prevents direct network protocols, but does not isolate local file access or make uploaded media safe. Untrusted media still requires process isolation and resource limits. A demuxer allowlist remains under investigation and is not implemented in this checkpoint.
+Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. A per-input `-protocol_whitelist file` prevents direct network protocols, but does not isolate local file access or apply to files opened by filters. Untrusted media still requires process isolation and resource limits. A demuxer allowlist remains under investigation and is not implemented in this checkpoint.
+
+### Composition and resources
+
+```php
+$export = FFMpeg::disk('uploads')->open('source.mov')->export();
+$audio = $export->addInput(FFMpeg::disk('recordings')->open('narration.wav'));
+
+$result = $export
+	->resource('look', FFMpeg::disk('assets')->open('looks/grade.cube'))
+	->filterComplex('[0:v]lut3d=file={{look}},split[full][small];[small]scale=640:360[preview]')
+	->output('full.mp4', fn (ExportOutput $out) => $out
+		->map('[full]')->map($audio.':a:0')
+		->video('libx264', crf: 21)->audio('aac', bitrate: '128k')
+		->metadataFrom(0)->chaptersFrom(null)->toDisk('videos'))
+	->output('preview.mp4', fn (ExportOutput $out) => $out
+		->map('[preview]')->video('libx264', crf: 28)
+		->withoutMetadata()->chaptersFrom(null)->toDisk('previews'))
+	->save();
+```
+
+The example uses `ProtoneMedia\LaravelFFMpeg\ExportOutput`. Explicit outputs default to `filesystems.default`, not the first input disk. Adding an input also changes the single-output convenience default to `filesystems.default` unless `toDisk()` was explicit. Root output settings cannot be mixed with `output()` callbacks. After `output()`, `save()` takes no path. Duplicate destinations and composition destinations matching an input's disk/key identity are rejected.
+
+Graph labels are simple identifiers. Each named output label must be consumed or mapped exactly once. Branching requires `split` or `asplit`. A quote-aware lexer ignores brackets inside literal values. FFmpeg remains responsible for filter syntax and pad types. Graph-produced streams do not automatically preserve input language tags or dispositions.
+
+Type-scoped encoding settings and simple filters apply to every selected stream of that type, including graph outputs. A graph-filtered video can accompany copied input audio. Copying a graph-fed stream or applying both a simple filter and a complex graph to the same stream fails during FFmpeg output setup. These failures report `MediaException` with phase `encoding` and category `configuration`, without publication. Graph types are not guessed during pure inspection.
+
+`resource($name, Media)` currently supports `drawtext`'s `fontfile` and `textfile`, and `lut3d`'s `file` option. Every placeholder must be a whole, unquoted named option value, such as `file={{look}}`. The compiler substitutes a generated relative filename, and the process runs inside the workspace. Original keys can contain punctuation or Unicode without entering the graph. Unknown, unused, quoted, or embedded placeholders fail before staging. Literal-text convenience methods and subtitle staging are not implemented. A logo or other media resource uses `addInput()` and a graph input label, not `movie` or `amovie`. Resource placeholders in demuxing filters are rejected.
+
+Accurate clips stay output-scoped and do not seek sibling inputs. Keyframe clips remain limited to one input and one output without a complex graph. Graph duration can change arbitrarily, so graph progress reports time and speed without inventing a percentage. Composition validates all files before publication, but publication across disks is not atomic.
 
 ## Acceptance scenarios
 
@@ -44,7 +75,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Contract | Required acceptance scenario | Existing evidence or new test | Native status |
 | --- | --- | --- | --- |
 | Disk inputs and probing | Probe a nested key, supplied filesystem, local file, and upload. Retain source bytes and disk context. | `NativeProbeTest` | Implemented |
-| Private staging | Transfer a non-local input once per execution. Check permissions, truncation, failed reads, and cleanup. Reject unsupported manifest dependencies. | `NativeProbeTest`, `NativeExportTest` | Shared by probe and single-output export |
+| Private staging | Transfer a non-local input once per execution. Check permissions, truncation, failed reads, and cleanup. Reject unsupported manifest dependencies. | `NativeProbeTest`, `NativeExportTest`, `NativeCompositionTest` | Shared across inputs and probe selectors within an execution |
 | Metadata | Preserve chapters, tags, rational rates, null duration, color fields, all streams, and separate cover art from motion video. | `NativeProbeTest` | Implemented for raw data and basic accessors |
 | Process capture | Drain a noisy child, cap metadata output, remove application secrets, terminate on total and idle deadlines, and reap before cleanup. | `NativeProbeTest`, `NativeExportTest` | Shared process boundary; real callback cancellation verified |
 | Network inputs | Read explicit public URLs. Stage authenticated finite downloads through Http. Keep per-input headers separate and redact signed URLs. | `MediaOpenerTest`, `ExportTest` | Open |
@@ -55,8 +86,8 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Metadata preservation | Copy global tags. Preserve chapters only for an unchanged timeline unless explicitly transformed. Test remove and override controls. | `NativeExportTest` | Copy, override, and clip chapter omission verified; broader removal cases open |
 | Quality and passes | Compare CRF and target-bitrate contracts. Reject conflicts. Prove explicit two-pass encoding with isolated pass logs. | `NativeExportTest`, `ExportTest`, README pass-progress contract | CRF and conflict checks verified; two-pass open |
 | Copy and clipping | Remux without changing codecs. Distinguish accurate transcoding from keyframe copy cuts. Preserve audio offsets and VFR. | `NativeExportTest`, `CopyTest` | Remux, accurate duration, and decoded keyframe identity verified; VFR and offset coverage open |
-| Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `AddFilterTest`, `LegacyFilterMappingTest`, `ExportTest` | Ordered simple filters and copy conflicts implemented; secondary resources open |
-| Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `ExportTest` | Open |
+| Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `NativeCompositionTest`, `AddFilterTest`, `LegacyFilterMappingTest`, `ExportTest` | Simple filters and staged LUTs verified with real media; font/text resource compilation verified; subtitle staging open |
+| Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `NativeCompositionTest`, `ExportTest` | Mixed-disk overlay, LUT, branching, independent clips, copied audio, validation, and partial publication verified |
 | Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `ExportTest` | Open |
 | Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `FrameTest` | Open |
 | Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `ExportTest` | Open |
@@ -65,11 +96,11 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `WatermarkTest`, `WatermarkFactoryTest`, `HlsExportTest` | Open |
 | Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Open |
 | Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle verified, including real child reaping; multiple passes open |
-| Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `ExportTest`, `TileTest` | Single-file validation and publication verified; multi-file inventory open |
+| Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `ExportTest`, `TileTest` | Multiple single-file outputs verified; playlist/segment inventory open |
 | Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `HlsExportTest`, `HLSPlaylistGeneratorTest` | Open |
 | Encrypted HLS | Decrypt AES-128 segments and verify IVs, supplied keys, key rotation boundaries, private key storage, and failure cleanup. | `EncryptedHlsExportTest` | Open |
 | Dynamic HLS | Rewrite master, variant, segment, and key URLs relative to their containing playlists. Verify response integration and missing or invalid input errors. | `DynamicHLSPlaylistTest` | Open |
-| Extension points | Inspect scoped argument arrays without execution. Preserve custom filters, playlist hooks, and output configuration without arbitrary driver forwarding. | `NativeExportTest`, `BeforeSavingTest`, README | Pure inspection and allowlisted scoped options implemented; graphs and playlist hooks open |
+| Extension points | Inspect scoped argument arrays without execution. Preserve custom filters, playlist hooks, and output configuration without arbitrary driver forwarding. | `NativeExportTest`, `NativeCompositionTest`, `BeforeSavingTest`, README | Pure inspection, scoped options, graphs, and output callbacks implemented; playlist hooks open |
 
 ## Compiler contracts
 
@@ -82,11 +113,11 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 - Fonts, logos, LUTs, subtitle files, and literal-text files belong to the execution workspace. Literal text, paths, and FFmpeg expressions require different escaping. A graph compiles to one argument value, not a shell fragment.
 - Compilation and inspection allocate no workspace, download nothing, and do not mutate a pending builder. Scoped options cannot replace reserved filenames, binary selection, progress transport, or pass-log paths.
 
-The single-output subset has compiler, process-fake, and real-media tests in `NativeExportTest`. Multi-input graphs, secondary resources, and multiple outputs are not implemented.
+`NativeExportTest` covers the single-output subset. `NativeCompositionTest` adds pure inspection, process fakes, and real-media acceptance for graphs, resources, independent outputs, validation-before-publication, and partial failure. A resource and the same key used as a media input have separate staging entries so resource staging cannot bypass manifest checks.
 
 ## Remaining sequence
 
-1. Extend the verified single-output compiler and execution contract to secondary resources, multiple inputs, and multiple outputs. Preserve progress, failure cleanup, and publication guarantees across those extensions.
+1. Complete secondary-resource coverage with font rendering, literal-text convenience, and safely staged subtitles. The multi-input and multi-output execution contract is implemented.
 2. Preserve ordinary encoding, composition, concatenation, frames, timelapse, watermarks, waveform images, storyboards, and VTT.
 3. Preserve adaptive and encrypted HLS and dynamic playlist responses against the same execution contract.
 4. Replace the README and upgrade guide, then remove the legacy driver and dependency tree. No parallel legacy backend remains in the released package.
@@ -96,6 +127,6 @@ Optional follow-ups remain ordered as loudness normalization, fMP4 HLS and alter
 
 ## Test commands
 
-`vendor/bin/phpunit tests/NativeProbeTest.php tests/NativeExportTest.php` runs the native process and Storage contract tests. Real-media cases require `FFMPEG_9_FFPROBE` to identify an installed FFprobe 9.0.x binary and report skips when that variable is absent. Export acceptance uses a matching `ffmpeg` binary in the same directory, built with libx264. This is temporary while the legacy suite still uses the distribution build.
+`vendor/bin/phpunit tests/NativeProbeTest.php tests/NativeExportTest.php tests/NativeCompositionTest.php` runs the native process and Storage contract tests. Real-media cases require `FFMPEG_9_FFPROBE` to identify an installed FFprobe 9.0.x binary and report skips when that variable is absent. Export acceptance uses a matching `ffmpeg` binary in the same directory, built with libx264. This is temporary while the legacy suite still uses the distribution build.
 
 `FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit` runs both suites when that binary is installed. Native acceptance uses FFmpeg and FFprobe 9.0.2. Legacy encoding tests still use the separately configured legacy binaries. Passing legacy tests does not establish native support for their workflows. Pinning the matching native build in setup and CI remains a release gate.

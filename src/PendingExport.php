@@ -8,11 +8,10 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
-use League\Flysystem\WhitespacePathNormalizer;
-use ProtoneMedia\LaravelFFMpeg\Events;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
+use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProgressParser;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
@@ -21,202 +20,114 @@ use Throwable;
 class PendingExport
 {
     use Conditionable;
+    use ConfiguresOutput;
 
-    private array $video = [];
+    private array $inputs;
 
-    private array $audio = [];
+    private array $outputs = [];
 
-    private array $maps = [];
-
-    private array $videoFilters = [];
-
-    private array $audioFilters = [];
+    private array $resources = [];
 
     private array $globalOptions = [];
 
-    private array $outputOptions = [];
-
-    private array $writeOptions = [];
-
-    private array $metadata = [];
-
-    private bool $omitAudio = false;
-
-    private bool $omitVideo = false;
-
-    private bool $copyMetadata = true;
-
-    private ?int $chapterSource = null;
-
-    private ?array $clip = null;
+    private ?string $graph = null;
 
     private ?Closure $progress = null;
 
-    public function __construct(private readonly Media $media, private string|Filesystem $disk) {}
+    private bool $rootConfigured = false;
 
-    public function video(?string $codec = null, mixed $bitrate = null, ?float $crf = null, ?string $preset = null): self
+    private bool $running = false;
+
+    public function __construct(private readonly Media $media, string|Filesystem $disk)
     {
-        $this->codec($codec);
-        $this->bitrate($bitrate);
-
-        if ($crf !== null && (! is_finite($crf) || $crf < 0)) {
-            throw new InvalidArgumentException('CRF must be a finite, nonnegative encoder-specific value.');
-        }
-
-        if ($preset !== null && ! preg_match('/^[a-zA-Z0-9_-]+$/D', $preset)) {
-            throw new InvalidArgumentException('Invalid encoder preset.');
-        }
-
-        $this->video = array_replace($this->video, array_filter(compact('codec', 'bitrate', 'crf', 'preset'), fn ($value) => $value !== null));
-
-        return $this;
+        $this->inputs = [$media];
+        $this->disk = $disk;
     }
 
-    public function audio(?string $codec = null, mixed $bitrate = null): self
+    protected function assertOutputMutable(): void
     {
-        $this->codec($codec);
-        $this->bitrate($bitrate);
-        $this->audio = array_replace($this->audio, array_filter(compact('codec', 'bitrate'), fn ($value) => $value !== null));
+        $this->assertMutable();
 
-        return $this;
+        if ($this->outputs !== []) {
+            throw new InvalidArgumentException('Configure each output in its output() callback, not on the export root.');
+        }
+
+        $this->rootConfigured = true;
     }
 
-    private function codec(?string $codec): void
+    private function assertMutable(): void
     {
-        if ($codec !== null && ! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
-            throw new InvalidArgumentException('Invalid FFmpeg encoder name.');
+        if ($this->running) {
+            throw new InvalidArgumentException('An executing export cannot be changed.');
         }
     }
 
-    private function bitrate(mixed $bitrate): void
+    /** Returns the stable FFmpeg input index; staging reuse never removes an input. */
+    public function addInput(Media $media): int
     {
-        if ($bitrate !== null && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
-            throw new InvalidArgumentException('Bitrates require an explicit unit string, such as 2500k.');
-        }
-    }
+        $this->assertMutable();
+        $this->inputs[] = $media;
 
-    public function map(string $specifier): self
-    {
-        if (! preg_match('/^-?0(?::[^\x00\r\n]+)?\??$/D', $specifier)) {
-            throw new InvalidArgumentException('Maps must reference input 0. Graph and multiple-input composition are not implemented yet.');
+        if (! $this->outputDiskExplicit) {
+            $this->disk = config('filesystems.default');
         }
 
-        $this->maps[] = $specifier;
-
-        return $this;
+        return array_key_last($this->inputs);
     }
 
-    public function withoutAudio(): self
+    public function resource(string $name, Media $media): self
     {
-        $this->omitAudio = true;
+        $this->assertMutable();
 
-        return $this;
-    }
-
-    public function withoutVideo(): self
-    {
-        $this->omitVideo = true;
-
-        return $this;
-    }
-
-    public function videoFilter(string $expression): self
-    {
-        $this->filter($expression);
-        $this->videoFilters[] = $expression;
-
-        return $this;
-    }
-
-    public function audioFilter(string $expression): self
-    {
-        $this->filter($expression);
-        $this->audioFilters[] = $expression;
-
-        return $this;
-    }
-
-    private function filter(string $expression): void
-    {
-        if ($expression === '' || str_contains($expression, "\0") || preg_match('~[a-z][a-z0-9+.-]*://~i', $expression)) {
-            throw new InvalidArgumentException('Filters require a nonempty, developer-trusted expression without network URLs.');
+        if (! preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/D', $name) || isset($this->resources[$name])) {
+            throw new InvalidArgumentException('Resource names must be unique simple identifiers.');
         }
+
+        $this->resources[$name] = $media;
+
+        return $this;
+    }
+
+    public function filterComplex(string $expression): self
+    {
+        $this->assertMutable();
+        FilterGraph::validateExpression($expression);
+
+        if ($this->graph !== null) {
+            throw new InvalidArgumentException('Declare one complex graph per export.');
+        }
+
+        $this->graph = $expression;
+
+        return $this;
+    }
+
+    public function output(string $path, callable $configure): self
+    {
+        $this->assertMutable();
+
+        if ($this->rootConfigured) {
+            throw new InvalidArgumentException('Do not combine root output settings with output() callbacks.');
+        }
+
+        $output = new ExportOutput($path, config('filesystems.default'));
+        $configure($output);
+        $this->outputs[] = $output;
+
+        return $this;
     }
 
     public function globalOptions(array $tokens): self
     {
+        $this->assertMutable();
         $this->globalOptions = CommandCompiler::options([...$this->globalOptions, ...$tokens], 'global');
-
-        return $this;
-    }
-
-    public function outputOptions(array $tokens): self
-    {
-        $this->outputOptions = CommandCompiler::options([...$this->outputOptions, ...$tokens], 'output');
-
-        return $this;
-    }
-
-    public function withoutMetadata(): self
-    {
-        $this->copyMetadata = false;
-
-        return $this;
-    }
-
-    public function metadata(string $key, string $value): self
-    {
-        if (! preg_match('/^[a-zA-Z0-9_.:-]+$/D', $key) || str_contains($value, "\0")) {
-            throw new InvalidArgumentException('Invalid metadata tag.');
-        }
-
-        $this->metadata[$key] = $value;
-
-        return $this;
-    }
-
-    public function chaptersFrom(?int $input): self
-    {
-        if ($input !== null && $input !== 0) {
-            throw new InvalidArgumentException('The chapter source must be input 0 or null to omit chapters.');
-        }
-
-        $this->chapterSource = $input ?? -1;
-
-        return $this;
-    }
-
-    public function clip(float $start, ?float $duration = null, ?float $end = null, string $seek = 'accurate'): self
-    {
-        if (! is_finite($start) || $start < 0 || ($duration === null) === ($end === null)
-            || ($duration !== null && (! is_finite($duration) || $duration <= 0))
-            || ($end !== null && (! is_finite($end) || $end <= $start))
-            || ! in_array($seek, ['accurate', 'keyframe'], true)) {
-            throw new InvalidArgumentException('A clip needs a nonnegative start and either a positive duration or a later end.');
-        }
-
-        $this->clip = ['start' => $start, 'duration' => $duration ?? $end - $start, 'seek' => $seek];
-
-        return $this;
-    }
-
-    public function toDisk(string|Filesystem $disk, array $options = []): self
-    {
-        $this->disk = $disk;
-        $this->writeOptions = $options;
-
-        return $this;
-    }
-
-    public function visibility(string $visibility): self
-    {
-        $this->writeOptions['visibility'] = $visibility;
 
         return $this;
     }
 
     public function onProgress(callable $callback): self
     {
+        $this->assertMutable();
         $this->progress = Closure::fromCallable($callback);
 
         return $this;
@@ -225,111 +136,144 @@ class PendingExport
     /** Pure, redacted inspection. No files or processes are created. */
     public function inspect(): array
     {
-        return $this->command('[input:0]', '[output:0]');
+        return $this->command($this->configuredOutputs(), array_map(fn ($i) => '[input:'.$i.']', array_keys($this->inputs)));
     }
 
-    private function command(string $input, string $output): array
+    private function configuredOutputs(?string $path = null): array
     {
-        if (isset($this->video['bitrate'], $this->video['crf'])) {
-            throw new InvalidArgumentException('Choose either a target bitrate or CRF.');
-        }
-
-        if ($this->maps !== [] && ($this->omitAudio || $this->omitVideo)) {
-            throw new InvalidArgumentException('Use maps alone to omit tracks when explicit mapping is enabled.');
-        }
-
-        if ($this->maps === [] && $this->omitAudio && $this->omitVideo) {
-            throw new InvalidArgumentException('An export must select audio or video.');
-        }
-
-        foreach ([[$this->video, $this->videoFilters], [$this->audio, $this->audioFilters]] as [$encoding, $filters]) {
-            if (($encoding['codec'] ?? null) === 'copy' && ($filters !== [] || count($encoding) > 1
-                || ($this->clip !== null && $this->clip['seek'] === 'accurate'))) {
-                throw new InvalidArgumentException('Copied streams cannot have filters, encoder settings, or accurate clipping.');
-            }
-        }
-
-        $inputOptions = $this->media->inputOptions();
-        $options = [];
-
-        if ($this->clip !== null) {
-            if ($this->clip['seek'] === 'keyframe') {
-                array_push($inputOptions, '-ss', (string) $this->clip['start'], '-noaccurate_seek');
-            } else {
-                array_push($options, '-ss', (string) $this->clip['start']);
+        if ($this->outputs !== []) {
+            if ($path !== null) {
+                throw new InvalidArgumentException('Use save() without a path after output().');
             }
 
-            array_push($options, '-t', (string) $this->clip['duration']);
+            return $this->outputs;
         }
 
-        $maps = $this->maps !== [] ? $this->maps : array_filter([
-            $this->omitVideo ? null : '0:V:0?', $this->omitAudio ? null : '0:a:0?',
-        ]);
-
-        foreach ($maps as $map) {
-            array_push($options, '-map', $map);
-        }
-
-        array_push($options, '-map_metadata', $this->copyMetadata ? '0' : '-1', '-map_chapters', (string) ($this->chapterSource ?? ($this->clip === null ? 0 : -1)));
-
-        foreach ([['v', $this->video, $this->videoFilters], ['a', $this->audio, $this->audioFilters]] as [$type, $encoding, $filters]) {
-            foreach ($encoding as $name => $value) {
-                $option = match ($name) { 'codec' => 'c', 'bitrate' => 'b', default => $name };
-                array_push($options, '-'.$option.':'.$type, (string) $value);
-            }
-
-            if ($filters !== []) {
-                array_push($options, '-filter:'.$type, implode(',', $filters));
-            }
-        }
-
-        foreach ($this->metadata as $key => $value) {
-            array_push($options, '-metadata', $key.'='.$value);
-        }
-
-        if (! $this->omitVideo && ($this->video['codec'] ?? null) !== 'copy'
-            && ! array_any($this->outputOptions, fn ($token) => preg_match('/^-(?:r|fps_mode)(?::|$)/', $token))) {
-            array_push($options, '-fps_mode:v', 'passthrough');
-        }
-
-        $threads = config('laravel-ffmpeg.ffmpeg.threads');
-
-        if ($threads !== false && $threads !== null && ! in_array('-threads', $this->outputOptions, true)) {
-            array_push($options, '-threads', (string) $threads);
-        }
-
-        return CommandCompiler::compile(
-            config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'),
-            [['path' => $input, 'options' => $inputOptions]],
-            [['path' => $output, 'options' => [...$options, ...$this->outputOptions]]],
-            $this->globalOptions,
-        );
+        return [(new ExportOutput($path ?? 'inspection.mp4', $this->disk))->configure($this->outputConfiguration())];
     }
 
-    public function save(string $path): ExportResult
+    private function resourceNames(): array
     {
-        if ($path === '' || preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $path)) {
-            throw new InvalidArgumentException('The destination must be a disk-relative key.');
+        $names = [];
+
+        foreach ($this->resources as $name => $media) {
+            $extension = $media->extension();
+            $names[$name] = 'resource-'.count($names).($extension === '' ? '' : '.'.$extension);
         }
 
-        $path = (new WhitespacePathNormalizer)->normalizePath($path);
-        $extension = pathinfo($path, PATHINFO_EXTENSION);
+        return $names;
+    }
 
-        if ($path === '' || ($extension !== '' && ! preg_match('/^[a-zA-Z0-9]{1,16}$/D', $extension))) {
-            throw new InvalidArgumentException('Invalid media destination.');
+    private function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    {
+        $composition = count($this->inputs) > 1 || $this->graph !== null;
+        $mappedLabels = $used = $compiledOutputs = [];
+        $resources = $this->resourceNames();
+
+        foreach ($outputs as $index => $output) {
+            if ($composition && ! $output->hasMaps()) {
+                throw new InvalidArgumentException('Every composition output requires explicit maps.');
+            }
+
+            if (count($this->inputs) > 1 && ($output->metadataSource() === null || $output->chapterSource() === null)) {
+                throw new InvalidArgumentException('Multiple inputs require explicit metadata and chapter sources, or omission.');
+            }
+
+            foreach ([$output->metadataSource(), $output->chapterSource()] as $source) {
+                if ($source !== null && $source >= count($this->inputs)) {
+                    throw new InvalidArgumentException('Metadata or chapters reference an invalid input.');
+                }
+            }
+
+            if ($output->inputSeekOptions() !== [] && (count($this->inputs) > 1 || count($outputs) > 1 || $this->graph !== null)) {
+                throw new InvalidArgumentException('Keyframe clips require one input and one output without a complex graph.');
+            }
+
+            foreach ($output->maps() as $map) {
+                if (str_starts_with($map, '[')) {
+                    if ($this->graph === null) {
+                        throw new InvalidArgumentException('A graph map requires filterComplex().');
+                    }
+
+                    $mappedLabels[] = substr($map, 1, -1);
+                } elseif ((int) ltrim($map, '-') >= count($this->inputs)) {
+                    throw new InvalidArgumentException('Map references an invalid input.');
+                }
+            }
+
+            $options = $output->outputArguments();
+
+            for ($i = 0; $i < count($options); $i += 2) {
+                if (in_array($options[$i], ['-filter:v', '-filter:a'], true)) {
+                    $options[$i + 1] = FilterGraph::resources($options[$i + 1], $resources, $used);
+                }
+            }
+
+            $compiledOutputs[] = ['path' => $outputPaths[$index] ?? '[output:'.$index.']', 'options' => $options];
         }
 
-        $this->inspect();
+        $globals = $this->globalOptions;
+
+        if ($this->graph !== null) {
+            FilterGraph::validate($this->graph, count($this->inputs), $mappedLabels);
+            array_push($globals, '-filter_complex', FilterGraph::resources($this->graph, $resources, $used));
+        }
+
+        if (count($used) !== count($resources)) {
+            throw new InvalidArgumentException('Every declared resource must be used by a filter.');
+        }
+
+        $compiledInputs = [];
+
+        foreach ($this->inputs as $index => $input) {
+            $compiledInputs[] = ['path' => $paths[$index], 'options' => [...$input->inputOptions(), ...($index === 0 ? $outputs[0]->inputSeekOptions() : [])]];
+        }
+
+        return CommandCompiler::compile(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $compiledInputs, $compiledOutputs, $globals);
+    }
+
+    public function save(?string $path = null): ExportResult
+    {
+        $this->assertMutable();
+
+        if ($path === null && $this->outputs === []) {
+            throw new InvalidArgumentException('Declare outputs or pass a destination to save().');
+        }
+
+        $outputs = $this->configuredOutputs($path);
+        $this->command($outputs, array_map(fn ($i) => '[input:'.$i.']', array_keys($this->inputs)));
+        $this->validateDestinations($outputs);
+
+        foreach ($outputs as $output) {
+            $output->freeze();
+        }
+
+        $this->running = true;
         $operationId = bin2hex(random_bytes(16));
-        $destination = ['disk' => is_string($this->disk) ? $this->disk : null, 'path' => $path];
+        $destinations = array_map(fn ($output) => $output->destination(), $outputs);
         $published = [];
         $phase = 'staging';
 
         try {
-            Event::dispatch(new Events\ExportStarting($operationId, [$destination]));
+            Event::dispatch(new Events\ExportStarting($operationId, $destinations));
             $this->notify(new Progress($phase));
+            $result = $this->media->withInput(function (string $input, Workspace $workspace) use ($outputs, &$phase, &$published) {
+                $paths = array_map(fn ($media) => $workspace->stage($media), $this->inputs);
+                $redactions = [];
 
-            $result = $this->media->withInput(function (string $input, Workspace $workspace) use ($path, $extension, &$phase, &$published, $destination) {
+                foreach ($paths as $index => $path) {
+                    $redactions[$path] ??= '[input:'.$index.']';
+                }
+
+                foreach ($this->resourceNames() as $name => $filename) {
+                    $source = $workspace->stage($this->resources[$name], resource: true);
+                    $target = $workspace->path.'/'.$filename;
+
+                    if (! @copy($source, $target) || ! chmod($target, 0600)) {
+                        throw new MediaException('Cannot stage the filter resource.', 'staging', 'transfer');
+                    }
+                }
+
                 $runner = new ProcessRunner;
                 $phase = 'probing';
                 $this->notify(new Progress($phase));
@@ -340,72 +284,112 @@ class PendingExport
                     throw new MediaException('FFmpeg and FFprobe must have matching release versions.', 'probing', 'version');
                 }
 
-                $metadata = $this->media->probePath($input, $workspace);
-                $this->validateMaps($input, $workspace, $metadata);
-                $output = $workspace->path.'/output'.($extension === '' ? '' : '.'.$extension);
-                $duration = $metadata->duration();
+                $metadata = array_map(fn ($media) => $workspace->probe($media), $this->inputs);
+                $expected = array_map(fn ($output) => $this->selectedStreams($output, $workspace, $metadata), $outputs);
+                $outputPaths = [];
 
-                if ($this->clip !== null) {
-                    $duration = $duration === null ? null : max(0, min($this->clip['duration'], $duration - $this->clip['start']));
+                foreach ($outputs as $index => $output) {
+                    $extension = pathinfo($output->destination()['path'], PATHINFO_EXTENSION);
+                    $outputPaths[] = $workspace->path.'/output-'.$index.($extension === '' ? '' : '.'.$extension);
+                    $redactions[end($outputPaths)] = '[output:'.$index.']';
                 }
 
+                // Graphs can change timing arbitrarily; do not invent a percentage.
+                $duration = $this->graph === null && ! array_any($metadata, fn ($item) => $item->duration() === null)
+                    ? max(array_map(fn ($item) => $item->duration(), $metadata)) : null;
+                $durations = array_map(function ($output) use ($duration) {
+                    $clip = $output->clipSettings();
+
+                    return $duration === null ? null : ($clip === null ? $duration : max(0, min($clip['duration'], $duration - $clip['start'])));
+                }, $outputs);
                 $phase = 'encoding';
                 $this->notify(new Progress($phase));
                 $process = $runner->run(
-                    $this->command($input, $output), $workspace->path,
-                    [$input => '[input:0]', $output => '[output:0]'],
-                    phase: $phase, progress: new ProgressParser($duration), onProgress: $this->progress,
+                    $this->command($outputs, $paths, $outputPaths), $workspace->path, $redactions,
+                    phase: $phase, progress: new ProgressParser($duration === null ? null : max($durations)), onProgress: $this->progress,
                 );
 
                 if ($process->exitCode !== 0) {
-                    throw new MediaException('FFmpeg failed (exit '.$process->exitCode.').', $phase, 'exit', $process->diagnostics);
+                    $category = str_contains($process->diagnostics, 'Streamcopy requested for output stream fed from a complex filtergraph')
+                        || str_contains($process->diagnostics, 'Simple and complex filtering cannot be used together')
+                        ? 'configuration' : 'exit';
+
+                    throw new MediaException('FFmpeg failed (exit '.$process->exitCode.').', $phase, $category, $process->diagnostics);
                 }
 
                 $phase = 'validation';
                 $this->notify(new Progress($phase));
-                clearstatcache(true, $output);
+                $sizes = [];
 
-                if (! is_file($output) || ($size = filesize($output)) === false || $size === 0) {
-                    throw new MediaException('FFmpeg did not produce a nonempty media file.', $phase, 'artifact');
+                foreach ($outputPaths as $index => $outputPath) {
+                    clearstatcache(true, $outputPath);
+
+                    if (! is_file($outputPath) || ($size = filesize($outputPath)) === false || $size === 0) {
+                        throw new MediaException('FFmpeg did not produce a nonempty media file.', $phase, 'artifact');
+                    }
+
+                    if (count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null) {
+                        try {
+                            $actual = $this->media->probePath($outputPath, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
+                        } catch (MediaException $exception) {
+                            throw new MediaException('Cannot validate the encoded media.', $phase, 'artifact', $exception->diagnostics);
+                        }
+
+                        if (count($actual) !== count($expected[$index]) || array_any(array_keys($actual), fn ($i) => $expected[$index][$i] !== null && $actual[$i] !== $expected[$index][$i])) {
+                            throw new MediaException('Encoded streams do not match the explicit output maps.', $phase, 'mapping');
+                        }
+                    }
+
+                    $sizes[] = $size;
                 }
 
                 $phase = 'publication';
                 $this->notify(new Progress($phase));
-                $stream = null;
+                $files = [];
 
-                try {
-                    $disk = is_string($this->disk) ? Storage::disk($this->disk) : $this->disk;
-                    $stream = fopen($output, 'rb');
+                foreach ($outputs as $index => $output) {
+                    $destination = $output->destination();
+                    $stream = null;
 
-                    if ($stream === false || ! $disk->put($path, $stream, $this->writeOptions)) {
-                        throw new \RuntimeException('Publication failed.');
+                    try {
+                        $disk = $output->filesystem();
+                        $disk = is_string($disk) ? Storage::disk($disk) : $disk;
+                        $stream = fopen($outputPaths[$index], 'rb');
+
+                        if ($stream === false || ! $disk->put($destination['path'], $stream, $output->storageOptions())) {
+                            throw new \RuntimeException('Publication failed.');
+                        }
+
+                        $published[] = $destination;
+
+                        if ($disk->size($destination['path']) !== $sizes[$index]) {
+                            throw new \RuntimeException('Published size mismatch.');
+                        }
+                    } catch (Throwable) {
+                        throw new MediaException('Cannot publish the media output.', $phase, 'transfer', published: $published, destination: $destination);
+                    } finally {
+                        if (is_resource($stream)) {
+                            fclose($stream);
+                        }
                     }
 
-                    $published[] = $destination;
-
-                    if ($disk->size($path) !== $size) {
-                        throw new \RuntimeException('Published size mismatch.');
-                    }
-                } catch (Throwable) {
-                    throw new MediaException('Cannot publish the media output.', $phase, 'transfer', published: $published, destination: $destination);
-                } finally {
-                    if (is_resource($stream)) {
-                        fclose($stream);
-                    }
+                    $files[] = new GeneratedFile($disk, $destination['disk'], $destination['path'], $sizes[$index]);
                 }
 
-                return new ExportResult([new GeneratedFile($disk, $destination['disk'], $path, $size)], [$process->summary()]);
+                return new ExportResult($files, [$process->summary()]);
             });
         } catch (Throwable $exception) {
             $event = $exception instanceof ExportCancelled ? Events\ExportCancelled::class : Events\ExportFailed::class;
 
             try {
-                Event::dispatch(new $event($operationId, $exception instanceof MediaException ? $exception->phase : $phase, [$destination], $published));
+                Event::dispatch(new $event($operationId, $exception instanceof MediaException ? $exception->phase : $phase, $destinations, $published));
             } catch (Throwable) {
-                // A listener must not replace the primary process or storage failure.
+                // Preserve the primary process or Storage failure.
             }
 
             throw $exception;
+        } finally {
+            $this->running = false;
         }
 
         Event::dispatch(new Events\ExportCompleted($operationId, $result->files()->map->toArray()->all()));
@@ -413,41 +397,69 @@ class PendingExport
         return $result;
     }
 
-    private function validateMaps(string $input, Workspace $workspace, Metadata $metadata): void
+    private function validateDestinations(array $outputs): void
     {
-        if ($this->maps === []) {
-            return;
+        $seen = [];
+
+        foreach ($outputs as $output) {
+            $disk = $output->filesystem();
+            $path = $output->destination()['path'];
+            $identity = (is_string($disk) ? 'disk:'.$disk : 'object:'.spl_object_id($disk)).':'.$path;
+
+            if (isset($seen[$identity])) {
+                throw new InvalidArgumentException('Outputs cannot share a destination.');
+            }
+
+            $seen[$identity] = true;
+
+            if (count($outputs) > 1 || count($this->inputs) > 1) {
+                foreach ($this->inputs as $input) {
+                    if ((new Media($disk, $path, $input->inputOptions()))->identity() === $input->identity()) {
+                        throw new InvalidArgumentException('Composition outputs cannot overwrite an input.');
+                    }
+                }
+            }
         }
+    }
 
-        $selected = $cache = [];
+    /** Ordered expected stream types; null denotes a graph pad whose type FFmpeg resolves. */
+    private function selectedStreams(ExportOutput $output, Workspace $workspace, array $metadata): array
+    {
+        $selected = [];
 
-        foreach ($this->maps as $map) {
-            $exclude = str_starts_with($map, '-');
-            $optional = str_ends_with($map, '?');
-            $selector = substr(ltrim(rtrim($map, '?'), '-'), 1);
-            $selector = str_starts_with($selector, ':') ? substr($selector, 1) : $selector;
-            $streams = $selector === '' ? $metadata->streams() : ($cache[$selector] ??= $this->media->probePath($input, $workspace, $selector)->streams());
+        foreach ($output->maps() as $map) {
+            if (str_starts_with($map, '[')) {
+                $selected[] = ['identity' => $map, 'type' => null];
 
-            if ($streams->isEmpty() && ! $exclude && ! $optional) {
+                continue;
+            }
+
+            preg_match('/^(-?)(\d+)(?::(.*?))?(\?)?$/D', $map, $match);
+            $exclude = $match[1] === '-';
+            $input = (int) $match[2];
+            $selector = $match[3] ?? '';
+            $streams = $selector === '' ? $metadata[$input]->streams() : $workspace->probe($this->inputs[$input], $selector)->streams();
+
+            if ($streams->isEmpty() && ! $exclude && ! str_ends_with($map, '?')) {
                 throw new MediaException('A required stream map matched no streams.', 'probing', 'mapping');
             }
 
             foreach ($streams as $stream) {
-                $index = $stream->get('index');
+                $identity = $input.':'.$stream->get('index');
 
                 if ($exclude) {
-                    unset($selected[$index]);
+                    $selected = array_values(array_filter($selected, fn ($item) => $item['identity'] !== $identity));
                 } else {
-                    $selected[$index] = true;
+                    $selected[] = ['identity' => $identity, 'type' => $stream->get('codec_type')];
                 }
             }
         }
 
-        // FFmpeg can fall back to automatic selection when every optional map
-        // misses. An explicit mapping request must never add hidden tracks.
-        if ($selected === []) {
+        if ($output->hasMaps() && $selected === []) {
             throw new MediaException('Explicit stream maps selected no output streams.', 'probing', 'mapping');
         }
+
+        return array_column($selected, 'type');
     }
 
     private function notify(Progress $progress): void
