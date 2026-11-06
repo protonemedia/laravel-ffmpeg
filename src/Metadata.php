@@ -26,6 +26,20 @@ readonly class Metadata
         return is_numeric($duration) && is_finite((float) $duration) && $duration >= 0 ? (float) $duration : null;
     }
 
+    public function tag(string $key): ?string
+    {
+        $tags = $this->get('format.tags');
+        $value = is_array($tags) ? ($tags[$key] ?? null) : null;
+
+        return is_string($value) ? $value : null;
+    }
+
+    /** @return Collection<int, array> */
+    public function chapters(): Collection
+    {
+        return collect($this->get('chapters', []));
+    }
+
     /** @return Collection<int, Stream> */
     public function streams(): Collection
     {
@@ -35,14 +49,37 @@ readonly class Metadata
     /** @return Collection<int, Stream> */
     public function videoStreams(): Collection
     {
-        return $this->streams()->filter(fn (Stream $stream) => $stream->get('codec_type') === 'video'
-            && ! $stream->get('disposition.attached_pic', false))->values();
+        return $this->streams()->filter(fn (Stream $stream) => $stream->type() === 'video'
+            && ! $stream->isCoverArt())->values();
     }
 
     /** @return Collection<int, Stream> */
     public function audioStreams(): Collection
     {
-        return $this->streams()->filter(fn (Stream $stream) => $stream->get('codec_type') === 'audio')->values();
+        return $this->streams()->filter(fn (Stream $stream) => $stream->type() === 'audio')->values();
+    }
+
+    /** @return Collection<int, Stream> */
+    public function subtitleStreams(): Collection
+    {
+        return $this->streams()->filter(fn (Stream $stream) => $stream->type() === 'subtitle')->values();
+    }
+
+    /** @return Collection<int, Stream> */
+    public function coverArt(): Collection
+    {
+        return $this->streams()->filter(fn (Stream $stream) => $stream->type() === 'video'
+            && $stream->isCoverArt())->values();
+    }
+
+    public function hasVideo(): bool
+    {
+        return $this->video() !== null;
+    }
+
+    public function hasAudio(): bool
+    {
+        return $this->audio() !== null;
     }
 
     public function video(): ?Stream
@@ -53,5 +90,10 @@ readonly class Metadata
     public function audio(): ?Stream
     {
         return $this->audioStreams()->first();
+    }
+
+    public function subtitle(): ?Stream
+    {
+        return $this->subtitleStreams()->first();
     }
 }

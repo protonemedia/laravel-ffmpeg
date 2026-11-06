@@ -12,6 +12,7 @@ use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Stream;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class NativeProbeTest extends TestCase
@@ -38,13 +39,15 @@ class NativeProbeTest extends TestCase
     private function metadataJson(): string
     {
         return json_encode([
-            'format' => ['duration' => '12.375', 'tags' => ['title' => 'Lecture']],
+            'format' => ['duration' => '12.375', 'tags' => ['title' => 'Lecture', 'com.example.title' => 'Literal key']],
             'chapters' => [['start_time' => '1.250', 'end_time' => '7.500']],
             'streams' => [
                 ['index' => 0, 'codec_type' => 'video', 'disposition' => ['attached_pic' => 1], 'width' => 80, 'height' => 80],
-                ['index' => 1, 'codec_type' => 'audio', 'tags' => ['language' => 'fra'], 'disposition' => ['default' => 0]],
+                ['index' => 1, 'codec_type' => 'audio', 'codec_name' => 'aac', 'channels' => 6, 'sample_rate' => '48000', 'bit_rate' => '192000', 'tags' => ['language' => 'fra', 'com.example.title' => 'Commentary'], 'disposition' => ['default' => 0]],
                 ['index' => 2, 'codec_type' => 'video', 'width' => 854, 'height' => 480, 'avg_frame_rate' => '30000/1001', 'sample_aspect_ratio' => '4:3', 'color_transfer' => 'smpte2084'],
                 ['index' => 3, 'codec_type' => 'audio', 'tags' => ['language' => 'eng'], 'disposition' => ['default' => 1]],
+                ['index' => 4, 'codec_type' => 'subtitle', 'codec_name' => 'subrip', 'tags' => ['language' => 'eng'], 'disposition' => ['default' => 0, 'forced' => 1]],
+                ['index' => 5, 'codec_type' => 'subtitle', 'codec_name' => 'ass', 'tags' => ['language' => 'fra'], 'disposition' => ['default' => 1, 'forced' => 0]],
             ],
         ]);
     }
@@ -95,7 +98,7 @@ class NativeProbeTest extends TestCase
         $metadata = $media->probe();
 
         $this->assertSame(12.375, $metadata->duration());
-        $this->assertCount(4, $metadata->streams());
+        $this->assertCount(6, $metadata->streams());
         $this->assertCount(1, $metadata->videoStreams());
         $this->assertSame(854, $metadata->video()->width());
         $this->assertSame(480, $metadata->video()->height());
@@ -104,6 +107,31 @@ class NativeProbeTest extends TestCase
         $this->assertSame('smpte2084', $metadata->video()->get('color_transfer'));
         $this->assertSame('fra', $metadata->audio()->get('tags.language'));
         $this->assertSame('1.250', $metadata->get('chapters.0.start_time'));
+        $this->assertSame('Lecture', $metadata->tag('title'));
+        $this->assertSame('Literal key', $metadata->tag('com.example.title'));
+        $this->assertNull($metadata->tag('TITLE'));
+        $this->assertSame([['start_time' => '1.250', 'end_time' => '7.500']], $metadata->chapters()->all());
+        $this->assertTrue($metadata->hasVideo());
+        $this->assertTrue($metadata->hasAudio());
+        $this->assertSame('audio', $metadata->audio()->type());
+        $this->assertSame('aac', $metadata->audio()->codec());
+        $this->assertSame('fra', $metadata->audio()->language());
+        $this->assertSame('Commentary', $metadata->audio()->tag('com.example.title'));
+        $this->assertNull($metadata->audio()->tag('LANGUAGE'));
+        $this->assertSame(6, $metadata->audio()->channels());
+        $this->assertSame(48000, $metadata->audio()->sampleRate());
+        $this->assertSame(192000, $metadata->audio()->bitrate());
+        $this->assertFalse($metadata->audio()->isDefault());
+        $this->assertTrue($metadata->audioStreams()->last()->isDefault());
+        $this->assertSame([4, 5], $metadata->subtitleStreams()->map->index()->all());
+        $this->assertSame('subrip', $metadata->subtitle()->codec());
+        $this->assertTrue($metadata->subtitle()->isForced());
+        $this->assertFalse($metadata->subtitle()->isDefault());
+        $this->assertFalse($metadata->subtitleStreams()->last()->isForced());
+        $this->assertTrue($metadata->subtitleStreams()->last()->isDefault());
+        $this->assertSame([0], $metadata->coverArt()->map->index()->all());
+        $this->assertTrue($metadata->coverArt()->first()->isCoverArt());
+        $this->assertFalse($metadata->video()->isCoverArt());
         $this->assertSame($key, $metadata->toArray()['format']['filename']);
         $this->assertSame('fallback', $metadata->get('missing', 'fallback'));
         $this->assertSame('source bytes', $disk->get($key));
@@ -138,6 +166,43 @@ class NativeProbeTest extends TestCase
         $this->assertNull($metadata->video());
         $this->assertNull($metadata->audio()->width());
         $this->assertNull($metadata->audio()->frameRate());
+        $this->assertTrue($metadata->hasAudio());
+        $this->assertFalse($metadata->hasVideo());
+        $this->assertNull($metadata->subtitle());
+        $this->assertTrue($metadata->subtitleStreams()->isEmpty());
+        $this->assertTrue($metadata->coverArt()->isEmpty());
+        $this->assertTrue($metadata->chapters()->isEmpty());
+        $this->assertNull($metadata->tag('title'));
+        $this->assertNull($metadata->audio()->codec());
+        $this->assertNull($metadata->audio()->language());
+        $this->assertNull($metadata->audio()->channels());
+        $this->assertNull($metadata->audio()->sampleRate());
+        $this->assertNull($metadata->audio()->bitrate());
+        $this->assertFalse($metadata->audio()->isDefault());
+        $this->assertFalse($metadata->audio()->isForced());
+        $this->assertFalse($metadata->audio()->isCoverArt());
+    }
+
+    #[Test]
+    public function typed_probe_accessors_keep_cover_art_separate_and_do_not_coerce_unknown_values(): void
+    {
+        $stream = ['codec_type' => 'video', 'disposition' => ['attached_pic' => 1]];
+        $this->fakeProbe(Process::result(output: json_encode(['format' => [], 'streams' => [$stream]])));
+        $metadata = FFMpeg::disk('local')->open(new File(__DIR__.'/src/guitar.m4a'))->probe();
+        $this->assertFalse($metadata->hasVideo());
+        $this->assertFalse($metadata->hasAudio());
+        $this->assertCount(1, $metadata->coverArt());
+        $this->assertSame($stream, $metadata->coverArt()->first()->toArray());
+
+        foreach ([null, 'N/A', 0, -1, '1.5', '1e3', (string) PHP_INT_MAX.'0', true, []] as $unknown) {
+            $stream = new Stream([
+                'channels' => $unknown, 'sample_rate' => $unknown, 'bit_rate' => $unknown,
+            ]);
+            $this->assertNull($stream->channels());
+            $this->assertNull($stream->sampleRate());
+            $this->assertNull($stream->bitrate());
+            $this->assertSame($unknown, $stream->get('bit_rate'));
+        }
     }
 
     #[Test]
@@ -389,7 +454,9 @@ class NativeProbeTest extends TestCase
             $this->assertEqualsWithDelta(4.72, $metadata->duration(), 0.001);
             $this->assertSame(1920, $metadata->video()->width());
             $this->assertSame(1080, $metadata->video()->height());
-            $this->assertSame('h264', $metadata->video()->get('codec_name'));
+            $this->assertSame('h264', $metadata->video()->codec());
+            $this->assertSame('video', $metadata->video()->type());
+            $this->assertTrue($metadata->hasVideo());
             $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
     }

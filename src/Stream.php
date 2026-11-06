@@ -31,6 +31,76 @@ readonly class Stream
         return $this->data;
     }
 
+    public function type(): ?string
+    {
+        $type = $this->get('codec_type');
+
+        return is_string($type) && $type !== '' ? $type : null;
+    }
+
+    public function codec(): ?string
+    {
+        $codec = $this->get('codec_name');
+
+        return is_string($codec) && $codec !== '' ? $codec : null;
+    }
+
+    public function tag(string $key): ?string
+    {
+        $tags = $this->get('tags');
+        $value = is_array($tags) ? ($tags[$key] ?? null) : null;
+
+        return is_string($value) ? $value : null;
+    }
+
+    public function language(): ?string
+    {
+        return $this->tag('language');
+    }
+
+    public function isDefault(): bool
+    {
+        return in_array($this->get('disposition.default'), [1, '1', true], true);
+    }
+
+    public function isForced(): bool
+    {
+        return in_array($this->get('disposition.forced'), [1, '1', true], true);
+    }
+
+    public function isCoverArt(): bool
+    {
+        return in_array($this->get('disposition.attached_pic'), [1, '1', true], true);
+    }
+
+    public function channels(): ?int
+    {
+        return $this->positiveInteger('channels');
+    }
+
+    public function sampleRate(): ?int
+    {
+        return $this->positiveInteger('sample_rate');
+    }
+
+    public function bitrate(): ?int
+    {
+        return $this->positiveInteger('bit_rate');
+    }
+
+    private function positiveInteger(string $key): ?int
+    {
+        $value = $this->get($key);
+
+        if (! is_int($value) && ! is_string($value)) {
+            return null;
+        }
+
+        $value = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+
+        return $value === false ? null : $value;
+    }
+
     public function width(): ?int
     {
         $width = $this->get('width');

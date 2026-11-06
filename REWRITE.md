@@ -22,6 +22,31 @@ All outputs, including local destinations, are generated in the workspace. Every
 
 The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, additional geometry helpers, two-pass encoding, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
 
+### Probe accessors
+
+```php
+$metadata = $media->probe();
+$english = $metadata->audioStreams()
+	->first(fn ($stream) => $stream->language() === 'eng');
+
+$english?->codec();      // Nullable string, such as "aac".
+$english?->channels();   // Nullable integer, such as 2.
+$english?->sampleRate(); // Hz, such as 48000.
+$english?->bitrate();    // Bits per second, such as 192000.
+$english?->isDefault();  // Boolean disposition flag.
+
+$metadata->hasVideo();
+$metadata->hasAudio();
+$metadata->subtitleStreams()->first(fn ($stream) => $stream->isForced());
+$metadata->coverArt()->first();
+$metadata->chapters()->first();
+$metadata->tag('title');
+```
+
+`Stream` exposes `index()`, `type()`, `codec()`, `language()`, `tag($key)`, `isDefault()`, `isForced()`, `isCoverArt()`, `channels()`, `sampleRate()`, and `bitrate()`. Missing scalar values return `null`. Channels, sample rate, and bitrate require positive integers and return `null` for unavailable, fractional, or overflowing values. Missing disposition flags return `false`. `get()` and `toArray()` retain the original values without conversion.
+
+Stream and format `tag()` lookups use literal, case-sensitive keys, including keys containing dots. Missing tags return `null`. `subtitle()` returns the first subtitle stream or `null`. `coverArt()` returns a collection of attached-picture video streams, separate from `videoStreams()` and `video()`. An audio file with cover art does not satisfy `hasVideo()`. `chapters()` returns a collection of unchanged chapter arrays, or an empty collection when chapters are absent. All stream collections retain source identity for the mapping helpers below.
+
 ### Current export API
 
 ```php
@@ -53,7 +78,7 @@ $media->export()
 $metadata = $media->probe();
 $video = $metadata->videoStreams()->first();
 $english = $metadata->audioStreams()
-	->first(fn ($stream) => $stream->get('tags.language') === 'eng');
+	->first(fn ($stream) => $stream->language() === 'eng');
 
 $media->export()->mapVideo($video)->mapAudio($english)
 	->video('copy')->audio('copy')->toDisk('videos')->save('selected.mkv');

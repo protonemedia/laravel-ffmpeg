@@ -485,11 +485,13 @@ class NativeExportTest extends TestCase
             ->outputOptions(['-disposition:a:0', 'default'])->save('english.mkv');
         $selected = FFMpeg::disk('memory')->open($selection->file()->path)->probe();
         $this->assertSame(['audio', 'video'], $selected->streams()->map(fn ($stream) => $stream->get('codec_type'))->all());
-        $this->assertSame('eng', $selected->audio()->get('tags.language'));
-        $this->assertSame(1, $selected->audio()->get('disposition.default'));
+        $this->assertSame('eng', $selected->audio()->language());
+        $this->assertTrue($selected->audio()->isDefault());
+        $this->assertSame(48000, $selected->audio()->sampleRate());
+        $this->assertSame(1, $selected->audio()->channels());
 
         $probed = $media->probe();
-        $english = $probed->audioStreams()->first(fn ($stream) => $stream->get('tags.language') === 'eng');
+        $english = $probed->audioStreams()->first(fn ($stream) => $stream->language() === 'eng');
         $objectSelection = $media->export()->mapAudio($english)->mapVideo($probed->videoStreams()->first())
             ->audio('copy')->video('copy')->save('probed-selection.mkv');
         $objectMetadata = FFMpeg::disk('memory')->open($objectSelection->file()->path)->probe();
