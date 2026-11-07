@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use BadMethodCallException;
+use DateTimeInterface;
 use Illuminate\Contracts\Filesystem\Filesystem;
 
 readonly class GeneratedFile
@@ -23,6 +24,21 @@ readonly class GeneratedFile
         }
 
         return $this->filesystem->url($this->path);
+    }
+
+    public function temporaryUrl(DateTimeInterface $expiration, array $options = []): string
+    {
+        if (! method_exists($this->filesystem, 'temporaryUrl')) {
+            throw new BadMethodCallException('This filesystem does not support temporary URLs.');
+        }
+
+        return $this->filesystem->temporaryUrl($this->path, $expiration, $options);
+    }
+
+    /** @return resource|null */
+    public function readStream()
+    {
+        return $this->filesystem->readStream($this->path);
     }
 
     public function toArray(): array

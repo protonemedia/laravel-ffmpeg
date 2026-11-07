@@ -54,6 +54,16 @@ $result->files();                                // All generated files.
 
 A lookup with a path or disk requires exactly one match. It uses literal, case-sensitive destination paths and disk names. No match throws `Illuminate\Support\ItemNotFoundException`. Multiple matches throw `Illuminate\Support\MultipleItemsFoundException`, following Laravel Collection's `sole()` behavior. A path shared by two disks requires the disk name to disambiguate it. Filesystem instances have no disk name; `files()` remains available for selections that the path and disk name cannot distinguish. Lookups neither access Storage nor change output order.
 
+Generated files retain their destination filesystem, including supplied filesystem instances. `temporaryUrl($expiration, $options)` delegates to that filesystem without a public-URL fallback. Unsupported drivers throw. URLs are created on demand and are not included in `toArray()`.
+
+```php
+$file = $result->file();
+$url = $file->temporaryUrl(now()->addMinutes(5));
+$stream = $file->readStream(); // The caller closes the stream with fclose().
+```
+
+`readStream()` returns a readable resource or `null`, following the destination's configured Storage failure behavior. Streams are not cached or serialized.
+
 ### Probe accessors
 
 ```php

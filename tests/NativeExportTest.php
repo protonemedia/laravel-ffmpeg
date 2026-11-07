@@ -339,6 +339,42 @@ class NativeExportTest extends TestCase
     }
 
     #[Test]
+    public function generated_files_read_streams_and_delegate_temporary_urls_to_the_retained_filesystem(): void
+    {
+        $this->fakePipeline();
+        $filesystem = Storage::disk('memory');
+        $file = FFMpeg::disk($filesystem)->open('source.mp4')->export()->save('nested/access.mp4')->file();
+        $this->assertNull($file->disk);
+
+        $stream = $file->readStream();
+        try {
+            $this->assertSame('encoded media', stream_get_contents($stream));
+        } finally {
+            fclose($stream);
+        }
+
+        $expiration = now()->addMinutes(5);
+        try {
+            $file->temporaryUrl($expiration);
+            $this->fail('Unsupported temporary URLs must not fall back to public URLs.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('This driver does not support creating temporary URLs.', $exception->getMessage());
+        }
+
+        $arguments = null;
+        $filesystem->buildTemporaryUrlsUsing(function ($path, $expires, $options) use (&$arguments) {
+            $arguments = [$path, $expires, $options];
+
+            return 'https://example.test/signed-preview';
+        });
+        $this->assertSame('https://example.test/signed-preview', $file->temporaryUrl($expiration, ['download' => 'preview.mp4']));
+        $this->assertSame(['nested/access.mp4', $expiration, ['download' => 'preview.mp4']], $arguments);
+
+        $filesystem->delete($file->path);
+        $this->assertNull($file->readStream());
+    }
+
+    #[Test]
     public function a_single_export_publishes_only_after_validation_and_cleans_before_completion(): void
     {
         $this->fakePipeline();
