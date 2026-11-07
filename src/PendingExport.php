@@ -165,7 +165,7 @@ class PendingExport
         return $this->command($this->configuredOutputs(), array_map(fn ($i) => '[input:'.$i.']', array_keys($this->inputs)));
     }
 
-    private function configuredOutputs(?string $path = null): array
+    protected function configuredOutputs(?string $path = null): array
     {
         if ($this->outputs !== []) {
             if ($path !== null) {

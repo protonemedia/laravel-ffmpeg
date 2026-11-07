@@ -48,7 +48,21 @@ $first = $media->frame()->get();         // Timestamp zero, with fresh settings.
 
 `save()` accepts `.jpg`, `.jpeg`, or `.png` destinations and returns an `ExportResult` with an image-role file. Generated images must have positive dimensions and the requested image format before publication. Destination defaults, Storage write options, filters, callbacks, cancellation, and workspace cleanup use the export pipeline. A `%` in a destination remains literal; single-frame output is not an image sequence.
 
-`get()` returns JPEG bytes after validation and workspace cleanup. It performs no destination Storage write or publication notification. Lifecycle events contain empty destination and file lists for this in-memory result. Image extraction does not infer a percentage from the video's full duration. `frames()`, count-based sampling, and storyboards remain unimplemented.
+`get()` returns JPEG bytes after validation and workspace cleanup. It performs no destination Storage write or publication notification. Lifecycle events contain empty destination and file lists for this in-memory result. Single-image extraction does not infer a percentage from the video's full duration.
+
+### Image sequences
+
+```php
+$media->frames(every: 2)->resize(width: 320)->save('frames/%05d.jpg');
+$result = $media->frames(count: 10)->save('previews/%03d.png');
+$result->files(); // Ordered files with concrete numbered paths and the image role.
+```
+
+`frames()` requires exactly one of `every` or `count`. Intervals are finite seconds, at least one microsecond. Counts are positive integers. Both resample decoded video at a constant rate through FFmpeg's `fps` filter with nearest timestamp rounding. This can duplicate source frames. It is not a sequence of independent `frame(at:)` seeks.
+
+Count-based extraction requires a known, positive duration and produces exactly the requested number of images. The sampling rate is the count divided by the source duration, or the intersecting clip duration when clipped. Short sources can repeat frames, with final-frame padding if needed. Missing or nonpositive duration fails during probing rather than inventing a sampling interval.
+
+Destinations require one `%d` or `%01d` through `%09d` placeholder in the filename, with no other percent signs. Numbering starts at one. Encoding uses a private workspace pattern, never the caller's destination as an FFmpeg path. All numbered files must be contiguous and valid JPEG or PNG images before any Storage write starts. Publication is not atomic. An upload failure reports concrete published paths and the failed destination, without deleting successful siblings. Storyboards and image-sequence inputs remain open.
 
 ### Progress helpers
 
@@ -294,7 +308,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `NativeCompositionTest`, `AddFilterTest`, `LegacyFilterMappingTest`, `ExportTest` | Simple filters, LUTs, fonts, literal text, and SRT/ASS/WebVTT rendering verified with real media, including clipped cue timing and manifest rejection |
 | Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `NativeCompositionTest`, `ExportTest` | Mixed-disk overlay, LUT, branching, independent clips, copied audio, validation, and partial publication verified |
 | Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `ExportTest` | Open |
-| Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `FrameTest` | Open |
+| Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `NativeExportTest`, `FrameTest` | Single images and interval/count output sequences verified with real media; image-quality controls remain available through output options |
 | Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `ExportTest` | Open |
 | Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `TileTest`, `VTTPreviewThumbnailsGeneratorTest` | Open |
 | Waveform images | Generate and inspect an actual waveform image from audio. | `MediaOpenerTest` only checks the old object type. New rendered-output acceptance required. | Open |

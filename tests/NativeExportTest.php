@@ -440,6 +440,158 @@ class NativeExportTest extends TestCase
     }
 
     #[Test]
+    public function image_sequences_require_valid_sampling_and_numbered_destinations(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('memory')->open('source.mp4');
+
+        foreach ([
+            fn () => $media->frames(),
+            fn () => $media->frames(every: 1, count: 2),
+            fn () => $media->frames(every: 0),
+            fn () => $media->frames(every: INF),
+            fn () => $media->frames(every: 0.0000001),
+            fn () => $media->frames(count: 0),
+            fn () => $media->frames(count: -1),
+        ] as $invalid) {
+            try {
+                $invalid();
+                $this->fail('Invalid sequence sampling was accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        foreach ([null, 'still.png', 'frame-%s.png', 'frame-%d-%d.png', 'frame-%010d.png',
+            'frame-%02d/child.png', 'frame-%02d\\child.png', 'frame-%02d.mp4'] as $path) {
+            try {
+                $media->frames(count: 2)->save($path);
+                $this->fail('An invalid sequence destination was accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        Process::assertNothingRan();
+
+        $this->fakePipeline(metadata: '{"format":{},"streams":[{"index":0,"codec_type":"video"}]}');
+        try {
+            $media->frames(count: 2)->save('unknown-%d.png');
+            $this->fail('Count sampling requires a known duration.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['probing', 'metadata'], [$exception->phase, $exception->category]);
+        }
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function image_sequences_validate_every_image_and_inventory_before_any_publication(): void
+    {
+        $image = file_get_contents(__DIR__.'/src/logo.png');
+
+        foreach (['corrupt', 'missing', 'gap'] as $failure) {
+            $this->fakePipeline(function (PendingProcess $process) use ($image, $failure) {
+                $pattern = end($process->command);
+                file_put_contents(sprintf($pattern, 1), $image);
+
+                if ($failure !== 'missing') {
+                    file_put_contents(sprintf($pattern, $failure === 'gap' ? 3 : 2), $failure === 'corrupt' ? 'not an image' : $image);
+                }
+
+                return Process::result();
+            });
+            try {
+                FFMpeg::disk('memory')->open('source.mp4')->frames(count: 2)->save('invalid-%02d.png');
+                $this->fail('An invalid sequence was published.');
+            } catch (MediaException $exception) {
+                $this->assertSame(['validation', 'artifact', []], [$exception->phase, $exception->category, $exception->published]);
+            }
+            $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
+        }
+    }
+
+    #[Test]
+    public function image_sequences_report_concrete_siblings_after_partial_publication(): void
+    {
+        $image = file_get_contents(__DIR__.'/src/logo.png');
+        $this->fakePipeline(function (PendingProcess $process) use ($image) {
+            $pattern = end($process->command);
+            file_put_contents(sprintf($pattern, 1), $image);
+            file_put_contents(sprintf($pattern, 2), $image);
+
+            return Process::result();
+        });
+        $storage = Storage::disk('memory');
+        $destination = Mockery::mock(Filesystem::class);
+        $destination->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) =>
+            $path === 'partial/02.png' ? false : $storage->put($path, $stream, $options));
+        $destination->shouldReceive('size')->andReturnUsing(fn ($path) => $storage->size($path));
+
+        try {
+            FFMpeg::disk('memory')->open('source.mp4')->frames(count: 2)
+                ->toDisk($destination)->save('partial/%02d.png');
+            $this->fail('A failed sequence upload must not complete.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
+            $this->assertSame([['disk' => null, 'path' => 'partial/01.png']], $exception->published);
+            $this->assertSame(['disk' => null, 'path' => 'partial/02.png'], $exception->destination);
+        }
+        $this->assertSame($image, $storage->get('partial/01.png'));
+        $this->assertFalse($storage->exists('partial/02.png'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        Event::assertNotDispatched(Events\ExportCompleted::class);
+    }
+
+    #[Test]
+    public function real_image_sequences_resample_intervals_counts_and_short_clips(): void
+    {
+        $probe = getenv('FFMPEG_9_FFPROBE');
+
+        if (! $probe) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real image sequences.');
+        }
+
+        $ffmpeg = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $fixture = $this->root.'/colors.mkv';
+        $generation = Process::run([
+            $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=80x48:r=10:d=0.2',
+            '-f', 'lavfi', '-i', 'color=c=lime:s=80x48:r=10:d=0.2',
+            '-f', 'lavfi', '-i', 'color=c=blue:s=80x48:r=10:d=0.2',
+            '-filter_complex', '[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]', '-map', '[v]', '-c:v', 'ffv1', $fixture,
+        ]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        Storage::disk('memory')->put('colors.mkv', file_get_contents($fixture));
+        $media = FFMpeg::disk('memory')->open('colors.mkv');
+        $result = $media->frames(every: 0.2)->resize(width: 40)->save('interval/%03d.png');
+        $this->assertSame(['interval/001.png', 'interval/002.png', 'interval/003.png'], $result->files()->pluck('path')->all());
+
+        foreach ($result->files() as $index => $file) {
+            $bytes = Storage::disk('memory')->get($file->path);
+            $this->assertSame([40, 24, IMAGETYPE_PNG], array_slice(getimagesizefromstring($bytes), 0, 3));
+            $this->assertSame('image', $file->role);
+            $image = imagecreatefromstring($bytes);
+            $color = imagecolorsforindex($image, imagecolorat($image, 20, 12));
+            $this->assertGreaterThan(200, $color[['red', 'green', 'blue'][$index]]);
+        }
+
+        $counted = $media->frames(count: 5)->save('count/%d.jpg');
+        $this->assertSame(['count/1.jpg', 'count/2.jpg', 'count/3.jpg', 'count/4.jpg', 'count/5.jpg'], $counted->files()->pluck('path')->all());
+        $last = imagecreatefromstring(Storage::disk('memory')->get('count/5.jpg'));
+        $this->assertGreaterThan(200, imagecolorsforindex($last, imagecolorat($last, 40, 24))['blue']);
+
+        $short = $media->frames(count: 4)->clip(0.2, duration: 0.1)->save('short/%02d.jpg');
+        $this->assertSame(['short/01.jpg', 'short/02.jpg', 'short/03.jpg', 'short/04.jpg'], $short->files()->pluck('path')->all());
+        foreach ($short->files() as $file) {
+            $bytes = Storage::disk('memory')->get($file->path);
+            $this->assertSame([80, 48, IMAGETYPE_JPEG], array_slice(getimagesizefromstring($bytes), 0, 3));
+            $image = imagecreatefromstring($bytes);
+            $this->assertGreaterThan(200, imagecolorsforindex($image, imagecolorat($image, 40, 24))['green']);
+        }
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
     public function generated_files_read_streams_and_delegate_temporary_urls_to_the_retained_filesystem(): void
     {
         $this->fakePipeline();

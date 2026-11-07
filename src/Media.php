@@ -50,6 +50,11 @@ readonly class Media
         return new PendingFrame($this, $this->defaultOutputDisk(), $at);
     }
 
+    public function frames(?float $every = null, ?int $count = null): PendingFrames
+    {
+        return new PendingFrames($this, $this->defaultOutputDisk(), $every, $count);
+    }
+
     /** @internal */
     public function defaultOutputDisk(): string|Filesystem
     {
