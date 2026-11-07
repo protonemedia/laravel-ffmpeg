@@ -356,15 +356,13 @@ class PendingExport
                 $this->validateResources($workspace, $runner, $resources);
                 $metadata = array_map(fn ($media) => $workspace->probe($media), $this->inputs);
                 $expected = array_map(fn ($output) => $this->selectedStreams($output, $workspace, $metadata), $outputs);
-                $outputPaths = [];
+                $outputPaths = $this->outputPaths($outputs, $workspace);
 
-                foreach ($outputs as $index => $output) {
-                    $extension = pathinfo($output->destination()['path'], PATHINFO_EXTENSION);
-                    $outputPaths[] = $workspace->path.'/output-'.$index.($extension === '' ? '' : '.'.$extension);
-                    $redactions[end($outputPaths)] = '[output:'.$index.']';
+                foreach ($outputPaths as $index => $outputPath) {
+                    $redactions[$outputPath] = '[output:'.$index.']';
                 }
 
-                $duration = $this->encodingDuration($metadata);
+                $duration = $this->prepareEncoding($metadata);
                 $durations = array_map(function ($output) use ($duration) {
                     $clip = $output->clipSettings();
 
@@ -387,9 +385,12 @@ class PendingExport
 
                 $phase = Progress::VALIDATION;
                 $this->notify(new Progress($phase));
+                $artifacts = $this->artifacts($outputs, $outputPaths);
                 $sizes = [];
 
-                foreach ($outputPaths as $index => $outputPath) {
+                foreach ($artifacts as $artifact) {
+                    $outputPath = $artifact['path'];
+                    $index = $artifact['output'];
                     $size = $this->validateArtifact($outputPath);
 
                     if (count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null) {
@@ -408,7 +409,7 @@ class PendingExport
                 }
 
                 if ($contents) {
-                    $bytes = @file_get_contents($outputPaths[0]);
+                    $bytes = @file_get_contents($artifacts[0]['path']);
 
                     if ($bytes === false) {
                         throw new MediaException('Cannot read the generated image.', $phase, 'artifact');
@@ -421,14 +422,15 @@ class PendingExport
                 $this->notify(new Progress($phase));
                 $files = [];
 
-                foreach ($outputs as $index => $output) {
-                    $destination = $output->destination();
+                foreach ($artifacts as $index => $artifact) {
+                    $output = $outputs[$artifact['output']];
+                    $destination = $artifact['destination'];
                     $stream = null;
 
                     try {
                         $disk = $output->filesystem();
                         $disk = is_string($disk) ? Storage::disk($disk) : $disk;
-                        $stream = fopen($outputPaths[$index], 'rb');
+                        $stream = fopen($artifact['path'], 'rb');
 
                         if ($stream === false || ! $disk->put($destination['path'], $stream, $output->storageOptions())) {
                             throw new \RuntimeException('Publication failed.');
@@ -471,7 +473,23 @@ class PendingExport
         return $result;
     }
 
-    protected function encodingDuration(array $metadata): ?float
+    protected function outputPaths(array $outputs, Workspace $workspace): array
+    {
+        return array_map(function ($index) use ($outputs, $workspace) {
+            $extension = pathinfo($outputs[$index]->destination()['path'], PATHINFO_EXTENSION);
+
+            return $workspace->path.'/output-'.$index.($extension === '' ? '' : '.'.$extension);
+        }, array_keys($outputs));
+    }
+
+    protected function artifacts(array $outputs, array $paths): array
+    {
+        return array_map(fn ($index) => [
+            'path' => $paths[$index], 'output' => $index, 'destination' => $outputs[$index]->destination(),
+        ], array_keys($outputs));
+    }
+
+    protected function prepareEncoding(array $metadata): ?float
     {
         // Graphs can change timing arbitrarily; do not invent a percentage.
         return $this->graph === null && ! array_any($metadata, fn ($item) => $item->duration() === null)
