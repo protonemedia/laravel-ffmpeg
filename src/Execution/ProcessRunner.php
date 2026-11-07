@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
 use Illuminate\Support\Facades\Process;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\ProcessResult;
 use Throwable;
 
 /** @internal */
@@ -28,7 +29,8 @@ class ProcessRunner
         string $phase = 'probing',
         ?ProgressParser $progress = null,
         ?callable $onProgress = null,
-    ): ProcessOutput {
+        bool $redactOutput = false,
+    ): ProcessResult {
         $output = $diagnostics = '';
         $overflow = false;
         $started = $lastOutput = hrtime(true);
@@ -107,12 +109,13 @@ class ProcessRunner
 
             $result = $process->wait();
 
-            return new ProcessOutput(
+            return new ProcessResult(
                 $result->exitCode(),
-                $output,
+                $redactOutput ? str_replace(array_keys($redactions), array_values($redactions), $output) : $output,
                 str_replace(array_keys($redactions), array_values($redactions), $diagnostics),
                 (hrtime(true) - $started) / 1e9,
                 array_map(fn (string $token) => str_replace(array_keys($redactions), array_values($redactions), $token), $command),
+                $phase,
             );
         } catch (Throwable $exception) {
             $failure = $exception instanceof MediaException || $exception === $applicationFailure

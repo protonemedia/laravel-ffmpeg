@@ -13,6 +13,7 @@ use JsonException;
 use League\Flysystem\WhitespacePathNormalizer;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
+use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
 use ProtoneMedia\LaravelFFMpeg\Execution\InputSource;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
@@ -132,6 +133,27 @@ readonly class Media
     {
         return $this->withInput(function (string $path, Workspace $workspace) {
             return $workspace->probe($this);
+        });
+    }
+
+    public function analyze(string $audioFilter = 'volumedetect', int $audio = 0): ProcessResult
+    {
+        FilterGraph::validateExpression($audioFilter);
+        if ($audio < 0) {
+            throw new InvalidArgumentException('Audio analysis requires a nonnegative audio track index.');
+        }
+
+        return $this->withInput(function (string $path, Workspace $workspace) use ($audioFilter, $audio) {
+            $runner = new ProcessRunner;
+            $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
+            $runner->version($binary, 'ffmpeg', $workspace->path);
+            $workspace->requireProtocols($binary, $this->protocolWhitelist());
+
+            return $runner->run([
+                $binary, '-hide_banner', '-nostdin', '-nostats', '-xerror', '-loglevel', 'info',
+                '-protocol_whitelist', $this->protocolWhitelist(), ...$this->transportOptions(), ...$this->inputOptions(), '-i', $path,
+                '-map', '0:a:'.$audio, '-vn', '-sn', '-dn', '-af', $audioFilter, '-f', 'null', '-',
+            ], $workspace->path, [$path => '[input]'] + $this->redactions(), phase: 'analysis', redactOutput: true);
         });
     }
 

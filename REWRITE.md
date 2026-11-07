@@ -122,6 +122,28 @@ $media->waveform(width: 640, height: 120, colors: ['red'])
 
 Audio filters run before accurate audio trimming and waveform rendering. Geometry and other video filters run after rendering, inside the same owned graph. Keyframe clips are rejected. Each call creates fresh settings. `save()` publishes a validated JPEG or PNG with the image role, using the same Storage options, lifecycle events, cancellation, and workspace cleanup as other images. Percentage remains unknown. A waveform image is not waveform-peaks data or a live audio visualizer.
 
+### Audio analysis
+
+```php
+$analysis = $media->analyze(); // Runs volumedetect on the first audio track.
+$analysis->successful();
+$analysis->failed();
+$analysis->exitCode;
+$analysis->errorOutput(); // FFmpeg writes volume measurements to stderr.
+$analysis->output();
+$analysis->throw(); // Optional: throws MediaException for a nonzero exit.
+
+$analysis = $media->analyze('volume=0.25,volumedetect', audio: 1);
+```
+
+`analyze()` executes immediately and returns a `ProcessResult`. The default filter is `volumedetect`. `audio` is a zero-based audio-track index, not an absolute stream index. Only that track is mapped. Custom filters are developer-trusted audio filter expressions, with the same URL and NUL restrictions as export filters. Negative track indexes and empty filters fail before IO.
+
+Analysis uses FFmpeg's null muxer. It creates no media artifact, performs no destination Storage writes, and dispatches no export lifecycle events. Local files, staged Storage inputs, and URL transport use the shared input boundary. Source bytes are retained, and private workspace files are removed before return.
+
+Nonzero FFmpeg exits remain inspectable, including missing tracks, invalid filters, and invalid media. `throw()` returns the same successful result or throws a `MediaException` with phase `analysis` and category `exit`. Staging, capability, launch, and timeout failures still throw before a result is available. Timeouts stop and reap the child before cleanup.
+
+The result exposes `exitCode`, `output`, `diagnostics`, `elapsedSeconds`, `command`, and `phase` properties. `output()` returns stdout, and `errorOutput()` returns the diagnostic tail. `summary()` returns status, timing, the redacted command, and diagnostics. Captured stdout is limited to 16 MiB, and diagnostics retain the final 64 KiB. Analysis redacts known input paths, signed URLs, and query values in both streams and the returned command. Direct URL inputs still expose their URL to operating-system process inspection. Structured volume parsing and loudness normalization are not part of this operation.
+
 ### Progress helpers
 
 ```php
@@ -468,7 +490,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `NativeStoryboardTest` | Real PNG and JPEG sheets verify decoded tile order, asymmetric grids, spacing, partial sheets, quality, clipped timing, relative and custom URLs, cue coordinates, validation before publication, partial upload failure, source retention, and cleanup |
 | Waveform images | Generate and inspect an actual waveform image from audio. | `NativeExportTest`; `MediaOpenerTest` only checks the old object type | Real amplitude, muted audio, clipped timing, colors, odd image dimensions, and post-render resize verified |
 | Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `NativeCompositionTest`, `NativeUrlTest`, legacy `HlsExportTest` | Ordinary graph exports verify transparency, offsets, scaling, repeated static images, copied audio, and optional private-copy image preparation; URL downloads and callback failure cleanup verified; native HLS integration remains open |
-| Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Open |
+| Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Real two-track PCM verifies mean and peak volume, track selection, filters, silence, local and staged inputs, inspectable nonzero exits, opt-in exceptions, redaction, timeout reaping, source retention, and cleanup without publication |
 | Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle and real child reaping verified; both encoding passes, failure cleanup, and cancellation covered |
 | Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `ExportTest`, `TileTest` | Multiple single-file outputs verified; playlist/segment inventory open |
 | Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `HlsExportTest`, `HLSPlaylistGeneratorTest` | Open |
