@@ -539,6 +539,13 @@ class NativeExportTest extends TestCase
         $this->assertCount(2, $copyMetadata->get('chapters'));
         $this->assertCount(1, $copyMetadata->audioStreams());
 
+        $omitted = $media->export()->video('copy')->audio('copy')->withoutMetadata(chapters: true)->save('omitted.mkv');
+        $omittedMetadata = FFMpeg::disk('memory')->open($omitted->file()->path)->probe();
+        $this->assertNull($omittedMetadata->tag('title'));
+        $this->assertCount(0, $omittedMetadata->chapters());
+        $this->assertSame('h264', $omittedMetadata->video()->codec());
+        $this->assertSame('aac', $omittedMetadata->audio()->codec());
+
         $selection = $media->export()->video('copy')->audio('copy')
             ->map('0:a:m:language:eng')->map('0:V:0')->map('0:a:m:language:fra')->map('-0:a:m:language:fra')
             ->outputOptions(['-disposition:a:0', 'default'])->save('english.mkv');

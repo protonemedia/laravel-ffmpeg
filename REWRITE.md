@@ -151,11 +151,13 @@ $result = $export
 		->metadataFrom(0)->chaptersFrom(null)->toDisk('videos'))
 	->output('preview.mp4', fn (ExportOutput $out) => $out
 		->map('[preview]')->video('libx264', crf: 28)
-		->withoutMetadata()->chaptersFrom(null)->toDisk('previews'))
+		->withoutMetadata(chapters: true)->toDisk('previews'))
 	->save();
 ```
 
 The example uses `ProtoneMedia\LaravelFFMpeg\ExportOutput`. Explicit outputs default to `filesystems.default`, not the first input disk. Adding an input also changes the single-output convenience default to `filesystems.default` unless `toDisk()` was explicit. Root output settings cannot be mixed with `output()` callbacks. After `output()`, `save()` takes no path. Duplicate destinations and composition destinations matching an input's disk/key identity are rejected.
+
+`withoutMetadata(chapters: true)` is shorthand for `withoutMetadata()->chaptersFrom(null)`. It explicitly omits both global metadata and chapters. The default `withoutMetadata()` and `chapters: false` leave the chapter source unchanged, including earlier selections. A later `chaptersFrom($input)` overrides the omission. The shorthand works on the single-output export and in output callbacks. Multiple inputs still require explicit metadata and chapter sources or omission for each output. Clip defaults remain unchanged.
 
 Graph labels are simple identifiers. Each named output label must be consumed or mapped exactly once. Branching requires `split` or `asplit`. A quote-aware lexer ignores brackets inside literal values. FFmpeg remains responsible for filter syntax and pad types. Graph-produced streams do not automatically preserve input language tags or dispositions.
 

@@ -137,6 +137,34 @@ class NativeCompositionTest extends TestCase
     }
 
     #[Test]
+    public function metadata_omission_can_include_chapters_without_changing_existing_defaults(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('source.mkv');
+
+        foreach ([
+            [$media->export()->withoutMetadata(), '0'],
+            [$media->export()->chaptersFrom(0)->withoutMetadata(chapters: true), '-1'],
+            [$media->export()->withoutMetadata(chapters: true)->chaptersFrom(0), '0'],
+            [$media->export()->withoutMetadata(chapters: true)->withoutMetadata(chapters: false), '-1'],
+            [$media->export()->clip(1, duration: 2)->withoutMetadata(), '-1'],
+        ] as [$export, $chapters]) {
+            $command = $export->inspect();
+            $this->assertSame('-1', $command[array_search('-map_metadata', $command, true) + 1]);
+            $this->assertSame($chapters, $command[array_search('-map_chapters', $command, true) + 1]);
+        }
+
+        $export = $media->export();
+        $export->addInput($media);
+        $command = $export
+            ->output('omitted.mkv', fn ($out) => $out->mapVideo(0)->withoutMetadata(chapters: true))
+            ->output('kept.mkv', fn ($out) => $out->mapVideo(1)->chaptersFrom(1)->withoutMetadata())
+            ->inspect();
+        $this->assertSame(['-1', '1'], array_map(fn ($i) => $command[$i + 1], array_keys($command, '-map_chapters', true)));
+        Process::assertNothingRan();
+    }
+
+    #[Test]
     public function resources_use_whole_unquoted_generated_values_and_inspection_does_not_read_them(): void
     {
         Process::fake();

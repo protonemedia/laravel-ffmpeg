@@ -257,10 +257,14 @@ trait ConfiguresOutput
         return $this;
     }
 
-    public function withoutMetadata(): self
+    public function withoutMetadata(bool $chapters = false): self
     {
         $this->assertOutputMutable();
         $this->metadataSource = -1;
+
+        if ($chapters) {
+            $this->chapterSource = -1;
+        }
 
         return $this;
     }
