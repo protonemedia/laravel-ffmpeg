@@ -12,17 +12,18 @@ use JsonException;
 use League\Flysystem\WhitespacePathNormalizer;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
+use ProtoneMedia\LaravelFFMpeg\Execution\InputSource;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use Throwable;
 
 readonly class Media
 {
-    private string|File|UploadedFile|UrlInput $source;
+    private string|File|UploadedFile|InputSource $source;
 
     private array $options;
 
-    public function __construct(private string|Filesystem $disk, string|File|UploadedFile|UrlInput $source, array $inputOptions = [])
+    public function __construct(private string|Filesystem $disk, string|File|UploadedFile|InputSource $source, array $inputOptions = [])
     {
         if (is_string($source)) {
             if ($source === '' || preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $source)) {
@@ -43,6 +44,11 @@ readonly class Media
     public function export(): PendingExport
     {
         return new PendingExport($this, $this->defaultOutputDisk());
+    }
+
+    public function concat(Media ...$following): self
+    {
+        return new self(config('filesystems.default'), new ConcatInput([$this, ...$following]));
     }
 
     public function frame(float|string $at = 0): PendingFrame
@@ -71,7 +77,7 @@ readonly class Media
     {
         return hash('sha256', serialize([
             is_string($this->disk) ? ['name', $this->disk] : ['object', spl_object_id($this->disk)],
-            $this->source instanceof UrlInput ? ['url', $this->source->identity()]
+            $this->source instanceof InputSource ? ['source', $this->source->identity()]
                 : (is_string($this->source) ? ['key', $this->source] : ['file', $this->source->getPathname()]),
             $this->options,
         ]));
@@ -80,7 +86,7 @@ readonly class Media
     /** @internal */
     public function extension(): string
     {
-        $extension = $this->source instanceof UrlInput ? $this->source->extension()
+        $extension = $this->source instanceof InputSource ? $this->source->extension()
             : pathinfo(is_string($this->source) ? $this->source : $this->source->getPathname(), PATHINFO_EXTENSION);
 
         return preg_match('/\A[a-z0-9]{1,32}\z/i', $extension) ? strtolower($extension) : '';
@@ -95,19 +101,19 @@ readonly class Media
     /** @internal */
     public function protocolWhitelist(): string
     {
-        return $this->source instanceof UrlInput ? $this->source->protocols() : 'file';
+        return $this->source instanceof InputSource ? $this->source->protocols() : 'file';
     }
 
     /** @internal */
     public function transportOptions(): array
     {
-        return $this->source instanceof UrlInput ? $this->source->options() : [];
+        return $this->source instanceof InputSource ? $this->source->options() : [];
     }
 
     /** @internal */
     public function redactions(): array
     {
-        return $this->source instanceof UrlInput ? $this->source->redactions() : [];
+        return $this->source instanceof InputSource ? $this->source->redactions() : [];
     }
 
     public function probe(): Metadata
@@ -157,10 +163,10 @@ readonly class Media
             array_push($options, '-select_streams', $selector);
         }
 
-        $direct = $this->source instanceof UrlInput && $path === $this->source->url();
-        $protocols = $direct ? $this->protocolWhitelist() : 'file';
+        $customInput = $this->source instanceof InputSource && $path === $workspace->stage($this);
+        $protocols = $customInput ? $this->protocolWhitelist() : 'file';
 
-        if ($direct) {
+        if ($customInput) {
             $workspace->requireProtocols(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), $protocols);
             $options = [...$this->transportOptions(), ...$options];
         }
@@ -168,7 +174,7 @@ readonly class Media
         $result = (new ProcessRunner)->run([
             config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-print_format', 'json',
             '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', $protocols, ...$options, $path,
-        ], $workspace->path, [$path => '[input]', ...$this->redactions()]);
+        ], $workspace->path, [$path => '[input]'] + $this->redactions());
 
         if ($result->exitCode !== 0) {
             throw new MediaException('FFprobe failed (exit '.$result->exitCode.').', 'probing', 'exit', $result->diagnostics);
@@ -187,7 +193,7 @@ readonly class Media
         }
 
         // Do not return temporary paths or credential-bearing URLs.
-        $data['format']['filename'] = $this->source instanceof UrlInput ? '[url]'
+        $data['format']['filename'] = $this->source instanceof InputSource ? $this->source->label()
             : (is_string($this->source) ? $this->source : $this->source->getPathname());
 
         if ($this->source instanceof UrlInput) {
@@ -212,18 +218,8 @@ readonly class Media
         $input = $output = null;
 
         try {
-            if ($this->source instanceof UrlInput) {
-                if (! $resource && in_array($this->extension(), ['m3u8', 'm3u', 'mpd', 'ffconcat'])) {
-                    throw new MediaException('URL manifest inputs require an explicit dependency policy.', 'staging', 'manifest');
-                }
-
-                $path = $this->source->stage($workspace, $name, $resource);
-
-                if ($this->source->download && ! $resource) {
-                    $this->validateStagedContent($path);
-                }
-
-                return $path;
+            if ($this->source instanceof InputSource) {
+                return $this->source->stage($workspace, $name, $resource);
             }
 
             if (! is_string($this->source)) {

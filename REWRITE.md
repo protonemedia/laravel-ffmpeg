@@ -264,6 +264,36 @@ $media->export()
 
 Filters run in call order. Burning subtitles before resizing scales the rendered text with the image. Burning them after resizing renders at the final resolution. Any subtitle helper rejects input/keyframe seeking, even when it belongs to another output. Settings freeze at execution, and resource failures identify the output index and helper. Font files must be readable regular files; FFmpeg validates the font contents when rendering.
 
+### Concatenation
+
+```php
+$first = FFMpeg::disk('uploads')->open('first.mp4');
+$second = FFMpeg::disk('archive')->open('second.mp4');
+$joined = $first->concat($second);
+$joined->export()->video('copy')->audio('copy')->toDisk('videos')->save('joined.mp4');
+```
+
+`concat()` returns a media descriptor and does no IO until probing or export. It requires at least one following input. Compatible finite files join through the concat demuxer. Local files and non-local Storage inputs can be mixed. URL inputs require `download: true`. Input-specific media options, nested concat inputs, manifest sources, unknown durations, and nonzero reported presentation origins are rejected. Nonzero origins require an explicit normalization graph rather than a guessed timestamp correction.
+
+Stream order, codecs, profiles, time bases, geometry, pixel formats, sample rates, channel layouts, and other observable codec parameters must match. This comparison cannot prove bitstream compatibility. FFmpeg remains authoritative, and failures never trigger automatic transcoding. Codec choices remain explicit export settings. The ordinary first-video and first-audio selection defaults still apply unless maps replace them.
+
+The operation writes its own relative-name manifest with declared durations. Safe generated aliases isolate FFconcat filename syntax from caller keys, including quotes, Unicode, and newlines in local filenames. Aliases use private symlinks where supported, otherwise private copies. Cleanup does not modify or delete source files. Original chapter timelines are not combined. Results and publication use the ordinary export pipeline.
+
+Heterogeneous inputs use the existing composition API with an explicit normalization policy. This video-only example stretches both inputs to the requested geometry, sets square pixels and a common frame rate, resets video timestamps, and deliberately excludes audio:
+
+```php
+$export = $first->export();
+$export->addInput($second);
+$export->filterComplex(
+	'[0:v]scale=128:96,setsar=1,fps=10,setpts=PTS-STARTPTS[first];'
+	.'[1:v]scale=128:96,setsar=1,fps=10,setpts=PTS-STARTPTS[second];'
+	.'[first][second]concat=n=2:v=1:a=0[joined]'
+)->map('[joined]')->video('libx264', crf: 20)->withoutMetadata(chapters: true)
+	->toDisk('videos')->save('normalized.mp4');
+```
+
+Audio-inclusive graphs must declare their audio policy and preserve each segment's audio delay relative to video. Resetting each stream independently to its first sample can erase that delay. The library does not infer silence insertion, audio layout conversion, or intermediate encodes. Graph timing leaves percentage unknown.
+
 ### Composition and resources
 
 ```php
@@ -357,7 +387,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Copy and clipping | Remux without changing codecs. Distinguish accurate transcoding from keyframe copy cuts. Preserve audio offsets and VFR. | `NativeExportTest`, `CopyTest` | Remux, accurate duration, and decoded keyframe identity verified; VFR and offset coverage open |
 | Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `NativeCompositionTest`, `AddFilterTest`, `LegacyFilterMappingTest`, `ExportTest` | Simple filters, LUTs, fonts, literal text, and SRT/ASS/WebVTT rendering verified with real media, including clipped cue timing and manifest rejection |
 | Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `NativeCompositionTest`, `ExportTest` | Mixed-disk overlay, LUT, branching, independent clips, copied audio, validation, and partial publication verified |
-| Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `ExportTest` | Open |
+| Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `NativeConcatTest` | Compatible video/audio copy, mixed disks, decoded order, layout rejection, source retention, and audio-delay packet timestamps verified; explicit video normalization graph verified; broader audio-inclusive normalization remains open |
 | Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `NativeExportTest`, `FrameTest` | Single images and interval/count output sequences verified with real media; image-quality controls remain available through output options |
 | Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `ExportTest` | Open |
 | Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `TileTest`, `VTTPreviewThumbnailsGeneratorTest` | Open |

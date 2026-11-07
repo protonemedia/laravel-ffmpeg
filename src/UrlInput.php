@@ -5,11 +5,12 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Execution\InputSource;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use Throwable;
 
 /** @internal */
-readonly class UrlInput
+readonly class UrlInput implements InputSource
 {
     public function __construct(private string $url, private array $headers, public bool $download)
     {
@@ -51,6 +52,11 @@ readonly class UrlInput
     public function extension(): string
     {
         return pathinfo(parse_url($this->url, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION);
+    }
+
+    public function label(): string
+    {
+        return '[url]';
     }
 
     public function protocols(): string
@@ -95,6 +101,10 @@ readonly class UrlInput
 
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
+        if (! $resource && in_array(strtolower($this->extension()), ['m3u8', 'm3u', 'mpd', 'ffconcat'])) {
+            throw new MediaException('URL manifest inputs require an explicit dependency policy.', 'staging', 'manifest');
+        }
+
         if (! $this->download && ! $resource) {
             return $this->url;
         }
@@ -129,8 +139,18 @@ readonly class UrlInput
                 throw new MediaException('The HTTP media download did not complete.', 'staging', 'transfer');
             }
 
+            $prefix = file_get_contents($path, false, null, 0, 4096);
+
+            if (! $resource && preg_match('/^(?:\xEF\xBB\xBF)?\s*(?:#EXTM3U|ffconcat\s)|<(?:\w+:)?MPD(?:\s|>)/i', $prefix)) {
+                throw new MediaException('Remote manifest dependencies cannot be staged as a single file.', 'staging', 'manifest');
+            }
+
             return $path;
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            if ($exception instanceof MediaException) {
+                throw $exception;
+            }
+
             // HTTP exceptions can contain signed URLs, headers and response bodies.
             throw new MediaException('Cannot download the HTTP media input.', 'staging', 'transfer');
         } finally {
