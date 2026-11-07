@@ -23,8 +23,6 @@ readonly class HlsExportResult extends ExportResult
             throw new ItemNotFoundException('Unknown HLS variant.');
         }
 
-        $directory = dirname($this->variants[$name]).'/';
-
-        return new self($this->files()->filter(fn ($file) => str_starts_with($file->path, $directory))->values()->all(), $this->processes()->all());
+        return new self($this->files()->filter(fn ($file) => isset($this->variants[$name][$file->path]))->values()->all(), $this->processes()->all());
     }
 }

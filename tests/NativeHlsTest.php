@@ -421,6 +421,69 @@ class NativeHlsTest extends TestCase
     }
 
     #[Test]
+    public function custom_paths_keep_variant_membership_and_encode_relative_urls_from_each_playlist(): void
+    {
+        Storage::disk('memory')->put('source.mp4', 'source');
+        $this->fakePipeline();
+        $result = FFMpeg::disk('memory')->open('source.mp4')->hls()
+            ->variant('low', fn () => null, playlist: 'lists/low/index.m3u8', segments: 'shared/é #?/low-%03d.ts')
+            ->variant('high', fn () => null, playlist: 'lists/high/index.m3u8', segments: 'shared/é #?/high-%d.ts')
+            ->variant('root', fn () => null, playlist: 'root.m3u8')
+            ->variant('literal', fn () => null, playlist: '100% ready/index.m3u8')
+            ->save('catalog/master/list.m3u8');
+        $disk = Storage::disk('memory');
+        $master = $disk->get($result->playlist()->path);
+        $this->assertStringContainsString("../../lists/low/index.m3u8\n", $master);
+        $this->assertStringContainsString("../../lists/high/index.m3u8\n", $master);
+        $this->assertStringContainsString("../../root.m3u8\n", $master);
+        $this->assertStringContainsString("../../100%25%20ready/index.m3u8\n", $master);
+        $this->assertStringContainsString("../../shared/%C3%A9%20%23%3F/low-000.ts\n", $disk->get('lists/low/index.m3u8'));
+        $this->assertStringContainsString("../../shared/%C3%A9%20%23%3F/high-0.ts\n", $disk->get('lists/high/index.m3u8'));
+        $this->assertStringContainsString("\nsegment-00000000.ts\n", $disk->get('root.m3u8'));
+        $this->assertStringContainsString("\nsegment-00000000.ts\n", $disk->get('100% ready/index.m3u8'));
+        $this->assertSame(['shared/é #?/low-000.ts', 'lists/low/index.m3u8'], $result->variant('low')->files()->pluck('path')->all());
+        $this->assertSame(['shared/é #?/high-0.ts', 'lists/high/index.m3u8'], $result->variant('high')->files()->pluck('path')->all());
+        $this->assertSame(['segment-00000000.ts', 'root.m3u8'], $result->variant('root')->files()->pluck('path')->all());
+        $this->assertSame(['100% ready/segment-00000000.ts', '100% ready/index.m3u8'], $result->variant('literal')->files()->pluck('path')->all());
+        $this->assertSame([], glob($this->root.'/*'));
+    }
+
+    #[Test]
+    public function custom_nested_playlists_decode_with_segments_in_separate_directories(): void
+    {
+        $media = $this->source();
+        $result = $media->hls(segmentDuration: 0.7)
+            ->variant('low', fn ($variant) => $variant->resize(width: 80), playlist: 'lists/low/index.m3u8', segments: 'assets/low/part-%03d.ts')
+            ->variant('high', fn () => null, playlist: 'lists/high/index.m3u8', segments: 'assets/high/part-%d.ts')
+            ->save('catalog/master.m3u8');
+        foreach (['low', 'high'] as $name) {
+            $playlist = $result->variant($name)->playlist();
+            $decoded = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-xerror',
+                '-i', Storage::disk('local')->path($playlist->path), '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-']);
+            $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+            $this->assertCount(5, $result->variant($name)->files());
+        }
+        $this->assertSame([], glob($this->root.'/*'));
+    }
+
+    #[Test]
+    public function colliding_custom_segments_fail_before_any_write(): void
+    {
+        Storage::disk('memory')->put('source.mp4', 'source');
+        $this->fakePipeline();
+        try {
+            FFMpeg::disk('memory')->open('source.mp4')->hls()
+                ->variant('low', fn () => null, segments: 'shared/part-%d.ts')
+                ->variant('high', fn () => null, segments: 'shared/part-%01d.ts')
+                ->save('master.m3u8');
+            $this->fail('Colliding concrete segment destinations were accepted.');
+        } catch (InvalidArgumentException) {
+            $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+            $this->assertSame([], glob($this->root.'/*'));
+        }
+    }
+
+    #[Test]
     public function invalid_settings_fail_before_io(): void
     {
         Process::fake();
@@ -434,11 +497,17 @@ class NativeHlsTest extends TestCase
             fn () => $media->hls()->variant('valid', fn () => null)->save('out.mp4'),
             fn () => $media->hls()->variant('valid', fn ($variant) => $variant->outputOptions(['-f', 'mp4']))->inspect(),
             fn () => $media->hls()->variant('valid', fn () => null)->twoPass(),
+            fn () => $media->hls()->variant('valid', fn () => null, playlist: '../outside.m3u8'),
+            fn () => $media->hls()->variant('valid', fn () => null, playlist: 'https://example.test/list.m3u8'),
+            fn () => $media->hls()->variant('valid', fn () => null, segments: 'segment.ts'),
+            fn () => $media->hls()->variant('valid', fn () => null, segments: 'seg-%d-%d.ts'),
+            fn () => $media->hls()->variant('valid', fn () => null, segments: '%d/segment.ts'),
+            fn () => $media->hls()->variant('valid', fn () => null, segments: 'seg-%10d.ts'),
         ] as $invalid) {
             try {
                 $invalid();
                 $this->fail('Invalid HLS settings were accepted.');
-            } catch (InvalidArgumentException) {
+            } catch (InvalidArgumentException|\League\Flysystem\PathTraversalDetected) {
                 $this->assertSame([], glob($this->root.'/*'));
             }
         }

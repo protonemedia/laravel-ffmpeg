@@ -13,6 +13,10 @@ class PendingHlsExport extends PendingExport
 
     private array $variants = [];
 
+    private array $variantPaths = [];
+
+    private array $variantFiles = [];
+
     public function __construct(Media $media, string|Filesystem $disk, private readonly float $segmentDuration)
     {
         parent::__construct($media, $disk);
@@ -24,7 +28,7 @@ class PendingHlsExport extends PendingExport
         $this->video('libx264')->audio('aac');
     }
 
-    public function variant(string $name, callable $configure): self
+    public function variant(string $name, callable $configure, ?string $playlist = null, ?string $segments = null): self
     {
         $this->assertOutputMutable();
 
@@ -32,9 +36,24 @@ class PendingHlsExport extends PendingExport
             throw new InvalidArgumentException('HLS variant names must be unique simple path components.');
         }
 
+        $paths = compact('playlist', 'segments');
+        foreach ($paths as $type => $path) {
+            if ($path === null) {
+                continue;
+            }
+            $path = (new ExportOutput($path, $this->filesystem()))->destination()['path'];
+            if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== ($type === 'playlist' ? 'm3u8' : 'ts')
+                || ($type === 'segments' && (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', $path)
+                    || str_contains(dirname($path), '%')))) {
+                throw new InvalidArgumentException('HLS paths require an m3u8 playlist or a ts filename with one %d or %01d through %09d placeholder.');
+            }
+            $paths[$type] = $path;
+        }
+
         $variant = new HlsVariant;
         $configure($variant);
         $this->variants[$name] = $variant;
+        $this->variantPaths[$name] = $paths;
 
         return $this;
     }
@@ -62,7 +81,7 @@ class PendingHlsExport extends PendingExport
         $directory = dirname($path) === '.' ? '' : dirname($path).'/';
         $outputs = [];
         foreach ($this->variants as $name => $variant) {
-            $outputs[] = (new ExportOutput($directory.$name.'/index.m3u8', $this->filesystem()))->configure($variant->inherit($this->outputConfiguration()));
+            $outputs[] = (new ExportOutput($this->variantPaths[$name]['playlist'] ?? $directory.$name.'/index.m3u8', $this->filesystem()))->configure($variant->inherit($this->outputConfiguration()));
         }
         $outputs[] = $master;
 
@@ -71,20 +90,21 @@ class PendingHlsExport extends PendingExport
 
     public function save(?string $path = null): HlsExportResult
     {
+        $this->assertOutputMutable();
         if ($path === null) {
             throw new InvalidArgumentException('An HLS export requires a master playlist destination.');
         }
 
-        $outputs = $this->configuredOutputs($path);
+        $this->configuredOutputs($path);
         $this->inspect();
         foreach ($this->variants as $variant) {
             $variant->freeze();
         }
 
+        $this->variantFiles = [];
         $result = parent::save($path);
 
-        return new HlsExportResult($result->files()->all(), $result->processes()->all(),
-            array_combine(array_keys($this->variants), array_map(fn ($output) => $output->destination()['path'], array_slice($outputs, 0, -1))));
+        return new HlsExportResult($result->files()->all(), $result->processes()->all(), $this->variantFiles);
     }
 
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
@@ -138,6 +158,9 @@ class PendingHlsExport extends PendingExport
             $longest = 0;
             $count = $bytes = $total = $peak = 0;
             $owned = [];
+            $name = array_keys($this->variants)[$index];
+            $pattern = $this->variantPaths[$name]['segments'] ?? dirname($output->destination()['path']).'/segment-%08d.ts';
+            $directory = dirname($pattern);
             foreach ($lines as &$line) {
                 if (str_starts_with($line, '#EXTINF:')) {
                     if ($duration !== null || ! preg_match('/\A#EXTINF:([0-9]+(?:\.[0-9]+)?),\z/', $line, $match)
@@ -161,8 +184,9 @@ class PendingHlsExport extends PendingExport
                     $peak = max($peak, (int) ceil(8 * $size / $duration));
                     $longest = max($longest, $duration);
                     $destination = $output->destination();
-                    $line = 'segment-'.sprintf('%08d', $count++).'.ts';
-                    $destination['path'] = dirname($destination['path']).'/'.$line;
+                    $destination['path'] = ($directory === '.' ? '' : $directory.'/').sprintf(basename($pattern), $count++);
+                    $line = $this->relativeUrl($destination['path'], $output->destination()['path']);
+                    $this->variantFiles[$name][$destination['path']] = true;
                     $segments[] = ['path' => $local, 'output' => $index, 'role' => 'hls-segment', 'destination' => $destination, 'probe' => $count === 1];
                     $duration = null;
                 }
@@ -183,9 +207,10 @@ class PendingHlsExport extends PendingExport
             }
             $masterLines[] = '#EXT-X-STREAM-INF:BANDWIDTH='.$peak.',AVERAGE-BANDWIDTH='.(int) ceil(8 * $bytes / $total)
                 .($attributes === '' ? '' : ','.$attributes);
-            $masterLines[] = array_keys($this->variants)[$index].'/index.m3u8';
+            $masterLines[] = $this->relativeUrl($output->destination()['path'], $outputs[array_key_last($outputs)]->destination()['path']);
             $lines[$targets[0]] = '#EXT-X-TARGETDURATION:'.max(1, (int) ceil($longest));
             $this->writePlaylist($paths[$index], $lines);
+            $this->variantFiles[$name][$output->destination()['path']] = true;
             $playlists[] = ['path' => $paths[$index], 'output' => $index, 'role' => 'hls-playlist', 'destination' => $output->destination()];
         }
 
@@ -197,6 +222,18 @@ class PendingHlsExport extends PendingExport
         $this->validateDestinations(array_map(fn ($artifact) => new ExportOutput($artifact['destination']['path'], $outputs[$artifact['output']]->filesystem()), $artifacts));
 
         return $artifacts;
+    }
+
+    private function relativeUrl(string $target, string $playlist): string
+    {
+        $from = dirname($playlist) === '.' ? [] : explode('/', dirname($playlist));
+        $to = explode('/', $target);
+        while ($from !== [] && $to !== [] && $from[0] === $to[0]) {
+            array_shift($from);
+            array_shift($to);
+        }
+
+        return implode('/', [...array_fill(0, count($from), '..'), ...array_map('rawurlencode', $to)]);
     }
 
     private function playlistLines(string $path): array

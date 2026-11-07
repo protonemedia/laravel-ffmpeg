@@ -174,7 +174,22 @@ The default layout places each variant's `index.m3u8` and `segment-00000000.ts` 
 
 The result lists all segments first, then variant playlists, then the master. Their roles are `hls-segment`, `hls-playlist`, and `hls-master`. Publication follows that order. A failed upload identifies the concrete published siblings and failed destination without deleting successful uploads. Saving replaces the requested definitions, does not append variants or remove old files, and is not transactional. Existing segments may already be replaced when a later upload fails.
 
-Custom playlist and segment paths, playlist hooks, AES-128 encryption and rotation, dynamic responses, two-pass HLS, and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
+Variant playlists and segments can use separate destination directories:
+
+```php
+$result = $media->hls(segmentDuration: 6)
+	->variant('360p', fn (HlsVariant $variant) => $variant->resize(height: 360),
+		playlist: 'playlists/360p/index.m3u8', segments: 'segments/360p/part-%03d.ts')
+	->variant('720p', fn (HlsVariant $variant) => $variant->resize(height: 720),
+		playlist: 'playlists/720p/index.m3u8', segments: 'segments/720p/part-%d.ts')
+	->toDisk('streams')->save('catalog/master.m3u8');
+```
+
+`playlist:` and `segments:` are optional disk-relative keys, not paths relative to the master. Playlists require an `.m3u8` extension. A segment pattern requires a `.ts` extension and exactly one `%d` or `%01d` through `%09d` placeholder in the filename, with no other percent signs. Numbering starts at zero. Without `segments:`, segments use the variant playlist's directory and the default `segment-%08d.ts` pattern. A playlist at the disk root is supported.
+
+Each playlist references files relative to its own directory, with path components percent-encoded for URLs. Normalized destination keys remain unchanged in Storage and result records. `variant($name)->files()` selects the files owned by that variant, even when variants share a segment directory or use the same playlist basename. Concrete destination collisions, including equivalent numbering patterns, fail before any publication. Custom destinations never enter FFmpeg arguments.
+
+Playlist hooks, AES-128 encryption and rotation, dynamic responses, two-pass HLS, and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
 
 ### Progress helpers
 
@@ -421,7 +436,7 @@ Preparation returns an immutable media descriptor. Construction and inspection d
 
 URL images always download through Laravel Http before preparation, even when the source descriptor selects direct input. Callbacks and FFmpeg receive local filenames, never URLs or headers. Input and prepared output must have readable raster image headers. Callback errors and invalid prepared images fail with phase `staging` and category `resource`, without publication or an exception chain that could expose private paths or credentials. FFmpeg still validates image decoding. The callback is trusted application code, not a sandbox.
 
-Ordinary exports are verified with transparent local and staged PNGs, scaled bottom-right offsets, persistent overlays, unchanged decoded audio, private-copy preprocessing, source retention, and repeated executions. Watermark integration with native HLS remains open.
+Ordinary exports are verified with transparent local and staged PNGs, scaled bottom-right offsets, persistent overlays, unchanged decoded audio, private-copy preprocessing, source retention, and repeated executions. Native HLS acceptance also verifies a shared overlay graph with two scaled branches, accurate clipping, and decoded watermark pixels.
 
 ### Composition and resources
 
@@ -525,7 +540,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Real two-track PCM verifies mean and peak volume, track selection, filters, silence, local and staged inputs, inspectable nonzero exits, opt-in exceptions, redaction, timeout reaping, source retention, and cleanup without publication |
 | Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle and real child reaping verified; both encoding passes, failure cleanup, and cancellation covered |
 | Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `ExportTest`, `TileTest` | Multiple single-file outputs and owned HLS inventories verified, including publication order, validation before writes, concrete partial failures, source protection, and cleanup |
-| Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `NativeHlsTest`, legacy `HlsExportTest`, `HLSPlaylistGeneratorTest` | Multiple variants, complete playlist decoding, segment keyframes and aligned boundaries, audio-only artwork exclusion, silent video, first/all audio, copy, clipped watermarks, staged input, streamed publication, and relative references under a nested master verified; custom paths and playlist hooks remain open |
+| Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `NativeHlsTest`, legacy `HlsExportTest`, `HLSPlaylistGeneratorTest` | Multiple variants, complete playlist decoding, segment keyframes and aligned boundaries, audio-only artwork exclusion, silent video, first/all audio, copy, clipped watermarks, staged input, streamed publication, and custom nested playlist and segment paths verified; playlist hooks remain open |
 | Encrypted HLS | Decrypt AES-128 segments and verify IVs, supplied keys, key rotation boundaries, private key storage, and failure cleanup. | `EncryptedHlsExportTest` | Open |
 | Dynamic HLS | Rewrite master, variant, segment, and key URLs relative to their containing playlists. Verify response integration and missing or invalid input errors. | `DynamicHLSPlaylistTest` | Open |
 | Extension points | Inspect scoped argument arrays without execution. Preserve custom filters, playlist hooks, and output configuration without arbitrary driver forwarding. | `NativeExportTest`, `NativeCompositionTest`, `BeforeSavingTest`, README | Pure inspection, scoped options, graphs, and output callbacks implemented; playlist hooks open |
