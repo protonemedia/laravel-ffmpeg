@@ -11,11 +11,11 @@ abstract class PendingImages extends PendingExport
 {
     protected string $outputRole = 'image';
 
-    public function __construct(Media $media, string|Filesystem $disk)
+    public function __construct(Media $media, string|Filesystem $disk, string $map = '0:V:0')
     {
         parent::__construct($media, $disk);
 
-        $this->map('0:V:0')->withoutMetadata(chapters: true)->video('mjpeg');
+        $this->map($map)->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
     public function save(?string $path = null): ExportResult

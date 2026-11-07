@@ -727,6 +727,86 @@ class NativeExportTest extends TestCase
     }
 
     #[Test]
+    public function waveform_arguments_and_invalid_images_fail_without_publication(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('memory')->open('source.mp4');
+
+        foreach ([
+            fn () => $media->waveform(width: 0),
+            fn () => $media->waveform(height: -1),
+            fn () => $media->waveform(colors: []),
+            fn () => $media->waveform(colors: ['red|blue']),
+            fn () => $media->waveform(colors: ['red:draw=full']),
+            fn () => $media->waveform(colors: ['#fff']),
+            fn () => $media->waveform(colors: [123]),
+            fn () => $media->waveform()->clip(0, duration: 1, seek: 'keyframe')->inspect(),
+        ] as $invalid) {
+            try {
+                $invalid();
+                $this->fail('An invalid waveform request was accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        Process::assertNothingRan();
+
+        $this->fakePipeline();
+        try {
+            $media->waveform()->save('invalid-wave.png');
+            $this->fail('Invalid waveform image bytes must not publish.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
+        }
+        $this->assertFalse(Storage::disk('memory')->exists('invalid-wave.png'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function real_waveforms_render_audio_levels_filters_clips_colors_and_geometry(): void
+    {
+        $probe = getenv('FFMPEG_9_FFPROBE');
+
+        if (! $probe) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real waveform images.');
+        }
+
+        $ffmpeg = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $fixture = $this->root.'/levels.wav';
+        $generation = Process::run([
+            $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'aevalsrc=if(lt(t\,0.3)\,0\,0.8):s=8000:d=1.2',
+            '-c:a', 'pcm_s16le', $fixture,
+        ]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        Storage::disk('memory')->put('levels.wav', file_get_contents($fixture));
+        $media = FFMpeg::disk('memory')->open('levels.wav');
+        $operation = $media->waveform(width: 80, height: 41);
+        $inspection = $operation->inspect();
+        $this->assertSame($inspection, $operation->inspect());
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $result = $operation->onProgress(fn (Progress $progress) => $this->assertNull($progress->percentage))->save('wave.png');
+        $this->assertSame('image', $result->file()->role);
+        $bytes = Storage::disk('memory')->get('wave.png');
+        $this->assertSame([80, 41, IMAGETYPE_PNG], array_slice(getimagesizefromstring($bytes), 0, 3));
+        $image = imagecreatefromstring($bytes);
+        $this->assertSame(0, imagecolorsforindex($image, imagecolorat($image, 5, 10))['blue']);
+        $this->assertGreaterThan(200, imagecolorsforindex($image, imagecolorat($image, 60, 10))['blue']);
+
+        $media->waveform(width: 80, height: 41)->audioFilter('volume=0')->save('muted.png');
+        $muted = imagecreatefromstring(Storage::disk('memory')->get('muted.png'));
+        $this->assertSame(0, imagecolorsforindex($muted, imagecolorat($muted, 60, 10))['blue']);
+
+        $media->waveform(width: 80, height: 41, colors: ['#ff0000'])->clip(0.6, duration: 0.3)
+            ->resize(width: 40)->save('clipped.jpg');
+        $bytes = Storage::disk('memory')->get('clipped.jpg');
+        $this->assertSame([40, 20, IMAGETYPE_JPEG], array_slice(getimagesizefromstring($bytes), 0, 3));
+        $clipped = imagecreatefromstring($bytes);
+        $this->assertGreaterThan(200, imagecolorsforindex($clipped, imagecolorat($clipped, 2, 5))['red']);
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
     public function generated_files_read_streams_and_delegate_temporary_urls_to_the_retained_filesystem(): void
     {
         $this->fakePipeline();

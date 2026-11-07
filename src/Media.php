@@ -55,6 +55,11 @@ readonly class Media
         return new PendingFrames($this, $this->defaultOutputDisk(), $every, $count);
     }
 
+    public function waveform(int $width = 640, int $height = 120, array $colors = ['blue']): PendingWaveform
+    {
+        return new PendingWaveform($this, $this->defaultOutputDisk(), $width, $height, $colors);
+    }
+
     /** @internal */
     public function defaultOutputDisk(): string|Filesystem
     {

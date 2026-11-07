@@ -64,6 +64,20 @@ Count-based extraction requires a known, positive duration and produces exactly 
 
 Destinations require one `%d` or `%01d` through `%09d` placeholder in the filename, with no other percent signs. Numbering starts at one. Encoding uses a private workspace pattern, never the caller's destination as an FFmpeg path. All numbered files must be contiguous and valid JPEG or PNG images before any Storage write starts. Publication is not atomic. An upload failure reports concrete published paths and the failed destination, without deleting successful siblings. Storyboards and image-sequence inputs remain open.
 
+### Waveform images
+
+```php
+$media->waveform(width: 640, height: 120, colors: ['#0000ff'])
+	->toDisk('previews')->save('audio/waveform.png');
+$media->waveform(width: 640, height: 120, colors: ['red'])
+	->audioFilter('volume=0.5')->clip(10, duration: 5)
+	->resize(width: 320)->save('audio/excerpt.jpg');
+```
+
+`waveform()` renders the first audio stream through FFmpeg's `showwavespic` filter. Defaults are 640 × 120 pixels with blue channels on one canvas. Dimensions are positive integers and may be odd. Colors are a nonempty list of FFmpeg color names, six-digit RGB strings, or eight-digit RGBA strings. Hexadecimal colors require a `#` or `0x` prefix. Filter syntax is not accepted as a color.
+
+Audio filters run before accurate audio trimming and waveform rendering. Geometry and other video filters run after rendering, inside the same owned graph. Keyframe clips are rejected. Each call creates fresh settings. `save()` publishes a validated JPEG or PNG with the image role, using the same Storage options, lifecycle events, cancellation, and workspace cleanup as other images. Percentage remains unknown. A waveform image is not waveform-peaks data or a live audio visualizer.
+
 ### Progress helpers
 
 ```php
@@ -327,7 +341,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `NativeExportTest`, `FrameTest` | Single images and interval/count output sequences verified with real media; image-quality controls remain available through output options |
 | Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `ExportTest` | Open |
 | Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `TileTest`, `VTTPreviewThumbnailsGeneratorTest` | Open |
-| Waveform images | Generate and inspect an actual waveform image from audio. | `MediaOpenerTest` only checks the old object type. New rendered-output acceptance required. | Open |
+| Waveform images | Generate and inspect an actual waveform image from audio. | `NativeExportTest`; `MediaOpenerTest` only checks the old object type | Real amplitude, muted audio, clipped timing, colors, odd image dimensions, and post-render resize verified |
 | Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `WatermarkTest`, `WatermarkFactoryTest`, `HlsExportTest` | Open |
 | Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Open |
 | Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle and real child reaping verified; both encoding passes, failure cleanup, and cancellation covered |
