@@ -14,7 +14,7 @@ class ProgressParser
 
     private ?Progress $pending = null;
 
-    public function __construct(private readonly ?float $duration) {}
+    public function __construct(private readonly ?float $duration, private readonly int $pass = 1, private readonly int $totalPasses = 1) {}
 
     public function push(string $chunk): void
     {
@@ -51,6 +51,7 @@ class ProgressParser
                 $known ? min(100, 100 * $seconds / $this->duration) : null,
                 $speed,
                 $known && $speed !== null ? max(0, ($this->duration - $seconds) / $speed) : null,
+                $this->pass, $this->totalPasses,
             );
             $this->record = [];
         }

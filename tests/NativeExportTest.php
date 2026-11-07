@@ -592,6 +592,141 @@ class NativeExportTest extends TestCase
     }
 
     #[Test]
+    public function two_pass_encoding_requires_explicit_video_bitrate_without_crf(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('absent.mp4');
+
+        foreach ([
+            fn () => $media->export()->twoPass()->inspect(),
+            fn () => $media->export()->video('libx264', crf: 23)->twoPass()->inspect(),
+            fn () => $media->export()->video(bitrate: '150k')->twoPass()->inspect(),
+            fn () => $media->export()->video('copy', bitrate: '150k')->twoPass()->inspect(),
+            fn () => $media->export()->video('libx264', bitrate: '150k')->withoutVideo()->twoPass()->inspect(),
+            fn () => $media->frame()->twoPass(),
+        ] as $invalid) {
+            try {
+                $invalid();
+                $this->fail('Invalid two-pass encoding was accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        $this->assertNotContains('-pass:v', $media->export()->video('libx264', bitrate: '150k')->inspect());
+        Process::assertNothingRan();
+
+        $this->fakePipeline(metadata: '{"format":{"duration":"1"},"streams":[{"index":0,"codec_type":"audio"}]}');
+        try {
+            FFMpeg::disk('memory')->open('source.mp4')->export()->video('libx264', bitrate: '150k')->twoPass()->save('audio.mp4');
+            $this->fail('An audio-only selection cannot produce video pass statistics.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['probing', 'mapping'], [$exception->phase, $exception->category]);
+        }
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function two_pass_failures_and_cancellation_never_publish_or_retain_statistics(): void
+    {
+        foreach (['missing', 'first', 'second', 'cancel-first', 'cancel-second'] as $failure) {
+            $this->fakePipeline(function (PendingProcess $process) use ($failure) {
+                $pass = (int) $process->command[array_search('-pass:v', $process->command, true) + 1];
+
+                if ($pass === 1 && $failure !== 'missing') {
+                    file_put_contents($process->path.'/pass-0-0.log', 'private statistics');
+                } elseif ($pass === 2) {
+                    file_put_contents(end($process->command), 'encoded media');
+                }
+
+                return Process::result(exitCode: ($failure === 'first' && $pass === 1) || ($failure === 'second' && $pass === 2) ? 7 : 0);
+            });
+
+            try {
+                FFMpeg::disk('memory')->open('source.mp4')->export()->video('libx264', bitrate: '150k')->twoPass()
+                    ->onProgress(function (Progress $progress) use ($failure) {
+                        if ($progress->isEncoding() && (($failure === 'cancel-first' && $progress->pass === 1)
+                            || ($failure === 'cancel-second' && $progress->pass === 2))) {
+                            throw new ExportCancelled('cancel pass');
+                        }
+                    })->save('failed.mp4');
+                $this->fail('A failed or cancelled pass must not publish.');
+            } catch (ExportCancelled $exception) {
+                $this->assertStringStartsWith('cancel-', $failure);
+            } catch (MediaException $exception) {
+                $this->assertSame(['encoding', $failure === 'missing' ? 'artifact' : 'exit'], [$exception->phase, $exception->category]);
+                $this->assertSame([], $exception->published);
+            }
+            $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
+        }
+        Event::assertNotDispatched(Events\ExportCompleted::class);
+    }
+
+    #[Test]
+    public function real_two_pass_exports_keep_independent_output_statistics_and_report_both_passes(): void
+    {
+        $probe = getenv('FFMPEG_9_FFPROBE');
+
+        if (! $probe) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real two-pass encoding.');
+        }
+
+        $ffmpeg = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $fixture = $this->root.'/passes.mkv';
+        $generation = Process::run([
+            $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=1.2',
+            '-f', 'lavfi', '-i', 'sine=frequency=700:sample_rate=48000:duration=1.2',
+            '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $fixture,
+        ]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        Storage::disk('memory')->put('passes.mkv', file_get_contents($fixture));
+        $media = FFMpeg::disk('memory')->open('passes.mkv');
+        $snapshots = [];
+        $nested = false;
+        $export = $media->export()->twoPass()->filterComplex('[0:v]split[full][branch];[branch]scale=48:32[small]')
+            ->output('full.mp4', fn ($out) => $out->map('[full]')->map('0:a:0')
+                ->video('libx264', bitrate: '150k', preset: 'medium')->audio('aac', bitrate: '64k')
+                ->clip(0.1, duration: 0.5)->outputOptions(['-movflags', '+faststart'])->toDisk('memory'))
+            ->output('small.mkv', fn ($out) => $out->map('[small]')->video('libx264', bitrate: '80k')
+                ->clip(0.2, duration: 0.3)->toDisk('memory'))
+            ->onProgress(function (Progress $progress) use (&$snapshots, &$nested, $media) {
+                $snapshots[] = $progress;
+                $this->assertFalse(Storage::disk('memory')->exists('full.mp4'));
+                $this->assertFalse(Storage::disk('memory')->exists('small.mkv'));
+
+                if (! $nested && $progress->isEncoding() && $progress->pass === 1 && $progress->elapsedSeconds !== null) {
+                    $nested = true;
+                    $media->export()->video('libx264', bitrate: '60k')->withoutAudio()->resize(32, 32)
+                        ->clip(0, duration: 0.2)->twoPass()->save('nested.mp4');
+                }
+            });
+        $inspection = $export->inspect();
+        $this->assertSame($inspection, $export->inspect());
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $result = $export->save();
+
+        $this->assertCount(2, $result->processes());
+        $this->assertSame([0, 0], $result->processes()->pluck('exit_code')->all());
+        $encoding = array_values(array_filter($snapshots, fn ($progress) => $progress->isEncoding()));
+        $this->assertSame([1, 2], array_values(array_unique(array_column($encoding, 'pass'))));
+        $this->assertSame([2], array_values(array_unique(array_column($encoding, 'totalPasses'))));
+        $updates = array_values(array_filter($encoding, fn ($progress) => $progress->elapsedSeconds !== null));
+        $this->assertSame([1, 2], array_values(array_unique(array_column($updates, 'pass'))));
+        $this->assertCount(2, $result->files());
+        $full = FFMpeg::disk('memory')->open('full.mp4')->probe();
+        $small = FFMpeg::disk('memory')->open('small.mkv')->probe();
+        $inner = FFMpeg::disk('memory')->open('nested.mp4')->probe();
+        $this->assertSame([32, 32, false], [$inner->video()->width(), $inner->video()->height(), $inner->hasAudio()]);
+        $this->assertSame([96, 64, 'h264', 'aac'], [$full->video()->width(), $full->video()->height(), $full->video()->codec(), $full->audio()->codec()]);
+        $this->assertSame([48, 32, 'h264', false], [$small->video()->width(), $small->video()->height(), $small->video()->codec(), $small->hasAudio()]);
+        $this->assertEqualsWithDelta(0.5, $full->duration(), 0.05);
+        $this->assertEqualsWithDelta(0.3, $small->duration(), 0.05);
+        $this->assertSame($inspection, $export->inspect());
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
     public function generated_files_read_streams_and_delegate_temporary_urls_to_the_retained_filesystem(): void
     {
         $this->fakePipeline();

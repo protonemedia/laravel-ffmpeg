@@ -39,6 +39,8 @@ class PendingExport
 
     private bool $running = false;
 
+    private bool $twoPass = false;
+
     protected string $outputRole = 'media';
 
     public function __construct(private readonly Media $media, string|Filesystem $disk)
@@ -165,6 +167,19 @@ class PendingExport
         return $this->command($this->configuredOutputs(), array_map(fn ($i) => '[input:'.$i.']', array_keys($this->inputs)));
     }
 
+    public function twoPass(): self
+    {
+        $this->assertMutable();
+
+        if ($this->outputRole !== 'media') {
+            throw new InvalidArgumentException('Two-pass encoding requires video media outputs, not images.');
+        }
+
+        $this->twoPass = true;
+
+        return $this;
+    }
+
     protected function configuredOutputs(?string $path = null): array
     {
         if ($this->outputs !== []) {
@@ -255,6 +270,18 @@ class PendingExport
                     ? $filter->toFilter(fn ($role) => $resources['helper:'.spl_object_id($filter).':'.$role]['path'])
                     : FilterGraph::resources($filter, $resources, $used);
             }, $maps);
+
+            if ($this->twoPass) {
+                $settings = $output->outputConfiguration();
+                $video = $settings['video'];
+
+                if ($settings['omitVideo'] || ! isset($video['codec'], $video['bitrate'])
+                    || $video['codec'] === 'copy' || isset($video['crf'])) {
+                    throw new InvalidArgumentException('Every two-pass output requires an explicit video encoder and target bitrate, without CRF.');
+                }
+
+                array_push($options, '-pass:v', '2', '-passlogfile:v', 'pass-'.$index);
+            }
 
             $compiledOutputs[] = ['path' => $outputPaths[$index] ?? '[output:'.$index.']', 'options' => $options];
         }
@@ -356,6 +383,11 @@ class PendingExport
                 $this->validateResources($workspace, $runner, $resources);
                 $metadata = array_map(fn ($media) => $workspace->probe($media), $this->inputs);
                 $expected = array_map(fn ($output) => $this->selectedStreams($output, $workspace, $metadata), $outputs);
+
+                if ($this->twoPass && array_any($expected, fn ($streams) => ! in_array('video', $streams, true) && ! in_array(null, $streams, true))) {
+                    throw new MediaException('Every two-pass output must select video.', $phase, 'mapping');
+                }
+
                 $outputPaths = $this->outputPaths($outputs, $workspace);
 
                 foreach ($outputPaths as $index => $outputPath) {
@@ -369,18 +401,54 @@ class PendingExport
                     return $duration === null ? null : ($clip === null ? $duration : max(0, min($clip['duration'], $duration - $clip['start'])));
                 }, $outputs);
                 $phase = Progress::ENCODING;
-                $this->notify(new Progress($phase));
-                $process = $runner->run(
-                    $this->command($outputs, $paths, $outputPaths), $workspace->path, $redactions,
-                    phase: $phase, progress: new ProgressParser($duration === null ? null : max($durations)), onProgress: $this->progress,
-                );
+                $command = $this->command($outputs, $paths, $outputPaths);
+                $summaries = [];
+                $totalPasses = $this->twoPass ? 2 : 1;
 
-                if ($process->exitCode !== 0) {
-                    $category = str_contains($process->diagnostics, 'Streamcopy requested for output stream fed from a complex filtergraph')
-                        || str_contains($process->diagnostics, 'Simple and complex filtering cannot be used together')
-                        ? 'configuration' : 'exit';
+                for ($pass = 1; $pass <= $totalPasses; $pass++) {
+                    $this->notify(new Progress($phase, pass: $pass, totalPasses: $totalPasses));
+                    $passCommand = $command;
 
-                    throw new MediaException('FFmpeg failed (exit '.$process->exitCode.').', $phase, $category, $process->diagnostics);
+                    if ($totalPasses === 2 && $pass === 1) {
+                        $passCommand = [];
+
+                        foreach ($command as $index => $token) {
+                            $output = array_search($token, $outputPaths, true);
+
+                            if ($output !== false) {
+                                $target = $workspace->path.'/analysis-'.$output.'.null';
+                                $redactions[$target] = '[analysis:'.$output.']';
+                                array_push($passCommand, '-f', 'null', $target);
+                            } else {
+                                $passCommand[] = ($command[$index - 1] ?? null) === '-pass:v' ? '1' : $token;
+                            }
+                        }
+                    }
+
+                    $process = $runner->run(
+                        $passCommand, $workspace->path, $redactions,
+                        phase: $phase, progress: new ProgressParser($duration === null ? null : max($durations), $pass, $totalPasses), onProgress: $this->progress,
+                    );
+
+                    if ($process->exitCode !== 0) {
+                        $category = str_contains($process->diagnostics, 'Streamcopy requested for output stream fed from a complex filtergraph')
+                            || str_contains($process->diagnostics, 'Simple and complex filtering cannot be used together')
+                            ? 'configuration' : 'exit';
+
+                        throw new MediaException('FFmpeg failed (exit '.$process->exitCode.').', $phase, $category, $process->diagnostics);
+                    }
+
+                    $summaries[] = $process->summary();
+
+                    if ($totalPasses === 2 && $pass === 1) {
+                        foreach (array_keys($outputs) as $index) {
+                            $logs = glob($workspace->path.'/pass-'.$index.'-*.log') ?: [];
+
+                            if (! array_any($logs, fn ($log) => is_file($log) && filesize($log) > 0)) {
+                                throw new MediaException('The first encoding pass did not produce statistics for output '.$index.'.', $phase, 'artifact');
+                            }
+                        }
+                    }
                 }
 
                 $phase = Progress::VALIDATION;
@@ -452,7 +520,7 @@ class PendingExport
                     $files[] = new GeneratedFile($disk, $destination['disk'], $destination['path'], $sizes[$index], role: $this->outputRole);
                 }
 
-                return new ExportResult($files, [$process->summary()]);
+                return new ExportResult($files, $summaries);
             });
         } catch (Throwable $exception) {
             $event = $exception instanceof ExportCancelled ? Events\ExportCancelled::class : Events\ExportFailed::class;

@@ -22,7 +22,7 @@ All outputs, including local destinations, are generated in the workspace. Every
 
 `save()` returns generated-file records and bounded, redacted process summaries. Structured progress separates staging, probing, encoding, validation, and publication. Percentage, speed, and remaining time can be unknown. A callback can cancel by throwing `Exceptions\ExportCancelled`; other callback exceptions propagate unchanged as failures. Both stop and reap the child before workspace cleanup. Lifecycle events work without a progress callback, and completion follows publication and cleanup.
 
-The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, additional geometry helpers, two-pass encoding, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
+The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, additional geometry helpers, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
 
 ### Native acceptance toolchain
 
@@ -157,6 +157,22 @@ $media->export()->clip(13.375, duration: '00:00:02.125');
 Input options, `globalOptions()`, and `outputOptions()` accept flat option/value pairs from a closed allowlist. Every allowed option has library-defined arity and value validation. Unknown options, aliases, switches with caller-supplied values, duplicate nonrepeatable options, filename controls, authentication headers, and encoder parameter blobs are rejected. Output `-f` permits only listed single-file muxers. These methods are not unrestricted argv passthrough.
 
 Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. A per-input `-protocol_whitelist file` prevents direct network protocols, but does not isolate local file access or apply to files opened by filters. Untrusted media still requires process isolation and resource limits. A demuxer allowlist remains under investigation and is not implemented in this checkpoint.
+
+### Two-pass bitrate encoding
+
+```php
+$result = $media->export()
+	->video('libx264', bitrate: '2500k', preset: 'medium')
+	->audio('aac', bitrate: '128k')
+	->twoPass()
+	->save('converted.mp4');
+```
+
+An ordinary export runs one encoding pass. `twoPass()` explicitly runs two passes for every output in that export. Every output requires an explicit video encoder and target bitrate, without CRF or video stream copy. Images and audio-only selections are rejected. The encoder must support FFmpeg's `-pass` and `-passlogfile` mechanism. Real acceptance covers libx264. Hardware-internal multipass is separate.
+
+Both passes use the same inputs, maps, graph, filters, clips, and encoding settings. The first pass uses null muxers and publishes nothing. Each output has a separate statistics prefix relative to its operation-private workspace. Missing or empty first-pass statistics fail before the final pass. Statistics remain private and are removed after success, failure, or cancellation. Concurrent or nested exports cannot overwrite one another's statistics.
+
+Encoding progress reports `pass` as one or two and `totalPasses` as two, including encoding-start notifications. Percentage and remaining time describe the current pass, not the whole operation. Timing-changing graphs leave percentage unknown. The result contains both process summaries in order. Validation and publication follow the final pass, and completion follows cleanup. `inspect()` remains pure and shows the final-pass command with private relative statistics prefixes.
 
 ### Stream selection shortcuts
 
@@ -303,7 +319,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Independent operations | Start two exports from the same media descriptor without inheriting settings or temporary files. | `NativeExportTest`, `ExportTest`, `MediaOpenerTest` | Single-output builders and repeated real exports verified |
 | Stream selection | Use multilingual audio, forced subtitles, cover art, and chapters. Verify ordered, optional, and negative maps and resulting dispositions. | `NativeExportTest`, `HlsExportTest` | Language selection, negative maps, order, dispositions, and absent optional maps verified; subtitle/artwork exports open |
 | Metadata preservation | Copy global tags. Preserve chapters only for an unchanged timeline unless explicitly transformed. Test remove and override controls. | `NativeExportTest` | Copy, override, and clip chapter omission verified; broader removal cases open |
-| Quality and passes | Compare CRF and target-bitrate contracts. Reject conflicts. Prove explicit two-pass encoding with isolated pass logs. | `NativeExportTest`, `ExportTest`, README pass-progress contract | CRF and conflict checks verified; two-pass open |
+| Quality and passes | Compare CRF and target-bitrate contracts. Reject conflicts. Prove explicit two-pass encoding with isolated pass logs. | `NativeExportTest`, `ExportTest`, README pass-progress contract | CRF and conflict checks verified; explicit libx264 two-pass verified with independent output logs and nested exports |
 | Copy and clipping | Remux without changing codecs. Distinguish accurate transcoding from keyframe copy cuts. Preserve audio offsets and VFR. | `NativeExportTest`, `CopyTest` | Remux, accurate duration, and decoded keyframe identity verified; VFR and offset coverage open |
 | Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `NativeCompositionTest`, `AddFilterTest`, `LegacyFilterMappingTest`, `ExportTest` | Simple filters, LUTs, fonts, literal text, and SRT/ASS/WebVTT rendering verified with real media, including clipped cue timing and manifest rejection |
 | Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `NativeCompositionTest`, `ExportTest` | Mixed-disk overlay, LUT, branching, independent clips, copied audio, validation, and partial publication verified |
@@ -314,7 +330,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Waveform images | Generate and inspect an actual waveform image from audio. | `MediaOpenerTest` only checks the old object type. New rendered-output acceptance required. | Open |
 | Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `WatermarkTest`, `WatermarkFactoryTest`, `HlsExportTest` | Open |
 | Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Open |
-| Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle verified, including real child reaping; multiple passes open |
+| Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle and real child reaping verified; both encoding passes, failure cleanup, and cancellation covered |
 | Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `ExportTest`, `TileTest` | Multiple single-file outputs verified; playlist/segment inventory open |
 | Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `HlsExportTest`, `HLSPlaylistGeneratorTest` | Open |
 | Encrypted HLS | Decrypt AES-128 segments and verify IVs, supplied keys, key rotation boundaries, private key storage, and failure cleanup. | `EncryptedHlsExportTest` | Open |
