@@ -28,14 +28,7 @@ class PendingFrames extends PendingImages
             throw new InvalidArgumentException('An image sequence requires a destination pattern.');
         }
 
-        $path = $this->configuredOutputs($path)[0]->destination()['path'];
-
-        if (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', $path)
-            || str_contains(dirname($path), '%')) {
-            throw new InvalidArgumentException('A sequence destination requires exactly one %d or %01d to %09d placeholder in its filename.');
-        }
-
-        return parent::save($path);
+        return parent::save($this->sequenceDestination($path));
     }
 
     protected function prepareEncoding(array $metadata): ?float
@@ -94,27 +87,6 @@ class PendingFrames extends PendingImages
 
     protected function artifacts(array $outputs, array $paths): array
     {
-        $extension = pathinfo($outputs[0]->destination()['path'], PATHINFO_EXTENSION);
-        $files = glob(dirname($paths[0]).'/frame-*.'.$extension) ?: [];
-        sort($files, SORT_NATURAL);
-
-        if ($files === [] || ($this->count !== null && count($files) !== $this->count)) {
-            throw new MediaException('FFmpeg did not produce the expected image sequence.', Progress::VALIDATION, 'artifact');
-        }
-
-        $destination = $outputs[0]->destination();
-        $artifacts = [];
-
-        foreach ($files as $index => $file) {
-            if (basename($file) !== sprintf('frame-%08d.'.$extension, $index + 1)) {
-                throw new MediaException('The generated image sequence is not contiguous.', Progress::VALIDATION, 'artifact');
-            }
-
-            $artifacts[] = ['path' => $file, 'output' => 0, 'destination' => [
-                'disk' => $destination['disk'], 'path' => sprintf($destination['path'], $index + 1),
-            ]];
-        }
-
-        return $artifacts;
+        return $this->sequenceArtifacts($outputs[0], $paths[0], $this->count);
     }
 }

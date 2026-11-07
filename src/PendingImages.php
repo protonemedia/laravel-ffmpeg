@@ -42,4 +42,41 @@ abstract class PendingImages extends PendingExport
 
         return $size;
     }
+
+    protected function sequenceDestination(string $path): string
+    {
+        $path = $this->configuredOutputs($path)[0]->destination()['path'];
+
+        if (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', $path)
+            || str_contains(dirname($path), '%')) {
+            throw new InvalidArgumentException('A sequence destination requires exactly one %d or %01d to %09d placeholder in its filename.');
+        }
+
+        return $path;
+    }
+
+    protected function sequenceArtifacts(ExportOutput $output, string $path, ?int $expected = null): array
+    {
+        $files = glob(str_replace('%08d', '*', $path)) ?: [];
+        sort($files, SORT_NATURAL);
+
+        if ($files === [] || ($expected !== null && count($files) !== $expected)) {
+            throw new MediaException('FFmpeg did not produce the expected image sequence.', Progress::VALIDATION, 'artifact');
+        }
+
+        $destination = $output->destination();
+        $artifacts = [];
+
+        foreach ($files as $index => $file) {
+            if ($file !== sprintf($path, $index + 1)) {
+                throw new MediaException('The generated image sequence is not contiguous.', Progress::VALIDATION, 'artifact');
+            }
+
+            $artifacts[] = ['path' => $file, 'output' => 0, 'destination' => [
+                'disk' => $destination['disk'], 'path' => sprintf($destination['path'], $index + 1),
+            ]];
+        }
+
+        return $artifacts;
+    }
 }
