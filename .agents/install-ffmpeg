@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Keep the native acceptance build identical in orbs and GitHub Actions.
+prefix=${1:-/opt/ffmpeg-9.0.2}
+SECONDS=0
+elevate=()
+if ((EUID != 0)); then
+    elevate=(sudo)
+fi
+
+packages=(build-essential ca-certificates curl pkg-config nasm libx264-dev libfreetype-dev libharfbuzz-dev libass-dev fonts-dejavu-core)
+missing=()
+for package in "${packages[@]}"; do
+    if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -qx 'install ok installed'; then
+        missing+=("$package")
+    fi
+done
+if ((${#missing[@]})); then
+    "${elevate[@]}" apt-get update
+    "${elevate[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+fi
+
+if [[ -x "$prefix/bin/ffmpeg" && -x "$prefix/bin/ffprobe" ]] &&
+    [[ $("$prefix/bin/ffmpeg" -version | head -n 1) == 'ffmpeg version 9.0.2 '* ]] &&
+    [[ $("$prefix/bin/ffprobe" -version | head -n 1) == 'ffprobe version 9.0.2 '* ]]; then
+    echo "FFmpeg/FFprobe 9.0.2 ready at $prefix (${SECONDS}s elapsed)."
+    exit 0
+fi
+
+temporary_dir=$(mktemp -d)
+trap 'rm -rf "$temporary_dir"' EXIT
+echo 'Building FFmpeg/FFprobe 9.0.2 for native acceptance...'
+curl --fail --location --retry 3 --connect-timeout 15 --max-time 180 \
+    https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n9.0.2.tar.gz -o "$temporary_dir/source.tar.gz"
+echo "6e374ed621e48faa40639307dff48ba6fe574a509977956d2cce9669b7cc27e9  $temporary_dir/source.tar.gz" | sha256sum --check
+tar -xzf "$temporary_dir/source.tar.gz" -C "$temporary_dir"
+cd "$temporary_dir/FFmpeg-n9.0.2"
+./configure --prefix="$prefix" --disable-doc --disable-debug --disable-autodetect --disable-ffplay \
+    --enable-gpl --enable-libx264 --enable-libfreetype --enable-libharfbuzz --enable-libass
+make -j"$(nproc)"
+make DESTDIR="$temporary_dir/install" install
+"${elevate[@]}" mkdir -p "$prefix"
+"${elevate[@]}" cp -a "$temporary_dir/install$prefix/." "$prefix/"
+"$prefix/bin/ffmpeg" -version
+"$prefix/bin/ffprobe" -version
+echo "Native acceptance build installed (${SECONDS}s elapsed)."

@@ -24,6 +24,16 @@ All outputs, including local destinations, are generated in the workspace. Every
 
 The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, additional geometry helpers, two-pass encoding, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
 
+### Native acceptance toolchain
+
+`.agents/setup` installs matching FFmpeg and FFprobe 9.0.2 binaries at `/opt/ffmpeg-9.0.2/bin`. The shared `.agents/install-ffmpeg` script verifies the source archive's SHA-256 before building with libx264, FreeType, HarfBuzz, and libass. An existing matching pair is reused. Resume checks for the binaries without installing anything.
+
+```bash
+FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by random
+```
+
+CI uses the same installer and runs native real-media acceptance throughout the PHP 8.4/8.5 and Laravel 12/13 matrix. The compiled pair is cached by operating system, architecture, and installer contents. A cold installation compiles from source; warm setup and cache hits reuse the binaries. Distribution FFmpeg remains separate for legacy tests until the old backend is removed.
+
 ### Progress helpers
 
 ```php

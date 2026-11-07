@@ -43,6 +43,10 @@ fi
 "${elevate[@]}" update-alternatives --set php /usr/bin/php8.4
 echo "System packages ready (${SECONDS}s elapsed)."
 
+# Keep distribution FFmpeg for legacy tests until the old backend is removed.
+# Native acceptance uses the separate, matching 9.0.2 pair.
+.agents/install-ffmpeg
+
 # Debian 12's Composer predates PHP 8.4 support. Install Composer 2 once.
 if [[ ! -x /usr/local/bin/composer ]]; then
     echo 'Installing Composer 2...'
