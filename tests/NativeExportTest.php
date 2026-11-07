@@ -284,6 +284,61 @@ class NativeExportTest extends TestCase
     }
 
     #[Test]
+    public function clip_timecodes_normalize_all_positions_and_mix_with_numeric_seconds(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('absent.mkv');
+
+        foreach ([
+            ['01:02:59.75', null, '01:03:01.125', '3779.75', '1.375'],
+            [0, '00:00:00.125', null, '0', '0.125'],
+            ['100:00:00', 2, null, '360000', '2'],
+            ['00:00:13.000001', '00:00:01.000001', null, '13.000001', '1.000001'],
+            [1.25, null, '00:00:02.5', '1.25', '1.25'],
+            ['00:00:00.000001', '00:00:00.000002', null, '0.000001', '0.000002'],
+        ] as [$start, $duration, $end, $expectedStart, $expectedDuration]) {
+            $command = $media->export()->clip($start, duration: $duration, end: $end)->inspect();
+            $this->assertSame($expectedStart, $command[array_search('-ss', $command, true) + 1]);
+            $this->assertSame($expectedDuration, $command[array_search('-t', $command, true) + 1]);
+        }
+
+        $command = $media->export()->clip('00:00:00.000001', duration: '00:00:00.000002', seek: 'keyframe')->inspect();
+        $this->assertSame('0.000001', $command[array_search('-ss', $command, true) + 1]);
+        $this->assertLessThan(array_search('-i', $command, true), array_search('-ss', $command, true));
+        Process::assertNothingRan();
+    }
+
+    #[Test]
+    public function clip_rejects_invalid_timecodes_and_ranges_before_execution(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('absent.mkv');
+
+        foreach (['', '12.5', '1e2', '1s', '1:02:03', '00:60:00', '00:00:60', '-00:00:01',
+            '00:00:01.', '00:00:01.1234567', "00:00:01\n", ' 00:00:01', "00:00:01\0"] as $invalid) {
+            foreach ([[0, $invalid, null], [$invalid, 1, null], [0, null, $invalid]] as [$start, $duration, $end]) {
+                try {
+                    $media->export()->clip($start, duration: $duration, end: $end)->inspect();
+                    $this->fail('An invalid timecode was accepted.');
+                } catch (InvalidArgumentException) {
+                    $this->addToAssertionCount(1);
+                }
+            }
+        }
+
+        foreach ([[0, '00:00:00', null], ['00:00:01', null, 1], [2, null, '00:00:01'], [INF, 1, null]] as [$start, $duration, $end]) {
+            try {
+                $media->export()->clip($start, duration: $duration, end: $end)->inspect();
+                $this->fail('An invalid clip range was accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        Process::assertNothingRan();
+    }
+
+    #[Test]
     public function a_single_export_publishes_only_after_validation_and_cleans_before_completion(): void
     {
         $this->fakePipeline();
@@ -580,7 +635,7 @@ class NativeExportTest extends TestCase
         $absentMetadata = FFMpeg::disk('memory')->open($absentSelection->file()->path)->probe();
         $this->assertSame(['video'], $absentMetadata->streams()->map(fn ($stream) => $stream->get('codec_type'))->all());
 
-        $media->export()->video('copy')->audio('copy')->clip(1.3, duration: 0.6, seek: 'keyframe')->toDisk('local')->save('keyframe.mkv');
+        $media->export()->video('copy')->audio('copy')->clip('00:00:01.300', duration: '00:00:00.600', seek: 'keyframe')->toDisk('local')->save('keyframe.mkv');
         $keyframe = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('keyframe.mkv'), '-map', '0:v:0', '-frames:v', '1', '-f', 'md5', '-']);
         $sourceFrame = Process::run([$ffmpeg, '-v', 'error', '-i', $fixture, '-map', '0:v:0', '-vf', 'select=eq(n\\,10)', '-frames:v', '1', '-f', 'md5', '-']);
         $this->assertTrue($keyframe->successful(), $keyframe->errorOutput());
@@ -588,7 +643,7 @@ class NativeExportTest extends TestCase
         $this->assertSame($sourceFrame->output(), $keyframe->output());
 
         $clip = $media->export()->video('libx264', crf: 25, preset: 'ultrafast')->audio('aac', bitrate: '64k')
-            ->videoFilter('crop=120:80:20:4')->videoFilter('scale=60:40')->clip(0.4, duration: 1.2)
+            ->videoFilter('crop=120:80:20:4')->videoFilter('scale=60:40')->clip('00:00:00.400', end: '00:00:01.600')
             ->metadata('title', 'Trimmed lecture')->toDisk('local', ['visibility' => 'private'])->save('clips/trimmed.mp4');
         $metadata = FFMpeg::disk('local')->open($clip->file()->path)->probe();
         $this->assertEqualsWithDelta(1.2, $metadata->duration(), 0.12);

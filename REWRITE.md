@@ -94,6 +94,16 @@ $result = FFMpeg::disk('uploads')
 
 `toDisk($disk, $options)` merges write options with earlier calls instead of replacing them. The last explicitly supplied value for a key wins. `visibility()` follows the same rule, so `->visibility('public')->toDisk('videos')` preserves public visibility. Options remain independent between exports and output callbacks. In multi-output exports, destination settings still belong inside each `output()` callback, not on the export root.
 
+`clip()` accepts numeric seconds or strict `HH:MM:SS` timecodes for start, duration, and end. Hours have at least two digits. Minutes and seconds range from `00` to `59`. An optional decimal fraction has one to six digits. Timecodes normalize to seconds before the existing range checks. Strings such as `'12.5'`, signed values, whitespace, suffixes, and other FFmpeg duration formats are rejected. Numeric `12.5` remains supported. Start must be nonnegative; exactly one of positive duration or end after start is required. Seek modes and output-callback behavior are unchanged.
+
+Clip arguments use plain decimal seconds at microsecond precision, never scientific notation. This applies to accurate output seeks and keyframe input seeks.
+
+```php
+$media->export()->clip('00:00:13.375', duration: '00:00:02.125');
+$media->export()->clip('01:02:59.750', end: '01:03:01.125');
+$media->export()->clip(13.375, duration: '00:00:02.125');
+```
+
 Input options, `globalOptions()`, and `outputOptions()` accept flat option/value pairs from a closed allowlist. Every allowed option has library-defined arity and value validation. Unknown options, aliases, switches with caller-supplied values, duplicate nonrepeatable options, filename controls, authentication headers, and encoder parameter blobs are rejected. Output `-f` permits only listed single-file muxers. These methods are not unrestricted argv passthrough.
 
 Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. A per-input `-protocol_whitelist file` prevents direct network protocols, but does not isolate local file access or apply to files opened by filters. Untrusted media still requires process isolation and resource limits. A demuxer allowlist remains under investigation and is not implemented in this checkpoint.
