@@ -18,6 +18,8 @@ class Workspace
 
     private array $probeVersions = [];
 
+    private array $protocols = [];
+
     private int $nextAsset = 0;
 
     public function __construct()
@@ -67,6 +69,23 @@ class Workspace
         }
 
         return $this->metadata[$identity];
+    }
+
+    public function requireProtocols(string $binary, string $protocols): void
+    {
+        if ($protocols === 'file') {
+            return;
+        }
+
+        if (! isset($this->protocols[$binary])) {
+            $result = (new ProcessRunner)->run([$binary, '-hide_banner', '-protocols'], $this->path, outputLimit: 65536);
+            $this->protocols[$binary] = $result->exitCode === 0 && preg_match('/Input:\s*(.*?)\s*Output:/s', $result->output, $matches)
+                ? preg_split('/\s+/', trim($matches[1])) : [];
+        }
+
+        if (array_diff(explode(',', $protocols), $this->protocols[$binary]) !== []) {
+            throw new MediaException('The media binary lacks required URL input protocols.', 'probing', 'capability');
+        }
     }
 
     public function delete(): void

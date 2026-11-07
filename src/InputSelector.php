@@ -14,4 +14,9 @@ class InputSelector
     {
         return new Media($this->disk, $path, $inputOptions);
     }
+
+    public function openUrl(string $url, array $headers = [], bool $download = false, array $inputOptions = []): Media
+    {
+        return new Media($this->disk, new UrlInput($url, $headers, $download), $inputOptions);
+    }
 }

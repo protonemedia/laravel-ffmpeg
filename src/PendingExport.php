@@ -300,7 +300,10 @@ class PendingExport
         $compiledInputs = [];
 
         foreach ($this->inputs as $index => $input) {
-            $compiledInputs[] = ['path' => $paths[$index], 'options' => [...$input->inputOptions(), ...($index === 0 ? $outputs[0]->inputSeekOptions() : [])]];
+            $compiledInputs[] = [
+                'path' => $paths[$index], 'protocols' => $input->protocolWhitelist(),
+                'options' => [...$input->transportOptions(), ...$input->inputOptions(), ...($index === 0 ? $outputs[0]->inputSeekOptions() : [])],
+            ];
         }
 
         return CommandCompiler::compile(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $compiledInputs, $compiledOutputs, $globals);
@@ -342,6 +345,7 @@ class PendingExport
 
                 foreach ($paths as $index => $path) {
                     $redactions[$path] ??= '[input:'.$index.']';
+                    $redactions += $this->inputs[$index]->redactions();
                 }
 
                 $resources = $this->resourceNames($outputs);
@@ -378,6 +382,10 @@ class PendingExport
 
                 if ($ffmpeg !== $ffprobe) {
                     throw new MediaException('FFmpeg and FFprobe must have matching release versions.', 'probing', 'version');
+                }
+
+                foreach ($this->inputs as $media) {
+                    $workspace->requireProtocols(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $media->protocolWhitelist());
                 }
 
                 $this->validateResources($workspace, $runner, $resources);

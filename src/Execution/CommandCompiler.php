@@ -13,7 +13,7 @@ class CommandCompiler
         $command = [$binary, '-hide_banner', '-nostdin', '-nostats', '-y', '-loglevel', 'warning', '-progress', 'pipe:1', ...$globalOptions];
 
         foreach ($inputs as $input) {
-            $command = [...$command, '-protocol_whitelist', 'file', ...$input['options'], '-i', $input['path']];
+            $command = [...$command, '-protocol_whitelist', $input['protocols'], ...$input['options'], '-i', $input['path']];
         }
 
         foreach ($outputs as $output) {

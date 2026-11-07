@@ -18,11 +18,11 @@ use Throwable;
 
 readonly class Media
 {
-    private string|File|UploadedFile $source;
+    private string|File|UploadedFile|UrlInput $source;
 
     private array $options;
 
-    public function __construct(private string|Filesystem $disk, string|File|UploadedFile $source, array $inputOptions = [])
+    public function __construct(private string|Filesystem $disk, string|File|UploadedFile|UrlInput $source, array $inputOptions = [])
     {
         if (is_string($source)) {
             if ($source === '' || preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $source)) {
@@ -71,7 +71,8 @@ readonly class Media
     {
         return hash('sha256', serialize([
             is_string($this->disk) ? ['name', $this->disk] : ['object', spl_object_id($this->disk)],
-            is_string($this->source) ? ['key', $this->source] : ['file', $this->source->getPathname()],
+            $this->source instanceof UrlInput ? ['url', $this->source->identity()]
+                : (is_string($this->source) ? ['key', $this->source] : ['file', $this->source->getPathname()]),
             $this->options,
         ]));
     }
@@ -79,7 +80,8 @@ readonly class Media
     /** @internal */
     public function extension(): string
     {
-        $extension = pathinfo(is_string($this->source) ? $this->source : $this->source->getPathname(), PATHINFO_EXTENSION);
+        $extension = $this->source instanceof UrlInput ? $this->source->extension()
+            : pathinfo(is_string($this->source) ? $this->source : $this->source->getPathname(), PATHINFO_EXTENSION);
 
         return preg_match('/\A[a-z0-9]{1,32}\z/i', $extension) ? strtolower($extension) : '';
     }
@@ -88,6 +90,24 @@ readonly class Media
     public function inputOptions(): array
     {
         return $this->options;
+    }
+
+    /** @internal */
+    public function protocolWhitelist(): string
+    {
+        return $this->source instanceof UrlInput ? $this->source->protocols() : 'file';
+    }
+
+    /** @internal */
+    public function transportOptions(): array
+    {
+        return $this->source instanceof UrlInput ? $this->source->options() : [];
+    }
+
+    /** @internal */
+    public function redactions(): array
+    {
+        return $this->source instanceof UrlInput ? $this->source->redactions() : [];
     }
 
     public function probe(): Metadata
@@ -137,10 +157,18 @@ readonly class Media
             array_push($options, '-select_streams', $selector);
         }
 
+        $direct = $this->source instanceof UrlInput && $path === $this->source->url();
+        $protocols = $direct ? $this->protocolWhitelist() : 'file';
+
+        if ($direct) {
+            $workspace->requireProtocols(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), $protocols);
+            $options = [...$this->transportOptions(), ...$options];
+        }
+
         $result = (new ProcessRunner)->run([
             config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-print_format', 'json',
-            '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', 'file', ...$options, $path,
-        ], $workspace->path, [$path => '[input]']);
+            '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', $protocols, ...$options, $path,
+        ], $workspace->path, [$path => '[input]', ...$this->redactions()]);
 
         if ($result->exitCode !== 0) {
             throw new MediaException('FFprobe failed (exit '.$result->exitCode.').', 'probing', 'exit', $result->diagnostics);
@@ -158,8 +186,18 @@ readonly class Media
             throw new MediaException('FFprobe returned invalid metadata.', 'probing', 'metadata');
         }
 
-        // Do not return a pathname that disappears when staging is released.
-        $data['format']['filename'] = is_string($this->source) ? $this->source : $this->source->getPathname();
+        // Do not return temporary paths or credential-bearing URLs.
+        $data['format']['filename'] = $this->source instanceof UrlInput ? '[url]'
+            : (is_string($this->source) ? $this->source : $this->source->getPathname());
+
+        if ($this->source instanceof UrlInput) {
+            $url = $this->source->url();
+            array_walk_recursive($data, static function (&$value) use ($url) {
+                if (is_string($value)) {
+                    $value = str_replace($url, '[url]', $value);
+                }
+            });
+        }
 
         return new Metadata($data, $this->identity());
     }
@@ -174,6 +212,20 @@ readonly class Media
         $input = $output = null;
 
         try {
+            if ($this->source instanceof UrlInput) {
+                if (! $resource && in_array($this->extension(), ['m3u8', 'm3u', 'mpd', 'ffconcat'])) {
+                    throw new MediaException('URL manifest inputs require an explicit dependency policy.', 'staging', 'manifest');
+                }
+
+                $path = $this->source->stage($workspace, $name, $resource);
+
+                if ($this->source->download && ! $resource) {
+                    $this->validateStagedContent($path);
+                }
+
+                return $path;
+            }
+
             if (! is_string($this->source)) {
                 return $this->absoluteLocalPath($this->source->getPathname());
             }
@@ -208,10 +260,8 @@ readonly class Media
                 throw new MediaException('The media input transfer did not complete.', 'staging', 'transfer');
             }
 
-            $prefix = file_get_contents($path, false, null, 0, 4096);
-
-            if (! $resource && preg_match('/^(?:\xEF\xBB\xBF)?\s*(?:#EXTM3U|ffconcat\s)|<(?:\w+:)?MPD(?:\s|>)/i', $prefix)) {
-                throw new MediaException('Remote manifest dependencies cannot be staged as a single file.', 'staging', 'manifest');
+            if (! $resource) {
+                $this->validateStagedContent($path);
             }
 
             return $path;
@@ -229,6 +279,15 @@ readonly class Media
             if (is_resource($output)) {
                 fclose($output);
             }
+        }
+    }
+
+    private function validateStagedContent(string $path): void
+    {
+        $prefix = file_get_contents($path, false, null, 0, 4096);
+
+        if (preg_match('/^(?:\xEF\xBB\xBF)?\s*(?:#EXTM3U|ffconcat\s)|<(?:\w+:)?MPD(?:\s|>)/i', $prefix)) {
+            throw new MediaException('Remote manifest dependencies cannot be staged as a single file.', 'staging', 'manifest');
         }
     }
 

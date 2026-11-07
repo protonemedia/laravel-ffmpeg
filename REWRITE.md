@@ -22,11 +22,31 @@ All outputs, including local destinations, are generated in the workspace. Every
 
 `save()` returns generated-file records and bounded, redacted process summaries. Structured progress separates staging, probing, encoding, validation, and publication. Percentage, speed, and remaining time can be unknown. A callback can cancel by throwing `Exceptions\ExportCancelled`; other callback exceptions propagate unchanged as failures. Both stop and reap the child before workspace cleanup. Lifecycle events work without a progress callback, and completion follows publication and cleanup.
 
-The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, additional geometry helpers, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
+The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. Additional geometry helpers and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
+
+### HTTP inputs
+
+```php
+$public = FFMpeg::disk()->openUrl('https://media.example/video.mp4');
+$private = FFMpeg::disk()->openUrl(
+	'https://media.example/private.mp4',
+	headers: ['Authorization' => 'Bearer '.$token],
+	download: true,
+);
+$private->export()->video('copy')->audio('copy')->toDisk('videos')->save('private.mp4');
+```
+
+`InputSelector::openUrl()` accepts HTTP and HTTPS URLs. Direct input is the default for public or signed URLs. Choosing direct input permits the URL in FFmpeg and FFprobe process arguments, visible to operating-system process inspection. Package inspection, process summaries, diagnostics, and probe filenames redact the URL. Query values also receive diagnostic redaction. A direct read has a 15-second network read timeout, plus the configured process deadline.
+
+Per-input headers require `download: true`. URL user information, fragments, invalid header names, and multiline header values are rejected. Downloads use Laravel Http with a 10-second connection deadline, a 60-second request deadline, TLS verification, and a private file sink. Redirects and transparent decompression are disabled. Only a complete, nonempty HTTP 200 response is accepted. A declared `Content-Length` must match the downloaded file. Headers and downloaded URLs never enter media process arguments. Laravel Http middleware and events still receive the original request, so application HTTP instrumentation must redact credentials.
+
+URL inputs default to `filesystems.default` for publication, regardless of the selector's disk. Repeated inputs share one download within an execution. Separate headers produce distinct sources. URL resources such as fonts download through Http even when declared without `download: true`. Known manifest extensions and downloaded manifest contents are rejected as standalone media. This check is not a sandbox for hostile inputs or developer-supplied filters.
+
+Protocol capabilities are checked only when a direct URL executes. Local inputs and Http downloads do not require network protocols in FFmpeg. HTTPS direct input verifies the certificate and excludes plaintext HTTP from its protocol whitelist. The native build includes GnuTLS. Other protocols and live-input policies remain outside this HTTP implementation.
 
 ### Native acceptance toolchain
 
-`.agents/setup` installs matching FFmpeg and FFprobe 9.0.2 binaries at `/opt/ffmpeg-9.0.2/bin`. The shared `.agents/install-ffmpeg` script verifies the source archive's SHA-256 before building with libx264, FreeType, HarfBuzz, libass, and zlib for PNG support. An existing matching pair with PNG encoding is reused. Resume checks for the binaries without installing anything.
+`.agents/setup` installs matching FFmpeg and FFprobe 9.0.2 binaries at `/opt/ffmpeg-9.0.2/bin`. The shared `.agents/install-ffmpeg` script verifies the source archive's SHA-256 before building with libx264, FreeType, HarfBuzz, libass, zlib for PNG support, and GnuTLS for HTTPS. An existing matching pair with PNG encoding and HTTPS protocols is reused. Resume checks for the binaries without installing anything.
 
 ```bash
 FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by random
@@ -170,7 +190,7 @@ $media->export()->clip(13.375, duration: '00:00:02.125');
 
 Input options, `globalOptions()`, and `outputOptions()` accept flat option/value pairs from a closed allowlist. Every allowed option has library-defined arity and value validation. Unknown options, aliases, switches with caller-supplied values, duplicate nonrepeatable options, filename controls, authentication headers, and encoder parameter blobs are rejected. Output `-f` permits only listed single-file muxers. These methods are not unrestricted argv passthrough.
 
-Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. A per-input `-protocol_whitelist file` prevents direct network protocols, but does not isolate local file access or apply to files opened by filters. Untrusted media still requires process isolation and resource limits. A demuxer allowlist remains under investigation and is not implemented in this checkpoint.
+Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. Local and downloaded inputs use `-protocol_whitelist file`. Direct HTTP inputs use a transport-specific protocol whitelist. Neither policy isolates local file access or applies to files opened by filters. Untrusted media still requires process isolation and resource limits. A demuxer allowlist remains under investigation and is not implemented in this checkpoint.
 
 ### Two-pass bitrate encoding
 
@@ -326,7 +346,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Private staging | Transfer a non-local input once per execution. Check permissions, truncation, failed reads, and cleanup. Reject unsupported manifest dependencies. | `NativeProbeTest`, `NativeExportTest`, `NativeCompositionTest` | Shared across inputs and probe selectors within an execution |
 | Metadata | Preserve chapters, tags, rational rates, null duration, color fields, all streams, and separate cover art from motion video. | `NativeProbeTest` | Implemented for raw data and basic accessors |
 | Process capture | Drain a noisy child, cap metadata output, remove application secrets, terminate on total and idle deadlines, and reap before cleanup. | `NativeProbeTest`, `NativeExportTest` | Shared process boundary; real callback cancellation verified |
-| Network inputs | Read explicit public URLs. Stage authenticated finite downloads through Http. Keep per-input headers separate and redact signed URLs. | `MediaOpenerTest`, `ExportTest` | Open |
+| Network inputs | Read explicit public URLs. Stage authenticated finite downloads through Http. Keep per-input headers separate and redact signed URLs. | `NativeUrlTest` | HTTP direct probe/export and authenticated downloads verified with real network fixtures; redirect, truncation, TLS rejection, capability, redaction, and cleanup checks covered |
 | Scoped and read-only filesystems | Preserve prefixes and wrappers. Never write through a read-only adapter or escape a destination root. | `DiskTest`, new wrapper scenarios required | Open |
 | Ordinary encoding | Encode audio and video to different disks. Verify codecs, duration, channels, geometry, and write options. | `NativeExportTest`, `ExportTest` | Basic CRF encode and Storage publication verified; broader media coverage open |
 | Display geometry | Resize by one dimension or stretch explicitly. Contain or cover an exact canvas, preserving anamorphic display aspect ratio. | `NativeExportTest` | Resize, square pixels, centered padding, centered crop, and independent output geometry verified with real media; rotation helpers open |
