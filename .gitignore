@@ -6,3 +6,4 @@ vendor
 src/EncryptedHLSExporter.php
 .DS_Store
 ffmpeg-passes*
+.amp/portals/*
