@@ -144,6 +144,38 @@ Nonzero FFmpeg exits remain inspectable, including missing tracks, invalid filte
 
 The result exposes `exitCode`, `output`, `diagnostics`, `elapsedSeconds`, `command`, and `phase` properties. `output()` returns stdout, and `errorOutput()` returns the diagnostic tail. `summary()` returns status, timing, the redacted command, and diagnostics. Captured stdout is limited to 16 MiB, and diagnostics retain the final 64 KiB. Analysis redacts known input paths, signed URLs, and query values in both streams and the returned command. Direct URL inputs still expose their URL to operating-system process inspection. Structured volume parsing and loudness normalization are not part of this operation.
 
+### Adaptive HLS
+
+```php
+use ProtoneMedia\LaravelFFMpeg\HlsVariant;
+
+$result = $media->hls(segmentDuration: 6)
+	->video('libx264')->audio('aac', bitrate: '96k')
+	->variant('360p', fn (HlsVariant $variant) => $variant->resize(height: 360)->video(bitrate: '800k'))
+	->variant('720p', fn (HlsVariant $variant) => $variant->resize(height: 720)->video(bitrate: '2800k'))
+	->toDisk('streams', ['visibility' => 'private'])->save('lesson/master.m3u8');
+
+$result->playlist();                   // The master GeneratedFile.
+$result->variant('720p')->playlist();  // lesson/720p/index.m3u8.
+$result->variant('720p')->files();     // This variant's segments and playlist.
+```
+
+`hls()` returns a fresh `PendingHlsExport` for MPEG-TS VOD. Its default codecs are `libx264` and `aac`. At least one named variant is required. Names contain ASCII letters, digits, underscores, or hyphens and start with a letter or digit. Names must be unique. Variant callbacks run immediately and configure encoding, maps, and filters, without `save()` or `toDisk()` methods.
+
+Shared defaults resolve at compilation, including settings declared after a variant. Variants override individual codec settings, metadata tags, maps, and matching output-option flags. Variant filters append after shared filters. Explicitly repeatable stream IDs remain ordered. Rate-control conflicts still fail rather than silently dropping a bitrate or CRF. Shared Storage options apply to every generated file. Variants freeze when execution starts.
+
+All variants run in one FFmpeg invocation against the same staged inputs. Explicit graphs can share processing through `split` or `asplit`. Different variants still encode separately. When a variant maps a graph-produced stream, its geometry and other video filters belong inside that graph, not in a separate `resize()` or `videoFilter()` chain. Multi-input operations retain the explicit map, metadata, and chapter-source requirements of ordinary composition. Accurate clips and watermark graphs use the shared execution pipeline. No performance improvement has been measured.
+
+Without explicit maps, each variant selects the first motion-video and audio streams when present. Cover artwork does not become video in an audio-only export. Silent video, audio-only media, and `video('copy')->audio('copy')` are supported. Explicit maps replace defaults. For example, `map('0:V:0')->map('0:a')` retains every audio stream with the first motion-video stream.
+
+Segment duration ranges from 0.001 to 86400 seconds. Encoded video requests closed GOPs and keyframes at segment-duration intervals. Actual boundaries depend on available frame timestamps and the encoder. Copy mode retains source keyframes and cannot promise exact segment lengths. Neither mode advertises independent segments. Finalization sets a positive integer target duration that covers the longest segment. Master bandwidth includes MPEG-TS overhead: `BANDWIDTH` conservatively uses the highest individual segment bitrate, and `AVERAGE-BANDWIDTH` uses total bytes divided by total duration. FFmpeg-supplied codec and resolution attributes are retained when available.
+
+The default layout places each variant's `index.m3u8` and `segment-00000000.ts` files in a subdirectory beside the master. Playlist references are relative to their containing playlist. Encoder filenames stay private. Finalization requires complete VOD playlists, contiguous referenced segments, nonempty files, and no unreferenced matching segments. External, traversal, duplicate, missing, and encrypted references fail before any Storage write. Playlist reads are limited to 16 MiB each. Validation also probes each variant's first segment for the expected stream count and directly mapped stream types, catching extra unlabeled graph outputs. It does not decode every encoded frame or probe every segment.
+
+The result lists all segments first, then variant playlists, then the master. Their roles are `hls-segment`, `hls-playlist`, and `hls-master`. Publication follows that order. A failed upload identifies the concrete published siblings and failed destination without deleting successful uploads. Saving replaces the requested definitions, does not append variants or remove old files, and is not transactional. Existing segments may already be replaced when a later upload fails.
+
+Custom playlist and segment paths, playlist hooks, AES-128 encryption and rotation, dynamic responses, two-pass HLS, and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
+
 ### Progress helpers
 
 ```php
@@ -489,11 +521,11 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `NativeSequenceTest` | Local PNG and staged JPEG inputs verified with decoded order, explicit count, decimal and rational rates, non-default starts, exact output duration, source retention, and cleanup; missing, mismatched, disguised, and corrupt images reject publication |
 | Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `NativeStoryboardTest` | Real PNG and JPEG sheets verify decoded tile order, asymmetric grids, spacing, partial sheets, quality, clipped timing, relative and custom URLs, cue coordinates, validation before publication, partial upload failure, source retention, and cleanup |
 | Waveform images | Generate and inspect an actual waveform image from audio. | `NativeExportTest`; `MediaOpenerTest` only checks the old object type | Real amplitude, muted audio, clipped timing, colors, odd image dimensions, and post-render resize verified |
-| Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `NativeCompositionTest`, `NativeUrlTest`, legacy `HlsExportTest` | Ordinary graph exports verify transparency, offsets, scaling, repeated static images, copied audio, and optional private-copy image preparation; URL downloads and callback failure cleanup verified; native HLS integration remains open |
+| Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `NativeCompositionTest`, `NativeUrlTest`, `NativeHlsTest`, legacy `HlsExportTest` | Ordinary graph exports verify transparency, offsets, scaling, repeated static images, copied audio, and optional private-copy image preparation; URL downloads and callback failure cleanup verified; native HLS verifies a shared overlay graph, two scaled branches, clipped duration, and decoded watermark pixels |
 | Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Real two-track PCM verifies mean and peak volume, track selection, filters, silence, local and staged inputs, inspectable nonzero exits, opt-in exceptions, redaction, timeout reaping, source retention, and cleanup without publication |
 | Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle and real child reaping verified; both encoding passes, failure cleanup, and cancellation covered |
-| Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `ExportTest`, `TileTest` | Multiple single-file outputs verified; playlist/segment inventory open |
-| Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `HlsExportTest`, `HLSPlaylistGeneratorTest` | Open |
+| Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `ExportTest`, `TileTest` | Multiple single-file outputs and owned HLS inventories verified, including publication order, validation before writes, concrete partial failures, source protection, and cleanup |
+| Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `NativeHlsTest`, legacy `HlsExportTest`, `HLSPlaylistGeneratorTest` | Multiple variants, complete playlist decoding, segment keyframes and aligned boundaries, audio-only artwork exclusion, silent video, first/all audio, copy, clipped watermarks, staged input, streamed publication, and relative references under a nested master verified; custom paths and playlist hooks remain open |
 | Encrypted HLS | Decrypt AES-128 segments and verify IVs, supplied keys, key rotation boundaries, private key storage, and failure cleanup. | `EncryptedHlsExportTest` | Open |
 | Dynamic HLS | Rewrite master, variant, segment, and key URLs relative to their containing playlists. Verify response integration and missing or invalid input errors. | `DynamicHLSPlaylistTest` | Open |
 | Extension points | Inspect scoped argument arrays without execution. Preserve custom filters, playlist hooks, and output configuration without arbitrary driver forwarding. | `NativeExportTest`, `NativeCompositionTest`, `BeforeSavingTest`, README | Pure inspection, scoped options, graphs, and output callbacks implemented; playlist hooks open |

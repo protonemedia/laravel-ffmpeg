@@ -48,6 +48,11 @@ readonly class Media
         return new PendingExport($this, $this->defaultOutputDisk());
     }
 
+    public function hls(float $segmentDuration = 6): PendingHlsExport
+    {
+        return new PendingHlsExport($this, $this->defaultOutputDisk(), $segmentDuration);
+    }
+
     public function concat(Media ...$following): self
     {
         return new self(config('filesystems.default'), new ConcatInput([$this, ...$following]));

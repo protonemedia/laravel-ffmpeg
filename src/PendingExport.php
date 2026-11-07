@@ -470,7 +470,8 @@ class PendingExport
                     $role = $artifact['role'] ?? $this->outputRole;
                     $size = $this->validateArtifact($outputPath, $role);
 
-                    if (in_array($role, ['media', 'image'], true) && (count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null)) {
+                    if (($artifact['probe'] ?? false)
+                        || (in_array($role, ['media', 'image'], true) && (count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null))) {
                         try {
                             $actual = $this->media->probePath($outputPath, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
                         } catch (MediaException $exception) {
@@ -641,7 +642,7 @@ class PendingExport
         }
     }
 
-    private function validateDestinations(array $outputs): void
+    protected function validateDestinations(array $outputs): void
     {
         $seen = [];
 
