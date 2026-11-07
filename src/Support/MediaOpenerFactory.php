@@ -47,9 +47,9 @@ class MediaOpenerFactory
         return new DynamicHLSPlaylist($this->defaultDisk);
     }
 
-    public function disk(string|Filesystem $disk): InputSelector
+    public function disk(string|Filesystem|null $disk = null): InputSelector
     {
-        return new InputSelector($disk);
+        return new InputSelector($disk ?? config('filesystems.default'));
     }
 
     /**

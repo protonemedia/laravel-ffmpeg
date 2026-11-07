@@ -6,6 +6,8 @@ This file tracks the Laravel-native rewrite. The [design proposal](https://ampco
 
 `FFMpeg::disk($disk)->open($key)` returns a media descriptor with native `probe()` and `export()` operations through Laravel Process. A disk can be a name or an `Illuminate\Contracts\Filesystem\Filesystem` instance. `open()` also accepts `Illuminate\Http\File` and `UploadedFile`. Creating a descriptor or inspecting an export performs no transfers or process launches.
 
+`FFMpeg::disk()->open($key)` and `FFMpeg::disk(null)->open($key)` select `filesystems.default` when `disk()` is called. Existing selectors and media descriptors keep their selected disk when the configuration changes. The legacy `FFMpeg::open()` entry point remains unchanged.
+
 Local disks and file objects use their local paths. Other filesystem instances stream into a private workspace with transfer-size checks. Known remote manifests are rejected because staging a playlist alone loses its dependencies. This detection is not a sandbox for hostile media.
 
 Probing requires FFprobe 9.0.x. It reads format, streams, and chapters together. `Metadata` and `Stream` retain raw fields through `get()` and `toArray()`. Duration is nullable, frame rates retain their rational source values, and the default video accessor excludes attached pictures. Width and height are encoded dimensions, not rotation-adjusted display dimensions.
@@ -59,6 +61,8 @@ $result = FFMpeg::disk('uploads')
 	->toDisk('videos', ['visibility' => 'private', 'ContentType' => 'video/mp4'])
 	->save('converted.mp4');
 ```
+
+`toDisk($disk, $options)` merges write options with earlier calls instead of replacing them. The last explicitly supplied value for a key wins. `visibility()` follows the same rule, so `->visibility('public')->toDisk('videos')` preserves public visibility. Options remain independent between exports and output callbacks. In multi-output exports, destination settings still belong inside each `output()` callback, not on the export root.
 
 Input options, `globalOptions()`, and `outputOptions()` accept flat option/value pairs from a closed allowlist. Every allowed option has library-defined arity and value validation. Unknown options, aliases, switches with caller-supplied values, duplicate nonrepeatable options, filename controls, authentication headers, and encoder parameter blobs are rejected. Output `-f` permits only listed single-file muxers. These methods are not unrestricted argv passthrough.
 

@@ -370,7 +370,7 @@ trait ConfiguresOutput
         $this->assertOutputMutable();
         $this->disk = $disk;
         $this->outputDiskExplicit = true;
-        $this->writeOptions = $options;
+        $this->writeOptions = array_replace($this->writeOptions, $options);
 
         return $this;
     }

@@ -399,6 +399,30 @@ class NativeExportTest extends TestCase
     }
 
     #[Test]
+    public function destination_options_merge_and_the_last_explicit_visibility_wins(): void
+    {
+        $this->fakePipeline();
+        $media = FFMpeg::disk('memory')->open('source.mp4');
+        $exports = [
+            $media->export()->visibility('private')->toDisk('memory', ['ContentType' => 'video/mp4']),
+            $media->export()->toDisk('memory', ['visibility' => 'public'])->visibility('private'),
+            $media->export()->visibility('public')->toDisk('memory', ['visibility' => 'private']),
+            $media->export()->toDisk('memory', ['visibility' => 'private'])->toDisk('memory'),
+        ];
+
+        foreach ($exports as $index => $export) {
+            $path = "options-{$index}.mp4";
+            $export->save($path);
+
+            $this->assertSame('encoded media', Storage::disk('memory')->get($path));
+            $this->assertSame('private', Storage::disk('memory')->getVisibility($path));
+        }
+
+        $media->export()->save('independent.mp4');
+        $this->assertSame('public', Storage::disk('memory')->getVisibility('independent.mp4'));
+    }
+
+    #[Test]
     public function false_storage_writes_fail_with_destination_context(): void
     {
         $this->fakePipeline();

@@ -78,6 +78,33 @@ class NativeProbeTest extends TestCase
     }
 
     #[Test]
+    public function disk_defaults_to_the_current_configuration_without_changing_existing_descriptors(): void
+    {
+        $local = $this->fakeLocalDisk();
+        $local->put('source.mp4', 'local source');
+        Storage::disk('memory')->put('source.mp4', 'memory source');
+        $sources = [];
+        $this->fakeProbe(inspect: function (PendingProcess $process) use (&$sources) {
+            $sources[] = file_get_contents(end($process->command));
+        });
+
+        config(['filesystems.default' => 'memory']);
+        $memory = FFMpeg::disk()->open('source.mp4');
+        config(['filesystems.default' => 'local']);
+        $local = FFMpeg::disk(null)->open('source.mp4');
+        $explicit = FFMpeg::disk('memory')->open('source.mp4');
+        Process::assertNothingRan();
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+
+        foreach ([$memory, $local, $explicit] as $media) {
+            $this->assertSame(12.375, $media->probe()->duration());
+        }
+
+        $this->assertSame(['memory source', 'local source', 'memory source'], $sources);
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
     public function it_probes_a_local_input_without_mutating_or_staging_it(): void
     {
         $disk = $this->fakeLocalDisk();
