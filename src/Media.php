@@ -67,6 +67,11 @@ readonly class Media
         return new PendingFrames($this, $this->defaultOutputDisk(), $every, $count);
     }
 
+    public function storyboard(float $every, int $columns = 5, int $rows = 5, int $margin = 0, int $padding = 0): PendingStoryboard
+    {
+        return new PendingStoryboard($this, $this->defaultOutputDisk(), $every, $columns, $rows, $margin, $padding);
+    }
+
     public function waveform(int $width = 640, int $height = 120, array $colors = ['blue']): PendingWaveform
     {
         return new PendingWaveform($this, $this->defaultOutputDisk(), $width, $height, $colors);

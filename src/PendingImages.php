@@ -30,9 +30,13 @@ abstract class PendingImages extends PendingExport
         return parent::save($path);
     }
 
-    protected function validateArtifact(string $path): int
+    protected function validateArtifact(string $path, string $role = 'image'): int
     {
-        $size = parent::validateArtifact($path);
+        $size = parent::validateArtifact($path, $role);
+        if ($role !== 'image') {
+            return $size;
+        }
+
         $image = @getimagesize($path);
         $type = strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'png' ? IMAGETYPE_PNG : IMAGETYPE_JPEG;
 

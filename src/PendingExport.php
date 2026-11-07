@@ -467,9 +467,10 @@ class PendingExport
                 foreach ($artifacts as $artifact) {
                     $outputPath = $artifact['path'];
                     $index = $artifact['output'];
-                    $size = $this->validateArtifact($outputPath);
+                    $role = $artifact['role'] ?? $this->outputRole;
+                    $size = $this->validateArtifact($outputPath, $role);
 
-                    if (count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null) {
+                    if (in_array($role, ['media', 'image'], true) && (count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null)) {
                         try {
                             $actual = $this->media->probePath($outputPath, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
                         } catch (MediaException $exception) {
@@ -525,7 +526,7 @@ class PendingExport
                         }
                     }
 
-                    $files[] = new GeneratedFile($disk, $destination['disk'], $destination['path'], $sizes[$index], role: $this->outputRole);
+                    $files[] = new GeneratedFile($disk, $destination['disk'], $destination['path'], $sizes[$index], role: $artifact['role'] ?? $this->outputRole);
                 }
 
                 return new ExportResult($files, $summaries);
@@ -572,7 +573,7 @@ class PendingExport
             ? max(array_map(fn ($item) => $item->duration(), $metadata)) : null;
     }
 
-    protected function validateArtifact(string $path): int
+    protected function validateArtifact(string $path, string $role = 'media'): int
     {
         clearstatcache(true, $path);
 

@@ -82,7 +82,31 @@ $result->files(); // Ordered files with concrete numbered paths and the image ro
 
 Count-based extraction requires a known, positive duration and produces exactly the requested number of images. The sampling rate is the count divided by the source duration, or the intersecting clip duration when clipped. Short sources can repeat frames, with final-frame padding if needed. Missing or nonpositive duration fails during probing rather than inventing a sampling interval.
 
-Destinations require one `%d` or `%01d` through `%09d` placeholder in the filename, with no other percent signs. Numbering starts at one. Encoding uses a private workspace pattern, never the caller's destination as an FFmpeg path. All numbered files must be contiguous and valid JPEG or PNG images before any Storage write starts. Publication is not atomic. An upload failure reports concrete published paths and the failed destination, without deleting successful siblings. Storyboards and image-sequence inputs remain open.
+Destinations require one `%d` or `%01d` through `%09d` placeholder in the filename, with no other percent signs. Numbering starts at one. Encoding uses a private workspace pattern, never the caller's destination as an FFmpeg path. All numbered files must be contiguous and valid JPEG or PNG images before any Storage write starts. Publication is not atomic. An upload failure reports concrete published paths and the failed destination, without deleting successful siblings.
+
+### Storyboards and WebVTT cues
+
+```php
+$result = $media->storyboard(every: 2, columns: 5, rows: 4, margin: 3, padding: 2)
+	->resize(width: 160)->clip(10, duration: 45)
+	->vtt('metadata/preview.vtt')->toDisk('previews')
+	->save('images/sheet-%03d.jpg');
+```
+
+`storyboard()` samples decoded video at the declared interval and tiles thumbnails in row-major order. Intervals are positive whole milliseconds expressed in seconds. The default grid is five columns by five rows. Margin and padding are nonnegative pixel counts. `resize()` and `fit()` configure each thumbnail before tiling. JPEG quality remains an output option, such as `outputOptions(['-q:v', '2'])`.
+
+The operation requires one input with a known, positive duration. Complex graphs and keyframe seeks are rejected. Accurate clips bound thumbnails before tiling, and cue times start at zero within the clip. Sampling uses the `fps` filter with nearest timestamp rounding and can repeat source frames. The final sheet contains black unused cells. Those cells have no cues.
+
+`save()` requires a numbered JPEG or PNG destination, with the same placeholder and numbering rules as `frames()`. `vtt()` optionally writes WebVTT cues on the output disk. Without a resolver, image URLs are percent-encoded paths relative to the VTT file's directory. A custom resolver receives each concrete sheet key and its one-based index:
+
+```php
+$media->storyboard(every: 2)->vtt('preview.vtt', fn (string $key, int $index) => Storage::disk('previews')->url($key))
+	->toDisk('previews')->save('images/sheet-%03d.png');
+```
+
+Resolved URLs must be nonempty strings without whitespace, control characters, or fragments. Query strings are retained before the generated `#xywh=x,y,width,height` fragment. Coordinates use the actual sheet dimensions, margin, and padding. Each cue ends at the next sample or the clip's end, rounded up to a millisecond.
+
+Every sheet and the cue file are validated before publication. The result lists image-role files first and the optional `vtt`-role file last. Publication is not atomic. If the cue upload fails, the exception identifies the sheets already published and the failed cue destination. Source bytes and successful uploads are retained, and private workspace files are removed.
 
 ### Waveform images
 
@@ -441,7 +465,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `NativeConcatTest` | Compatible video/audio copy, mixed disks, decoded order, layout rejection, source retention, and audio-delay packet timestamps verified; explicit video-only and audio-inclusive normalization graphs verified, including delayed audio across different sample rates and channel layouts |
 | Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `NativeExportTest`, `FrameTest` | Single images and interval/count output sequences verified with real media; image-quality controls remain available through output options |
 | Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `NativeSequenceTest` | Local PNG and staged JPEG inputs verified with decoded order, explicit count, decimal and rational rates, non-default starts, exact output duration, source retention, and cleanup; missing, mismatched, disguised, and corrupt images reject publication |
-| Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `TileTest`, `VTTPreviewThumbnailsGeneratorTest` | Open |
+| Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `NativeStoryboardTest` | Real PNG and JPEG sheets verify decoded tile order, asymmetric grids, spacing, partial sheets, quality, clipped timing, relative and custom URLs, cue coordinates, validation before publication, partial upload failure, source retention, and cleanup |
 | Waveform images | Generate and inspect an actual waveform image from audio. | `NativeExportTest`; `MediaOpenerTest` only checks the old object type | Real amplitude, muted audio, clipped timing, colors, odd image dimensions, and post-render resize verified |
 | Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `NativeCompositionTest`, `NativeUrlTest`, legacy `HlsExportTest` | Ordinary graph exports verify transparency, offsets, scaling, repeated static images, copied audio, and optional private-copy image preparation; URL downloads and callback failure cleanup verified; native HLS integration remains open |
 | Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Open |
