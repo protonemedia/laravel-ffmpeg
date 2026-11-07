@@ -69,7 +69,7 @@ readonly class Media
     /** @internal */
     public function defaultOutputDisk(): string|Filesystem
     {
-        return is_string($this->source) ? $this->disk : config('filesystems.default');
+        return is_string($this->source) || $this->source instanceof SequenceInput ? $this->disk : config('filesystems.default');
     }
 
     /** @internal */

@@ -17,8 +17,8 @@ readonly class ConcatInput implements InputSource
         }
 
         foreach ($inputs as $input) {
-            if ($input->protocolWhitelist() !== 'file' || $input->inputOptions() !== []) {
-                throw new InvalidArgumentException('Concat inputs require local or staged files without input options. Use download: true for URLs.');
+            if ($input->protocolWhitelist() !== 'file' || $input->inputOptions() !== [] || $input->transportOptions() !== []) {
+                throw new InvalidArgumentException('Concat inputs require standalone local or staged files without input options. Use download: true for URLs.');
             }
         }
     }

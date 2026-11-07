@@ -85,7 +85,7 @@ class NativeExportTest extends TestCase
             ->outputOptions(['-movflags', '+faststart', '-streamid', '0:42', '-streamid', '1:43']);
 
         $expected = [
-            'ffmpeg', '-hide_banner', '-nostdin', '-nostats', '-y', '-loglevel', 'warning', '-progress', 'pipe:1',
+            'ffmpeg', '-hide_banner', '-nostdin', '-nostats', '-y', '-xerror', '-loglevel', 'warning', '-progress', 'pipe:1',
             '-filter_threads', '2', '-protocol_whitelist', 'file', '-probesize', '2000000', '-i', '[input:0]',
             '-ss', '12.5', '-t', '8', '-map', '0:a:0', '-map', '0:V:0:?', '-map', '-0:a:1:?',
             '-map_metadata', '0', '-map_chapters', '-1', '-c:v', 'libx264', '-crf:v', '21', '-preset:v', 'slow',

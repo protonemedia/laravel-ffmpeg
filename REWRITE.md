@@ -296,6 +296,22 @@ Audio-inclusive graphs must declare their audio policy and preserve each segment
 
 `NativeConcatTest` verifies a zero-origin policy with different dimensions, frame rates, sample rates, and channel layouts. It selects the first audio channel, resamples to 16000 Hz with `aresample=16000:async=1:first_pts=0`, and pads and trims each audio segment to its video duration before concatenation. Decoded PCM confirms silence during each original audio delay and the expected signal afterward. Inputs with other origins require a common timeline correction, not independent first-sample resets.
 
+### Image-sequence inputs and timelapse
+
+```php
+FFMpeg::disk('photos')->openSequence('camera/frame-%04d.png', count: 9, framerate: 1)
+	->export()->video('libx264', crf: 23)->outputOptions(['-pix_fmt', 'yuv420p'])
+	->toDisk('videos')->save('timelapse.mp4');
+```
+
+`openSequence()` returns a media descriptor without reading Storage or launching a process. The pattern is a disk-relative PNG or JPEG key with one `%d` or `%0Nd` placeholder in its filename, where N is from 1 to 99. Globs, directory placeholders, and other image formats are not supported. `count` is positive, and `start` defaults to 1 but can be zero. Every key in that contiguous range must exist. Files outside the range are not read.
+
+`framerate` is a positive decimal rate or a rational string such as `'30000/1001'`. It controls input timing, not an output frame-rate conversion. Nine images at one frame per second produce a nine-second video. Output codecs, geometry, filters, clipping, and publication use the ordinary export API. The default output disk remains the sequence's input disk.
+
+Each execution stages non-local images and prepares safe private numbered aliases. Local sources use symlinks where supported, otherwise private copies. All image headers must match the declared format and share dimensions. Missing files, mismatched dimensions, and invalid headers fail before encoding. Native exports use `-xerror` so corrupt image data fails encoding instead of silently publishing a shortened sequence. Cleanup removes only owned files and aliases, never the originals.
+
+Sequences can be graph inputs but are not standalone files for copy concatenation or filter resources. Encode a sequence to a regular media file before passing it to `concat()`.
+
 ### Composition and resources
 
 ```php
@@ -391,7 +407,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `NativeCompositionTest`, `ExportTest` | Mixed-disk overlay, LUT, branching, independent clips, copied audio, validation, and partial publication verified |
 | Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `NativeConcatTest` | Compatible video/audio copy, mixed disks, decoded order, layout rejection, source retention, and audio-delay packet timestamps verified; explicit video-only and audio-inclusive normalization graphs verified, including delayed audio across different sample rates and channel layouts |
 | Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `NativeExportTest`, `FrameTest` | Single images and interval/count output sequences verified with real media; image-quality controls remain available through output options |
-| Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `ExportTest` | Open |
+| Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `NativeSequenceTest` | Local PNG and staged JPEG inputs verified with decoded order, explicit count, decimal and rational rates, non-default starts, exact output duration, source retention, and cleanup; missing, mismatched, disguised, and corrupt images reject publication |
 | Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `TileTest`, `VTTPreviewThumbnailsGeneratorTest` | Open |
 | Waveform images | Generate and inspect an actual waveform image from audio. | `NativeExportTest`; `MediaOpenerTest` only checks the old object type | Real amplitude, muted audio, clipped timing, colors, odd image dimensions, and post-render resize verified |
 | Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `WatermarkTest`, `WatermarkFactoryTest`, `HlsExportTest` | Open |
@@ -413,6 +429,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 - Timeline changes omit chapters unless an explicit transform or mapping makes them valid. Multi-input composition requires an explicit metadata source.
 - Fonts, logos, LUTs, subtitle files, and literal-text files belong to the execution workspace. Literal text, paths, and FFmpeg expressions require different escaping. A graph compiles to one argument value, not a shell fragment.
 - Compilation and inspection allocate no workspace, download nothing, and do not mutate a pending builder. Scoped options cannot replace reserved filenames, binary selection, progress transport, or pass-log paths.
+- Native encoding stops on FFmpeg errors with `-xerror`. A decodable remainder of a damaged input is not a successful artifact.
 
 `NativeExportTest` covers the single-output subset. `NativeCompositionTest` adds pure inspection, process fakes, and real-media acceptance for graphs, resources, independent outputs, validation-before-publication, and partial failure. A resource and the same key used as a media input have separate staging entries so resource staging cannot bypass manifest checks.
 

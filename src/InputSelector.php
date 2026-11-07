@@ -19,4 +19,9 @@ class InputSelector
     {
         return new Media($this->disk, new UrlInput($url, $headers, $download), $inputOptions);
     }
+
+    public function openSequence(string $pattern, int $count, float|string $framerate, int $start = 1): Media
+    {
+        return new Media($this->disk, new SequenceInput($this->disk, $pattern, $count, $framerate, $start));
+    }
 }

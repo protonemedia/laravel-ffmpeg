@@ -10,7 +10,7 @@ class CommandCompiler
     /** Compile already resolved, operation-owned inputs and outputs. */
     public static function compile(string $binary, array $inputs, array $outputs, array $globalOptions = []): array
     {
-        $command = [$binary, '-hide_banner', '-nostdin', '-nostats', '-y', '-loglevel', 'warning', '-progress', 'pipe:1', ...$globalOptions];
+        $command = [$binary, '-hide_banner', '-nostdin', '-nostats', '-y', '-xerror', '-loglevel', 'warning', '-progress', 'pipe:1', ...$globalOptions];
 
         foreach ($inputs as $input) {
             $command = [...$command, '-protocol_whitelist', $input['protocols'], ...$input['options'], '-i', $input['path']];
