@@ -24,6 +24,24 @@ All outputs, including local destinations, are generated in the workspace. Every
 
 The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, additional geometry helpers, two-pass encoding, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
 
+### Progress helpers
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Progress;
+
+$media->export()->onProgress(function (Progress $progress) {
+	if ($progress->isEncoding()) {
+		// elapsedSeconds, percentage, speed, and remainingSeconds may be null.
+	}
+
+	if ($progress->phase === Progress::PUBLICATION) {
+		// Outputs are validated; publication is not complete yet.
+	}
+});
+```
+
+`Progress` defines typed string constants `STAGING`, `PROBING`, `ENCODING`, `VALIDATION`, and `PUBLICATION`. Their values remain `staging`, `probing`, `encoding`, `validation`, and `publication`. The `phase` property remains a string, so existing callback comparisons continue to work. `isEncoding()` is true for the encoding-start notification and encoder updates, including updates without a known percentage. Other progress phases return false. Callback timing, cancellation, and lifecycle events are unchanged; these helpers add no progress events or completion phase.
+
 ### Generated-file lookup
 
 ```php

@@ -47,7 +47,7 @@ class ProgressParser
             $known = $this->duration !== null && $this->duration > 0 && $seconds !== null;
 
             $this->pending = new Progress(
-                'encoding', $seconds,
+                Progress::ENCODING, $seconds,
                 $known ? min(100, 100 * $seconds / $this->duration) : null,
                 $speed,
                 $known && $speed !== null ? max(0, ($this->duration - $seconds) / $speed) : null,

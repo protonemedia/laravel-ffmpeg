@@ -315,6 +315,11 @@ class NativeExportTest extends TestCase
         $this->assertContains('[input:0]', $result->processes()->first()['command']);
         $this->assertContains('[output:0]', $result->processes()->first()['command']);
         $this->assertSame(['staging', 'probing', 'encoding', 'encoding', 'validation', 'publication'], array_column($snapshots, 'phase'));
+        $this->assertSame([
+            Progress::STAGING, Progress::PROBING, Progress::ENCODING, Progress::ENCODING,
+            Progress::VALIDATION, Progress::PUBLICATION,
+        ], array_column($snapshots, 'phase'));
+        $this->assertSame([false, false, true, true, false, false], array_map(fn (Progress $progress) => $progress->isEncoding(), $snapshots));
         $encoding = $snapshots[3];
         $this->assertSame(4.0, $encoding->elapsedSeconds);
         $this->assertSame(40.0, $encoding->percentage);

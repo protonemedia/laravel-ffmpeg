@@ -297,7 +297,7 @@ class PendingExport
         $operationId = bin2hex(random_bytes(16));
         $destinations = array_map(fn ($output) => $output->destination(), $outputs);
         $published = [];
-        $phase = 'staging';
+        $phase = Progress::STAGING;
 
         try {
             Event::dispatch(new Events\ExportStarting($operationId, $destinations));
@@ -337,7 +337,7 @@ class PendingExport
                 }
 
                 $runner = new ProcessRunner;
-                $phase = 'probing';
+                $phase = Progress::PROBING;
                 $this->notify(new Progress($phase));
                 $ffmpeg = $runner->version(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), 'ffmpeg', $workspace->path);
                 $ffprobe = $runner->version(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), 'ffprobe', $workspace->path);
@@ -365,7 +365,7 @@ class PendingExport
 
                     return $duration === null ? null : ($clip === null ? $duration : max(0, min($clip['duration'], $duration - $clip['start'])));
                 }, $outputs);
-                $phase = 'encoding';
+                $phase = Progress::ENCODING;
                 $this->notify(new Progress($phase));
                 $process = $runner->run(
                     $this->command($outputs, $paths, $outputPaths), $workspace->path, $redactions,
@@ -380,7 +380,7 @@ class PendingExport
                     throw new MediaException('FFmpeg failed (exit '.$process->exitCode.').', $phase, $category, $process->diagnostics);
                 }
 
-                $phase = 'validation';
+                $phase = Progress::VALIDATION;
                 $this->notify(new Progress($phase));
                 $sizes = [];
 
@@ -406,7 +406,7 @@ class PendingExport
                     $sizes[] = $size;
                 }
 
-                $phase = 'publication';
+                $phase = Progress::PUBLICATION;
                 $this->notify(new Progress($phase));
                 $files = [];
 

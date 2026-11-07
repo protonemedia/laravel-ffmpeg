@@ -4,6 +4,16 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 readonly class Progress
 {
+    public const string STAGING = 'staging';
+
+    public const string PROBING = 'probing';
+
+    public const string ENCODING = 'encoding';
+
+    public const string VALIDATION = 'validation';
+
+    public const string PUBLICATION = 'publication';
+
     public function __construct(
         public string $phase,
         public ?float $elapsedSeconds = null,
@@ -13,4 +23,9 @@ readonly class Progress
         public int $pass = 1,
         public int $totalPasses = 1,
     ) {}
+
+    public function isEncoding(): bool
+    {
+        return $this->phase === self::ENCODING;
+    }
 }
