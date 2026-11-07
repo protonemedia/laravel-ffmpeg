@@ -24,6 +24,18 @@ All outputs, including local destinations, are generated in the workspace. Every
 
 The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. URL inputs, additional geometry helpers, two-pass encoding, and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
 
+### Generated-file lookup
+
+```php
+$result->file();                                 // First output, unchanged.
+$result->file('nested/preview.mp4');              // Unique destination path.
+$result->file('full.mp4', disk: 'videos');        // Path on a named disk.
+$result->file(disk: 'previews');                  // Unique output on this disk.
+$result->files();                                // All generated files.
+```
+
+A lookup with a path or disk requires exactly one match. It uses literal, case-sensitive destination paths and disk names. No match throws `Illuminate\Support\ItemNotFoundException`. Multiple matches throw `Illuminate\Support\MultipleItemsFoundException`, following Laravel Collection's `sole()` behavior. A path shared by two disks requires the disk name to disambiguate it. Filesystem instances have no disk name; `files()` remains available for selections that the path and disk name cannot distinguish. Lookups neither access Storage nor change output order.
+
 ### Probe accessors
 
 ```php

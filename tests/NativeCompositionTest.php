@@ -8,6 +8,8 @@ use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\ItemNotFoundException;
+use Illuminate\Support\MultipleItemsFoundException;
 use InvalidArgumentException;
 use Mockery;
 use PHPUnit\Framework\Attributes\Test;
@@ -506,6 +508,43 @@ class NativeCompositionTest extends TestCase
             $this->assertSame('a LUT', Storage::disk('memory')->get('look.cube'));
             Event::assertDispatched(Events\ExportCancelled::class);
         }
+    }
+
+    #[Test]
+    public function generated_files_can_be_selected_by_path_and_disk_without_ambiguous_matches(): void
+    {
+        $this->fakePipeline();
+        $this->fakeLocalDisk();
+        $result = FFMpeg::disk('memory')->open('source.mkv')->export()
+            ->output('full.mkv', fn ($out) => $out->mapVideo(0)->toDisk('memory'))
+            ->output('full.mkv', fn ($out) => $out->mapVideo(0)->toDisk('local'))
+            ->output('nested/preview.mkv', fn ($out) => $out->mapVideo(0)->toDisk('memory'))
+            ->save();
+
+        $this->assertSame('full.mkv', $result->file()->path);
+        $this->assertSame('memory', $result->file()->disk);
+        $this->assertSame('nested/preview.mkv', $result->file('nested/preview.mkv')->path);
+        $this->assertSame('local', $result->file('full.mkv', disk: 'local')->disk);
+        $this->assertSame('memory', $result->file('full.mkv', disk: 'memory')->disk);
+        $this->assertSame('full.mkv', $result->file(disk: 'local')->path);
+
+        foreach ([
+            [fn () => $result->file('missing.mkv'), ItemNotFoundException::class],
+            [fn () => $result->file('nested/preview.mkv', disk: 'local'), ItemNotFoundException::class],
+            [fn () => $result->file('full.mkv'), MultipleItemsFoundException::class],
+            [fn () => $result->file(disk: 'memory'), MultipleItemsFoundException::class],
+        ] as [$lookup, $exceptionClass]) {
+            try {
+                $lookup();
+                $this->fail('A lookup must identify exactly one generated file.');
+            } catch (ItemNotFoundException|MultipleItemsFoundException $exception) {
+                $this->assertInstanceOf($exceptionClass, $exception);
+            }
+        }
+
+        $this->assertCount(3, $result->files());
+        $this->assertSame('memory', $result->file()->disk);
+        $this->assertSame('encoded', Storage::disk('local')->get($result->file('full.mkv', disk: 'local')->path));
     }
 
     #[Test]

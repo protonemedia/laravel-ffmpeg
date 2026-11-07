@@ -14,9 +14,14 @@ readonly class ExportResult
         return collect($this->generatedFiles);
     }
 
-    public function file(): GeneratedFile
+    public function file(?string $path = null, ?string $disk = null): GeneratedFile
     {
-        return $this->generatedFiles[0];
+        if ($path === null && $disk === null) {
+            return $this->generatedFiles[0];
+        }
+
+        return $this->files()->sole(fn (GeneratedFile $file) =>
+            ($path === null || $file->path === $path) && ($disk === null || $file->disk === $disk));
     }
 
     public function processes(): Collection
