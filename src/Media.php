@@ -45,6 +45,11 @@ readonly class Media
         return new PendingExport($this, $this->defaultOutputDisk());
     }
 
+    public function frame(float|string $at = 0): PendingFrame
+    {
+        return new PendingFrame($this, $this->defaultOutputDisk(), $at);
+    }
+
     /** @internal */
     public function defaultOutputDisk(): string|Filesystem
     {

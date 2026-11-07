@@ -339,6 +339,107 @@ class NativeExportTest extends TestCase
     }
 
     #[Test]
+    public function frame_exports_validate_image_bytes_before_publishing_and_clean_up_failures(): void
+    {
+        $image = file_get_contents(__DIR__.'/src/logo.png');
+        $this->fakePipeline(function (PendingProcess $process) use ($image) {
+            file_put_contents(end($process->command), $image);
+
+            return Process::result();
+        });
+        $media = FFMpeg::disk('memory')->open('source.mp4');
+        $result = $media->frame(at: '00:00:01.125')->save('nested/frame.png');
+        $this->assertSame($image, Storage::disk('memory')->get('nested/frame.png'));
+        $this->assertSame('image', $result->file()->role);
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+
+        $this->fakePipeline();
+        try {
+            $media->frame(at: 1)->save('invalid.png');
+            $this->fail('Non-image output must not be published.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
+        }
+        $this->assertFalse(Storage::disk('memory')->exists('invalid.png'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+
+        foreach ([-1, INF, '12.5'] as $invalid) {
+            try {
+                $media->frame(at: $invalid);
+                $this->fail('An invalid frame timestamp was accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        try {
+            $media->frame(at: 0)->save('frame.mp4');
+            $this->fail('A non-image destination was accepted.');
+        } catch (InvalidArgumentException) {
+            $this->addToAssertionCount(1);
+        }
+    }
+
+    #[Test]
+    public function real_frames_sample_after_the_timestamp_and_return_or_publish_images(): void
+    {
+        $probe = getenv('FFMPEG_9_FFPROBE');
+
+        if (! $probe) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real frame extraction.');
+        }
+
+        $ffmpeg = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $fixture = $this->root.'/sparse.mkv';
+        $generation = Process::run([
+            $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=96x64:r=1:d=1',
+            '-f', 'lavfi', '-i', 'color=c=blue:s=96x64:r=1:d=1',
+            '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0,setpts=3*N/TB[v]',
+            '-map', '[v]', '-fps_mode', 'vfr', '-c:v', 'ffv1', $fixture,
+        ]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        Storage::disk('memory')->put('sparse.mkv', file_get_contents($fixture));
+        $media = FFMpeg::disk('memory')->open('sparse.mkv');
+
+        $phases = [];
+        $bytes = $media->frame(at: '00:00:01.100')->fit(32, 32)->toDisk('not-configured')
+            ->onProgress(function (Progress $progress) use (&$phases) {
+                $phases[] = $progress->phase;
+                $this->assertNull($progress->percentage);
+            })->get();
+        $info = getimagesizefromstring($bytes);
+        $this->assertSame([32, 32, IMAGETYPE_JPEG], array_slice($info, 0, 3));
+        $image = imagecreatefromstring($bytes);
+        $color = imagecolorsforindex($image, imagecolorat($image, 16, 16));
+        $this->assertGreaterThan(200, $color['blue']);
+        $this->assertLessThan(30, $color['red']);
+        $this->assertNotContains(Progress::PUBLICATION, $phases);
+        Event::assertDispatched(Events\ExportCompleted::class, fn ($event) => $event->files === []);
+
+        $result = $media->frame(at: 1.1)->resize(width: 48)->save('nested/%03d.png');
+        $this->assertSame('image', $result->file()->role);
+        $this->assertSame('memory', $result->file()->disk);
+        $png = Storage::disk('memory')->get('nested/%03d.png');
+        $this->assertSame([48, 32, IMAGETYPE_PNG], array_slice(getimagesizefromstring($png), 0, 3));
+        $image = imagecreatefromstring($png);
+        $this->assertGreaterThan(200, imagecolorsforindex($image, imagecolorat($image, 24, 16))['blue']);
+
+        $first = $media->frame()->get();
+        $this->assertSame([96, 64, IMAGETYPE_JPEG], array_slice(getimagesizefromstring($first), 0, 3));
+        $image = imagecreatefromstring($first);
+        $this->assertGreaterThan(200, imagecolorsforindex($image, imagecolorat($image, 48, 32))['red']);
+
+        try {
+            $media->frame(at: 99)->save('beyond-end.jpg');
+            $this->fail('A timestamp beyond the final frame must not publish an empty image.');
+        } catch (MediaException $exception) {
+            $this->assertSame([], $exception->published);
+        }
+        $this->assertFalse(Storage::disk('memory')->exists('beyond-end.jpg'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
     public function generated_files_read_streams_and_delegate_temporary_urls_to_the_retained_filesystem(): void
     {
         $this->fakePipeline();

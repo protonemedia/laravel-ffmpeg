@@ -39,6 +39,8 @@ class PendingExport
 
     private bool $running = false;
 
+    protected string $outputRole = 'media';
+
     public function __construct(private readonly Media $media, string|Filesystem $disk)
     {
         $this->inputs = [$media];
@@ -204,7 +206,7 @@ class PendingExport
         return $names;
     }
 
-    private function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
         $composition = count($this->inputs) > 1 || $this->graph !== null;
         $mappedLabels = $used = $compiledOutputs = [];
@@ -279,6 +281,11 @@ class PendingExport
 
     public function save(?string $path = null): ExportResult
     {
+        return $this->execute($path);
+    }
+
+    protected function execute(?string $path, bool $contents = false): ExportResult|string
+    {
         $this->assertMutable();
 
         if ($path === null && $this->outputs === []) {
@@ -295,14 +302,14 @@ class PendingExport
 
         $this->running = true;
         $operationId = bin2hex(random_bytes(16));
-        $destinations = array_map(fn ($output) => $output->destination(), $outputs);
+        $destinations = $contents ? [] : array_map(fn ($output) => $output->destination(), $outputs);
         $published = [];
         $phase = Progress::STAGING;
 
         try {
             Event::dispatch(new Events\ExportStarting($operationId, $destinations));
             $this->notify(new Progress($phase));
-            $result = $this->media->withInput(function (string $input, Workspace $workspace) use ($outputs, &$phase, &$published) {
+            $result = $this->media->withInput(function (string $input, Workspace $workspace) use ($outputs, $contents, &$phase, &$published) {
                 $paths = array_map(fn ($media) => $workspace->stage($media), $this->inputs);
                 $redactions = [];
 
@@ -357,9 +364,7 @@ class PendingExport
                     $redactions[end($outputPaths)] = '[output:'.$index.']';
                 }
 
-                // Graphs can change timing arbitrarily; do not invent a percentage.
-                $duration = $this->graph === null && ! array_any($metadata, fn ($item) => $item->duration() === null)
-                    ? max(array_map(fn ($item) => $item->duration(), $metadata)) : null;
+                $duration = $this->encodingDuration($metadata);
                 $durations = array_map(function ($output) use ($duration) {
                     $clip = $output->clipSettings();
 
@@ -385,11 +390,7 @@ class PendingExport
                 $sizes = [];
 
                 foreach ($outputPaths as $index => $outputPath) {
-                    clearstatcache(true, $outputPath);
-
-                    if (! is_file($outputPath) || ($size = filesize($outputPath)) === false || $size === 0) {
-                        throw new MediaException('FFmpeg did not produce a nonempty media file.', $phase, 'artifact');
-                    }
+                    $size = $this->validateArtifact($outputPath);
 
                     if (count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null) {
                         try {
@@ -404,6 +405,16 @@ class PendingExport
                     }
 
                     $sizes[] = $size;
+                }
+
+                if ($contents) {
+                    $bytes = @file_get_contents($outputPaths[0]);
+
+                    if ($bytes === false) {
+                        throw new MediaException('Cannot read the generated image.', $phase, 'artifact');
+                    }
+
+                    return $bytes;
                 }
 
                 $phase = Progress::PUBLICATION;
@@ -436,7 +447,7 @@ class PendingExport
                         }
                     }
 
-                    $files[] = new GeneratedFile($disk, $destination['disk'], $destination['path'], $sizes[$index]);
+                    $files[] = new GeneratedFile($disk, $destination['disk'], $destination['path'], $sizes[$index], role: $this->outputRole);
                 }
 
                 return new ExportResult($files, [$process->summary()]);
@@ -455,9 +466,27 @@ class PendingExport
             $this->running = false;
         }
 
-        Event::dispatch(new Events\ExportCompleted($operationId, $result->files()->map->toArray()->all()));
+        Event::dispatch(new Events\ExportCompleted($operationId, $result instanceof ExportResult ? $result->files()->map->toArray()->all() : []));
 
         return $result;
+    }
+
+    protected function encodingDuration(array $metadata): ?float
+    {
+        // Graphs can change timing arbitrarily; do not invent a percentage.
+        return $this->graph === null && ! array_any($metadata, fn ($item) => $item->duration() === null)
+            ? max(array_map(fn ($item) => $item->duration(), $metadata)) : null;
+    }
+
+    protected function validateArtifact(string $path): int
+    {
+        clearstatcache(true, $path);
+
+        if (! is_file($path) || ($size = filesize($path)) === false || $size === 0) {
+            throw new MediaException('FFmpeg did not produce a nonempty media file.', Progress::VALIDATION, 'artifact');
+        }
+
+        return $size;
     }
 
     private function validateResources(Workspace $workspace, ProcessRunner $runner, array $resources): void

@@ -372,7 +372,7 @@ trait ConfiguresOutput
         return $this;
     }
 
-    private function clipSeconds(float|string $value): float
+    protected function clipSeconds(float|string $value): float
     {
         if (is_float($value)) {
             return $value;
@@ -385,7 +385,7 @@ trait ConfiguresOutput
         return (float) $parts[1] * 3600 + (int) $parts[2] * 60 + (float) $parts[3];
     }
 
-    private function clipTimestamp(float $seconds): string
+    protected function clipTimestamp(float $seconds): string
     {
         return rtrim(rtrim(number_format($seconds, 6, '.', ''), '0'), '.');
     }

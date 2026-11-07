@@ -26,13 +26,29 @@ The old API and dependency remain temporarily while their replacements are built
 
 ### Native acceptance toolchain
 
-`.agents/setup` installs matching FFmpeg and FFprobe 9.0.2 binaries at `/opt/ffmpeg-9.0.2/bin`. The shared `.agents/install-ffmpeg` script verifies the source archive's SHA-256 before building with libx264, FreeType, HarfBuzz, and libass. An existing matching pair is reused. Resume checks for the binaries without installing anything.
+`.agents/setup` installs matching FFmpeg and FFprobe 9.0.2 binaries at `/opt/ffmpeg-9.0.2/bin`. The shared `.agents/install-ffmpeg` script verifies the source archive's SHA-256 before building with libx264, FreeType, HarfBuzz, libass, and zlib for PNG support. An existing matching pair with PNG encoding is reused. Resume checks for the binaries without installing anything.
 
 ```bash
 FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by random
 ```
 
 CI uses the same installer and runs native real-media acceptance throughout the PHP 8.4/8.5 and Laravel 12/13 matrix. The compiled pair is cached by operating system, architecture, and installer contents. A cold installation compiles from source; warm setup and cache hits reuse the binaries. Distribution FFmpeg remains separate for legacy tests until the old backend is removed.
+
+### Single-frame extraction
+
+```php
+$media = FFMpeg::disk('videos')->open('converted.mp4');
+$result = $media->frame(at: '00:00:12.500')->resize(width: 320)
+	->toDisk('thumbnails')->save('covers/preview.png');
+$bytes = $media->frame(at: 12.5)->get(); // Raw JPEG bytes, not Base64.
+$first = $media->frame()->get();         // Timestamp zero, with fresh settings.
+```
+
+`frame()` selects the first non-attached-picture video stream and decodes the first frame at or after the timestamp. Timestamps accept nonnegative numeric seconds or the same strict timecodes as `clip()`. There is no artificial sampling window, so sparse variable-frame-rate media can return a frame several seconds later. A timestamp beyond the final frame throws a `MediaException` instead of publishing an empty file.
+
+`save()` accepts `.jpg`, `.jpeg`, or `.png` destinations and returns an `ExportResult` with an image-role file. Generated images must have positive dimensions and the requested image format before publication. Destination defaults, Storage write options, filters, callbacks, cancellation, and workspace cleanup use the export pipeline. A `%` in a destination remains literal; single-frame output is not an image sequence.
+
+`get()` returns JPEG bytes after validation and workspace cleanup. It performs no destination Storage write or publication notification. Lifecycle events contain empty destination and file lists for this in-memory result. Image extraction does not infer a percentage from the video's full duration. `frames()`, count-based sampling, and storyboards remain unimplemented.
 
 ### Progress helpers
 
