@@ -45,9 +45,9 @@ class NativeUrlTest extends TestCase
         config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
     }
 
-    private function server(bool $tls = false): string
+    private function server(bool $tls = false, ?string $fixture = null): string
     {
-        $command = [PHP_BINARY, __DIR__.'/src/http-input-server.php', __DIR__.'/src/guitar.m4a', $this->root.'/requests'];
+        $command = [PHP_BINARY, __DIR__.'/src/http-input-server.php', $fixture ?? __DIR__.'/src/guitar.m4a', $this->root.'/requests'];
 
         if ($tls) {
             $key = openssl_pkey_new(['private_key_bits' => 2048]);
@@ -154,6 +154,32 @@ class NativeUrlTest extends TestCase
         $requests = array_map(fn ($line) => json_decode($line, true), file($this->root.'/requests'));
         $this->assertSame(['first', 'second'], array_column($requests, 'source'));
         $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function prepared_url_images_download_once_per_execution_without_exposing_urls_to_callbacks_or_processes(): void
+    {
+        $this->native();
+        $base = $this->server(fixture: __DIR__.'/src/logo.png');
+        foreach ([false, true] as $authenticated) {
+            $calls = 0;
+            $url = $base.($authenticated ? '/private' : '/public').'?signature=private-image-signature';
+            $media = FFMpeg::disk()->openUrl($url, $authenticated ? ['Authorization' => 'Bearer first-secret'] : [], download: $authenticated)
+                ->prepareImage(function (string $path) use (&$calls) {
+                    $calls++;
+                    $this->assertStringStartsWith($this->root.'/workspaces/', $path);
+                    $this->assertSame(hash_file('sha256', __DIR__.'/src/logo.png'), hash_file('sha256', $path));
+                });
+            $result = $media->export()->video('ffv1')->toDisk('memory')->save('logo.mkv');
+            $this->assertSame(1, $calls);
+            $this->assertStringNotContainsString($base, json_encode($result->processes()));
+            $this->assertStringNotContainsString('private-image-signature', json_encode($result->processes()));
+            $this->assertStringNotContainsString('first-secret', json_encode($result->processes()));
+            $this->assertSame(getimagesize(__DIR__.'/src/logo.png')[0], FFMpeg::disk('memory')->open('logo.mkv')->probe()->video()->width());
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
+        }
+        $requests = array_map(fn ($line) => json_decode($line, true), file($this->root.'/requests'));
+        $this->assertSame([null, 'first'], array_column($requests, 'source'));
     }
 
     #[Test]

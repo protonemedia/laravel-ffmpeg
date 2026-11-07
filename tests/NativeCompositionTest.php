@@ -19,6 +19,7 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use Spatie\Image\Image;
 
 class NativeCompositionTest extends TestCase
 {
@@ -573,6 +574,108 @@ class NativeCompositionTest extends TestCase
         $this->assertCount(3, $result->files());
         $this->assertSame('memory', $result->file()->disk);
         $this->assertSame('encoded', Storage::disk('local')->get($result->file('full.mkv', disk: 'local')->path));
+    }
+
+    #[Test]
+    public function image_preparation_is_deferred_and_failures_cannot_mutate_originals_or_publish(): void
+    {
+        Process::fake();
+        $local = $this->fakeLocalDisk();
+        $this->addTestFile('logo.png');
+        $hash = hash_file('sha256', $local->path('logo.png'));
+        foreach ([fn ($path) => throw new \RuntimeException('application-secret'), fn ($path) => file_put_contents($path, '')] as $prepare) {
+            $image = FFMpeg::disk('local')->open('logo.png')->prepareImage($prepare);
+            $this->assertContains('[input:0]', $image->export()->video('ffv1')->inspect());
+            Process::assertNothingRan();
+            try {
+                $image->export()->video('ffv1')->toDisk('memory')->save('failed.mkv');
+                $this->fail('Invalid image preparation was accepted.');
+            } catch (MediaException $exception) {
+                $this->assertSame('staging', $exception->phase);
+                $this->assertSame('resource', $exception->category);
+                $this->assertNull($exception->getPrevious());
+                $this->assertStringNotContainsString('application-secret', $exception->getMessage());
+                $this->assertFalse(Storage::disk('memory')->exists('failed.mkv'));
+            }
+            $this->assertSame($hash, hash_file('sha256', $local->path('logo.png')));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
+        }
+        Process::assertNothingRan();
+    }
+
+    #[Test]
+    public function image_watermarks_preserve_alpha_offsets_duration_and_audio_with_optional_private_preparation(): void
+    {
+        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real watermark acceptance.');
+        }
+        $binary = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $binary, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $local = $this->fakeLocalDisk();
+        $generation = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=2',
+            '-f', 'lavfi', '-i', 'sine=sample_rate=48000:duration=2', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $local->path('source.mkv')]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $bitmap = imagecreatetruecolor(32, 16);
+        imagealphablending($bitmap, false);
+        imagesavealpha($bitmap, true);
+        imagefill($bitmap, 0, 0, imagecolorallocatealpha($bitmap, 0, 0, 0, 127));
+        imagefilledrectangle($bitmap, 0, 0, 15, 15, imagecolorallocatealpha($bitmap, 0, 0, 255, 0));
+        imagepng($bitmap, $this->root.'/logo.png');
+        imagedestroy($bitmap);
+        $bytes = file_get_contents($this->root.'/logo.png');
+        $key = "logos/blue 'é.png";
+        foreach (['local', 'memory'] as $disk) {
+            Storage::disk($disk)->put($key, $bytes);
+            foreach ([false, true] as $preprocess) {
+                $paths = [];
+                $logo = FFMpeg::disk($disk)->open($key);
+                if ($preprocess) {
+                    $logo = $logo->prepareImage(function (string $path) use (&$paths, $local) {
+                        $paths[] = $path;
+                        $this->assertStringStartsWith($this->root.'/workspaces/', $path);
+                        $this->assertSame(0600, fileperms($path) & 0777);
+                        $this->assertNotSame($local->path("logos/blue 'é.png"), $path);
+                        Image::load($path)->width(24)->save();
+                        $this->assertSame([24, 12], array_slice(getimagesize($path), 0, 2));
+                    });
+                }
+                $export = FFMpeg::disk('local')->open('source.mkv')->export();
+                $index = $export->addInput($logo);
+                $export->filterComplex('['.$index.':v]scale=16:8,format=rgba[logo];'
+                    .'[0:v][logo]overlay=x=main_w-overlay_w-7:y=main_h-overlay_h-5:eof_action=repeat:repeatlast=1:shortest=0[video]')
+                    ->map('[video]')->map('0:a')->video('ffv1')->audio('copy')->withoutMetadata(chapters: true)
+                    ->toDisk('memory')->save('watermarked.mkv');
+                $this->assertCount($preprocess ? 1 : 0, $paths);
+                foreach ($paths as $path) {
+                    $this->assertFileDoesNotExist($path);
+                }
+                $output = FFMpeg::disk('memory')->open('watermarked.mkv');
+                $this->assertEqualsWithDelta(2, $output->probe()->duration(), 0.001);
+                foreach ([0.2, 1.7] as $at) {
+                    $frame = imagecreatefromstring($output->frame(at: $at)->get());
+                    foreach ([[59, 49, 'blue'], [69, 49, 'red'], [53, 49, 'red'], [59, 43, 'red'], [59, 57, 'red']] as [$x, $y, $channel]) {
+                        $pixel = imagecolorsforindex($frame, imagecolorat($frame, $x, $y));
+                        $this->assertGreaterThan(220, $pixel[$channel]);
+                        $this->assertLessThan(35, $pixel[$channel === 'blue' ? 'red' : 'blue']);
+                    }
+                    imagedestroy($frame);
+                }
+                $local->put('watermarked.mkv', Storage::disk('memory')->get('watermarked.mkv'));
+                $original = Process::run([$binary, '-v', 'error', '-i', $local->path('source.mkv'), '-map', '0:a', '-f', 'md5', '-']);
+                $audio = Process::run([$binary, '-v', 'error', '-i', $local->path('watermarked.mkv'), '-map', '0:a', '-f', 'md5', '-']);
+                $this->assertTrue($original->successful(), $original->errorOutput());
+                $this->assertTrue($audio->successful(), $audio->errorOutput());
+                $this->assertSame($original->output(), $audio->output());
+                if ($preprocess) {
+                    $logo->frame()->save('prepared.png');
+                    $this->assertSame(24, getimagesizefromstring(Storage::disk($disk)->get('prepared.png'))[0]);
+                    $this->assertCount(2, $paths);
+                    $this->assertNotSame($paths[0], $paths[1]);
+                }
+                $this->assertSame($bytes, Storage::disk($disk)->get($key));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
+            }
+        }
     }
 
     #[Test]

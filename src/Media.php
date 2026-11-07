@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\LocalFilesystemAdapter;
 use Illuminate\Http\File;
@@ -51,6 +52,11 @@ readonly class Media
         return new self(config('filesystems.default'), new ConcatInput([$this, ...$following]));
     }
 
+    public function prepareImage(callable $prepare): self
+    {
+        return new self($this->defaultOutputDisk(), new PreparedImageInput($this, Closure::fromCallable($prepare)));
+    }
+
     public function frame(float|string $at = 0): PendingFrame
     {
         return new PendingFrame($this, $this->defaultOutputDisk(), $at);
@@ -69,7 +75,8 @@ readonly class Media
     /** @internal */
     public function defaultOutputDisk(): string|Filesystem
     {
-        return is_string($this->source) || $this->source instanceof SequenceInput ? $this->disk : config('filesystems.default');
+        return is_string($this->source) || $this->source instanceof SequenceInput || $this->source instanceof PreparedImageInput
+            ? $this->disk : config('filesystems.default');
     }
 
     /** @internal */

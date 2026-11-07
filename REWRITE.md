@@ -312,6 +312,39 @@ Each execution stages non-local images and prepares safe private numbered aliase
 
 Sequences can be graph inputs but are not standalone files for copy concatenation or filter resources. Encode a sequence to a regular media file before passing it to `concat()`.
 
+### Watermarks and image preparation
+
+Watermarks are ordinary graph inputs. FFmpeg controls placement, scaling, and alpha compositing. This example keeps a static image visible through the end of the video and copies the source audio:
+
+```php
+$export = FFMpeg::disk('videos')->open('source.mkv')->export();
+$logo = $export->addInput(FFMpeg::disk('assets')->open('brand/logo.png'));
+$export->filterComplex(
+	'['.$logo.':v]scale=160:-1,format=rgba[logo];'
+	.'[0:v][logo]overlay=x=main_w-overlay_w-20:y=main_h-overlay_h-15:'
+	.'eof_action=repeat:repeatlast=1:shortest=0[video]'
+)->map('[video]')->map('0:a:0?')->video('libx264', crf: 23)->audio('copy')
+	->withoutMetadata(chapters: true)->toDisk('videos')->save('branded.mkv');
+```
+
+Local and non-local Storage images use the same API. A downloaded URL image uses `openUrl($url, headers: $headers, download: true)`. No filename is embedded in the filter graph.
+
+`Media::prepareImage(callable $prepare)` optionally preprocesses an image before FFmpeg reads it. The callback receives the path of a private writable copy, not the original. It must write the prepared image to that same path. The package does not depend on an image library or forward unknown methods to one. For example, an application with Spatie Image installed can supply:
+
+```php
+$logo = FFMpeg::disk('assets')->open('brand/logo.png')
+	->prepareImage(function (string $path) {
+		\Spatie\Image\Image::load($path)->width(320)->save();
+	});
+// Pass $logo to addInput(), then compose it with an overlay graph.
+```
+
+Preparation returns an immutable media descriptor. Construction and inspection do no IO and do not call the callback. The callback runs during staging once per media identity and staging purpose in each execution. Reusing the descriptor in a later execution creates a new private copy and reruns preparation. Callback results do not persist across executions. Input options and multi-file sources are rejected.
+
+URL images always download through Laravel Http before preparation, even when the source descriptor selects direct input. Callbacks and FFmpeg receive local filenames, never URLs or headers. Input and prepared output must have readable raster image headers. Callback errors and invalid prepared images fail with phase `staging` and category `resource`, without publication or an exception chain that could expose private paths or credentials. FFmpeg still validates image decoding. The callback is trusted application code, not a sandbox.
+
+Ordinary exports are verified with transparent local and staged PNGs, scaled bottom-right offsets, persistent overlays, unchanged decoded audio, private-copy preprocessing, source retention, and repeated executions. Watermark integration with native HLS remains open.
+
 ### Composition and resources
 
 ```php
@@ -410,7 +443,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `NativeSequenceTest` | Local PNG and staged JPEG inputs verified with decoded order, explicit count, decimal and rational rates, non-default starts, exact output duration, source retention, and cleanup; missing, mismatched, disguised, and corrupt images reject publication |
 | Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `TileTest`, `VTTPreviewThumbnailsGeneratorTest` | Open |
 | Waveform images | Generate and inspect an actual waveform image from audio. | `NativeExportTest`; `MediaOpenerTest` only checks the old object type | Real amplitude, muted audio, clipped timing, colors, odd image dimensions, and post-render resize verified |
-| Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `WatermarkTest`, `WatermarkFactoryTest`, `HlsExportTest` | Open |
+| Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `NativeCompositionTest`, `NativeUrlTest`, legacy `HlsExportTest` | Ordinary graph exports verify transparency, offsets, scaling, repeated static images, copied audio, and optional private-copy image preparation; URL downloads and callback failure cleanup verified; native HLS integration remains open |
 | Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Open |
 | Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle and real child reaping verified; both encoding passes, failure cleanup, and cancellation covered |
 | Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `ExportTest`, `TileTest` | Multiple single-file outputs verified; playlist/segment inventory open |
