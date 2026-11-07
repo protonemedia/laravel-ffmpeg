@@ -147,6 +147,56 @@ class NativeConcatTest extends TestCase
     }
 
     #[Test]
+    public function an_explicit_normalization_graph_preserves_audio_delays_across_different_inputs(): void
+    {
+        $binary = $this->native();
+        foreach ([['red', '64x48', '10', '0.6', '0.1', '0.2|0.4:s=48000:d=0.5'],
+            ['blue', '80x60', '20', '1.1', '0.15', '0.7:s=8000:d=0.95']] as $index => [$color, $size, $rate, $duration, $delay, $signal]) {
+            $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', "color=$color:size=$size:rate=$rate:duration=$duration",
+                '-itsoffset', $delay, '-f', 'lavfi', '-i', 'aevalsrc='.$signal,
+                '-c:v', 'libx264', '-bf', '0', '-threads', '1', '-c:a', 'pcm_s16le', '-copyts', '-fps_mode:v', 'passthrough', $this->root.'/'.$index.'.mov']);
+            $this->assertTrue($result->successful(), $result->errorOutput());
+        }
+
+        $first = FFMpeg::disk()->open(new File($this->root.'/0.mov'));
+        $export = $first->export();
+        $export->addInput(FFMpeg::disk()->open(new File($this->root.'/1.mov')));
+        $export->filterComplex('[0:v]scale=128:96,setsar=1,fps=10,setpts=PTS-STARTPTS[v0];'
+            .'[1:v]scale=128:96,setsar=1,fps=10,setpts=PTS-STARTPTS[v1];'
+            .'[0:a]pan=mono|c0=c0,aresample=16000:async=1:first_pts=0,aformat=sample_fmts=s16,apad=whole_dur=0.6,atrim=duration=0.6[a0];'
+            .'[1:a]pan=mono|c0=c0,aresample=16000:async=1:first_pts=0,aformat=sample_fmts=s16,apad=whole_dur=1.1,atrim=duration=1.1[a1];'
+            .'[v0][a0][v1][a1]concat=n=2:v=1:a=1[video][audio]')
+            ->map('[video]')->map('[audio]')->video('libx264', crf: 20)->audio('pcm_s16le')
+            ->withoutMetadata(chapters: true)->toDisk('memory')->save('normalized.mov');
+
+        $media = FFMpeg::disk('memory')->open('normalized.mov');
+        $metadata = $media->probe();
+        $this->assertSame(128, $metadata->video()->get('width'));
+        $this->assertSame(96, $metadata->video()->get('height'));
+        $this->assertSame('10/1', $metadata->video()->get('r_frame_rate'));
+        $this->assertSame('16000', $metadata->audioStreams()->first()->get('sample_rate'));
+        $this->assertSame(1, $metadata->audioStreams()->first()->get('channels'));
+        $this->assertEqualsWithDelta(1.7, $metadata->duration(), 0.001);
+
+        file_put_contents($this->root.'/normalized.mov', Storage::disk('memory')->get('normalized.mov'));
+        $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/normalized.mov', '-map', '0:a', '-f', 's16le', 'pipe:1']);
+        $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+        $this->assertSame(54400, strlen($decoded->output())); // 1.7 seconds of 16000 Hz mono PCM.
+        foreach ([[0.05, 0], [0.2, 6554], [0.65, 0], [0.85, 22938]] as [$at, $sample]) {
+            $this->assertEqualsWithDelta($sample, unpack('v', substr($decoded->output(), (int) ($at * 16000) * 2, 2))[1], 2);
+        }
+
+        foreach ([[0.2, 'red'], [0.9, 'blue']] as [$at, $channel]) {
+            $image = imagecreatefromstring($media->frame(at: $at)->get());
+            $pixel = imagecolorsforindex($image, imagecolorat($image, 10, 10));
+            $this->assertGreaterThan(200, $pixel[$channel]);
+            $this->assertLessThan(40, $pixel[$channel === 'red' ? 'blue' : 'red']);
+            imagedestroy($image);
+        }
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
     public function copy_concat_retains_each_segments_audio_delay_relative_to_video(): void
     {
         $binary = $this->native();

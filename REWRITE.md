@@ -294,6 +294,8 @@ $export->filterComplex(
 
 Audio-inclusive graphs must declare their audio policy and preserve each segment's audio delay relative to video. Resetting each stream independently to its first sample can erase that delay. The library does not infer silence insertion, audio layout conversion, or intermediate encodes. Graph timing leaves percentage unknown.
 
+`NativeConcatTest` verifies a zero-origin policy with different dimensions, frame rates, sample rates, and channel layouts. It selects the first audio channel, resamples to 16000 Hz with `aresample=16000:async=1:first_pts=0`, and pads and trims each audio segment to its video duration before concatenation. Decoded PCM confirms silence during each original audio delay and the expected signal afterward. Inputs with other origins require a common timeline correction, not independent first-sample resets.
+
 ### Composition and resources
 
 ```php
@@ -387,7 +389,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Copy and clipping | Remux without changing codecs. Distinguish accurate transcoding from keyframe copy cuts. Preserve audio offsets and VFR. | `NativeExportTest`, `CopyTest` | Remux, accurate duration, and decoded keyframe identity verified; VFR and offset coverage open |
 | Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `NativeCompositionTest`, `AddFilterTest`, `LegacyFilterMappingTest`, `ExportTest` | Simple filters, LUTs, fonts, literal text, and SRT/ASS/WebVTT rendering verified with real media, including clipped cue timing and manifest rejection |
 | Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `NativeCompositionTest`, `ExportTest` | Mixed-disk overlay, LUT, branching, independent clips, copied audio, validation, and partial publication verified |
-| Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `NativeConcatTest` | Compatible video/audio copy, mixed disks, decoded order, layout rejection, source retention, and audio-delay packet timestamps verified; explicit video normalization graph verified; broader audio-inclusive normalization remains open |
+| Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `NativeConcatTest` | Compatible video/audio copy, mixed disks, decoded order, layout rejection, source retention, and audio-delay packet timestamps verified; explicit video-only and audio-inclusive normalization graphs verified, including delayed audio across different sample rates and channel layouts |
 | Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `NativeExportTest`, `FrameTest` | Single images and interval/count output sequences verified with real media; image-quality controls remain available through output options |
 | Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `ExportTest` | Open |
 | Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `TileTest`, `VTTPreviewThumbnailsGeneratorTest` | Open |
