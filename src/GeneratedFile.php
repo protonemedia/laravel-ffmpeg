@@ -41,6 +41,11 @@ readonly class GeneratedFile
         return $this->filesystem->readStream($this->path);
     }
 
+    public function delete(): bool
+    {
+        return $this->owned && $this->filesystem->delete($this->path);
+    }
+
     public function toArray(): array
     {
         return ['disk' => $this->disk, 'path' => $this->path, 'size' => $this->size, 'role' => $this->role, 'owned' => $this->owned];

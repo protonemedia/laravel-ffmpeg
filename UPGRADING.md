@@ -2,6 +2,8 @@
 
 Version 9 replaces PHP-FFMpeg with Laravel Process, Storage, and Http. The old builders, format objects, driver forwarding, and filter factories are removed. This is a breaking upgrade, not a compatibility layer.
 
+This guide describes the `9.x` development branch, not a published release.
+
 ## Update the runtime
 
 Use PHP 8.4 or later, Laravel 12 or 13, and matching FFmpeg and FFprobe 9.0.x binaries. The tested patch is 9.0.2. Install the codecs, filters, fonts, and HTTPS support that your application needs.
@@ -34,6 +36,23 @@ $private = FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer '.$token],
 
 `FFMpeg::openUrl()` uses the same HTTP rules as the disk selector. Headers require `download: true`. Downloads use Laravel Http with TLS verification and reject redirects. Direct URLs enter media process arguments, so do not include reusable credentials. See the [HTTP input reference](REWRITE.md#http-inputs) for transport limits and redaction rules.
 
+```php
+$metadata = $media->probeCached(
+	\Illuminate\Support\Facades\Cache::store('redis'),
+	versionedKey: 'tenant:42:asset:7:object-version:abc123',
+	ttl: 600,
+);
+
+$camera = FFMpeg::openRtsp($cameraUrl, transport: 'tcp', timeout: 10);
+$camera->frame()->toDisk('images')->save('snapshot.jpg');
+```
+
+Use `probeCached()` only with an application-owned source-version key and cache repository. Change the key when the object changes. A cache hit does not read or authorize the source. Your application owns freshness, tenant isolation, eviction, and metadata security. `probe()` and exports still probe normally.
+
+`openRtsp()` returns `RtspCamera`, not a `Media` descriptor for live exports. Its `frame()` captures a private PNG, then uses the ordinary frame pipeline. Transport is `tcp` or `udp`, and timeout is positive and at most 300 seconds. Actual TCP and UDP fixtures pass, but arbitrary camera compatibility is not claimed. Camera URLs must be trusted configuration. Restrict network access and protect credentials visible in process arguments.
+
+For hardware decoding, pass validated input pairs such as `inputOptions: ['-hwaccel', 'cuda', '-hwaccel_device', '0', '-hwaccel_output_format', 'cuda']` to `open()`. These flags are input-scoped and are not passed to FFprobe. They do not select an output encoder, generate transfer filters, or provide a CPU fallback. Hardware execution has not been validated here. Test your deployed build and GPU separately. See the [hardware input contract](REWRITE.md#cached-probing-and-hardware-inputs).
+
 Builders do not forward methods to PHP-FFMpeg. Use explicit codecs, scoped `inputOptions:`, `globalOptions()`, `outputOptions()`, and filters. Bitrates accept positive integers in bits per second, such as `2500000`, or unit strings such as `'2500k'`. Floats and unitless strings are invalid. `inspect()` returns the argument plan without reading inputs or launching a process. `save()` returns `ExportResult`, not the builder.
 
 ## Replace filters and clipping
@@ -51,6 +70,8 @@ $media->export()->video('copy')->audio('copy')
 ```
 
 Ordinary filters run in registration order. All output video filters run before generated watermark overlays, even filters called after `watermark()`. One-dimension resize preserves display aspect ratio; two explicit dimensions stretch. Use `fit()` for a contain or cover policy. Stream copy rejects filters and accurate clipping. Keyframe cuts can begin before the requested time. Timeline changes omit chapters unless explicitly mapped.
+
+For portrait sources, use `resize(height: 1920)` to preserve the autorotated display aspect ratio, or `fit(1080, 1920, mode: 'contain')` for an exact canvas. Probe width and height remain encoded dimensions, before display rotation.
 
 Use `frameRate()`, `flipHorizontal()`, `flipVertical()`, `grayscale()`, and `deinterlace()` instead of filter-factory callbacks. Deinterlace before resizing. `volume()` takes a linear multiplier; `delayAudio()` inserts silence on all channels. `fadeIn()` and `fadeOut()` affect video and audio by default. Fade-out requires an explicit start in seconds. Disable either stream type with `video: false` or `audio: false`.
 
@@ -74,7 +95,7 @@ $media->concatTranscoded($second)
 $media->concat($second)->export()->video('copy')->audio('copy')->save('joined.mkv');
 ```
 
-`watermark()` adds inputs and maps automatically for static PNG or JPEG images. The default anchor is bottom-right; offsets are inward margins. Marks run after all output video filters, regardless of call order. Repeated marks and multiple ordinary outputs are supported, but custom maps, graphs, additional media inputs, HLS, and video copy are not. Use `addInput()` and `filterComplex()` for custom composition and HLS overlays.
+`watermark()` adds inputs and maps automatically for PNG, JPEG, or GIF images. The default anchor is bottom-right; offsets are inward margins. Marks run after all output video filters, regardless of call order. Repeated marks, multiple ordinary outputs, and HLS variants are supported. Custom maps, graphs, additional media inputs, and video copy require another composition policy. Use `addInput()` and `filterComplex()` for custom graphs.
 
 `concat()` joins compatible streams without silently transcoding. `concatTranscoded()` returns an export builder with one output. Choose `normalizeVideo()` and either `normalizeAudio()` or `withoutAudio()` before saving. Normalization selects each input's first motion-video and audio streams, preserves audio delays, and requires finite sources with zero container/video origins. It rejects root filters, custom graphs, and stream copy. Sources without audio require `withoutAudio()` or a custom graph; the helper does not create missing audio tracks. Source chapters are not combined.
 
@@ -83,7 +104,7 @@ $media->concat($second)->export()->video('copy')->audio('copy')->save('joined.mk
 ```php
 $music = FFMpeg::disk('music')->open('background.mp3');
 $media->backgroundMusic($music, volume: 0.2)
-	->video('copy')->audio('aac')->save('with-music.mp4');
+	->at(2.5)->video('copy')->audio('aac')->save('with-music.mp4');
 
 $media->mixAudio($music, volume: 0.4, originalVolume: 0.8, normalize: true)
 	->fadeIn(1, video: false)->video('copy')->audio('aac')->save('mixed.mp4');
@@ -91,7 +112,9 @@ $media->mixAudio($music, volume: 0.4, originalVolume: 0.8, normalize: true)
 
 `backgroundMusic()` loops by default. Use `loop: false` for one playback, or `mixAudio()` for one-shot mixing with explicit gains. Call `loopAudio()` on the returned builder to repeat the added track. The primary container's duration sets output length. Short nonlooping audio ends in silence, and longer audio is trimmed. Silent video and audio-only primaries are supported.
 
-Mixing selects the first audio track from each input and the primary's first motion-video track when present. Output audio is stereo at 48000 Hz and must be encoded. Video copy is allowed without video filters. Audio filters and `volume()` run after mixing. Added audio starts at its first decoded sample; original audio retains its offset relative to video.
+Use `at(float $seconds)` to start only the added audio later. It accepts finite nonnegative offsets, rounded to the nearest 48 kHz sample. Later calls replace the offset; `at(0)` restores the default. Original timing and gains do not change. A loop repeats the added samples after the initial delay without repeating that delay. Offsets at or beyond the primary duration add no audio and do not extend output.
+
+Mixing selects the first audio track from each input and the primary's first motion-video track when present. Output audio is stereo at 48000 Hz and must be encoded. Video copy is allowed without video filters. Audio filters and `volume()` run after mixing. Added audio starts at its first decoded sample after any `at()` delay; original audio retains its offset relative to video.
 
 The default `normalize: false` adds the weighted signals and can clip. With original audio present, `normalize: true` divides both padded branches equally by two, without changing gain when a track ends. This is not loudness normalization.
 
@@ -124,7 +147,22 @@ $metadata->chapters();
 $metadata->toArray();
 ```
 
-Without maps, ordinary exports select the first motion-video and audio streams. Subtitles and cover art require explicit maps and container-compatible codecs. Multiple-input outputs require explicit maps and metadata/chapter policy. Stream tags and dispositions address output order, not input indexes.
+Without maps, ordinary exports select the first motion-video and audio streams. Existing subtitles and cover art require explicit maps and container-compatible codecs. The `coverArt()` attachment helper below owns its maps instead. General multiple-input outputs require explicit maps and metadata/chapter policy. Stream tags and dispositions address output order, not input indexes.
+
+```php
+$media->export()->coverArt(FFMpeg::disk('assets')->open('cover.png'))->save('album.mp4');
+
+$media->export()->map('0:v:0')->map('0:v:0')->map('0:a:0')->audio('copy')
+	->videoStream(0, fn ($track) => $track->codec('libx264')->crf(20)->preset('medium'))
+	->videoStream(1, fn ($track) => $track->codec('mpeg4')->bitrate('800k'))
+	->save('tracks.mp4');
+
+$media->export()->map('0:s:0')->outputOptions(['-c:s', 'webvtt'])->save('captions.vtt');
+```
+
+Use `coverArt()` instead of a custom attached-picture graph for MP4, M4A, or MP3. It attaches one standalone PNG or JPEG and copies all motion-video and audio tracks. It refuses existing cover art. It rejects encoding, filters, clipping, custom maps, graphs, and disposition overrides.
+
+`videoStream($track, $configure)` uses zero-based output video order after mapping, not input indexes. Its callback configures `codec()`, `bitrate()`, `crf()`, and `preset()` through `VideoStreamSettings`. Unspecified settings inherit `video()` defaults. Configure each track once; inherited bitrate and CRF conflicts are errors. Per-track overrides do not support two-pass encoding or create filter chains. The WebVTT recipe extracts a text subtitle track, not bitmap subtitles or speech.
 
 ## Replace image and analysis operations
 
@@ -140,6 +178,13 @@ $analysis->throw();
 ```
 
 `get()` returns raw JPEG bytes, not Base64. Storyboard geometry applies to each tile before assembly. `waveform()` writes an image; `waveformPeaks()` returns versioned amplitude data. Analysis-only nonzero exits remain inspectable until `throw()` is called.
+
+```php
+FFMpeg::disk('images')->open('title.png')->still(duration: 5, frameRate: 25)
+	->toDisk('videos')->save('title.mp4');
+```
+
+Use `still()` to hold a PNG or JPEG for a finite positive duration. Input dimensions must be even and at least two pixels, and input options are unsupported. Frame rate is an integer from 1 to 240, defaulting to 25. The single-output builder defaults to H.264 with `yuv420p` and creates no audio. Local, staged Storage, and downloaded images are supported. Output duration can round to frame boundaries.
 
 Waveform `colors` accepts a string or a nonempty list of color strings. For example, `waveform(colors: 'blue')` selects one color. A scalar string is not a delimited list. RGB and RGBA hexadecimal colors require a `#` or `0x` prefix.
 
@@ -164,6 +209,19 @@ return FFMpeg::disk('streams')->playlist('lesson/master.m3u8')
 ```
 
 Variants configure encoding only. MPEG-TS remains the default. Private key storage is explicit; key routes return 16 raw bytes after authorization. Keys rotate deterministically by segment group, with a random IV per segment. Playlist hooks are additive and cannot replace generated references or encryption lines. URL resolvers receive the canonical target, containing playlist, and original URI, not just a basename.
+
+```php
+$badge = FFMpeg::disk('assets')->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
+$media->hls()->watermark($badge, width: 96)
+	->variant('720p', fn ($variant) => $variant->resize(height: 720)->video('libx264', bitrate: '2500k'))
+	->toDisk('streams')->save('animated/master.m3u8');
+
+$lesson->hls_playback = $result->playbackForVariants(['360p'])->toArray();
+```
+
+GIF `-ignore_loop 0` honors embedded loop instructions rather than forcing every GIF to loop forever. The final frame remains visible at EOF. All ordinary filters, including variant resizing, precede overlays. `playbackForVariants()` requires nonempty unique known variant names and retains their required rendition, initialization, and key dependencies. Protected responses filter master declarations without changing Storage files. Authorize the selected inventory before issuing URLs; public disk URLs bypass this selection.
+
+To combine completed presentations for the same timeline, see [`PendingHlsMerge`](REWRITE.md#compose-completed-hls-presentations). It writes only a fresh version-suffixed master, not new media. Inputs need trusted v9 inventories, disjoint destinations, compatible VOD clocks and packaging, and a common media disk. Its result owns only the new master. Borrowed media stays owned by the source inventories, so retain application reference counts before deletion.
 
 For protected Laravel playback, replace handwritten playlist and key routes with `Support\Hls`. Persist `$result->playback()->toArray()` from the root export result in the lesson's JSON column with an `array` cast for the full presentation. A variant's `playback()` also retains its needed private-key references internally, while its `files()` still excludes shared key files. Restore the inventory with `Http\HlsPresentation::fromArray($lesson->hls_playback)` in the definition's resolver.
 
@@ -195,5 +253,16 @@ try {
 Completion follows validation, publication, and cleanup. Throw `ExportCancelled` from a callback to stop the operation. Other callback exceptions propagate unchanged. There is no global `cleanupTemporaryFiles()` call and no arbitrary before-save command mutation.
 
 All artifacts validate before the first Storage write, but publication is not transactional. A later transfer failure can leave earlier outputs or replaced objects. Failures report successful writes without deleting them. Streams returned by `GeneratedFile::readStream()` belong to the caller and must be closed.
+
+```php
+// After authorization and checking that no other presentation needs these files:
+foreach ($result->files() as $file) {
+	if ($file->owned && ! $file->delete()) {
+		throw new \RuntimeException('Cannot delete '.$file->path);
+	}
+}
+```
+
+Use the root HLS result's inventory for deletion, not a variant's partial view. `GeneratedFile::delete(): bool` deletes the exact stored destination through its captured filesystem. Borrowed files with `owned=false` return `false` without a filesystem call. Adapter failures return `false` or throw according to filesystem behavior. The application owns authorization, reference tracking, deletion order, and retries. There is no directory-wide or transactional delete.
 
 See the [README](README.md) for executable API examples and the [reference](REWRITE.md) for detailed limits.

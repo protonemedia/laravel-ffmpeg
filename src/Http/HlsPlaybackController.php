@@ -18,20 +18,17 @@ class HlsPlaybackController
         $file = $presentation->file($request->route('hlsResource'));
         $headers = ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff'];
         if (in_array($file['role'], ['hls-master', 'hls-playlist'], true)) {
-            $playlist = new HlsPlaylist($file['disk'], $file['path']);
-            foreach (['playlist', 'media', 'key'] as $kind) {
-                $playlist->{$kind.'UrlsUsing'}(function ($target, $source, $uri) use ($request, $presentation, $file, $kind) {
+            try {
+                $content = $presentation->render($file, function ($id) use ($request) {
                     $parameters = array_replace($request->query(), $request->route()->parameters());
                     unset($parameters['_hlsPlayback'], $parameters['signature'], $parameters['expires']);
-                    $parameters['hlsResource'] = $presentation->reference($file, $target, $uri, $kind);
+                    $parameters['hlsResource'] = $id;
 
                     return URL::temporarySignedRoute($request->route()->getName(),
                         CarbonImmutable::createFromTimestamp((int) $request->query('expires')), $parameters);
                 });
-            }
 
-            try {
-                return response($playlist->get(), 200, [...$headers, 'Content-Type' => 'application/vnd.apple.mpegurl']);
+                return response($content, 200, [...$headers, 'Content-Type' => 'application/vnd.apple.mpegurl']);
             } catch (MediaException) {
                 abort(404);
             }

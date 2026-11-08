@@ -15,6 +15,8 @@ class PendingAudioMix extends PendingExport
 {
     private bool $loop = false;
 
+    private float $offset = 0;
+
     private array $analysisProcesses = [];
 
     public function __construct(
@@ -34,7 +36,19 @@ class PendingAudioMix extends PendingExport
         $this->toDisk($disk);
     }
 
-    /** Repeat the added track until the primary presentation ends. */
+    /** Start the added track at this nonnegative offset in the primary presentation. */
+    public function at(float $seconds): self
+    {
+        $this->assertOutputMutable();
+        if (! is_finite($seconds) || $seconds < 0) {
+            throw new InvalidArgumentException('Audio mix offsets require finite nonnegative seconds.');
+        }
+        $this->offset = $seconds;
+
+        return $this;
+    }
+
+    /** Repeat the added track from its offset, without repeating the initial delay. */
     public function loopAudio(bool $loop = true): self
     {
         $this->assertOutputMutable();
@@ -95,12 +109,16 @@ class PendingAudioMix extends PendingExport
         return $this->mixGraph(true);
     }
 
-    private function mixGraph(bool $originalAudio): string
+    private function mixGraph(bool $originalAudio, ?float $duration = null): string
     {
         // Fill timestamp gaps and convert both tracks to a common format before
         // mixing. Padding keeps a short track from shortening the presentation.
         $format = 'aresample=48000:async=1:first_pts=0,aformat=sample_rates=48000:channel_layouts=stereo';
-        $branches = ['[1:a:0]asetpts=PTS-STARTPTS,'.$format.',volume='.json_encode($this->volume, JSON_THROW_ON_ERROR).',apad[added_audio]'];
+        // Nothing beyond the primary presentation is audible. Bound the delay
+        // buffer to that presentation, even for very large finite offsets.
+        $offset = min($this->offset, $duration ?? PHP_INT_MAX / 96000);
+        $delay = $offset > 0 ? ',adelay=delays='.sprintf('%.0f', round($offset * 48000)).'S:all=1' : '';
+        $branches = ['[1:a:0]asetpts=PTS-STARTPTS,'.$format.',volume='.json_encode($this->volume, JSON_THROW_ON_ERROR).$delay.',apad[added_audio]'];
 
         if ($originalAudio) {
             $branches[] = '[0:a:0]'.$format.',volume='.json_encode($this->originalVolume, JSON_THROW_ON_ERROR).',apad[original_audio]';
@@ -192,7 +210,7 @@ class PendingAudioMix extends PendingExport
             ]);
         }
         $source = $workspace->probe($this->source);
-        $graph = $this->mixGraph($source->hasAudio());
+        $graph = $this->mixGraph($source->hasAudio(), $source->duration());
         FilterGraph::validate($graph, 2, ['mixed_audio']);
         $command[array_search('-filter_complex', $command, true) + 1] = $graph;
         $command[array_search('-t', $command, true) + 1] = $this->clipTimestamp($source->duration());

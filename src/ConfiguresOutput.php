@@ -17,6 +17,8 @@ trait ConfiguresOutput
 
     private array $video = [];
 
+    private array $videoStreams = [];
+
     private array $audio = [];
 
     private array $maps = [];
@@ -46,6 +48,20 @@ trait ConfiguresOutput
     private ?array $clip = null;
 
     abstract protected function assertOutputMutable(): void;
+
+    /** Override encoding in mapped output video order, not input stream order. */
+    public function videoStream(int $track, callable $configure): self
+    {
+        $this->assertOutputMutable();
+        if ($track < 0 || isset($this->videoStreams[$track])) {
+            throw new InvalidArgumentException('Video track indexes must be nonnegative and configured once.');
+        }
+        $settings = new VideoStreamSettings;
+        $configure($settings);
+        $this->videoStreams[$track] = $settings->settings();
+
+        return $this;
+    }
 
     public function video(?string $codec = null, mixed $bitrate = null, ?float $crf = null, ?string $preset = null): self
     {
@@ -575,6 +591,15 @@ trait ConfiguresOutput
 
         $options = [];
 
+        foreach ($this->videoStreams as $track => $overrides) {
+            $encoding = array_replace($this->video, $overrides);
+            if (isset($encoding['bitrate'], $encoding['crf'])
+                || (($encoding['codec'] ?? null) === 'copy' && (count($encoding) > 1 || $this->videoFilters !== []
+                    || ($this->clip !== null && $this->clip['seek'] === 'accurate')))) {
+                throw new InvalidArgumentException('Video track settings conflict with rate control, copying, or filters.');
+            }
+        }
+
         if ($this->clip !== null) {
             if ($this->clip['seek'] === 'accurate') {
                 array_push($options, '-ss', $this->clipTimestamp($this->clip['start']));
@@ -602,6 +627,13 @@ trait ConfiguresOutput
 
             if ($filters !== []) {
                 array_push($options, '-filter:'.$type, implode(',', array_map($compileFilter, $filters)));
+            }
+        }
+
+        foreach ($this->videoStreams as $track => $encoding) {
+            foreach ($encoding as $name => $value) {
+                $option = match ($name) { 'codec' => 'c', 'bitrate' => 'b', default => $name };
+                array_push($options, '-'.$option.':v:'.$track, (string) $value);
             }
         }
 
@@ -672,6 +704,7 @@ trait ConfiguresOutput
             'disk' => $this->disk,
             'outputDiskExplicit' => $this->outputDiskExplicit,
             'video' => $this->video,
+            'videoStreams' => $this->videoStreams,
             'audio' => $this->audio,
             'maps' => $this->maps,
             'videoFilters' => $this->videoFilters,

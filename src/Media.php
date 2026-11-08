@@ -3,6 +3,9 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
+use DateInterval;
+use DateTimeInterface;
+use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\LocalFilesystemAdapter;
 use Illuminate\Http\File;
@@ -61,6 +64,11 @@ readonly class Media
     public function gif(int $width = 480, int|float $frameRate = 12, int $loop = 0): PendingGif
     {
         return new PendingGif($this, $this->defaultOutputDisk(), $width, $frameRate, $loop);
+    }
+
+    public function still(float $duration, int $frameRate = 25): PendingStill
+    {
+        return new PendingStill($this, $this->defaultOutputDisk(), $duration, $frameRate);
     }
 
     public function mixAudio(Media $audio, float $volume = 1, float $originalVolume = 1, bool $normalize = false): PendingAudioMix
@@ -182,6 +190,27 @@ readonly class Media
         });
     }
 
+    /** The caller's key must change whenever the source bytes or object version change. */
+    public function probeCached(Cache $cache, string $versionedKey, DateTimeInterface|DateInterval|int $ttl = 3600): Metadata
+    {
+        if ($versionedKey === '' || (is_int($ttl) && $ttl < 1)) {
+            throw new InvalidArgumentException('Cached probing requires a source-versioned key and positive TTL.');
+        }
+
+        $key = 'laravel-ffmpeg:probe:v1:'.hash('sha256', serialize([
+            $this->identity(), $versionedKey, config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'),
+        ]));
+        $data = $cache->get($key);
+        if (! is_array($data) || ! isset($data['format'], $data['streams']) || ! is_array($data['format'])
+            || ! is_array($data['streams']) || ! array_is_list($data['streams'])
+            || array_any($data['streams'], fn ($stream) => ! is_array($stream))) {
+            $data = $this->probe()->toArray();
+            $cache->put($key, $data, $ttl);
+        }
+
+        return new Metadata($data, $this->identity());
+    }
+
     public function analyze(string $audioFilter = 'volumedetect', int $audio = 0): ProcessResult
     {
         FilterGraph::validateExpression($audioFilter);
@@ -234,7 +263,7 @@ readonly class Media
         $options = [];
 
         for ($i = 0; $i < count($this->options); $i += 2) {
-            if ($this->options[$i] !== '-thread_queue_size') {
+            if (in_array($this->options[$i], ['-probesize', '-analyzeduration'], true)) {
                 array_push($options, $this->options[$i], $this->options[$i + 1]);
             }
         }
@@ -248,7 +277,7 @@ readonly class Media
 
         if ($customInput) {
             $workspace->requireProtocols(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), $protocols);
-            $options = [...$this->transportOptions(), ...$options];
+            $options = [...($this->source instanceof StillInput ? [] : $this->transportOptions()), ...$options];
         }
 
         $result = (new ProcessRunner)->run([

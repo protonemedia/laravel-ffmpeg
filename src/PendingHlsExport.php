@@ -32,6 +32,8 @@ class PendingHlsExport extends PendingExport
 
     private ?float $presentationDuration = null;
 
+    private array $provenance = [];
+
     private readonly Media $source;
 
     private ?Workspace $workspace = null;
@@ -276,6 +278,7 @@ class PendingHlsExport extends PendingExport
 
         $this->variantFiles = [];
         $this->keyReferences = [];
+        $this->provenance = [];
         $result = parent::save($path);
         [$keys, $files] = $result->files()->partition(fn ($file) => $file->role === 'hls-key');
 
@@ -284,7 +287,8 @@ class PendingHlsExport extends PendingExport
             $renditions[$rendition['type']][$rendition['group']][$rendition['name']] = $id;
         }
 
-        return new HlsExportResult([...$files, ...$keys], $result->processes()->all(), $this->variantFiles, $renditions, $this->keyReferences);
+        return new HlsExportResult([...$files, ...$keys], $result->processes()->all(), $this->variantFiles, $renditions, $this->keyReferences,
+            variantGroups: array_map(fn ($variant) => array_filter($variant->groups(), fn ($group) => $group !== null), $this->variants), provenance: $this->provenance);
     }
 
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
@@ -466,7 +470,7 @@ class PendingHlsExport extends PendingExport
                     $probePath = $count === 1 && $init !== null ? $this->fragmentProbe($init, $local) : $local;
                     if ($this->isSubtitle($index)) {
                         $subtitlePath = $local;
-                    } elseif ($count === 1 && array_any($this->renditions, fn ($item) => $item['type'] === 'SUBTITLES')) {
+                    } elseif ($count === 1) {
                         $metadata = $this->source->probePath($probePath, $this->workspace);
                         $stream = $metadata->video() ?? $metadata->audio();
                         $start = $stream?->get('start_time');
@@ -494,6 +498,9 @@ class PendingHlsExport extends PendingExport
             }
             $streamInfo[$name] = ['peak' => $peak, 'average' => (int) ceil(8 * $bytes / $total), 'attributes' => $attributes,
                 'path' => $output->destination()['path'], 'start' => $start, 'subtitle' => $subtitlePath, 'duration' => $total];
+            $this->provenance[$output->destination()['path']] = ['version' => 9, 'start' => $start, 'duration' => $total,
+                'clip' => $output->clipSettings(), 'segmentType' => $this->segmentType, 'subtitle' => $this->isSubtitle($index),
+                'streamType' => $this->isSubtitle($index) ? 'subtitle' : ($metadata->video() === null ? 'audio' : 'video')];
             $lines[$targets[0]] = '#EXT-X-TARGETDURATION:'.max(1, (int) ceil($longest));
             $rendered = [];
             foreach ($lines as $lineIndex => $line) {

@@ -35,6 +35,12 @@ class PendingExport
 
     private array $watermarks = [];
 
+    private ?float $watermarkDuration = null;
+
+    private ?int $coverInput = null;
+
+    private ?int $coverVideoTrack = null;
+
     private ?Closure $progress = null;
 
     private bool $rootConfigured = false;
@@ -132,20 +138,34 @@ class PendingExport
         return $this;
     }
 
-    /** Overlay a still image after each output's video filters. Offsets are inward margins. */
+    /** Overlay a PNG/JPEG or animated GIF after video filters. Offsets are inward margins. */
     public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
     {
         $this->assertMutable();
 
         if (! in_array($position, ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'], true)
             || $x < 0 || $y < 0 || ($width !== null && $width <= 0) || ($height !== null && $height <= 0)
-            || ! is_finite($opacity) || $opacity < 0 || $opacity > 1 || $image->inputOptions() !== []) {
-            throw new InvalidArgumentException('Watermarks require an anchor, nonnegative margins, positive dimensions, opacity between zero and one, and an image without input options.');
+            || ! is_finite($opacity) || $opacity < 0 || $opacity > 1
+            || ! in_array($image->inputOptions(), [[], ['-ignore_loop', '0'], ['-ignore_loop', '1']], true)) {
+            throw new InvalidArgumentException('Watermarks require an anchor, nonnegative margins, positive dimensions, opacity between zero and one, and no input options except GIF ignore_loop.');
         }
 
         $this->inputs[] = $image;
         $input = array_key_last($this->inputs);
         $this->watermarks[] = compact('input', 'position', 'x', 'y', 'width', 'height', 'opacity');
+
+        return $this;
+    }
+
+    /** Attach one standalone PNG/JPEG, copying all motion video and audio unchanged. */
+    public function coverArt(Media $image): self
+    {
+        $this->assertMutable();
+        if ($this->coverInput !== null || $image->inputOptions() !== []) {
+            throw new InvalidArgumentException('Cover art requires one image without input options.');
+        }
+        $this->inputs[] = $image;
+        $this->coverInput = array_key_last($this->inputs);
 
         return $this;
     }
@@ -250,11 +270,16 @@ class PendingExport
     {
         $graph = $this->filterGraph();
         $watermarking = $this->watermarks !== [];
+        $covering = $this->coverInput !== null;
+        if ($covering && ($graph !== null || $watermarking || count($this->inputs) !== 2
+            || count($outputs) !== 1 || $this->outputRole !== 'media' || $this->twoPass)) {
+            throw new InvalidArgumentException('Cover art requires one media output, one source, and no graph, watermark, or two-pass encoding.');
+        }
         if ($watermarking && ($graph !== null || count($this->inputs) !== count($this->watermarks) + 1
-            || $this->outputRole !== 'media')) {
+            || ! in_array($this->outputRole, ['media', 'hls-playlist'], true))) {
             throw new InvalidArgumentException('Watermarks require a media export and own their image inputs and graph; use filterComplex() for custom compositions.');
         }
-        $composition = ! $watermarking && (count($this->inputs) > 1 || $graph !== null);
+        $composition = ! $covering && ! $watermarking && (count($this->inputs) > 1 || $graph !== null);
         $mappedLabels = $used = $compiledOutputs = [];
         $resources = $this->resourceNames($outputs);
 
@@ -264,6 +289,24 @@ class PendingExport
         }
 
         foreach ($outputs as $index => $output) {
+            if ($this->twoPass && $output->outputConfiguration()['videoStreams'] !== []) {
+                throw new InvalidArgumentException('Per-track video settings do not support two-pass encoding.');
+            }
+            if ($covering) {
+                $settings = $output->outputConfiguration();
+                if (! in_array(strtolower(pathinfo($output->destination()['path'], PATHINFO_EXTENSION)), ['mp4', 'm4a', 'mp3'], true)
+                    || $output->hasMaps() || $settings['omitVideo'] || $settings['omitAudio']
+                    || $settings['videoFilters'] !== [] || $settings['audioFilters'] !== [] || $settings['videoStreams'] !== []
+                    || $settings['outputOptions'] !== [] || $settings['dispositions'] !== [] || $settings['clip'] !== null
+                    || ! in_array($settings['video'], [[], ['codec' => 'copy']], true)
+                    || ! in_array($settings['audio'], [[], ['codec' => 'copy']], true)) {
+                    throw new InvalidArgumentException('Cover art supports MP4, M4A, or MP3 with unchanged audio/video, automatic maps, and no encoding, clipping, or disposition overrides.');
+                }
+                $settings['video'] = $settings['audio'] = ['codec' => 'copy'];
+                $settings['metadataSource'] ??= 0;
+                $settings['chapterSource'] ??= 0;
+                $output = (new ExportOutput($output->destination()['path'], $output->filesystem()))->configure($settings);
+            }
             if ($watermarking) {
                 $settings = $output->outputConfiguration();
                 if ($output->hasMaps() || $settings['omitVideo'] || ($settings['video']['codec'] ?? null) === 'copy') {
@@ -311,6 +354,11 @@ class PendingExport
                     : FilterGraph::resources($filter, $resources, $used);
             }, $maps);
 
+            if ($covering) {
+                // Like input paths, this output index is unresolved in pure inspection.
+                array_push($options, '-disposition:v:'.($this->coverVideoTrack ?? '[cover-video-track]'), 'attached_pic');
+            }
+
             if ($watermarking) {
                 $filter = 'null';
                 $processed = [];
@@ -338,6 +386,14 @@ class PendingExport
                 }
                 $graph = ($graph === null ? '' : $graph.';').implode(';', $branches);
                 $mappedLabels[] = 'watermark_out'.$index;
+                if (array_any($this->watermarks, fn ($mark) => $this->inputs[$mark['input']]->inputOptions() === ['-ignore_loop', '0'])) {
+                    $clip = $output->clipSettings();
+                    $duration = $this->watermarkDuration === null ? null : max(0, $this->watermarkDuration - ($clip['start'] ?? 0));
+                    if ($duration !== null && $clip !== null) {
+                        $duration = min($duration, $clip['duration']);
+                    }
+                    array_push($options, '-t', $duration === null ? '[source-duration]' : $this->clipTimestamp($duration));
+                }
             }
 
             if ($this->twoPass && in_array($index, $this->twoPassOutputIndexes($outputs), true)) {
@@ -460,6 +516,13 @@ class PendingExport
                 $this->validateResources($workspace, $runner, $resources);
                 $metadata = array_map(fn ($media) => $workspace->probe($media), $this->inputs);
                 $expected = array_map(fn ($output) => $this->selectedStreams($output, $workspace, $metadata), $outputs);
+                foreach ($outputs as $index => $output) {
+                    $tracks = $output->outputConfiguration()['videoStreams'];
+                    if ($tracks !== [] && ! in_array(null, $expected[$index], true)
+                        && max(array_keys($tracks)) >= count(array_filter($expected[$index], fn ($type) => $type === 'video'))) {
+                        throw new MediaException('Video track settings require existing output video tracks.', 'probing', 'mapping');
+                    }
+                }
                 $this->validateStreamSelections($expected);
 
                 if ($this->twoPass && array_any($this->twoPassOutputIndexes($outputs), fn ($index) => ! in_array('video', $expected[$index], true) && ! in_array(null, $expected[$index], true))) {
@@ -528,9 +591,10 @@ class PendingExport
                     $index = $artifact['output'];
                     $role = $artifact['role'] ?? $this->outputRole;
                     $size = $this->validateArtifact($outputPath, $role);
+                    $tracks = $outputs[$index]->outputConfiguration()['videoStreams'];
 
                     if (($artifact['probe'] ?? false)
-                        || (in_array($role, ['media', 'image'], true) && (count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null))) {
+                        || (in_array($role, ['media', 'image'], true) && ($tracks !== [] || count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null))) {
                         try {
                             $actual = $this->media->probePath($artifact['probePath'] ?? $outputPath, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
                         } catch (MediaException $exception) {
@@ -539,6 +603,9 @@ class PendingExport
 
                         if (count($actual) !== count($expected[$index]) || array_any(array_keys($actual), fn ($i) => $expected[$index][$i] !== null && $actual[$i] !== $expected[$index][$i])) {
                             throw new MediaException('Encoded streams do not match the explicit output maps.', $phase, 'mapping');
+                        }
+                        if ($tracks !== [] && max(array_keys($tracks)) >= count(array_filter($actual, fn ($type) => $type === 'video'))) {
+                            throw new MediaException('Video track settings require existing encoded output video tracks.', $phase, 'mapping');
                         }
                     }
 
@@ -661,9 +728,34 @@ class PendingExport
 
     protected function prepareEncoding(array $metadata): ?float
     {
+        if ($this->coverInput !== null) {
+            $image = $metadata[$this->coverInput];
+            if (! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true)
+                || $image->streams()->count() !== 1) {
+                throw new MediaException('Cover art requires a standalone PNG or JPEG image.', 'probing', 'cover-art');
+            }
+            if ($metadata[0]->streams()->contains(fn ($stream) => (int) $stream->get('disposition.attached_pic') === 1)) {
+                throw new MediaException('Cover art does not replace existing attached pictures.', 'probing', 'cover-art');
+            }
+            if ($metadata[0]->streams()->contains(fn ($stream) => ! in_array($stream->get('codec_type'), ['video', 'audio'], true))) {
+                throw new MediaException('Cover art accepts sources containing only motion video and audio.', 'probing', 'cover-art');
+            }
+            $this->coverVideoTrack = $metadata[0]->streams()->filter(fn ($stream) => $stream->get('codec_type') === 'video')->count();
+
+            return $metadata[0]->duration();
+        }
         foreach ($this->watermarks as $mark) {
-            if (! in_array($metadata[$mark['input']]->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true)) {
-                throw new MediaException('Watermarks require a standalone PNG or JPEG image.', 'probing', 'watermark');
+            $image = $metadata[$mark['input']];
+            $gif = $image->get('format.format_name') === 'gif' && $image->video()?->get('codec_name') === 'gif';
+            if ((! $gif && ! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true))
+                || $image->streams()->count() !== 1 || (! $gif && $this->inputs[$mark['input']]->inputOptions() !== [])) {
+                throw new MediaException('Watermarks require a standalone PNG, JPEG, or GIF image; ignore_loop is GIF-only.', 'probing', 'watermark');
+            }
+            if ($this->inputs[$mark['input']]->inputOptions() === ['-ignore_loop', '0']) {
+                $this->watermarkDuration = $metadata[0]->duration();
+                if ($this->watermarkDuration === null || $this->watermarkDuration <= 0) {
+                    throw new MediaException('Looping GIF overlays require a finite primary duration.', 'probing', 'watermark');
+                }
             }
         }
         foreach ($this->configuredOutputs() as $output) {
@@ -779,6 +871,10 @@ class PendingExport
 
     private function resolveMaps(ExportOutput $output): array
     {
+        if ($this->coverInput !== null) {
+            return ['0:V?', '0:a?', $this->coverInput.':v:0'];
+        }
+
         return array_map(function ($map) {
             if (is_string($map)) {
                 return $map;

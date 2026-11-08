@@ -7,7 +7,7 @@ use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 
 readonly class HlsExportResult extends ExportResult
 {
-    public function __construct(array $files, array $summaries, private array $variants = [], private array $renditions = [], private array $keyReferences = [], private array $playbackKeys = [])
+    public function __construct(array $files, array $summaries, private array $variants = [], private array $renditions = [], private array $keyReferences = [], private array $playbackKeys = [], private array $variantGroups = [], private array $provenance = [], private ?HlsPresentation $presentation = null)
     {
         parent::__construct($files, $summaries);
     }
@@ -20,12 +20,33 @@ readonly class HlsExportResult extends ExportResult
 
     public function playback(): HlsPresentation
     {
+        if ($this->presentation !== null) {
+            return $this->presentation;
+        }
         $playlist = $this->playlist();
+        $variants = [];
+        foreach ($this->variants as $name => $paths) {
+            if (array_any($this->renditions, fn ($groups) => array_any($groups, fn ($members) => in_array($name, $members, true)))) {
+                continue;
+            }
+            foreach ($this->variantGroups[$name] ?? [] as $type => $group) {
+                foreach ($this->renditions[$type][$group] ?? [] as $member) {
+                    $paths += $this->variants[$member];
+                }
+            }
+            $variants[$name] = $this->files()->filter(fn ($file) => isset($paths[$file->path]))
+                ->map(fn ($file) => HlsPresentation::id($file->disk ?? '', $file->path))->values()->all();
+        }
 
         return new HlsPresentation(
             [...$this->files()->map(fn ($file) => $file->toArray())->all(), ...$this->playbackKeys],
-            HlsPresentation::id($playlist->disk ?? '', $playlist->path), $this->keyReferences,
+            HlsPresentation::id($playlist->disk ?? '', $playlist->path), $this->keyReferences, $variants, provenance: $this->provenance,
         );
+    }
+
+    public function playbackForVariants(array $names): HlsPresentation
+    {
+        return $this->playback()->playbackForVariants($names);
     }
 
     public function variant(string $name): self

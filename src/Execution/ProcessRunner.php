@@ -30,6 +30,7 @@ class ProcessRunner
         ?ProgressParser $progress = null,
         ?callable $onProgress = null,
         bool $redactOutput = false,
+        ?float $timeout = null,
     ): ProcessResult {
         $output = $diagnostics = '';
         $overflow = false;
@@ -81,6 +82,9 @@ class ProcessRunner
 
                 $now = hrtime(true);
                 $totalDeadline = config('laravel-ffmpeg.timeout', 3600);
+                if ($timeout !== null) {
+                    $totalDeadline = $totalDeadline === null ? $timeout : min($timeout, $totalDeadline);
+                }
                 $idleDeadline = config('laravel-ffmpeg.idle_timeout');
 
                 if (($totalDeadline !== null && ($now - $started) / 1e9 >= $totalDeadline)

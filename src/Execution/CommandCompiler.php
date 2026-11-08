@@ -28,7 +28,8 @@ class CommandCompiler
     {
         $allowed = match ($scope) {
             'global' => ['filter_threads' => 'positive', 'filter_complex_threads' => 'positive'],
-            'input' => ['probesize' => 'positive', 'analyzeduration' => 'unsigned', 'thread_queue_size' => 'positive'],
+            'input' => ['probesize' => 'positive', 'analyzeduration' => 'unsigned', 'thread_queue_size' => 'positive',
+                'hwaccel' => 'hardware', 'hwaccel_device' => 'device', 'hwaccel_output_format' => 'word', 'ignore_loop' => 'boolean'],
             'output' => [
                 'f' => 'format', 'preset' => 'word', 'tune' => 'word', 'profile' => 'word', 'level' => 'word',
                 'pix_fmt' => 'word', 'maxrate' => 'rate', 'minrate' => 'rate', 'bufsize' => 'rate',
@@ -66,6 +67,9 @@ class CommandCompiler
             $valid = match ($allowed[$name]) {
                 'positive' => ctype_digit($value) && (float) $value > 0,
                 'unsigned' => ctype_digit($value),
+                'boolean' => in_array($value, ['0', '1'], true),
+                'hardware' => in_array($value, ['cuda', 'vaapi', 'qsv', 'vulkan', 'videotoolbox', 'd3d11va', 'dxva2'], true),
+                'device' => (bool) preg_match('/\A[a-zA-Z0-9_\/.:\-]+\z/', $value),
                 'rate' => (bool) preg_match('/^[0-9]+(?:\.[0-9]+)?(?:[kKmMgG]|\/[1-9][0-9]*)?$/D', $value) && (float) $value > 0,
                 'word' => (bool) preg_match('/^[a-zA-Z0-9_.,+\-]+$/D', $value),
                 'fps' => in_array($value, ['passthrough', 'cfr', 'vfr', 'auto'], true),

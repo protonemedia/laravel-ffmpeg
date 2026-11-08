@@ -96,7 +96,15 @@ class NativeAudioMixTest extends TestCase
         $this->assertSame('audio-mix', $operation->outputConfiguration()['disk']);
         $this->assertNotContains('-stream_loop', $source->mixAudio($music)->inspect());
         $this->assertNotContains('-stream_loop', $operation->loopAudio(false)->inspect());
+        $delayed = $source->mixAudio($music);
+        $this->assertSame($delayed, $delayed->at(0.625));
+        $this->assertSame($delayed->inspect(), $delayed->inspect());
+        $this->assertSame($source->mixAudio($music)->inspect(), $delayed->at(0)->inspect());
         foreach ([
+            fn () => $source->mixAudio($music)->at(-0.1),
+            fn () => $source->mixAudio($music)->at(NAN),
+            fn () => $source->mixAudio($music)->at(INF),
+            fn () => $source->mixAudio($music)->at(-INF),
             fn () => $source->mixAudio($music, volume: NAN),
             fn () => $source->mixAudio($music, originalVolume: -1),
             fn () => $source->mixAudio($music, volume: INF),
@@ -119,6 +127,52 @@ class NativeAudioMixTest extends TestCase
             }
         }
         Process::assertNothingRan();
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function offsets_delay_only_added_samples_and_loop_without_repeating_the_delay(): void
+    {
+        $this->fixture();
+        foreach ([false, true] as $loop) {
+            $name = $loop ? 'delayed-loop.mkv' : 'delayed-once.mkv';
+            $this->media()->mixAudio($this->media('music.wav'), volume: 0.25, originalVolume: 0.5)
+                ->at(0.625)->loopAudio($loop)->video('copy')->audio('pcm_f64le')->save($name);
+            $samples = $this->samples($name);
+            $this->assertCount(3 * 48000 * 2, $samples);
+            $this->assertSame(3.0, $this->media($name)->probe()->duration());
+            $this->assertSample($samples, 0.1, 0, 0);
+            $this->assertSample($samples, 0.3, 0.05, -0.1);
+            $this->assertSample($samples, 0.625 - 1 / 48000, 0.05, -0.1);
+            $this->assertSample($samples, 0.625, 0.1, 0);
+            $this->assertSample($samples, 0.9, -0.05, -0.05);
+            $this->assertSample($samples, 1.125 - 1 / 48000, -0.05, -0.05);
+            $this->assertSample($samples, 1.125, $loop ? 0.1 : 0.05, $loop ? 0 : -0.1);
+            $this->assertSample($samples, 1.3, $loop ? 0.1 : 0.05, $loop ? 0 : -0.1);
+            $this->assertSample($samples, 2.7, $loop ? 0.05 : 0, $loop ? 0.1 : 0);
+            $this->assertSame(
+                $this->ffmpeg(['-i', $this->path('source.mkv'), '-map', '0:v', '-f', 'framemd5', '-']),
+                $this->ffmpeg(['-i', $this->path($name), '-map', '0:v', '-f', 'framemd5', '-']),
+            );
+        }
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function offsets_beyond_the_presentation_add_no_audio_and_silent_sources_keep_the_delay(): void
+    {
+        $this->fixture(audio: false);
+        foreach ([0.625, 3.0, 4.0, PHP_FLOAT_MAX] as $offset) {
+            $name = 'silent-offset-'.$offset.'.wav';
+            $this->media()->backgroundMusic($this->media('music.wav'), volume: 0.25)->at($offset)
+                ->withoutVideo()->audio('pcm_f64le')->save($name);
+            $samples = $this->samples($name);
+            $this->assertCount(3 * 48000 * 2, $samples);
+            $this->assertSample($samples, 0.1, 0, 0);
+            $this->assertSample($samples, 0.625 - 1 / 48000, 0, 0);
+            $this->assertSample($samples, 0.625, $offset < 3 ? 0.05 : 0, $offset < 3 ? 0.1 : 0);
+            $this->assertSample($samples, 2.7, $offset < 3 ? 0.05 : 0, $offset < 3 ? 0.1 : 0);
+        }
         $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
