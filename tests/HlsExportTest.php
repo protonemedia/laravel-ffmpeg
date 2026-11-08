@@ -20,7 +20,7 @@ class HlsExportTest extends TestCase
             ? ',CODECS="[a-zA-Z0-9,.]+"'
             : '(,CODECS="[a-zA-Z0-9,.]+")?';
 
-        return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION='.$resolution.$codecs.',FRAME-RATE='.$frameRate;
+        return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,}(,AVERAGE-BANDWIDTH=[0-9]{4,})?,RESOLUTION='.$resolution.$codecs.',FRAME-RATE='.$frameRate;
     }
 
     #[Test]
@@ -393,6 +393,42 @@ class HlsExportTest extends TestCase
         ]).'/';
 
         $this->assertEquals(1, preg_match($pattern, $playlist), 'Playlist mismatch:'.PHP_EOL.$playlist);
+    }
+
+    #[Test]
+    /** @test */
+    public function it_can_use_subdirectories_with_custom_segment_naming_and_cleans_up_temp_playlists()
+    {
+        $this->fakeLocalVideoFile();
+
+        $lowBitrate = $this->x264()->setKiloBitrate(250);
+        $midBitrate = $this->x264()->setKiloBitrate(1000);
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->addFormat($lowBitrate)
+            ->addFormat($midBitrate)
+            ->useSegmentFilenameGenerator(function ($name, $format, $key, callable $segments, callable $playlist) {
+                $folder = $format->getKiloBitrate() === 250 ? '480p' : '720p';
+
+                $segments("stream/{$folder}/segment_%05d.ts");
+                $playlist("stream/{$folder}/playlist.m3u8");
+            })
+            ->toDisk('local')
+            ->save('stream/master.m3u8');
+
+        $this->assertTrue(Storage::disk('local')->has('stream/master.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('stream/480p/playlist.m3u8'));
+        $this->assertTrue(Storage::disk('local')->has('stream/720p/playlist.m3u8'));
+
+        $masterPlaylist = Storage::disk('local')->get('stream/master.m3u8');
+
+        $this->assertStringContainsString('480p/playlist.m3u8', $masterPlaylist);
+        $this->assertStringContainsString('720p/playlist.m3u8', $masterPlaylist);
+
+        $this->assertFalse(Storage::disk('local')->has('stream/480p/temporary_segment_playlist_0.m3u8'));
+        $this->assertFalse(Storage::disk('local')->has('stream/720p/temporary_segment_playlist_1.m3u8'));
     }
 
     #[Test]

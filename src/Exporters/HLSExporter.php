@@ -234,13 +234,12 @@ class HLSExporter extends MediaExporter
      * segment playlist, which we generate manually using the
      * HLSPlaylistGenerator.
      */
-    private function cleanupSegmentPlaylistGuides(Media $media): self
+    private function cleanupSegmentPlaylistGuides(Collection $segmentPlaylists): self
     {
-        $disk = $media->getDisk();
-        $directory = $media->getDirectory();
-
-        $this->pendingFormats->map(function ($formatAndCallback, $key) use ($disk, $directory) {
-            $disk->delete($directory.static::generateTemporarySegmentPlaylistFilename($key));
+        $segmentPlaylists->each(function (Media $segmentPlaylist, int $key) {
+            $segmentPlaylist->getDisk()->delete(
+                $segmentPlaylist->getDirectory().static::generateTemporarySegmentPlaylistFilename($key)
+            );
         });
 
         return $this;
@@ -332,7 +331,7 @@ class HLSExporter extends MediaExporter
             $this->getDisk()->put($mainPlaylistPath, $playlist);
 
             $this->replaceAbsolutePathsHLSEncryption($segmentPlaylists)
-                ->cleanupSegmentPlaylistGuides($segmentPlaylists->first())
+                ->cleanupSegmentPlaylistGuides($segmentPlaylists)
                 ->cleanupHLSEncryption()
                 ->removeHandlerThatRotatesEncryptionKey();
 
