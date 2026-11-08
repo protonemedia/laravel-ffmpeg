@@ -9,7 +9,7 @@ if ((EUID != 0)); then
     elevate=(sudo)
 fi
 
-packages=(build-essential ca-certificates curl pkg-config nasm libx264-dev libfreetype-dev libharfbuzz-dev libass-dev zlib1g-dev libgnutls28-dev fonts-dejavu-core)
+packages=(build-essential ca-certificates curl pkg-config nasm libx264-dev libx265-dev libfreetype-dev libharfbuzz-dev libass-dev zlib1g-dev libgnutls28-dev fonts-dejavu-core)
 missing=()
 for package in "${packages[@]}"; do
     if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -qx 'install ok installed'; then
@@ -25,6 +25,7 @@ if [[ -x "$prefix/bin/ffmpeg" && -x "$prefix/bin/ffprobe" ]] &&
     [[ $("$prefix/bin/ffmpeg" -version | head -n 1) == 'ffmpeg version 9.0.2 '* ]] &&
     [[ $("$prefix/bin/ffprobe" -version | head -n 1) == 'ffprobe version 9.0.2 '* ]] &&
     "$prefix/bin/ffmpeg" -hide_banner -encoders 2>/dev/null | grep -E '[[:space:]]png[[:space:]]' >/dev/null &&
+    "$prefix/bin/ffmpeg" -hide_banner -encoders 2>/dev/null | grep -E '[[:space:]]libx265[[:space:]]' >/dev/null &&
     "$prefix/bin/ffmpeg" -hide_banner -protocols 2>/dev/null | grep -E '^[[:space:]]+https$' >/dev/null &&
     "$prefix/bin/ffprobe" -hide_banner -protocols 2>/dev/null | grep -E '^[[:space:]]+https$' >/dev/null; then
     echo "FFmpeg/FFprobe 9.0.2 ready at $prefix (${SECONDS}s elapsed)."
@@ -40,7 +41,7 @@ echo "6e374ed621e48faa40639307dff48ba6fe574a509977956d2cce9669b7cc27e9  $tempora
 tar -xzf "$temporary_dir/source.tar.gz" -C "$temporary_dir"
 cd "$temporary_dir/FFmpeg-n9.0.2"
 ./configure --prefix="$prefix" --disable-doc --disable-debug --disable-autodetect --disable-ffplay \
-    --enable-gpl --enable-libx264 --enable-libfreetype --enable-libharfbuzz --enable-libass --enable-zlib --enable-gnutls
+    --enable-gpl --enable-libx264 --enable-libx265 --enable-libfreetype --enable-libharfbuzz --enable-libass --enable-zlib --enable-gnutls
 make -j"$(nproc)"
 make DESTDIR="$temporary_dir/install" install
 "${elevate[@]}" mkdir -p "$prefix"

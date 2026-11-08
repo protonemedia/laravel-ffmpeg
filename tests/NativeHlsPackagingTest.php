@@ -86,6 +86,36 @@ class NativeHlsPackagingTest extends TestCase
 
     #[Test]
     #[DataProvider('packaging')]
+    public function x265_variants_publish_hevc_playlists_and_decode_without_falling_back_to_h264(bool $fragmented): void
+    {
+        $export = $this->source()->hls(segmentDuration: 0.7)->video('libx265', crf: 28, preset: 'ultrafast')
+            ->outputOptions(['-tag:v', 'hvc1'])
+            ->variant('hevc', fn (HlsVariant $variant) => $variant->resize(width: 80));
+        if ($fragmented) {
+            $export->fmp4();
+        }
+        $result = $export->save('hevc/master.m3u8');
+        $disk = Storage::disk('hls-packaging');
+        $variant = $result->variant('hevc');
+        $probe = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error',
+            '-show_entries', 'stream=codec_type,codec_name,width,height', '-of', 'json', $disk->path($variant->playlist()->path)]);
+        $this->assertTrue($probe->successful(), $probe->errorOutput());
+        $streams = collect(json_decode($probe->output(), true, flags: JSON_THROW_ON_ERROR)['streams']);
+        $video = $streams->firstWhere('codec_type', 'video');
+        $this->assertSame('hevc', $video['codec_name']);
+        $this->assertSame(80, $video['width']);
+        $this->assertSame(48, $video['height']);
+        $this->assertSame('aac', $streams->firstWhere('codec_type', 'audio')['codec_name']);
+        $this->assertMatchesRegularExpression('/CODECS="[^"]*(?:hvc1|hev1)\./', $disk->get($result->playlist()->path));
+        $this->assertStringContainsString('#EXT-X-ENDLIST', $disk->get($variant->playlist()->path));
+        $this->assertCount($fragmented ? 1 : 0, $variant->files()->where('role', 'hls-init'));
+        $this->decode($variant->playlist()->path);
+        $this->decode($result->playlist()->path);
+        $this->assertSame([], glob($this->root.'/work/*'));
+    }
+
+    #[Test]
+    #[DataProvider('packaging')]
     public function two_pass_variants_decode_with_private_isolated_statistics_and_no_first_pass_packaging(bool $fragmented): void
     {
         $media = $this->source();

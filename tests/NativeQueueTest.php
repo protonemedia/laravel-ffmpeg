@@ -348,6 +348,30 @@ class NativeQueueTest extends TestCase
     }
 
     #[Test]
+    public function ordinary_queued_hls_preserves_non_vod_types_and_encryption(): void
+    {
+        foreach (['event', 'live'] as $type) {
+            $this->source()->hls(segmentDuration: 0.5)->playlistType($type)->video(bitrate: '100k', preset: 'ultrafast')
+                ->variant('main', fn ($variant) => $variant->resize(width: 48))
+                ->encrypt('queued', static fn ($key) => 'https://keys.invalid/'.$key, rotateEvery: 1)
+                ->queued(connection: 'database', queue: 'media')->save($type.'/master.m3u8');
+            $this->work();
+            $playlist = Storage::disk('queued')->get($type.'/main/index.m3u8');
+            if ($type === 'event') {
+                $this->assertStringContainsString('#EXT-X-PLAYLIST-TYPE:EVENT', $playlist);
+            } else {
+                $this->assertStringNotContainsString('#EXT-X-PLAYLIST-TYPE:', $playlist);
+            }
+            $this->assertStringContainsString('#EXT-X-KEY:METHOD=AES-128', $playlist);
+            $this->assertStringEndsWith("#EXT-X-ENDLIST\n", $playlist);
+        }
+        $this->assertCount(2, $this->completed);
+        $this->assertSame([], $this->errors);
+        $this->assertSame(0, DB::table('jobs')->count());
+        $this->assertSame([], glob($this->root.'/work/*'));
+    }
+
+    #[Test]
     public function queued_plans_reject_request_local_inputs_before_dispatch(): void
     {
         foreach ([FFMpeg::open(new File(Storage::disk('queued')->path('source.mp4'))), FFMpeg::disk(Storage::disk('queued'))->open('source.mp4')] as $source) {

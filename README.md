@@ -429,6 +429,10 @@ $result->variant('720p')->files();
 $result->files()->where('role', 'hls-key');
 ```
 
+`playlistType('vod')` is the default. Use `playlistType('event')` for `EXT-X-PLAYLIST-TYPE:EVENT`, or `playlistType('live')` to omit the type tag. Both MPEG-TS and fMP4 retain every generated segment and end with `EXT-X-ENDLIST`. Exports still publish only after encoding and validation; these settings do not provide continuous streaming, sliding windows, or playback during encoding. Parallel queued composition and `mergeHls()` require VOD. A single queued export supports all three types.
+
+For HEVC HLS, select `video('libx265', crf: 28, preset: 'fast')` on the export or a variant. Add `outputOptions(['-tag:v', 'hvc1'])` so FFmpeg advertises the HEVC codec in the master. MPEG-TS and fMP4 encode and decode with this configuration. Check player support separately. Hardware encoders use the same `video()` API, for example `video('hevc_nvenc')`, with input-scoped decoding options when needed. There is no automatic hardware selection or software fallback. The deployed binary, drivers, device, and filter graph must support the selected path.
+
 ```php
 $animated = FFMpeg::disk('assets')->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
 $media->hls()->watermark($animated, width: 96, x: 16, y: 16)
@@ -644,7 +648,19 @@ foreach ($result->files() as $file) {
 
 Use the root result's inventory, not a variant view, for complete HLS deletion. `GeneratedFile::delete(): bool` deletes exactly that destination through its captured filesystem, not a directory or prefix. A borrowed file with `owned=false` returns `false` without touching Storage. Filesystem exceptions propagate. The application owns authorization and reference tracking; an owned file can still be referenced by another presentation. Deletion is not transactional and does not revoke cached client copies.
 
-Retain the trusted generated-file inventory when publishing HLS. Reopening a master playlist alone does not establish ownership of its segments or keys, so `playlist()` deliberately has no recursive delete operation. Merged presentations can borrow shared artifacts that must survive deletion of the merged master.
+Retain the trusted generated-file inventory when publishing HLS. Reopening a master playlist alone does not establish ownership of its segments or keys. Merged presentations can borrow shared artifacts that must survive deletion of the merged master.
+
+For older playlists without a retained result, `deleteAllFiles()` discovers the opened master, nested playlists, segments, initialization files, and keys on that same disk. Its required callback must approve every unique canonical disk path before any deletion begins:
+
+```php
+// Authorize the presentation first and prevent concurrent playlist changes.
+// Load $exclusivePaths from application-owned records, not request parameters.
+$approvedPaths = array_fill_keys($exclusivePaths, true);
+FFMpeg::disk('streams')->playlist('lesson/master.m3u8')
+	->deleteAllFiles(fn (string $path): bool => isset($approvedPaths[$path]));
+```
+
+Resolvers are ignored during deletion. External or root-relative references and invalid playlists fail before deletion. A refused path aborts the whole approval phase, protecting shared files. This operation cannot discover keys stored on another disk. Adapter failures throw and can leave partial deletion; authorization, concurrent-access control, reference tracking, and retry policy remain application responsibilities. Prefer the retained root inventory when it is available.
 
 ## Queue conversions
 

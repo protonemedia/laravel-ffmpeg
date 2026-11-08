@@ -210,6 +210,10 @@ return FFMpeg::disk('streams')->playlist('lesson/master.m3u8')
 
 Variants configure encoding only. MPEG-TS remains the default. Private key storage is explicit; key routes return 16 raw bytes after authorization. Keys rotate deterministically by segment group, with a random IV per segment. Playlist hooks are additive and cannot replace generated references or encryption lines. URL resolvers receive the canonical target, containing playlist, and original URI, not just a basename.
 
+Replace legacy `setPlaylistType()` with `playlistType()`, passing `vod`, `event`, or `live`. The default is VOD. EVENT writes its type tag; live omits the type tag rather than passing an unsupported FFmpeg value. All modes still finish encoding and validation before publication and retain `ENDLIST` and every segment. This is not continuous live publication. Parallel queued composition remains VOD-only; use an ordinary queued export for other playlist types.
+
+To clean up an old same-disk presentation, call `playlist($path)->deleteAllFiles($approve)`. The required approval callback receives every unique canonical disk path, including the opened playlist, and must return exactly `true` before any deletion starts. Verify exclusive ownership and prevent concurrent playlist changes in your application. URL resolvers are ignored; external references and malformed playlists fail before deletion. Adapter failures can leave partial deletion. Prefer the trusted root result inventory when available, especially with private keys on another disk or borrowed merged artifacts.
+
 ```php
 $badge = FFMpeg::disk('assets')->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
 $media->hls()->watermark($badge, width: 96)

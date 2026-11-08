@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -81,6 +82,193 @@ class NativePlaylistTest extends TestCase
         $this->assertStringContainsString('child.m3u8', FFMpeg::disk('memory')->playlist('master.m3u8')->get());
         $disk->put('child.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nmaster.m3u8\n");
         $this->assertSame(['master.m3u8', 'child.m3u8'], FFMpeg::disk('memory')->playlist('master.m3u8')->all()->keys()->all());
+    }
+
+    #[Test]
+    public function reopened_encrypted_playlists_delete_only_approved_original_files(): void
+    {
+        $disk = Storage::disk('memory');
+        $files = [
+            'show/master.m3u8' => "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nvariants/low\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Audio, main\",URI=\"variants/low\"\n",
+            'show/variants/low' => "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"../keys/a%20b.key?token=old\",IV=0x01\n#EXT-X-MAP:URI=\"../init.mp4\"\n#EXTINF:1,\n../parts/0.m4s\n#EXTINF:1,\n../parts/0.m4s?again=1\n#EXT-X-KEY:METHOD=NONE\n#EXT-X-STREAM-INF:BANDWIDTH=1\n../master.m3u8\n",
+            'show/keys/a b.key' => '0123456789abcdef',
+            'show/init.mp4' => 'initialization',
+            'show/parts/0.m4s' => 'encrypted media',
+        ];
+        foreach ($files as $path => $contents) {
+            $disk->put($path, $contents);
+        }
+        $disk->put('show/unrelated.ts', 'keep');
+        $disk->put('other/master.m3u8', 'keep');
+        $playlist = FFMpeg::disk('memory')->playlist('show/master.m3u8');
+        $resolver = fn () => throw new \RuntimeException('Deletion must not invoke URL resolvers.');
+        $playlist->playlistUrlsUsing($resolver)->keyUrlsUsing($resolver)->mediaUrlsUsing($resolver);
+        $approved = [];
+        $this->assertSame($playlist, $playlist->deleteAllFiles(function (string $path) use ($disk, $files, &$approved): bool {
+            foreach (array_keys($files) as $existing) {
+                $this->assertTrue($disk->exists($existing), 'Deletion started before all approvals.');
+            }
+            $approved[] = $path;
+
+            return array_key_exists($path, $files);
+        }));
+        $this->assertSame(array_keys($files), $approved);
+        $this->assertEqualsCanonicalizing(['show/unrelated.ts', 'other/master.m3u8'], $disk->allFiles());
+    }
+
+    #[Test]
+    public function an_old_native_export_can_be_reopened_and_deleted_without_its_result_inventory(): void
+    {
+        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native HLS cleanup acceptance.');
+        }
+        $binary = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => $binary]);
+        $disk = $this->fakeLocalDisk();
+        $source = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=80x48:rate=10:duration=1.2',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '1', $disk->path('source.mp4')]);
+        $this->assertTrue($source->successful(), $source->errorOutput());
+        FFMpeg::disk('local')->open('source.mp4')->hls(segmentDuration: 0.5)
+            ->video(bitrate: '100k', preset: 'ultrafast')->variant('low', fn () => null)->variant('high', fn () => null)
+            ->save('old/master.m3u8');
+        $generated = $disk->allFiles('old');
+        $this->assertGreaterThanOrEqual(5, count($generated));
+        $disk->put('old/unrelated.ts', 'keep');
+        FFMpeg::disk('local')->playlist('old/master.m3u8')->deleteAllFiles(fn (string $path): bool => in_array($path, $generated, true));
+        $this->assertSame(['old/unrelated.ts'], $disk->allFiles('old'));
+        $this->assertTrue($disk->exists('source.mp4'));
+    }
+
+    #[Test]
+    public function refusing_a_shared_file_or_throwing_during_approval_deletes_nothing(): void
+    {
+        $disk = Storage::disk('memory');
+        $disk->put('show/master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nchild.m3u8\n");
+        $disk->put('show/child.m3u8', "#EXTM3U\n#EXTINF:1,\n../shared.ts\n");
+        $disk->put('shared.ts', 'shared with another export');
+        foreach ([false, 1, new \RuntimeException('Application approval failed.')] as $refusal) {
+            $seen = [];
+            try {
+                FFMpeg::disk($disk)->playlist('show/master.m3u8')->deleteAllFiles(function (string $path) use (&$seen, $refusal) {
+                    $seen[] = $path;
+                    if ($path === 'shared.ts') {
+                        return $refusal instanceof \RuntimeException ? throw $refusal : $refusal;
+                    }
+
+                    return true;
+                });
+                $this->fail('An unapproved file was deleted.');
+            } catch (MediaException $exception) {
+                $this->assertSame('authorization', $exception->category);
+            } catch (\RuntimeException $exception) {
+                $this->assertSame($refusal, $exception);
+            }
+            $this->assertSame(['show/master.m3u8', 'show/child.m3u8', 'shared.ts'], $seen);
+            $this->assertCount(3, $disk->allFiles());
+        }
+    }
+
+    public static function unsafeDeletionReferences(): array
+    {
+        return array_map(fn ($uri) => [$uri], [
+            '../../outside.ts', '%2e%2e/%2e%2e/outside.ts', '/outside.ts', '//other.test/file',
+            'https://other.test/file', '%2Foutside.ts', '%5Coutside.ts', 'file:/outside.ts',
+            '%00outside.ts', '%ff.ts', 'part%zz.ts', '%68ttps%3Aoutside.ts',
+        ]);
+    }
+
+    #[Test]
+    #[DataProvider('unsafeDeletionReferences')]
+    public function unsafe_references_abort_discovery_before_approval_or_deletion(string $uri): void
+    {
+        $disk = Storage::disk('memory');
+        $disk->put('show/master.m3u8', "#EXTM3U\n#EXTINF:1,\nsafe.ts\n#EXTINF:1,\n{$uri}\n");
+        $disk->put('show/safe.ts', 'keep');
+        $disk->put('outside.ts', 'keep');
+        try {
+            FFMpeg::disk($disk)->playlist('show/master.m3u8')->deleteAllFiles(function () {
+                $this->fail('Approval ran before discovery finished.');
+            });
+            $this->fail('An unsafe reference was accepted.');
+        } catch (MediaException $exception) {
+            $this->assertSame('artifact', $exception->category);
+        }
+        $this->assertCount(3, $disk->allFiles());
+    }
+
+    #[Test]
+    #[DataProvider('invalidPlaylists')]
+    public function malformed_nested_playlists_abort_deletion_before_approval(string $contents): void
+    {
+        $disk = Storage::disk('memory');
+        $disk->put('master.m3u8', "#EXTM3U\n#EXTINF:1,\nsafe.ts\n#EXT-X-STREAM-INF:BANDWIDTH=1\nbad.m3u8\n");
+        $disk->put('safe.ts', 'keep');
+        $disk->put('bad.m3u8', $contents);
+        try {
+            FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function () {
+                $this->fail('Approval ran before validation finished.');
+            });
+            $this->fail('A malformed child playlist was accepted.');
+        } catch (MediaException $exception) {
+            $this->assertSame('artifact', $exception->category);
+        }
+        $this->assertCount(3, $disk->allFiles());
+    }
+
+    #[Test]
+    public function deletion_deduplicates_reads_and_deletes_and_stops_on_adapter_failure(): void
+    {
+        foreach ([false, new \RuntimeException('secret adapter details')] as $failure) {
+            $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+            foreach (['master.m3u8' => 'child.m3u8', 'child.m3u8' => 'master.m3u8'] as $path => $child) {
+                $stream = fopen('php://temp', 'w+');
+                fwrite($stream, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n{$child}\n#EXTINF:1,\npart.ts\n#EXTINF:1,\npart.ts\n");
+                rewind($stream);
+                $disk->shouldReceive('readStream')->once()->with($path)->andReturn($stream);
+            }
+            $disk->shouldReceive('delete')->once()->with('master.m3u8')->andReturn(true);
+            $expectation = $disk->shouldReceive('delete')->once()->with('child.m3u8');
+            if ($failure instanceof \RuntimeException) {
+                $expectation->andThrow($failure);
+            } else {
+                $expectation->andReturn($failure);
+            }
+            $disk->shouldNotReceive('delete')->with('part.ts');
+            $approved = [];
+            try {
+                FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function (string $path) use (&$approved): bool {
+                    $approved[] = $path;
+
+                    return true;
+                });
+                $this->fail('An adapter failure was ignored.');
+            } catch (MediaException $exception) {
+                $this->assertSame(['response', 'filesystem'], [$exception->phase, $exception->category]);
+                $this->assertStringNotContainsString('secret', $exception->getMessage());
+                $this->assertNull($exception->getPrevious());
+            }
+            $this->assertSame(['master.m3u8', 'child.m3u8', 'part.ts'], $approved);
+        }
+    }
+
+    #[Test]
+    public function an_unreadable_child_prevents_all_approval_and_deletion(): void
+    {
+        $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $stream = fopen('php://temp', 'w+');
+        fwrite($stream, "#EXTM3U\n#EXTINF:1,\nsafe.ts\n#EXT-X-STREAM-INF:BANDWIDTH=1\nmissing.m3u8\n");
+        rewind($stream);
+        $disk->shouldReceive('readStream')->once()->with('master.m3u8')->andReturn($stream);
+        $disk->shouldReceive('readStream')->once()->with('missing.m3u8')->andReturn(false);
+        $disk->shouldNotReceive('delete');
+        try {
+            FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function () {
+                $this->fail('Approval ran before every playlist was read.');
+            });
+            $this->fail('An unreadable playlist was accepted.');
+        } catch (MediaException $exception) {
+            $this->assertSame('filesystem', $exception->category);
+        }
     }
 
     #[Test]

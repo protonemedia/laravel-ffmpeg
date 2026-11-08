@@ -65,6 +65,47 @@ class HlsPlaylist implements Responsable
         return collect($this->render(true));
     }
 
+    /**
+     * Delete original disk references, never resolver URLs. Approval must return true
+     * for every unique disk-relative path, including the opened playlist. Discovery
+     * and approval finish before the first delete; adapter failures may leave a
+     * partially deleted set. The application must protect shared files and prevent
+     * concurrent changes to the playlists or their storage during this operation.
+     *
+     * @param callable(string): bool $approve
+     */
+    public function deleteAllFiles(callable $approve): self
+    {
+        $paths = [$this->path => true];
+        $this->render(true, function (?string $target, string $uri) use (&$paths): void {
+            $decoded = rawurldecode(parse_url($uri, PHP_URL_PATH) ?? '');
+            if ($target === null || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $decoded)) {
+                throw new MediaException('HLS deletion requires safe disk-relative references.', 'response', 'artifact');
+            }
+            $paths[$target] = true;
+        });
+
+        $paths = array_map('strval', array_keys($paths));
+        foreach ($paths as $path) {
+            if ($approve($path) !== true) {
+                throw new MediaException('HLS deletion was not approved for every file.', 'response', 'authorization');
+            }
+        }
+
+        try {
+            $disk = is_string($this->disk) ? Storage::disk($this->disk) : $this->disk;
+            foreach ($paths as $path) {
+                if (! $disk->delete($path)) {
+                    throw new InvalidArgumentException;
+                }
+            }
+        } catch (Throwable) {
+            throw new MediaException('Cannot delete the HLS files.', 'response', 'filesystem');
+        }
+
+        return $this;
+    }
+
     public function toResponse($request): Response
     {
         return response($this->get(), 200, [
@@ -73,12 +114,12 @@ class HlsPlaylist implements Responsable
         ]);
     }
 
-    private function render(bool $all): array
+    private function render(bool $all, ?Closure $discover = null): array
     {
         $pending = [$this->path];
         $queued = [$this->path => true];
         $result = $cache = [];
-        $resolvers = $this->resolvers;
+        $resolvers = $discover === null ? $this->resolvers : [];
         $inputBudget = $outputBudget = 16777216;
         for ($index = 0; $index < count($pending); $index++) {
             $path = $pending[$index];
@@ -135,6 +176,9 @@ class HlsPlaylist implements Responsable
                         } catch (Throwable) {
                             throw new MediaException('An HLS reference escapes the disk or has an invalid path.', 'response', 'artifact');
                         }
+                    }
+                    if ($discover !== null) {
+                        $discover($target, $uri);
                     }
                     if ($all && $kind === 'playlist' && $target !== null && ! isset($queued[$target])) {
                         if (count($pending) >= 1024) {

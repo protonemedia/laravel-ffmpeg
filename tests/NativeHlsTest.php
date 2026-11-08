@@ -193,6 +193,76 @@ class NativeHlsTest extends TestCase
         $this->assertContains('course/é #?/master.m3u8', array_column($progressEvents[0]->outputs, 'path'));
     }
 
+    public static function playlistTypes(): array
+    {
+        return [['vod', false], ['event', false], ['live', false], ['event', true], ['live', true]];
+    }
+
+    #[Test]
+    #[DataProvider('playlistTypes')]
+    public function playlist_types_preserve_complete_decodable_presentations(string $type, bool $fragmented): void
+    {
+        $this->source();
+        $disk = Storage::disk('local');
+        $disk->put('captions.srt', "1\n00:00:00,200 --> 00:00:01,100\nTyped captions\n");
+        $remux = Process::run([$this->native(), '-v', 'error', '-i', $disk->path('source.mkv'),
+            '-i', $disk->path('captions.srt'), '-map', '0', '-map', '1:s', '-c', 'copy', $disk->path('captioned.mkv')]);
+        $this->assertTrue($remux->successful(), $remux->errorOutput());
+        $media = FFMpeg::disk('local')->open('captioned.mkv');
+        $export = $media->hls(segmentDuration: 0.7)->playlistType(strtoupper($type))
+            ->variant('main', fn (HlsVariant $variant) => $variant->video('libx264', preset: 'ultrafast')
+                ->map('0:v:0')->audioGroup('sound')->subtitlesGroup('text'))
+            ->audioRendition('sound', 'Music', fn ($variant) => $variant->map('0:a:0'))
+            ->subtitleRendition('text', 'Captions', fn ($variant) => $variant->map('0:s:0'));
+        if ($fragmented) {
+            $export->fmp4();
+        }
+        $command = $export->inspect();
+        if ($type === 'live') {
+            $this->assertNotContains('-hls_playlist_type', $command);
+        } else {
+            $this->assertSame($type, $command[array_search('-hls_playlist_type', $command, true) + 1]);
+        }
+        $result = $export->save('typed/master.m3u8');
+        foreach ($result->files()->where('role', 'hls-playlist') as $file) {
+            $playlist = $disk->get($file->path);
+            if ($type === 'live') {
+                $this->assertStringNotContainsString('#EXT-X-PLAYLIST-TYPE:', $playlist);
+            } else {
+                $this->assertStringContainsString('#EXT-X-PLAYLIST-TYPE:'.strtoupper($type), $playlist);
+            }
+            $this->assertStringEndsWith("#EXT-X-ENDLIST\n", $playlist);
+        }
+        $this->assertStringContainsString('Typed captions', $disk->get($result->subtitleRendition('text', 'Captions')->files()->firstWhere('role', 'hls-segment')->path));
+        $this->assertGreaterThan(1, $result->files()->where('role', 'hls-segment')->count());
+        $decoded = Process::run([$this->native(), '-v', 'error', '-i', Storage::disk('local')->path('typed/master.m3u8'), '-f', 'null', '-']);
+        $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+        $this->assertSame([], glob($this->root.'/*'));
+    }
+
+    #[Test]
+    public function invalid_playlist_types_and_non_vod_parallel_work_are_rejected_before_dispatch(): void
+    {
+        foreach (['', 'other', ' vod '] as $type) {
+            try {
+                FFMpeg::disk('absent')->open('source.mp4')->hls()->playlistType($type);
+                $this->fail('Invalid playlist type accepted.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertStringContainsString('playlist type', $exception->getMessage());
+            }
+        }
+        foreach (['event', 'live'] as $type) {
+            try {
+                FFMpeg::disk('absent')->open('source.mp4')->hls()->playlistType($type)
+                    ->variant('low', fn () => null)->variant('high', fn () => null)
+                    ->queued(parallel: true)->job('master.m3u8');
+                $this->fail('Non-VOD parallel composition accepted.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertStringContainsString('requires VOD', $exception->getMessage());
+            }
+        }
+    }
+
     #[Test]
     public function audio_only_silent_video_copy_and_all_audio_selection_are_preserved(): void
     {

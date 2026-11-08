@@ -28,6 +28,8 @@ class PendingHlsExport extends PendingExport
 
     private string $segmentType = 'mpegts';
 
+    private string $playlistType = 'vod';
+
     private array $renditions = [];
 
     private ?float $presentationDuration = null;
@@ -48,6 +50,18 @@ class PendingHlsExport extends PendingExport
         }
 
         $this->video('libx264')->audio('aac');
+    }
+
+    public function playlistType(string $type): self
+    {
+        $this->assertOutputMutable();
+        $type = strtolower($type);
+        if (! in_array($type, ['vod', 'event', 'live'], true)) {
+            throw new InvalidArgumentException('HLS playlist type must be vod, event, or live.');
+        }
+        $this->playlistType = $type;
+
+        return $this;
     }
 
     /** Use fragmented MP4 with one owned initialization file per rendition. AES-128 is MPEG-TS only. */
@@ -267,6 +281,9 @@ class PendingHlsExport extends PendingExport
     public function queueParts(string $path, string $prefix): array
     {
         $this->configuredOutputs($path);
+        if ($this->playlistType !== 'vod') {
+            throw new InvalidArgumentException('Parallel HLS composition requires VOD playlists. Use a single queued export for event or live playlist types.');
+        }
         if ($this->playlistCallback !== null || in_array('-filter_complex', $this->inspect(), true)) {
             throw new InvalidArgumentException('Parallel HLS does not accept custom playlist callbacks or complex graphs. Use a single queued export.');
         }
@@ -370,8 +387,11 @@ class PendingHlsExport extends PendingExport
                     array_push($result, '-force_key_frames:v', 'expr:gte(t,n_forced*'.$this->clipTimestamp($this->segmentDuration).')', '-flags:v', '+cgop');
                 }
                 array_push($result, '-f', 'hls', '-hls_time', $this->clipTimestamp($this->segmentDuration),
-                    '-hls_list_size', '0', '-hls_playlist_type', 'vod', '-hls_segment_type', $this->segmentType, '-start_number', '0',
+                    '-hls_list_size', '0', '-hls_segment_type', $this->segmentType, '-start_number', '0',
                     '-hls_segment_filename', 'segment-'.$index.'-%08d.'.($this->segmentType === 'fmp4' ? 'm4s' : 'ts'), '-master_pl_name', 'master-'.$index.'.m3u8');
+                if ($this->playlistType !== 'live') {
+                    array_push($result, '-hls_playlist_type', $this->playlistType);
+                }
                 if ($this->segmentType === 'fmp4') {
                     array_push($result, '-hls_fmp4_init_filename', 'init-'.$index.'.mp4');
                 }
@@ -454,16 +474,17 @@ class PendingHlsExport extends PendingExport
                 }
                 $paths[$index] = dirname($paths[$index]).'/playlist-'.$index.'.m3u8';
                 $this->writePlaylist($paths[$index], ['#EXTM3U', '#EXT-X-VERSION:3', '#EXT-X-TARGETDURATION:'.max(1, (int) ceil($duration)),
-                    '#EXT-X-MEDIA-SEQUENCE:0', '#EXT-X-PLAYLIST-TYPE:VOD', '#EXTINF:'.sprintf('%.6f', $duration).',',
+                    '#EXT-X-MEDIA-SEQUENCE:0', ...($this->playlistType === 'live' ? [] : ['#EXT-X-PLAYLIST-TYPE:'.strtoupper($this->playlistType)]), '#EXTINF:'.sprintf('%.6f', $duration).',',
                     'segment-'.$index.'-00000000.vtt', '#EXT-X-ENDLIST'], $output->destination()['path'], null, false);
             }
             $lines = $this->playlistLines($paths[$index]);
             $targets = array_keys(array_filter($lines, fn ($line) => str_starts_with($line, '#EXT-X-TARGETDURATION:')));
+            $types = array_values(array_filter($lines, fn ($line) => str_starts_with($line, '#EXT-X-PLAYLIST-TYPE:')));
             if ($lines[0] !== '#EXTM3U' || end($lines) !== '#EXT-X-ENDLIST'
                 || count($targets) !== 1 || count(array_keys($lines, '#EXTM3U', true)) !== 1
                 || count(array_keys($lines, '#EXT-X-ENDLIST', true)) !== 1
-                || count(array_keys($lines, '#EXT-X-PLAYLIST-TYPE:VOD', true)) !== 1) {
-                throw new MediaException('FFmpeg did not produce a complete VOD playlist.', Progress::VALIDATION, 'artifact');
+                || $types !== ($this->playlistType === 'live' ? [] : ['#EXT-X-PLAYLIST-TYPE:'.strtoupper($this->playlistType)])) {
+                throw new MediaException('FFmpeg did not produce a complete '.$this->playlistType.' playlist.', Progress::VALIDATION, 'artifact');
             }
 
             $duration = null;
@@ -497,7 +518,7 @@ class PendingHlsExport extends PendingExport
                     $this->variantFiles[$name][$destination['path']] = true;
                     $segments[] = ['path' => $init, 'output' => $index, 'role' => 'hls-init', 'destination' => $destination];
                 } elseif (str_starts_with($line, '#')) {
-                    if (! preg_match('/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+|#EXT-X-MEDIA-SEQUENCE:0|#EXT-X-PLAYLIST-TYPE:VOD|#EXT-X-ENDLIST)\z/', $line)) {
+                    if (! preg_match('/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+|#EXT-X-MEDIA-SEQUENCE:0|#EXT-X-PLAYLIST-TYPE:(?:VOD|EVENT)|#EXT-X-ENDLIST)\z/', $line)) {
                         throw new MediaException('Unexpected HLS playlist directive.', Progress::VALIDATION, 'artifact');
                     }
                 } else {

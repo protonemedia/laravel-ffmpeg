@@ -155,6 +155,91 @@ class NativeInputHelpersTest extends TestCase
     }
 
     #[Test]
+    public function explicit_hardware_backends_and_encoders_compile_for_exports_and_hls_without_leaking_between_inputs(): void
+    {
+        Process::fake();
+        foreach ([['cuda', 'h264_nvenc'], ['cuda', 'hevc_nvenc'], ['vaapi', 'hevc_vaapi'], ['qsv', 'hevc_qsv']] as [$backend, $encoder]) {
+            $options = ['-hwaccel', $backend, '-hwaccel_device', '0', '-hwaccel_output_format', $backend];
+            $media = FFMpeg::open('hardware.mp4', inputOptions: $options);
+            $export = $media->export()->map('0:v:0')->withoutMetadata(chapters: true)->video($encoder);
+            $export->addInput(FFMpeg::open('software.mp4'));
+            foreach ([$export, $media->hls()->variant('hardware', fn ($variant) => $variant->video($encoder))] as $pending) {
+                $command = $pending->inspect();
+                $input = array_search('-i', $command, true);
+                $hardware = array_search('-hwaccel', $command, true);
+                $this->assertSame($options, array_slice($command, $hardware, count($options)));
+                $this->assertLessThan($input, $hardware + count($options) - 1);
+                $this->assertSame(1, count(array_keys($command, '-hwaccel', true)));
+                $codec = array_search('-c:v', $command, true);
+                $this->assertNotFalse($codec);
+                $this->assertGreaterThan($input, $codec);
+                $this->assertSame($encoder, $command[$codec + 1]);
+                $this->assertNotContains('libx264', $command);
+            }
+        }
+        Process::assertNothingRan();
+        $this->assertSame([], glob($this->root.'/work/*'));
+    }
+
+    #[Test]
+    public function an_unavailable_hardware_encoder_fails_explicitly_without_software_fallback_or_publication(): void
+    {
+        $binary = $this->native();
+        $encoders = Process::run([$binary, '-hide_banner', '-encoders']);
+        $this->assertTrue($encoders->successful(), $encoders->errorOutput());
+        if (preg_match('/\bh264_nvenc\b/', $encoders->output())) {
+            $this->markTestSkipped('This acceptance case requires a build without h264_nvenc, not an assumption about GPU availability.');
+        }
+        $path = $this->root.'/source.mp4';
+        $source = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=80x48:r=10',
+            '-t', '0.4', '-c:v', 'libx264', '-threads', '1', $path]);
+        $this->assertTrue($source->successful(), $source->errorOutput());
+        $hash = hash_file('sha256', $path);
+        $media = FFMpeg::open(new File($path));
+        foreach (['hardware.mp4' => $media->export()->video('h264_nvenc'),
+            'hardware/master.m3u8' => $media->hls()->variant('gpu', fn ($variant) => $variant->video('h264_nvenc'))] as $output => $export) {
+            try {
+                $export->toDisk('input-helpers')->save($output);
+                $this->fail('An unavailable hardware encoder silently succeeded.');
+            } catch (MediaException $exception) {
+                $this->assertSame('encoding', $exception->phase);
+                $this->assertSame('exit', $exception->category);
+                $this->assertStringContainsString("Unknown encoder 'h264_nvenc'", $exception->diagnostics);
+                $this->assertStringNotContainsString($this->root, $exception->diagnostics);
+                $this->assertSame([], Storage::disk('input-helpers')->allFiles());
+                $this->assertSame([], glob($this->root.'/work/*'));
+                $this->assertSame($hash, hash_file('sha256', $path));
+            }
+        }
+    }
+
+    #[Test]
+    public function an_unavailable_hardware_decoder_fails_instead_of_silently_using_software_decoding(): void
+    {
+        $binary = $this->native();
+        $backends = Process::run([$binary, '-hide_banner', '-hwaccels']);
+        $this->assertTrue($backends->successful(), $backends->errorOutput());
+        if (preg_match('/^cuda$/m', $backends->output())) {
+            $this->markTestSkipped('This acceptance case requires a build without CUDA decoding support.');
+        }
+        $path = __DIR__.'/src/video.mp4';
+        $hash = hash_file('sha256', $path);
+        try {
+            FFMpeg::open(new File($path), inputOptions: ['-hwaccel', 'cuda'])->export()
+                ->video('libx264')->toDisk('input-helpers')->save('hardware-decoding.mp4');
+            $this->fail('An unavailable explicit decoder silently fell back to software.');
+        } catch (MediaException $exception) {
+            $this->assertSame('encoding', $exception->phase);
+            $this->assertSame('exit', $exception->category);
+            $this->assertStringContainsString('No device available for decoder: device type cuda', $exception->diagnostics);
+            $this->assertStringNotContainsString($this->root, $exception->diagnostics);
+            $this->assertSame([], Storage::disk('input-helpers')->allFiles());
+            $this->assertSame([], glob($this->root.'/work/*'));
+            $this->assertSame($hash, hash_file('sha256', $path));
+        }
+    }
+
+    #[Test]
     public function rtsp_snapshots_capture_real_tcp_and_udp_frames_and_bound_failed_cameras(): void
     {
         $binary = $this->native();
