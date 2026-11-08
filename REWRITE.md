@@ -37,7 +37,11 @@ $private = FFMpeg::openUrl(
 	headers: ['Authorization' => 'Bearer '.$token],
 	download: true,
 );
-$private->export()->video('copy')->audio('copy')->toDisk('videos')->save('private.mp4');
+$private->export()
+	->video('copy')
+	->audio('copy')
+	->toDisk('videos')
+	->save('private.mp4');
 ```
 
 `FFMpeg::openUrl()` delegates to `InputSelector::openUrl()` and accepts the same headers, download flag, and input options. Both accept HTTP and HTTPS URLs. Direct input is the default for public or signed URLs. Choosing direct input permits the URL in FFmpeg and FFprobe process arguments, visible to operating-system process inspection. Package inspection, process summaries, diagnostics, and probe filenames redact the URL. Query values also receive diagnostic redaction. A direct read has a 15-second network read timeout, plus the configured process deadline.
@@ -57,9 +61,10 @@ $metadata = $media->probeCached(
 	ttl: 600,
 );
 
-$media = FFMpeg::disk('uploads')->open('source.mp4', inputOptions: [
-	'-hwaccel', 'cuda', '-hwaccel_device', '0', '-hwaccel_output_format', 'cuda',
-]);
+$media = FFMpeg::disk('uploads')
+	->open('source.mp4', inputOptions: [
+		'-hwaccel', 'cuda', '-hwaccel_device', '0', '-hwaccel_output_format', 'cuda',
+	]);
 ```
 
 `Media::probeCached(\Illuminate\Contracts\Cache\Repository $cache, string $versionedKey, \DateTimeInterface|\DateInterval|int $ttl = 3600): Metadata` caches the ordinary probe's raw metadata array. The key must be nonempty. An integer TTL must be positive. The internal namespace includes descriptor identity, the caller's versioned key, and the configured FFprobe binary. A hit restores `Metadata` with the current descriptor's stream identity. Missing or structurally invalid entries trigger a probe and cache write. Ordinary `probe()` and exports do not use this cache.
@@ -74,8 +79,12 @@ These checks validate arguments, not hardware availability. No GPU encode or dec
 
 ```php
 $camera = FFMpeg::openRtsp($cameraUrl, transport: 'udp', timeout: 10);
-$camera->frame()->resize(width: 640)->toDisk('images')->save('snapshot.jpg');
-$bytes = $camera->frame()->get(); // A new capture, returned as JPEG bytes.
+$camera->frame()
+	->resize(width: 640)
+	->toDisk('images')
+	->save('snapshot.jpg');
+$bytes = $camera->frame()
+	->get(); // A new capture, returned as JPEG bytes.
 ```
 
 `FFMpeg::openRtsp(string $url, string $transport = 'tcp', float $timeout = 15): RtspCamera` accepts an `rtsp` URL with a host, without whitespace, control bytes, or a fragment. Transport is `tcp` or `udp`. Timeout is finite, positive, and at most 300 seconds. `RtspCamera::frame(): PendingFrame` is the supported operation, not `export()` or live playback.
@@ -97,11 +106,16 @@ CI uses Ubuntu 26.04 and the same installer throughout the PHP 8.4/8.5 and Larav
 ### Single-frame extraction
 
 ```php
-$media = FFMpeg::disk('videos')->open('converted.mp4');
-$result = $media->frame(at: '00:00:12.500')->resize(width: 320)
-	->toDisk('thumbnails')->save('covers/preview.png');
-$bytes = $media->frame(at: 12.5)->get(); // Raw JPEG bytes, not Base64.
-$first = $media->frame()->get();         // Timestamp zero, with fresh settings.
+$media = FFMpeg::disk('videos')
+	->open('converted.mp4');
+$result = $media->frame(at: '00:00:12.500')
+	->resize(width: 320)
+	->toDisk('thumbnails')
+	->save('covers/preview.png');
+$bytes = $media->frame(at: 12.5)
+	->get(); // Raw JPEG bytes, not Base64.
+$first = $media->frame()
+	->get();         // Timestamp zero, with fresh settings.
 ```
 
 `frame()` selects the first non-attached-picture video stream and decodes the first frame at or after the timestamp. Timestamps accept nonnegative numeric seconds or the same strict timecodes as `clip()`. There is no artificial sampling window, so sparse variable-frame-rate media can return a frame several seconds later. A timestamp beyond the final frame throws a `MediaException` instead of publishing an empty file.
@@ -113,8 +127,11 @@ $first = $media->frame()->get();         // Timestamp zero, with fresh settings.
 ### Image sequences
 
 ```php
-$media->frames(every: 2)->resize(width: 320)->save('frames/%05d.jpg');
-$result = $media->frames(count: 10)->save('previews/%03d.png');
+$media->frames(every: 2)
+	->resize(width: 320)
+	->save('frames/%05d.jpg');
+$result = $media->frames(count: 10)
+	->save('previews/%03d.png');
 $result->files(); // Ordered files with concrete numbered paths and the image role.
 ```
 
@@ -128,8 +145,10 @@ Destinations require one `%d` or `%01d` through `%09d` placeholder in the filena
 
 ```php
 $result = $media->storyboard(every: 2, columns: 5, rows: 4, margin: 3, padding: 2)
-	->resize(width: 160)->clip(10, duration: 45)
-	->vtt('metadata/preview.vtt')->toDisk('previews')
+	->resize(width: 160)
+	->clip(10, duration: 45)
+	->vtt('metadata/preview.vtt')
+	->toDisk('previews')
 	->save('images/sheet-%03d.jpg');
 ```
 
@@ -140,8 +159,11 @@ The operation requires one input with a known, positive duration. Complex graphs
 `save()` requires a numbered JPEG or PNG destination, with the same placeholder and numbering rules as `frames()`. `vtt()` optionally writes WebVTT cues on the output disk. Without a resolver, image URLs are percent-encoded paths relative to the VTT file's directory. A custom resolver receives each concrete sheet key and its one-based index:
 
 ```php
-$media->storyboard(every: 2)->vtt('preview.vtt', fn (string $key, int $index) => Storage::disk('previews')->url($key))
-	->toDisk('previews')->save('images/sheet-%03d.png');
+$media->storyboard(every: 2)
+	->vtt('preview.vtt', fn (string $key, int $index) => Storage::disk('previews')
+		->url($key))
+	->toDisk('previews')
+	->save('images/sheet-%03d.png');
 ```
 
 Resolved URLs must be nonempty strings without whitespace, control characters, or fragments. Query strings are retained before the generated `#xywh=x,y,width,height` fragment. Coordinates use the actual sheet dimensions, margin, and padding. Each cue ends at the next sample or the clip's end, rounded up to a millisecond.
@@ -152,10 +174,13 @@ Every sheet and the cue file are validated before publication. The result lists 
 
 ```php
 $media->waveform(width: 640, height: 120, colors: ['#0000ff'])
-	->toDisk('previews')->save('audio/waveform.png');
+	->toDisk('previews')
+	->save('audio/waveform.png');
 $media->waveform(width: 640, height: 120, colors: ['red'])
-	->audioFilter('volume=0.5')->clip(10, duration: 5)
-	->resize(width: 320)->save('audio/excerpt.jpg');
+	->audioFilter('volume=0.5')
+	->clip(10, duration: 5)
+	->resize(width: 320)
+	->save('audio/excerpt.jpg');
 ```
 
 `waveform()` renders the first audio stream through FFmpeg's `showwavespic` filter. Defaults are 640 × 120 pixels with blue channels on one canvas. Dimensions are positive integers and may be odd. The `colors` parameter accepts `string|array`. A string is one color, not a delimited list. An array must be a nonempty list of color strings. Colors are FFmpeg names, six-digit RGB strings, or eight-digit RGBA strings. Hexadecimal colors require a `#` or `0x` prefix. Filter syntax is not accepted as a color.
@@ -190,14 +215,20 @@ The result exposes `exitCode`, `output`, `diagnostics`, `elapsedSeconds`, `comma
 use ProtoneMedia\LaravelFFMpeg\HlsVariant;
 
 $result = $media->hls(segmentDuration: 6)
-	->video('libx264')->audio('aac', bitrate: '96k')
-	->variant('360p', fn (HlsVariant $variant) => $variant->resize(height: 360)->video(bitrate: '800k'))
-	->variant('720p', fn (HlsVariant $variant) => $variant->resize(height: 720)->video(bitrate: '2800k'))
-	->toDisk('streams', ['visibility' => 'private'])->save('lesson/master.m3u8');
+	->video('libx264')
+	->audio('aac', bitrate: '96k')
+	->variant('360p', fn (HlsVariant $variant) => $variant->resize(height: 360)
+		->video(bitrate: '800k'))
+	->variant('720p', fn (HlsVariant $variant) => $variant->resize(height: 720)
+		->video(bitrate: '2800k'))
+	->toDisk('streams', ['visibility' => 'private'])
+	->save('lesson/master.m3u8');
 
 $result->playlist();                   // The master GeneratedFile.
-$result->variant('720p')->playlist();  // lesson/720p/index.m3u8.
-$result->variant('720p')->files();     // This variant's segments and playlist.
+$result->variant('720p')
+	->playlist();  // lesson/720p/index.m3u8.
+$result->variant('720p')
+	->files();     // This variant's segments and playlist.
 ```
 
 `hls()` returns a fresh `PendingHlsExport` for MPEG-TS VOD. Its default codecs are `libx264` and `aac`. At least one named variant is required. Names contain ASCII letters, digits, underscores, or hyphens and start with a letter or digit. Names must be unique. Variant callbacks run immediately and configure encoding, maps, and filters, without `save()` or `toDisk()` methods.
@@ -224,7 +255,8 @@ $result = $media->hls(segmentDuration: 6)
 		playlist: 'playlists/360p/index.m3u8', segments: 'segments/360p/part-%03d.ts')
 	->variant('720p', fn (HlsVariant $variant) => $variant->resize(height: 720),
 		playlist: 'playlists/720p/index.m3u8', segments: 'segments/720p/part-%d.ts')
-	->toDisk('streams')->save('catalog/master.m3u8');
+	->toDisk('streams')
+	->save('catalog/master.m3u8');
 ```
 
 `playlist:` and `segments:` are optional disk-relative keys, not paths relative to the master. Playlists require an `.m3u8` extension. A segment pattern requires the packaging's extension and exactly one `%d` or `%01d` through `%09d` placeholder in the filename, with no other percent signs. MPEG-TS uses `.ts`, fMP4 uses `.m4s`, and subtitle renditions use `.vtt`. Numbering starts at zero. Without `segments:`, segments use the variant playlist's directory and the default `segment-%08d` basename. A playlist at the disk root is supported.
@@ -236,14 +268,19 @@ HLS supports `twoPass()` with bitrate-configured video variants. The first pass 
 ### fMP4 and alternate groups
 
 ```php
-$result = $media->hls()->fmp4()
+$result = $media->hls()
+	->fmp4()
 	->variant('720p', fn (HlsVariant $variant) => $variant
-		->resize(height: 720)->audioGroup('sound')->subtitlesGroup('captions'))
+		->resize(height: 720)
+		->audioGroup('sound')
+		->subtitlesGroup('captions'))
 	->audioRendition('sound', 'English', fn (HlsVariant $rendition) => $rendition
-		->map('0:a:0')->audio('aac', bitrate: '128k'), language: 'en', default: true)
+		->map('0:a:0')
+		->audio('aac', bitrate: '128k'), language: 'en', default: true)
 	->subtitleRendition('captions', 'English', fn (HlsVariant $rendition) => $rendition
 		->map('0:s:0'), language: 'en')
-	->toDisk('streams')->save('lesson/master.m3u8');
+	->toDisk('streams')
+	->save('lesson/master.m3u8');
 ```
 
 `fmp4()` changes segment extensions to `.m4s` and owns a validated `hls-init` file per audio/video playlist. Optional `variant(init:)` selects its disk-relative `.mp4` key. AES-128 encryption is rejected for fMP4 in either configuration order. Init files publish before playlists and remain in the variant inventory. Private combined probe files are never published.
@@ -256,14 +293,22 @@ Audio encodes once per rendition, not once per referencing variant. Subtitles us
 
 ```php
 $normalized = $media->normalizeLoudness(integrated: -18, truePeak: -2, sampleRate: 48000, audio: 1)
-	->clip(3, duration: 4)->audioFilter('pan=mono|c0=c0,volume=0.5')
-	->audio('pcm_s24le')->save('normalized.wav');
+	->clip(3, duration: 4)
+	->audioFilter('pan=mono|c0=c0,volume=0.5')
+	->audio('pcm_s24le')
+	->save('normalized.wav');
 $normalized->measurement;
 $normalized->actualMode();
 
-$peaks = $media->waveformPeaks(samplesPerBucket: 256)->audioTrack(1)->mono()->buckets(1000)->get();
+$peaks = $media->waveformPeaks(samplesPerBucket: 256)
+	->audioTrack(1)
+	->mono()
+	->buckets(1000)
+	->get();
 $peaks->toArray();
-$media->waveformPeaks()->buckets(2000)->save('peaks.json');
+$media->waveformPeaks()
+	->buckets(2000)
+	->save('peaks.json');
 ```
 
 Loudness normalization produces one audio-only output. It prepares one private lossless sample snapshot after trim, channel preprocessing, and resampling. Both loudnorm passes read that snapshot. Results retain validated measurement/final statistics, requested and actual normalization modes, and output rate. Nonfinite statistics become null, never zero; silence uses dynamic fallback. Graphs, multiple inputs/outputs, copied audio, video settings, keyframe seeking, and raw rate/channel overrides are rejected.
@@ -282,7 +327,8 @@ $result = $media->hls()
 
 		return str_replace("#EXTM3U\n", "#EXTM3U\n# Playlist: ".$path."\n".$tag."\n", $playlist);
 	})
-	->toDisk('streams')->save('lesson/master.m3u8');
+	->toDisk('streams')
+	->save('lesson/master.m3u8');
 ```
 
 `playlistUsing()` receives finalized text, the disk-relative destination key, and the variant name or generated rendition identifier. The name is `null` for the master. Callbacks run once per playlist during each save, before publication. Inspection does not call them. The last registration replaces the previous callback. Configuration cannot change while an export runs.
@@ -301,22 +347,27 @@ $result = $media->hls(segmentDuration: 6)
 		keyUrl: fn (string $path) => route('lesson.key', ['key' => basename($path)]),
 		directory: 'lessons/42/keys',
 	)
-	->toDisk('streams')->save('lessons/42/master.m3u8');
+	->toDisk('streams')
+	->save('lessons/42/master.m3u8');
 
 $result->playlist();                             // The master playlist, not a key.
 $result->file();                                 // Still the first media segment.
-$keys = $result->files()->where('role', 'hls-key'); // Owned private key copies.
+$keys = $result->files()
+	->where('role', 'hls-key'); // Owned private key copies.
 ```
 
 Configure `secrets` as a non-public disk. Your application serves each key URL with authorization and the key's 16 raw bytes, not hex or Base64. AES-128 is access control, not DRM. PHP's OpenSSL extension is required.
 
 ```php
 // Supply an existing 16-byte key. The export owns a new private copy.
-$key = Storage::disk('secrets')->get('lessons/42/source.key');
+$key = Storage::disk('secrets')
+	->get('lessons/42/source.key');
 
-$media->hls()->variant('720p', fn () => null)
+$media->hls()
+	->variant('720p', fn () => null)
 	->encrypt('secrets', fn ($path) => route('lesson.key', ['key' => basename($path)]), key: $key)
-	->toDisk('streams')->save('lesson/master.m3u8');
+	->toDisk('streams')
+	->save('lesson/master.m3u8');
 ```
 
 ```php
@@ -331,7 +382,8 @@ $result = $media->hls(segmentDuration: 6)
 		},
 		rotateEvery: 3,
 	)
-	->toDisk('streams')->save('lesson/master.m3u8');
+	->toDisk('streams')
+	->save('lesson/master.m3u8');
 ```
 
 Without `key:`, each save generates fresh keys and filenames. `rotateEvery:` is a positive segment count, indexed from zero independently within each variant. The same rotation group shares a key across variants. It cannot combine with `key:`. Every segment has its own random 128-bit IV, recorded explicitly in `EXT-X-KEY`. Local post-processing uses AES-128-CBC with PKCS#7 padding, not log-triggered FFmpeg rekeying. Ciphertext sizes determine master bandwidth. First-segment stream validation uses the retained private plaintext.
@@ -375,9 +427,12 @@ Keep published media and keys private and immutable. Replace an export by publis
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 $merged = FFMpeg::mergeHls(['main' => $firstResult, 'alternate' => $secondResult])
-	->toDisk('streams')->save('combined/master.m3u8');
-$publishedPath = $merged->playlist()->path; // Includes a generated version suffix.
-$inventory = $merged->playback()->toArray();
+	->toDisk('streams')
+	->save('combined/master.m3u8');
+$publishedPath = $merged->playlist()
+	->path; // Includes a generated version suffix.
+$inventory = $merged->playback()
+	->toArray();
 ```
 
 `FFMpeg::mergeHls(array $presentations): PendingHlsMerge` accepts at least two trusted completed v9 `HlsExportResult` objects, `HlsPresentation` objects, or persisted inventory arrays. Optional associative aliases prefix variant names and must be simple names. `toDisk(string $disk): self` chooses the shared media disk. Without it, the first master determines the disk. `save(string $path): HlsExportResult` requires a canonical `.m3u8` key and publishes a fresh version-suffixed master. Use the returned `playlist()->path`, not the requested path, for the published object.
@@ -392,29 +447,36 @@ Only the new master is `owned=true` in the returned generated-file inventory. Ex
 use Illuminate\Support\Facades\URL;
 
 // Inside an authorized controller. Resolve $path from this lesson's owned files.
-return FFMpeg::disk('streams')->playlist($path)
-	->playlistUrlsUsing(fn (?string $target, string $source, string $uri) =>
-		URL::temporarySignedRoute('lesson.playlist', now()->addMinutes(10), [
+return FFMpeg::disk('streams')
+	->playlist($path)
+	->playlistUrlsUsing(fn (?string $target, string $source, string $uri) => URL::temporarySignedRoute('lesson.playlist', now()
+		->addMinutes(10), [
 			'lesson' => $lesson->id, 'path' => $target,
 		]))
-	->mediaUrlsUsing(fn (?string $target, string $source, string $uri) =>
-		Storage::disk('streams')->temporaryUrl($target, now()->addMinutes(10)))
+	->mediaUrlsUsing(fn (?string $target, string $source, string $uri) => Storage::disk('streams')
+		->temporaryUrl($target, now()
+			->addMinutes(10)))
 	->keyUrlsUsing(function (?string $target, string $source, string $uri) use ($lesson) {
 		// Exported key URLs may be absolute. Look up the original URI in your owned key records.
-		$key = $lesson->keys()->where('playlist_uri', $uri)->firstOrFail();
+		$key = $lesson->keys()
+			->where('playlist_uri', $uri)
+			->firstOrFail();
 
-		return URL::temporarySignedRoute('lesson.key', now()->addMinutes(10), [
-			'lesson' => $lesson->id, 'key' => $key->id,
-		]);
+		return URL::temporarySignedRoute('lesson.key', now()
+			->addMinutes(10), [
+				'lesson' => $lesson->id, 'key' => $key->id,
+			]);
 	});
 ```
 
 `playlist()` accepts a disk-relative `.m3u8` key or a filesystem instance through `disk()`. It implements Laravel `Responsable` and sends `application/vnd.apple.mpegurl` with `Cache-Control: private, no-store`. Your application authorizes every playlist request, scopes paths and keys to the lesson, validates signatures, serves the 16 raw key bytes, and configures CORS. A signed URL does not replace ownership checks. The example assumes local playlist and segment references.
 
 ```php
-$playlist = FFMpeg::disk('streams')->playlist('lessons/42/master.m3u8')
-	->mediaUrlsUsing(fn (?string $target, string $source, string $uri) =>
-		$target === null ? $uri : Storage::disk('streams')->temporaryUrl($target, now()->addMinutes(10)));
+$playlist = FFMpeg::disk('streams')
+	->playlist('lessons/42/master.m3u8')
+	->mediaUrlsUsing(fn (?string $target, string $source, string $uri) => $target === null ? $uri : Storage::disk('streams')
+		->temporaryUrl($target, now()
+			->addMinutes(10)));
 
 $text = $playlist->get(); // Rewrite only this playlist. No writes.
 $all = $playlist->all();  // Collection keyed by original disk-relative playlist keys.
@@ -432,15 +494,16 @@ Invalid UTF-8, control characters, malformed URIs, disk-root traversal, incomple
 ```php
 use ProtoneMedia\LaravelFFMpeg\Progress;
 
-$media->export()->onProgress(function (Progress $progress) {
-	if ($progress->isEncoding()) {
-		// elapsedSeconds, percentage, speed, and remainingSeconds may be null.
-	}
+$media->export()
+	->onProgress(function (Progress $progress) {
+		if ($progress->isEncoding()) {
+			// elapsedSeconds, percentage, speed, and remainingSeconds may be null.
+		}
 
-	if ($progress->phase === Progress::PUBLICATION) {
-		// Outputs are validated; publication is not complete yet.
-	}
-});
+		if ($progress->phase === Progress::PUBLICATION) {
+			// Outputs are validated; publication is not complete yet.
+		}
+	});
 ```
 
 `Progress` defines typed string constants `STAGING`, `PROBING`, `ENCODING`, `VALIDATION`, and `PUBLICATION`. Their values remain `staging`, `probing`, `encoding`, `validation`, and `publication`. The `phase` property remains a string, so existing callback comparisons continue to work. `isEncoding()` is true for the encoding-start notification and encoder updates, including updates without a known percentage. Other progress phases return false. `Events\ExportProgress` wraps these values for global listeners; completion remains a separate `Events\ExportCompleted` event after publication and cleanup, not a progress phase.
@@ -461,7 +524,8 @@ Generated files retain their destination filesystem, including supplied filesyst
 
 ```php
 $file = $result->file();
-$url = $file->temporaryUrl(now()->addMinutes(5));
+$url = $file->temporaryUrl(now()
+	->addMinutes(5));
 $stream = $file->readStream(); // The caller closes the stream with fclose().
 ```
 
@@ -514,9 +578,12 @@ $english?->isDefault();  // Boolean disposition flag.
 
 $metadata->hasVideo();
 $metadata->hasAudio();
-$metadata->subtitleStreams()->first(fn ($stream) => $stream->isForced());
-$metadata->coverArt()->first();
-$metadata->chapters()->first();
+$metadata->subtitleStreams()
+	->first(fn ($stream) => $stream->isForced());
+$metadata->coverArt()
+	->first();
+$metadata->chapters()
+	->first();
 $metadata->tag('title');
 ```
 
@@ -529,14 +596,27 @@ Stream and format `tag()` lookups use literal, case-sensitive keys, including ke
 `PendingExport::coverArt(Media $image): self` attaches one standalone PNG or JPEG without input options. It copies every motion-video and audio track and marks the image as attached art. Output is limited to MP4, M4A, or MP3, with one primary input and one output. Existing attached art is rejected instead of replaced. Custom maps, graphs, watermarks, encoding settings, filters, clipping, raw output options, disposition overrides, and two-pass encoding are unsupported. This differs from `Metadata::coverArt()`, which reads existing attached-picture streams.
 
 ```php
-$media->export()->coverArt(FFMpeg::disk('assets')->open('cover.jpg'))->save('covered.mp4');
+$media->export()
+	->coverArt(FFMpeg::disk('assets')
+		->open('cover.jpg'))
+	->save('covered.mp4');
 
-$media->export()->map('0:v:0')->map('0:v:0')->map('0:a:0')->audio('copy')
-	->videoStream(0, fn ($track) => $track->codec('libx264')->crf(20)->preset('medium'))
-	->videoStream(1, fn ($track) => $track->codec('mpeg4')->bitrate('800k'))
+$media->export()
+	->map('0:v:0')
+	->map('0:v:0')
+	->map('0:a:0')
+	->audio('copy')
+	->videoStream(0, fn ($track) => $track->codec('libx264')
+		->crf(20)
+		->preset('medium'))
+	->videoStream(1, fn ($track) => $track->codec('mpeg4')
+		->bitrate('800k'))
 	->save('tracks.mp4');
 
-$media->export()->map('0:s:0')->outputOptions(['-c:s', 'webvtt'])->save('captions.vtt');
+$media->export()
+	->map('0:s:0')
+	->outputOptions(['-c:s', 'webvtt'])
+	->save('captions.vtt');
 ```
 
 `videoStream(int $track, callable $configure): self` configures a zero-based output video track after mapping. It is available on output configuration objects, including `output()` callbacks. The callback receives `VideoStreamSettings` with fluent `codec(string)`, `bitrate(int|string)`, `crf(float)`, and `preset(string)` methods. Overrides inherit unspecified type-wide `video()` settings. Each index can be configured once and must identify an existing output video track at execution. Inherited bitrate and CRF conflicts fail, as do copy settings with filters or encoder options. Per-track overrides reject two-pass encoding. They do not create tracks or independent per-track filter chains.
@@ -561,9 +641,12 @@ $result = FFMpeg::disk('uploads')
 Clip arguments use plain decimal seconds at microsecond precision, never scientific notation. This applies to accurate output seeks and keyframe input seeks.
 
 ```php
-$media->export()->clip('00:00:13.375', duration: '00:00:02.125');
-$media->export()->clip('01:02:59.750', end: '01:03:01.125');
-$media->export()->clip(13.375, duration: '00:00:02.125');
+$media->export()
+	->clip('00:00:13.375', duration: '00:00:02.125');
+$media->export()
+	->clip('01:02:59.750', end: '01:03:01.125');
+$media->export()
+	->clip(13.375, duration: '00:00:02.125');
 ```
 
 Input options, `globalOptions()`, and `outputOptions()` accept flat option/value pairs from a closed allowlist. Every allowed option has library-defined arity and value validation. Unknown options, aliases, switches with caller-supplied values, duplicate nonrepeatable options, filename controls, authentication headers, and encoder parameter blobs are rejected. Output `-f` permits only listed single-file muxers. These methods are not unrestricted argv passthrough.
@@ -589,21 +672,30 @@ Encoding progress reports `pass` as one or two and `totalPasses` as two, includi
 ### Stream selection shortcuts
 
 ```php
-$media = FFMpeg::disk('uploads')->open('original.mov');
+$media = FFMpeg::disk('uploads')
+	->open('original.mov');
 
 $media->export()
 	->mapVideo(0)
 	->mapAudio(0, language: 'eng', optional: true)
-	->video('copy')->audio('copy')
-	->toDisk('videos')->save('english.mkv');
+	->video('copy')
+	->audio('copy')
+	->toDisk('videos')
+	->save('english.mkv');
 
 $metadata = $media->probe();
-$video = $metadata->videoStreams()->first();
+$video = $metadata->videoStreams()
+	->first();
 $english = $metadata->audioStreams()
 	->first(fn ($stream) => $stream->language() === 'eng');
 
-$media->export()->mapVideo($video)->mapAudio($english)
-	->video('copy')->audio('copy')->toDisk('videos')->save('selected.mkv');
+$media->export()
+	->mapVideo($video)
+	->mapAudio($english)
+	->video('copy')
+	->audio('copy')
+	->toDisk('videos')
+	->save('selected.mkv');
 ```
 
 The object example assumes both streams exist. `mapVideo()` and `mapAudio()` accept a numeric input index or a probed `Stream`. The default selects input 0's first stream of that type. `track:` selects a zero-based track within that type. `language:` selects all matching audio tracks and cannot accompany `track:`. `optional: true` omits missing matches, but an entirely empty selection still fails. Raw `map()` remains available for other selectors, negative maps, and graph labels. Optional maps compile with a separator before `?` so FFmpeg 9 does not treat it as part of a metadata value.
@@ -615,11 +707,16 @@ A probed stream maps its absolute `index()` and retains its source identity. Its
 For an autorotated portrait source, `resize(height: 1920)` preserves display aspect ratio. `fit(1080, 1920, mode: 'contain')` produces an exact portrait canvas with padding, while `mode: 'cover'` crops to that canvas. Two explicit resize dimensions stretch. Probe `width()` and `height()` remain encoded dimensions rather than rotation-adjusted display dimensions.
 
 ```php
-$media->export()->resize(width: 1280);          // Preserve display aspect ratio.
-$media->export()->resize(height: 720);          // Infer an even width.
-$media->export()->resize(1280, 720);            // Stretch to both dimensions.
-$media->export()->fit(1280, 720);               // Contain with centered black padding.
-$media->export()->fit(1280, 720, mode: 'cover'); // Fill with a centered crop.
+$media->export()
+	->resize(width: 1280);          // Preserve display aspect ratio.
+$media->export()
+	->resize(height: 720);          // Infer an even width.
+$media->export()
+	->resize(1280, 720);            // Stretch to both dimensions.
+$media->export()
+	->fit(1280, 720);               // Contain with centered black padding.
+$media->export()
+	->fit(1280, 720, mode: 'cover'); // Fill with a centered crop.
 ```
 
 These settings work inside `output()` callbacks too. They append to the video filter chain in call order and cannot accompany video stream copy. Graph-fed streams follow the same simple-versus-complex filter restrictions as `videoFilter()`.
@@ -627,7 +724,9 @@ These settings work inside `output()` callbacks too. They append to the video fi
 Both helpers produce square pixels and allow upscaling. A one-dimension resize uses display aspect ratio, including the input's sample aspect ratio, and rounds the inferred dimension to a multiple of two. Two explicit resize dimensions stretch the image. `fit()` preserves display aspect ratio within rounding, requires positive even dimensions, and returns that exact canvas size. `contain` preserves the image with black bars. `cover` removes the edges outside a centered crop.
 
 ```php
-$media->export()->crop(1280, 720, x: 40, y: 20)->rotate(90)
+$media->export()
+	->crop(1280, 720, x: 40, y: 20)
+	->rotate(90)
 	->pad(800, 1280, color: 'black');
 ```
 
@@ -636,12 +735,20 @@ $media->export()->crop(1280, 720, x: 40, y: 20)->rotate(90)
 ### Video and audio adjustments
 
 ```php
-$media->export()->video('libx264')->audio('aac')
+$media->export()
+	->video('libx264')
+	->audio('aac')
 	->deinterlace(mode: 'frame', parity: 'auto', onlyInterlaced: true)
-	->resize(width: 1280)->frameRate('30000/1001')
-	->flipHorizontal()->flipVertical()->grayscale()
-	->volume(0.5)->delayAudio(0.25)
-	->fadeIn(1)->fadeOut(1, start: 9)->save('adjusted.mp4');
+	->resize(width: 1280)
+	->frameRate('30000/1001')
+	->flipHorizontal()
+	->flipVertical()
+	->grayscale()
+	->volume(0.5)
+	->delayAudio(0.25)
+	->fadeIn(1)
+	->fadeOut(1, start: 9)
+	->save('adjusted.mp4');
 ```
 
 These helpers append ordinary filters in call order and work in `output()` callbacks. They do not support stream copy for the affected type. `videoFilter()` and `audioFilter()` remain available for trusted expressions. Graph-fed streams retain the simple-versus-complex filter restrictions described below.
@@ -656,17 +763,27 @@ These helpers append ordinary filters in call order and work in `output()` callb
 
 ```php
 $primary = FFMpeg::open($request->file('video'));
-$music = FFMpeg::disk('music')->open('background.wav');
+$music = FFMpeg::disk('music')
+	->open('background.wav');
 
 $primary->backgroundMusic($music, volume: 0.2, loop: true)
-	->at(2.5)->video('copy')->audio('aac')->save('background.mp4');
+	->at(2.5)
+	->video('copy')
+	->audio('aac')
+	->save('background.mp4');
 
 $primary->mixAudio($music, volume: 0.5, originalVolume: 1, normalize: false)
-	->loopAudio(false)->volume(0.8)->fadeIn(1, video: false)
-	->video('copy')->audio('aac')->save('one-shot.mp4');
+	->loopAudio(false)
+	->volume(0.8)
+	->fadeIn(1, video: false)
+	->video('copy')
+	->audio('aac')
+	->save('one-shot.mp4');
 
-FFMpeg::open('voice.wav')->mixAudio($music, volume: 0.25)
-	->audio('pcm_s16le')->save('mixed.wav');
+FFMpeg::open('voice.wav')
+	->mixAudio($music, volume: 0.25)
+	->audio('pcm_s16le')
+	->save('mixed.wav');
 ```
 
 `Media::mixAudio(Media $audio, float $volume = 1, float $originalVolume = 1, bool $normalize = false)` returns a `PendingAudioMix` single-output builder. It mixes the primary input's first audio stream, when present, with the added input's first audio stream. `Media::backgroundMusic(Media $music, float $volume = 0.2, bool $loop = true)` is shorthand for `mixAudio($music, $volume)->loopAudio($loop)`. `PendingAudioMix::loopAudio(bool $loop = true)` controls repetition of the added track. Ordinary `mixAudio()` does not loop.
@@ -690,8 +807,14 @@ The helper owns its graph and maps and accepts only the primary input and one ad
 ### Playback speed
 
 ```php
-$media->speed(2)->video('libx264', crf: 23)->audio('aac')->save('faster.mp4');
-$media->speed(0.5)->withoutVideo()->audio('aac')->save('slower.m4a');
+$media->speed(2)
+	->video('libx264', crf: 23)
+	->audio('aac')
+	->save('faster.mp4');
+$media->speed(0.5)
+	->withoutVideo()
+	->audio('aac')
+	->save('slower.m4a');
 ```
 
 `Media::speed(float $factor)` returns a single-output builder. A finite positive factor above one speeds up playback; a factor below one slows playback. Video timestamps and audio delays are divided by the factor, while chained `atempo` filters preserve audio pitch. Existing simple filters run before the speed adjustment. The default selection remains the first motion-video and audio streams; explicit audio and video maps are supported.
@@ -702,7 +825,9 @@ Sources require a zero container origin, zero origins on every video track, and 
 
 ```php
 $media->gif(width: 480, frameRate: 12, loop: 0)
-	->clip(4, duration: 3)->toDisk('images')->save('preview.gif');
+	->clip(4, duration: 3)
+	->toDisk('images')
+	->save('preview.gif');
 ```
 
 `Media::gif(int $width = 480, int|float $frameRate = 12, int $loop = 0)` selects the first motion-video stream and omits audio. Width must be between 1 and 65535; frame rate must be finite and positive. The inferred height preserves display aspect ratio. Loop count accepts -1 through 65535; zero loops forever and -1 disables looping.
@@ -716,15 +841,19 @@ GIF owns its graph, maps, codec, muxer, and loop options. It supports one output
 ### Text and subtitle shortcuts
 
 ```php
-$font = FFMpeg::disk('assets')->open('fonts/Brand.ttf');
-$captions = FFMpeg::disk('assets')->open('captions/English.srt');
+$font = FFMpeg::disk('assets')
+	->open('fonts/Brand.ttf');
+$captions = FFMpeg::disk('assets')
+	->open('captions/English.srt');
 
 $media->export()
 	->resize(width: 1280)
 	->drawText("100%: café 'quoted' %{literal}", font: $font, size: 32, x: 24, y: 24)
 	->burnSubtitles($captions)
 	->clip(4, duration: 2)
-	->video('libx264', crf: 23)->toDisk('videos')->save('captioned.mp4');
+	->video('libx264', crf: 23)
+	->toDisk('videos')
+	->save('captioned.mp4');
 ```
 
 `drawText()` stages literal UTF-8 text in a private file with expansion and reload disabled. Font descriptors can use any supported disk. Size must be positive, coordinates are integers, and color accepts a name or `0xRRGGBB` with optional alpha bytes. `burnSubtitles()` uses the subtitle validation described below. Both helpers work in `output()` callbacks and share staged assets across outputs without named placeholders.
@@ -734,18 +863,25 @@ Ordinary filters run in call order, before all generated watermark overlays, eve
 ### Concatenation
 
 ```php
-$first = FFMpeg::disk('uploads')->open('first.mp4');
-$second = FFMpeg::disk('archive')->open('second.mp4');
+$first = FFMpeg::disk('uploads')
+	->open('first.mp4');
+$second = FFMpeg::disk('archive')
+	->open('second.mp4');
 
 $first->concatTranscoded($second)
 	->normalizeVideo(1280, 720, frameRate: 30, fit: 'contain')
 	->normalizeAudio(sampleRate: 48000, channels: 2)
-	->video('libx264', crf: 23)->audio('aac', bitrate: '128k')
-	->toDisk('videos')->save('normalized.mp4');
+	->video('libx264', crf: 23)
+	->audio('aac', bitrate: '128k')
+	->toDisk('videos')
+	->save('normalized.mp4');
 
 $first->concatTranscoded($second)
-	->normalizeVideo(1280, 720, frameRate: 30, fit: 'cover')->withoutAudio()
-	->video('libx264')->toDisk('videos')->save('silent.mp4');
+	->normalizeVideo(1280, 720, frameRate: 30, fit: 'cover')
+	->withoutAudio()
+	->video('libx264')
+	->toDisk('videos')
+	->save('silent.mp4');
 ```
 
 `concatTranscoded()` accepts at least one following source and returns a single-output export builder, not a media descriptor. `normalizeVideo()` is required and takes positive even dimensions, a positive numeric or rational frame rate, and `contain`, `cover`, or `stretch`. It produces square pixels. `contain` adds centered black padding; `cover` crops centrally; `stretch` uses the exact dimensions without preserving aspect ratio.
@@ -758,7 +894,11 @@ For compatible inputs, copy concatenation avoids re-encoding:
 
 ```php
 $joined = $first->concat($second);
-$joined->export()->video('copy')->audio('copy')->toDisk('videos')->save('joined.mp4');
+$joined->export()
+	->video('copy')
+	->audio('copy')
+	->toDisk('videos')
+	->save('joined.mp4');
 ```
 
 `concat()` returns a media descriptor and does no IO until probing or export. It requires at least one following input. Compatible finite files join through the concat demuxer. Local files and non-local Storage inputs can be mixed. URL inputs require `download: true`. Input-specific media options, nested concat inputs, manifest sources, unknown durations, and nonzero reported presentation origins are rejected. Nonzero origins require an explicit normalization graph rather than a guessed timestamp correction.
@@ -776,8 +916,12 @@ $export->filterComplex(
 	'[0:v]scale=128:96,setsar=1,fps=10,setpts=PTS-STARTPTS[first];'
 	.'[1:v]scale=128:96,setsar=1,fps=10,setpts=PTS-STARTPTS[second];'
 	.'[first][second]concat=n=2:v=1:a=0[joined]'
-)->map('[joined]')->video('libx264', crf: 20)->withoutMetadata(chapters: true)
-	->toDisk('videos')->save('normalized.mp4');
+)
+	->map('[joined]')
+	->video('libx264', crf: 20)
+	->withoutMetadata(chapters: true)
+	->toDisk('videos')
+	->save('normalized.mp4');
 ```
 
 Audio-inclusive custom graphs must declare their audio policy and preserve each segment's audio delay relative to video. Resetting each stream independently to its first sample can erase that delay. Unlike `concatTranscoded()`, raw graphs do not add silence or channel conversion for you. Graph timing leaves percentage unknown.
@@ -787,16 +931,23 @@ Audio-inclusive custom graphs must declare their audio policy and preserve each 
 ### Image-sequence inputs and timelapse
 
 ```php
-FFMpeg::disk('images')->open('title.png')->still(duration: 5, frameRate: 25)
-	->toDisk('videos')->save('title.mp4');
+FFMpeg::disk('images')
+	->open('title.png')
+	->still(duration: 5, frameRate: 25)
+	->toDisk('videos')
+	->save('title.mp4');
 ```
 
 `Media::still(float $duration, int $frameRate = 25): PendingStill` holds a standalone PNG or JPEG for a finite positive duration. Frame rate is an integer from 1 to 240. Input images must have even dimensions of at least two pixels, without media input options. Local, staged Storage, and downloaded images are supported. The builder defaults to `libx264` and `yuv420p`, generates no audio, and supports one root-configured output. Ordinary output geometry and publication settings remain available. `clip()` is rejected because `still()` owns duration. Frame rounding can affect the final duration. This is a repeated still image, not a timelapse or animation decoder.
 
 ```php
-FFMpeg::disk('photos')->openSequence('camera/frame-%04d.png', count: 9, framerate: 1)
-	->export()->video('libx264', crf: 23)->outputOptions(['-pix_fmt', 'yuv420p'])
-	->toDisk('videos')->save('timelapse.mp4');
+FFMpeg::disk('photos')
+	->openSequence('camera/frame-%04d.png', count: 9, framerate: 1)
+	->export()
+	->video('libx264', crf: 23)
+	->outputOptions(['-pix_fmt', 'yuv420p'])
+	->toDisk('videos')
+	->save('timelapse.mp4');
 ```
 
 `openSequence()` returns a media descriptor without reading Storage or launching a process. The pattern is a disk-relative PNG or JPEG key with one `%d` or `%0Nd` placeholder in its filename, where N is from 1 to 99. Globs, directory placeholders, and other image formats are not supported. `count` is positive, and `start` defaults to 1 but can be zero. Every key in that contiguous range must exist. Files outside the range are not read.
@@ -810,12 +961,18 @@ Sequences can be graph inputs but are not standalone files for copy concatenatio
 ### Watermarks and image preparation
 
 ```php
-$logo = FFMpeg::disk('assets')->open('brand/logo.png');
+$logo = FFMpeg::disk('assets')
+	->open('brand/logo.png');
 
-FFMpeg::disk('videos')->open('source.mkv')->export()
+FFMpeg::disk('videos')
+	->open('source.mkv')
+	->export()
 	->watermark($logo, position: 'bottom-right', x: 20, y: 15, width: 160, opacity: 0.8)
-	->resize(width: 1280)->video('libx264', crf: 23)->audio('copy')
-	->toDisk('videos')->save('branded.mkv');
+	->resize(width: 1280)
+	->video('libx264', crf: 23)
+	->audio('copy')
+	->toDisk('videos')
+	->save('branded.mkv');
 ```
 
 `PendingExport::watermark()` owns the image inputs, graph, and maps. It accepts standalone PNG, JPEG, or GIF images, including prepared images and staged Storage inputs. Only GIF can have `inputOptions: ['-ignore_loop', '0']` or `['-ignore_loop', '1']`; other image input options are rejected. Defaults are `position: 'bottom-right'`, `x: 0`, `y: 0`, no resize, and `opacity: 1`. Opacity ranges from zero to one. Anchors accept `top-left`, `top-right`, `bottom-left`, `bottom-right`, and `center`.
@@ -825,23 +982,36 @@ Offsets are nonnegative inward margins at corners; center offsets move right and
 The helper supports ordinary media exports, including multiple `output()` callbacks, and HLS variants. Marks apply to each output; configure codecs, geometry, destinations, and audio separately inside the callbacks. Video copy, custom maps, custom graphs, and additional media inputs are unsupported. Audio copy remains valid. Use a raw graph for other composition requirements:
 
 ```php
-$badge = FFMpeg::disk('assets')->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
-$media->hls()->watermark($badge, width: 96)
-	->variant('720p', fn ($variant) => $variant->resize(height: 720)->video('libx264', bitrate: '2500k'))
-	->toDisk('streams')->save('branded/master.m3u8');
+$badge = FFMpeg::disk('assets')
+	->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
+$media->hls()
+	->watermark($badge, width: 96)
+	->variant('720p', fn ($variant) => $variant->resize(height: 720)
+		->video('libx264', bitrate: '2500k'))
+	->toDisk('streams')
+	->save('branded/master.m3u8');
 ```
 
 `-ignore_loop 0` honors the GIF's embedded loop instructions. It does not force infinite repetition when the image specifies a finite loop. `-ignore_loop 1` ignores the loop instructions. At EOF the overlay repeats its final frame. All ordinary video filters, including HLS variant geometry, run before overlays regardless of registration order.
 
 ```php
-$export = FFMpeg::disk('videos')->open('source.mkv')->export();
-$logo = $export->addInput(FFMpeg::disk('assets')->open('brand/logo.png'));
+$export = FFMpeg::disk('videos')
+	->open('source.mkv')
+	->export();
+$logo = $export->addInput(FFMpeg::disk('assets')
+	->open('brand/logo.png'));
 $export->filterComplex(
 	'['.$logo.':v]scale=160:-1,format=rgba[logo];'
 	.'[0:v][logo]overlay=x=main_w-overlay_w-20:y=main_h-overlay_h-15:'
 	.'eof_action=repeat:repeatlast=1:shortest=0[video]'
-)->map('[video]')->map('0:a:0?')->video('libx264', crf: 23)->audio('copy')
-	->withoutMetadata(chapters: true)->toDisk('videos')->save('branded.mkv');
+)
+	->map('[video]')
+	->map('0:a:0?')
+	->video('libx264', crf: 23)
+	->audio('copy')
+	->withoutMetadata(chapters: true)
+	->toDisk('videos')
+	->save('branded.mkv');
 ```
 
 Local and non-local Storage images use the same API. A downloaded URL image uses `openUrl($url, headers: $headers, download: true)`. No filename is embedded in the filter graph.
@@ -849,9 +1019,12 @@ Local and non-local Storage images use the same API. A downloaded URL image uses
 `Media::prepareImage(callable $prepare)` optionally preprocesses an image before FFmpeg reads it. The callback receives the path of a private writable copy, not the original. It must write the prepared image to that same path. The package does not depend on an image library or forward unknown methods to one. For example, an application with Spatie Image installed can supply:
 
 ```php
-$logo = FFMpeg::disk('assets')->open('brand/logo.png')
+$logo = FFMpeg::disk('assets')
+	->open('brand/logo.png')
 	->prepareImage(function (string $path) {
-		\Spatie\Image\Image::load($path)->width(320)->save();
+		\Spatie\Image\Image::load($path)
+			->width(320)
+			->save();
 	});
 // Pass $logo to watermark(), or addInput() for a custom overlay graph.
 ```
@@ -869,19 +1042,29 @@ Ordinary exports are verified with transparent local and staged PNGs, scaled bot
 Reusing a LUT descriptor does not share decoded filter work. Each output runs its own LUT and resize filters. The helper does not generate a shared LUT or `split`. For shared-before-split processing, use the raw graph below, which applies the LUT once before branching.
 
 ```php
-$export = FFMpeg::disk('uploads')->open('source.mov')->export();
-$audio = $export->addInput(FFMpeg::disk('recordings')->open('narration.wav'));
+$export = FFMpeg::disk('uploads')
+	->open('source.mov')
+	->export();
+$audio = $export->addInput(FFMpeg::disk('recordings')
+	->open('narration.wav'));
 
 $result = $export
-	->resource('look', FFMpeg::disk('assets')->open('looks/grade.cube'))
+	->resource('look', FFMpeg::disk('assets')
+		->open('looks/grade.cube'))
 	->filterComplex('[0:v]lut3d=file={{look}},split[full][small];[small]scale=640:360[preview]')
 	->output('full.mp4', fn (ExportOutput $out) => $out
-		->map('[full]')->map($audio.':a:0')
-		->video('libx264', crf: 21)->audio('aac', bitrate: '128k')
-		->metadataFrom(0)->chaptersFrom(null)->toDisk('videos'))
+		->map('[full]')
+		->map($audio.':a:0')
+		->video('libx264', crf: 21)
+		->audio('aac', bitrate: '128k')
+		->metadataFrom(0)
+		->chaptersFrom(null)
+		->toDisk('videos'))
 	->output('preview.mp4', fn (ExportOutput $out) => $out
-		->map('[preview]')->video('libx264', crf: 28)
-		->withoutMetadata(chapters: true)->toDisk('previews'))
+		->map('[preview]')
+		->video('libx264', crf: 28)
+		->withoutMetadata(chapters: true)
+		->toDisk('previews'))
 	->save();
 ```
 
@@ -896,12 +1079,15 @@ Graph labels are simple identifiers. Each named output label must be consumed or
 ```php
 $media->export()
 	->filterComplex('[0:a]volume=0.5[commentary]')
-	->map('[commentary]')->mapVideo(0) // Audio is output stream 0, video is stream 1.
-	->audio('aac', bitrate: '128k')->video('copy')
+	->map('[commentary]')
+	->mapVideo(0) // Audio is output stream 0, video is stream 1.
+	->audio('aac', bitrate: '128k')
+	->video('copy')
 	->streamMetadata('a:0', 'language', 'eng')
 	->streamMetadata(0, 'title', 'English commentary')
 	->disposition('a:0', ['default', 'comment'])
-	->toDisk('videos')->save('commentary.mkv');
+	->toDisk('videos')
+	->save('commentary.mkv');
 ```
 
 These methods also work in `output()` callbacks and apply to that output only. Their selectors address **output order after mapping**, not input positions or graph labels. `0` selects the first output stream overall, `'a:0'` selects the first output audio stream, and `'a'` selects all output audio streams. Supported types are `v`, `a`, `s`, `d`, and `t`. Input selectors such as `'0:a:0'`, graph labels, and optional `?` suffixes are rejected.
@@ -918,16 +1104,22 @@ Type-scoped encoding settings and simple filters apply to every selected stream 
 
 ```php
 $media->export()
-	->resource('font', FFMpeg::disk('assets')->open('fonts/Brand.ttf'))
+	->resource('font', FFMpeg::disk('assets')
+		->open('fonts/Brand.ttf'))
 	->textResource('title', "100%: café 'quoted' [literal],; %{not_expanded}")
 	->videoFilter('drawtext=fontfile={{font}}:textfile={{title}}:expansion=none:fontcolor=white:fontsize=24')
-	->video('libx264', crf: 23)->toDisk('videos')->save('title.mp4');
+	->video('libx264', crf: 23)
+	->toDisk('videos')
+	->save('title.mp4');
 
 $media->export()
-	->subtitleResource('captions', FFMpeg::disk('assets')->open('captions/English.srt'))
+	->subtitleResource('captions', FFMpeg::disk('assets')
+		->open('captions/English.srt'))
 	->videoFilter('subtitles=filename={{captions}}')
 	->clip(4, duration: 2) // A cue at source time 5 appears at output time 1.
-	->video('libx264', crf: 23)->toDisk('videos')->save('captioned.mp4');
+	->video('libx264', crf: 23)
+	->toDisk('videos')
+	->save('captioned.mp4');
 ```
 
 `textResource()` writes UTF-8 bytes unchanged. It requires `drawtext`'s `textfile` option with `expansion=none` in that same filter instance. Reloading is disabled. Text never enters the graph or command arguments. Resource-bearing drawtext and subtitles filters require named, nonduplicate options. A second filename, positional filename, or `subtitles`'s `f` alias fails before execution.

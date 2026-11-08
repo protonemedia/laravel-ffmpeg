@@ -15,7 +15,8 @@ For a single disk-key input, the output disk defaults to the input disk. `toDisk
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
-$result = FFMpeg::disk('uploads')->open('video.mp4')
+$result = FFMpeg::disk('uploads')
+	->open('video.mp4')
 	->export()
 	->toDisk('converted')
 	->video('libx264', crf: 23, preset: 'medium')
@@ -35,9 +36,12 @@ Stream copying uses `video('copy')->audio('copy')` with a compatible output cont
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
-$logo = FFMpeg::disk('assets')->open('logo.png');
+$logo = FFMpeg::disk('assets')
+	->open('logo.png');
 
-$result = FFMpeg::disk('uploads')->open('video.mp4')->export()
+$result = FFMpeg::disk('uploads')
+	->open('video.mp4')
+	->export()
 	->toDisk('converted')
 	->video('libx264', crf: 23)
 	->audio('aac', bitrate: '128k')
@@ -52,9 +56,13 @@ $result = FFMpeg::disk('uploads')->open('video.mp4')->export()
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
-$media = FFMpeg::disk('uploads')->open('video.mp4');
-$result = $media->frame(at: 1)->toDisk('thumbnails')->save('thumb.jpg');
-$jpeg = $media->frame(at: '00:00:01.000')->get();
+$media = FFMpeg::disk('uploads')
+	->open('video.mp4');
+$result = $media->frame(at: 1)
+	->toDisk('thumbnails')
+	->save('thumb.jpg');
+$jpeg = $media->frame(at: '00:00:01.000')
+	->get();
 ```
 
 `frames(every: 5)` and `frames(count: 10)` select interval-based or count-based extraction. `storyboard(every: 5, columns: 5, rows: 5)` creates preview sheets. These pending operations accept `toDisk()` and `save()` without an intervening `export()`.
@@ -67,14 +75,19 @@ $jpeg = $media->frame(at: '00:00:01.000')->get();
 use ProtoneMedia\LaravelFFMpeg\HlsVariant;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
-$result = FFMpeg::disk('uploads')->open('video.mp4')
+$result = FFMpeg::disk('uploads')
+	->open('video.mp4')
 	->hls(segmentDuration: 6)
 	->toDisk('streams')
 	->variant('720p', static function (HlsVariant $variant): void {
-		$variant->video('libx264', bitrate: '2500k')->audio('aac', bitrate: '128k')->fit(1280, 720);
+		$variant->video('libx264', bitrate: '2500k')
+			->audio('aac', bitrate: '128k')
+			->fit(1280, 720);
 	})
 	->variant('360p', static function (HlsVariant $variant): void {
-		$variant->video('libx264', bitrate: '800k')->audio('aac', bitrate: '96k')->fit(640, 360);
+		$variant->video('libx264', bitrate: '800k')
+			->audio('aac', bitrate: '96k')
+			->fit(640, 360);
 	})
 	->save('video/master.m3u8');
 
@@ -94,7 +107,9 @@ Global `Events\ExportProgress` listeners receive an operation ID, output destina
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
-$dispatch = FFMpeg::disk('uploads')->open('video.mp4')->export()
+$dispatch = FFMpeg::disk('uploads')
+	->open('video.mp4')
+	->export()
 	->toDisk('converted')
 	->video('libx264', crf: 23)
 	->audio('aac', bitrate: '128k')

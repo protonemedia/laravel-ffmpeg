@@ -16,14 +16,21 @@ Republish the configuration and review your application's values. Keep `ffmpeg.b
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 // Before:
-FFMpeg::fromDisk('uploads')->open('lesson.mov')->export()
-	->toDisk('videos')->inFormat(new \FFMpeg\Format\Video\X264)
+FFMpeg::fromDisk('uploads')
+	->open('lesson.mov')
+	->export()
+	->toDisk('videos')
+	->inFormat(new \FFMpeg\Format\Video\X264)
 	->save('lesson.mp4');
 
 // After:
-$media = FFMpeg::disk('uploads')->open('lesson.mov');
-$result = $media->export()->video('libx264', crf: 23)->audio('aac', bitrate: '128k')
-	->toDisk('videos')->save('lesson.mp4');
+$media = FFMpeg::disk('uploads')
+	->open('lesson.mov');
+$result = $media->export()
+	->video('libx264', crf: 23)
+	->audio('aac', bitrate: '128k')
+	->toDisk('videos')
+	->save('lesson.mp4');
 ```
 
 Use `FFMpeg::open($key)` for disk-relative keys on the current `filesystems.default`. Keep `disk('uploads')` when selecting a Storage disk, or use `disk($filesystem)` for a supplied filesystem. Pass a Laravel `File` or `UploadedFile` directly to `FFMpeg::open()` to read that local file instead of a Storage key.
@@ -44,7 +51,9 @@ $metadata = $media->probeCached(
 );
 
 $camera = FFMpeg::openRtsp($cameraUrl, transport: 'tcp', timeout: 10);
-$camera->frame()->toDisk('images')->save('snapshot.jpg');
+$camera->frame()
+	->toDisk('images')
+	->save('snapshot.jpg');
 ```
 
 Use `probeCached()` only with an application-owned source-version key and cache repository. Change the key when the object changes. A cache hit does not read or authorize the source. Your application owns freshness, tenant isolation, eviction, and metadata security. `probe()` and exports still probe normally.
@@ -58,15 +67,25 @@ Builders do not forward methods to PHP-FFMpeg. Use explicit codecs, scoped `inpu
 ## Replace filters and clipping
 
 ```php
-$media->export()->video('libx264')->audio('copy')
-	->resize(width: 1280)->crop(1280, 720)->rotate(90)
+$media->export()
+	->video('libx264')
+	->audio('copy')
+	->resize(width: 1280)
+	->crop(1280, 720)
+	->rotate(90)
 	->save('portrait.mp4');
 
-$media->export()->video('libx264')->audio('aac')
-	->clip('00:00:12.500', duration: 8)->save('clip.mp4');
+$media->export()
+	->video('libx264')
+	->audio('aac')
+	->clip('00:00:12.500', duration: 8)
+	->save('clip.mp4');
 
-$media->export()->video('copy')->audio('copy')
-	->clip(12.5, end: 20.5, seek: 'keyframe')->save('copy.mkv');
+$media->export()
+	->video('copy')
+	->audio('copy')
+	->clip(12.5, end: 20.5, seek: 'keyframe')
+	->save('copy.mkv');
 ```
 
 Ordinary filters run in registration order. All output video filters run before generated watermark overlays, even filters called after `watermark()`. One-dimension resize preserves display aspect ratio; two explicit dimensions stretch. Use `fit()` for a contain or cover policy. Stream copy rejects filters and accurate clipping. Keyframe cuts can begin before the requested time. Timeline changes omit chapters unless explicitly mapped.
@@ -82,17 +101,29 @@ Use `lut3d($look)` with a `Media` descriptor for a privately staged LUT. In each
 ## Replace watermark and concat builders
 
 ```php
-$logo = FFMpeg::disk('assets')->open('logo.png');
-$media->export()->watermark($logo, x: 20, y: 15, width: 160)
-	->resize(width: 1280)->video('libx264')->audio('copy')->save('branded.mp4');
+$logo = FFMpeg::disk('assets')
+	->open('logo.png');
+$media->export()
+	->watermark($logo, x: 20, y: 15, width: 160)
+	->resize(width: 1280)
+	->video('libx264')
+	->audio('copy')
+	->save('branded.mp4');
 
-$second = FFMpeg::disk('uploads')->open('second.mp4');
+$second = FFMpeg::disk('uploads')
+	->open('second.mp4');
 $media->concatTranscoded($second)
 	->normalizeVideo(1280, 720, frameRate: 30, fit: 'contain')
 	->normalizeAudio(sampleRate: 48000, channels: 2)
-	->video('libx264')->audio('aac')->save('joined.mp4');
+	->video('libx264')
+	->audio('aac')
+	->save('joined.mp4');
 
-$media->concat($second)->export()->video('copy')->audio('copy')->save('joined.mkv');
+$media->concat($second)
+	->export()
+	->video('copy')
+	->audio('copy')
+	->save('joined.mkv');
 ```
 
 `watermark()` adds inputs and maps automatically for PNG, JPEG, or GIF images. The default anchor is bottom-right; offsets are inward margins. Marks run after all output video filters, regardless of call order. Repeated marks, multiple ordinary outputs, and HLS variants are supported. Custom maps, graphs, additional media inputs, and video copy require another composition policy. Use `addInput()` and `filterComplex()` for custom graphs.
@@ -102,12 +133,19 @@ $media->concat($second)->export()->video('copy')->audio('copy')->save('joined.mk
 ## Replace audio mixing graphs
 
 ```php
-$music = FFMpeg::disk('music')->open('background.mp3');
+$music = FFMpeg::disk('music')
+	->open('background.mp3');
 $media->backgroundMusic($music, volume: 0.2)
-	->at(2.5)->video('copy')->audio('aac')->save('with-music.mp4');
+	->at(2.5)
+	->video('copy')
+	->audio('aac')
+	->save('with-music.mp4');
 
 $media->mixAudio($music, volume: 0.4, originalVolume: 0.8, normalize: true)
-	->fadeIn(1, video: false)->video('copy')->audio('aac')->save('mixed.mp4');
+	->fadeIn(1, video: false)
+	->video('copy')
+	->audio('aac')
+	->save('mixed.mp4');
 ```
 
 `backgroundMusic()` loops by default. Use `loop: false` for one playback, or `mixAudio()` for one-shot mixing with explicit gains. Call `loopAudio()` on the returned builder to repeat the added track. The primary container's duration sets output length. Short nonlooping audio ends in silence, and longer audio is trimmed. Silent video and audio-only primaries are supported.
@@ -123,9 +161,13 @@ Both inputs require finite positive durations, and the added input requires audi
 ## Replace speed and GIF graphs
 
 ```php
-$media->speed(2)->video('libx264')->audio('aac')->save('faster.mp4');
+$media->speed(2)
+	->video('libx264')
+	->audio('aac')
+	->save('faster.mp4');
 $media->gif(width: 480, frameRate: 12, loop: 0)
-	->clip(4, duration: 3)->save('preview.gif');
+	->clip(4, duration: 3)
+	->save('preview.gif');
 ```
 
 `speed()` retimes video and preserves audio pitch. It requires a finite positive factor, zero container/video origins, and nonnegative audio origins. It rejects clipping, input options, custom graphs, watermark inputs, multiple outputs, and stream copy. To retime a clip, save that clip first.
@@ -135,13 +177,19 @@ $media->gif(width: 480, frameRate: 12, loop: 0)
 ## Select streams and metadata explicitly
 
 ```php
-$media->export()->mapVideo()->mapAudio(language: 'eng')
-	->video('copy')->audio('copy')->withoutMetadata(chapters: true)
-	->streamMetadata('a:0', 'language', 'eng')->disposition('a:0', ['default'])
+$media->export()
+	->mapVideo()
+	->mapAudio(language: 'eng')
+	->video('copy')
+	->audio('copy')
+	->withoutMetadata(chapters: true)
+	->streamMetadata('a:0', 'language', 'eng')
+	->disposition('a:0', ['default'])
 	->save('english.mkv');
 
 $metadata = $media->probe();
-$metadata->video()?->width();
+$metadata->video()
+	?->width();
 $metadata->audioStreams();
 $metadata->chapters();
 $metadata->toArray();
@@ -150,14 +198,27 @@ $metadata->toArray();
 Without maps, ordinary exports select the first motion-video and audio streams. Existing subtitles and cover art require explicit maps and container-compatible codecs. The `coverArt()` attachment helper below owns its maps instead. General multiple-input outputs require explicit maps and metadata/chapter policy. Stream tags and dispositions address output order, not input indexes.
 
 ```php
-$media->export()->coverArt(FFMpeg::disk('assets')->open('cover.png'))->save('album.mp4');
+$media->export()
+	->coverArt(FFMpeg::disk('assets')
+		->open('cover.png'))
+	->save('album.mp4');
 
-$media->export()->map('0:v:0')->map('0:v:0')->map('0:a:0')->audio('copy')
-	->videoStream(0, fn ($track) => $track->codec('libx264')->crf(20)->preset('medium'))
-	->videoStream(1, fn ($track) => $track->codec('mpeg4')->bitrate('800k'))
+$media->export()
+	->map('0:v:0')
+	->map('0:v:0')
+	->map('0:a:0')
+	->audio('copy')
+	->videoStream(0, fn ($track) => $track->codec('libx264')
+		->crf(20)
+		->preset('medium'))
+	->videoStream(1, fn ($track) => $track->codec('mpeg4')
+		->bitrate('800k'))
 	->save('tracks.mp4');
 
-$media->export()->map('0:s:0')->outputOptions(['-c:s', 'webvtt'])->save('captions.vtt');
+$media->export()
+	->map('0:s:0')
+	->outputOptions(['-c:s', 'webvtt'])
+	->save('captions.vtt');
 ```
 
 Use `coverArt()` instead of a custom attached-picture graph for MP4, M4A, or MP3. It attaches one standalone PNG or JPEG and copies all motion-video and audio tracks. It refuses existing cover art. It rejects encoding, filters, clipping, custom maps, graphs, and disposition overrides.
@@ -167,11 +228,17 @@ Use `coverArt()` instead of a custom attached-picture graph for MP4, M4A, or MP3
 ## Replace image and analysis operations
 
 ```php
-$jpeg = $media->frame(at: 12.5)->get();
-$media->frames(every: 2)->resize(width: 320)->save('frames/%05d.jpg');
+$jpeg = $media->frame(at: 12.5)
+	->get();
+$media->frames(every: 2)
+	->resize(width: 320)
+	->save('frames/%05d.jpg');
 $media->storyboard(every: 5, columns: 4, rows: 3, margin: 2, padding: 1)
-	->resize(width: 160)->vtt('previews/lesson.vtt')->save('sheets/%03d.jpg');
-$media->waveform()->save('waveform.png');
+	->resize(width: 160)
+	->vtt('previews/lesson.vtt')
+	->save('sheets/%03d.jpg');
+$media->waveform()
+	->save('waveform.png');
 $analysis = $media->analyze('volumedetect');
 $analysis->errorOutput();
 $analysis->throw();
@@ -180,8 +247,11 @@ $analysis->throw();
 `get()` returns raw JPEG bytes, not Base64. Storyboard geometry applies to each tile before assembly. `waveform()` writes an image; `waveformPeaks()` returns versioned amplitude data. Analysis-only nonzero exits remain inspectable until `throw()` is called.
 
 ```php
-FFMpeg::disk('images')->open('title.png')->still(duration: 5, frameRate: 25)
-	->toDisk('videos')->save('title.mp4');
+FFMpeg::disk('images')
+	->open('title.png')
+	->still(duration: 5, frameRate: 25)
+	->toDisk('videos')
+	->save('title.mp4');
 ```
 
 Use `still()` to hold a PNG or JPEG for a finite positive duration. Input dimensions must be even and at least two pixels, and input options are unsupported. Frame rate is an integer from 1 to 240, defaulting to 25. The single-output builder defaults to H.264 with `yuv420p` and creates no audio. Local, staged Storage, and downloaded images are supported. Output duration can round to frame boundaries.
@@ -195,17 +265,21 @@ use ProtoneMedia\LaravelFFMpeg\HlsVariant;
 
 $result = $media->hls(segmentDuration: 6)
 	->variant('360p', fn (HlsVariant $variant) => $variant
-		->resize(height: 360)->video('libx264', bitrate: '800k'))
+		->resize(height: 360)
+		->video('libx264', bitrate: '800k'))
 	->encrypt('secrets', fn ($path) => route('lesson.key', ['key' => basename($path)]), rotateEvery: 3)
-	->toDisk('streams')->save('lesson/master.m3u8');
+	->toDisk('streams')
+	->save('lesson/master.m3u8');
 
 $result->playlist();
-$result->variant('360p')->files();
+$result->variant('360p')
+	->files();
 
-return FFMpeg::disk('streams')->playlist('lesson/master.m3u8')
-	->mediaUrlsUsing(fn ($target, $source, $uri) =>
-		$target === null ? $uri : \Illuminate\Support\Facades\Storage::disk('streams')
-			->temporaryUrl($target, now()->addMinutes(10)));
+return FFMpeg::disk('streams')
+	->playlist('lesson/master.m3u8')
+	->mediaUrlsUsing(fn ($target, $source, $uri) => $target === null ? $uri : \Illuminate\Support\Facades\Storage::disk('streams')
+		->temporaryUrl($target, now()
+			->addMinutes(10)));
 ```
 
 Variants configure encoding only. MPEG-TS remains the default. Private key storage is explicit; key routes return 16 raw bytes after authorization. Keys rotate deterministically by segment group, with a random IV per segment. Playlist hooks are additive and cannot replace generated references or encryption lines. URL resolvers receive the canonical target, containing playlist, and original URI, not just a basename.
@@ -215,12 +289,17 @@ Replace legacy `setPlaylistType()` with `playlistType()`, passing `vod`, `event`
 To clean up an old same-disk presentation, call `playlist($path)->deleteAllFiles($approve)`. The required approval callback receives every unique canonical disk path, including the opened playlist, and must return exactly `true` before any deletion starts. Verify exclusive ownership and prevent concurrent playlist changes in your application. URL resolvers are ignored; external references and malformed playlists fail before deletion. Adapter failures can leave partial deletion. Prefer the trusted root result inventory when available, especially with private keys on another disk or borrowed merged artifacts.
 
 ```php
-$badge = FFMpeg::disk('assets')->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
-$media->hls()->watermark($badge, width: 96)
-	->variant('720p', fn ($variant) => $variant->resize(height: 720)->video('libx264', bitrate: '2500k'))
-	->toDisk('streams')->save('animated/master.m3u8');
+$badge = FFMpeg::disk('assets')
+	->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
+$media->hls()
+	->watermark($badge, width: 96)
+	->variant('720p', fn ($variant) => $variant->resize(height: 720)
+		->video('libx264', bitrate: '2500k'))
+	->toDisk('streams')
+	->save('animated/master.m3u8');
 
-$lesson->hls_playback = $result->playbackForVariants(['360p'])->toArray();
+$lesson->hls_playback = $result->playbackForVariants(['360p'])
+	->toArray();
 ```
 
 GIF `-ignore_loop 0` honors embedded loop instructions rather than forcing every GIF to loop forever. The final frame remains visible at EOF. All ordinary filters, including variant resizing, precede overlays. `playbackForVariants()` requires nonempty unique known variant names and retains their required rendition, initialization, and key dependencies. Protected responses filter master declarations without changing Storage files. Authorize the selected inventory before issuing URLs; public disk URLs bypass this selection.
@@ -244,10 +323,13 @@ use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 
 try {
-	$result = $media->export()->video('libx264')->onProgress(function (Progress $progress) {
-		// percentage, speed, and remainingSeconds can be null.
-		// pass and totalPasses describe encoding passes.
-	})->save('lesson.mp4');
+	$result = $media->export()
+		->video('libx264')
+		->onProgress(function (Progress $progress) {
+			// percentage, speed, and remainingSeconds can be null.
+			// pass and totalPasses describe encoding passes.
+		})
+		->save('lesson.mp4');
 	$file = $result->file();
 } catch (MediaException $exception) {
 	// phase, category, bounded diagnostics, and successfully published siblings.
@@ -276,10 +358,15 @@ Use the root HLS result's inventory for deletion, not a variant's partial view. 
 Configure the native export before calling `queued()`:
 
 ```php
-FFMpeg::disk('uploads')->open('lesson.mp4')->export()
-	->toDisk('media')->video('libx264')->audio('aac')
+FFMpeg::disk('uploads')
+	->open('lesson.mp4')
+	->export()
+	->toDisk('media')
+	->video('libx264')
+	->audio('aac')
 	->queued(connection: 'redis', queue: 'conversions')
-	->save('lesson.mp4')->afterCommit();
+	->save('lesson.mp4')
+	->afterCommit();
 ```
 
 Queued `save()` returns Laravel's `PendingDispatch`, not an export result. Listen for `QueuedExportCompleted` to retain file metadata and protected-HLS inventories. Use `job()` to build jobs for native chains or ordinary batches without dispatching them immediately.
