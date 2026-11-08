@@ -263,6 +263,60 @@ class PendingHlsExport extends PendingExport
         return $outputs;
     }
 
+    /** @internal Keep variants sharing alternate groups together so each rendition encodes once. */
+    public function queueParts(string $path, string $prefix): array
+    {
+        $this->configuredOutputs($path);
+        if ($this->playlistCallback !== null || in_array('-filter_complex', $this->inspect(), true)) {
+            throw new InvalidArgumentException('Parallel HLS does not accept custom playlist callbacks or complex graphs. Use a single queued export.');
+        }
+        $remaining = array_diff(array_keys($this->variants), array_keys($this->renditions));
+        foreach ($this->renditions as $rendition) {
+            if (! array_any($remaining, fn ($name) => $this->variants[$name]->groups()[$rendition['type']] === $rendition['group'])) {
+                throw new InvalidArgumentException('Parallel HLS requires every alternate rendition group to be referenced by a variant.');
+            }
+        }
+        $parts = [];
+        while ($remaining !== []) {
+            $members = [array_shift($remaining)];
+            do {
+                $previous = count($members);
+                $groups = [];
+                foreach ($members as $member) {
+                    foreach ($this->variants[$member]->groups() as $type => $group) {
+                        if ($group !== null) {
+                            $groups[$type.':'.$group] = true;
+                        }
+                    }
+                }
+                foreach ($remaining as $index => $name) {
+                    foreach ($this->variants[$name]->groups() as $type => $group) {
+                        if ($group !== null && isset($groups[$type.':'.$group])) {
+                            $members[] = $name;
+                            unset($remaining[$index]);
+                            break;
+                        }
+                    }
+                }
+            } while (count($members) !== $previous);
+            foreach ($this->renditions as $id => $rendition) {
+                if (isset($groups[$rendition['type'].':'.$rendition['group']])) {
+                    $members[] = $id;
+                }
+            }
+            $part = (new \ProtoneMedia\LaravelFFMpeg\Queue\ExportPlan($this))->restore();
+            $part->variants = array_intersect_key($part->variants, array_flip($members));
+            $part->renditions = array_intersect_key($part->renditions, array_flip($members));
+            $directory = $prefix.'/parts/'.count($parts);
+            $part->variantPaths = array_map(fn ($paths) => array_map(
+                fn ($value) => $value === null ? null : $directory.'/custom/'.$value, $paths),
+                array_intersect_key($part->variantPaths, array_flip($members)));
+            $parts[] = [$part, $directory.'/master.m3u8'];
+        }
+
+        return $parts;
+    }
+
     public function save(?string $path = null): HlsExportResult
     {
         $this->assertOutputMutable();

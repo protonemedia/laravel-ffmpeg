@@ -473,6 +473,26 @@ foreach ($result->files() as $file) {
 
 `GeneratedFile::delete(): bool` returns `false` immediately when `owned=false`, without a filesystem call. Otherwise it delegates the exact destination path to the captured filesystem's `delete()` and returns that result. Filesystem exceptions propagate. It does not expand patterns, delete directories, update metadata, or track references. Missing-file behavior follows the adapter. For complete HLS cleanup, use the root result's `files()` rather than a variant view, which omits shared keys. Authorization, reference checks, retry policy, and deletion ordering belong to the application. Deletion is not transactional.
 
+### Queue exports
+
+`PendingExport::queued(?string $connection = null, ?string $queue = null, DateTimeInterface|DateInterval|int|null $delay = null, bool $parallel = false): PendingQueuedExport` captures a detached export plan. Every pending export subclass inherits this method. Plan capture performs no media I/O. Changes to the original builder after capture do not change the queued plan.
+
+`PendingQueuedExport` exposes a random `id`, `configureJob(callable): self`, `job(?string $path = null): ExportJob|HlsBatchJob`, and `save(?string $path = null): Illuminate\Foundation\Bus\PendingDispatch`. `job()` builds without dispatch. `save()` uses Laravel's pending-dispatch lifecycle. The synchronous export's destination requirements still apply.
+
+Plans retain native builder objects, repeated descriptor references, readonly fields, and separately serialized callbacks. Filesystem instances, local `File` inputs, uploads, streams, and runtime services are rejected. Callbacks require static closures with scalar or array captures. Named disk configuration and durable disk contents belong to the application and must be available on every worker. Jobs implement `ShouldBeEncrypted` and require the application's encryption key.
+
+`ExportJob` uses Laravel's `Queueable`, `Batchable`, `InteractsWithQueue`, and `SerializesModels` traits. Public controls include `tries`, `backoff`, `timeout`, `maxExceptions`, and `failOnTimeout`. Defaults are one attempt, zero backoff, a job timeout 30 seconds longer than the configured FFmpeg process timeout, and failure on timeout. `configureJob()` runs before dispatch and supports native middleware and dispatch controls. Worker queue visibility must exceed the job timeout. Operations with several process invocations can require a larger job timeout.
+
+Ordinary jobs support `Bus::chain()` and `Bus::batch()`. Cancellation is cooperative: cancelled jobs do not start, and running jobs check cancellation independently of user progress callbacks. Exceptions retain Laravel's retry and failure behavior. Retries restart work, and publication is not transactional. Exactly-once completion and checkpoint recovery are not provided.
+
+With `parallel: true`, HLS requires an explicit master path. Variants connected by shared audio or subtitle groups remain in one conversion job. Disconnected groups become independent batched jobs. A single connected group falls back to an ordinary queued export. Custom playlist callbacks, complex graphs, and unreferenced alternate groups are rejected for parallel execution.
+
+Parallel artifact destinations use `laravel-ffmpeg/queued/{id}/parts/{group}/` on the shared destination disk. Custom artifact paths are namespaced beneath that prefix. Each successful conversion writes a private inventory in `laravel-ffmpeg/queued/{id}/inventories/`, retaining its batch ID. Retried part jobs with a completed inventory skip re-encoding. Laravel batch failures or cancellation prevent finalizer dispatch. The finalizer also verifies that every inventory belongs to the same successful, uncancelled batch before composing the master. Batch records must remain available until finalization completes.
+
+The finalizer uses `PendingHlsMerge`, including its clock checks, immutable versioned master path, and borrowed-source ownership. The unversioned requested path remains unchanged. Conversion parts remain live artifacts referenced by the master. Neither failure nor cancellation deletes published parts. Retention, reference tracking, and removal of abandoned artifacts belong to the application. A parallel workflow composes with Laravel chains but rejects nesting inside another batch, which would otherwise count the coordinator as complete before its conversions finish.
+
+`QueuedExportCompleted` contains `exportId`, an array of generated-file metadata in `files`, and an optional serializable `playback` inventory. Part jobs do not emit this event. Single exports and successful finalizers emit it after publication. Event listeners and downstream jobs must tolerate repeated attempts. Result persistence and queue or batch migrations belong to the application.
+
 ### Probe accessors
 
 ```php

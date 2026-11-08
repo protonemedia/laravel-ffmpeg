@@ -265,4 +265,21 @@ foreach ($result->files() as $file) {
 
 Use the root HLS result's inventory for deletion, not a variant's partial view. `GeneratedFile::delete(): bool` deletes the exact stored destination through its captured filesystem. Borrowed files with `owned=false` return `false` without a filesystem call. Adapter failures return `false` or throw according to filesystem behavior. The application owns authorization, reference tracking, deletion order, and retries. There is no directory-wide or transactional delete.
 
+## Queue native exports
+
+Configure the native export before calling `queued()`:
+
+```php
+FFMpeg::disk('uploads')->open('lesson.mp4')->export()
+	->toDisk('media')->video('libx264')->audio('aac')
+	->queued(connection: 'redis', queue: 'conversions')
+	->save('lesson.mp4')->afterCommit();
+```
+
+Queued `save()` returns Laravel's `PendingDispatch`, not an export result. Listen for `QueuedExportCompleted` to retain file metadata and protected-HLS inventories. Use `job()` to build jobs for native chains or ordinary batches without dispatching them immediately.
+
+Store uploads on durable named disks before dispatch. Workers need matching disk configuration, FFmpeg binaries, and the application's encryption key. Filesystem instances and request-local `File` inputs are not portable queue inputs. Worker callbacks require static closures with scalar or array captures. Set queue visibility above the job timeout. Retries restart conversions rather than resuming media checkpoints.
+
+For independent HLS groups, `queued(parallel: true)` uses a Laravel batch and a final publication job. Shared rendition groups remain together. The versioned final master and borrowed-source ownership follow `mergeHls()`. Persist the event's actual playback inventory rather than constructing a filename. Keep part artifacts and batch records until finalization finishes. Use a chain rather than nesting a parallel workflow inside another batch. See [queue examples](README.md#queue-conversions) for retry, result, and retention details.
+
 See the [README](README.md) for executable API examples and the [reference](REWRITE.md) for detailed limits.

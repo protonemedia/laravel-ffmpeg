@@ -602,6 +602,78 @@ foreach ($result->files() as $file) {
 
 Use the root result's inventory, not a variant view, for complete HLS deletion. `GeneratedFile::delete(): bool` deletes exactly that destination through its captured filesystem, not a directory or prefix. A borrowed file with `owned=false` returns `false` without touching Storage. Filesystem exceptions propagate. The application owns authorization and reference tracking; an owned file can still be referenced by another presentation. Deletion is not transactional and does not revoke cached client copies.
 
+## Queue conversions
+
+Use `queued()` after configuring an export. It captures the builder's current settings without staging inputs or starting FFmpeg. `save()` returns Laravel's `PendingDispatch`, not an `ExportResult`.
+
+```php
+$pending = FFMpeg::disk('uploads')->open('lesson.mp4')
+	->export()->toDisk('media')->video('libx264', preset: 'fast')->audio('aac')
+	->queued(connection: 'redis', queue: 'conversions', delay: 10)
+	->configureJob(function ($job) {
+		$job->tries = 3;
+		$job->backoff = [30, 120];
+		$job->timeout = 1800;
+	});
+
+$exportId = $pending->id;
+$pending->save('lessons/encoded.mp4')->afterCommit();
+```
+
+Inputs, resources, and destinations must use named disks that every worker can access. Store uploads first. `File`, `UploadedFile`, filesystem objects, and open streams are rejected before dispatch. Worker callbacks must be static closures with scalar or array captures. Resolve services inside the callback rather than capturing a request or service instance. Jobs implement `ShouldBeEncrypted`, so workers need the application's encryption key.
+
+For retries, set the queue connection's `retry_after` or visibility timeout above the job timeout. The default job timeout is the configured FFmpeg timeout plus 30 seconds. Set a larger job timeout for operations with several process invocations, including two-pass encoding. Retries restart a conversion, not a media checkpoint. Laravel queues provide at-least-once delivery, not exactly-once publication.
+
+Use `job()` instead of `save()` to build a job without dispatching it. Ordinary export jobs work with Laravel chains and batches:
+
+```php
+use Illuminate\Support\Facades\Bus;
+
+$job = FFMpeg::disk('uploads')->open('lesson.mp4')->frame(2)
+	->toDisk('media')->queued()->job('lessons/preview.jpg');
+
+Bus::chain([$job, new \App\Jobs\NotifyLessonReady($lessonId)])
+	->onConnection('redis')->onQueue('conversions')->dispatch();
+```
+
+`configureJob()` also accepts Laravel's `through()` middleware and `afterCommit()`. Global Laravel queue-failure listeners handle exhausted attempts. Batch cancellation skips work that has not started and stops running encoders at the next progress check. Cancellation cannot roll back files already published.
+
+### Run independent HLS conversions in parallel
+
+```php
+FFMpeg::disk('uploads')->open('lesson.mp4')
+	->hls(segmentDuration: 4)->toDisk('media')->video(preset: 'fast')->audio('aac')
+	->variant('small', fn ($v) => $v->resize(width: 640)->video(bitrate: '800k'))
+	->variant('large', fn ($v) => $v->resize(width: 1280)->video(bitrate: '2400k'))
+	->queued(connection: 'redis', queue: 'conversions', parallel: true)
+	->save('lessons/master.m3u8');
+```
+
+Parallel HLS requires Laravel's batch repository and several workers for concurrent execution. Independent variant groups become separate jobs. Variants that share alternate audio or subtitle groups stay together, so shared renditions encode once. If all variants belong to one group, one ordinary queued export runs instead.
+
+Each group publishes under `laravel-ffmpeg/queued/{exportId}/parts/` on the destination disk. These files remain live media, not temporary files. Custom artifact paths are placed beneath that group prefix. A separate finalizer verifies the completed inventories and publishes a versioned master such as `lessons/master.<version>.m3u8`; the unversioned path stays untouched. Use the completion event's playback inventory rather than guessing the master filename. A failed or cancelled conversion prevents final publication and downstream chain jobs. Completed parts remain available for application-managed retention and cleanup.
+
+Parallel exports reject custom playlist callbacks, complex graphs, and unreferenced alternate groups. Use one queued export for those operations. Compose a parallel workflow with `Bus::chain()`, not inside another `Bus::batch()`. `configureJob()` applies to the coordinator, conversions, and finalizer. Add downstream jobs through `save()->chain()` or `Bus::chain()`, not inside that callback. Keep batch records until finalization finishes.
+
+### Retain queue results
+
+```php
+use Illuminate\Support\Facades\Event;
+use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
+
+Event::listen(QueuedExportCompleted::class, function ($event) {
+	// Persist by exportId in your application's own job or listener.
+	// files contains disk, path, size, role, and owned for each artifact.
+	// playback contains a serializable protected-HLS inventory, or null.
+	\App\Models\Conversion::where('export_id', $event->exportId)->update([
+		'files' => $event->files,
+		'playback' => $event->playback,
+	]);
+});
+```
+
+Completion follows publication. Listeners must tolerate duplicate delivery. Parallel composition marks its source artifacts as borrowed, just like `mergeHls()`. Retain the part inventories for ownership-aware cleanup. No queue database tables or application result models are created by this package.
+
 ## Configuration and security
 
 Configuration is published as `config/laravel-ffmpeg.php`. Total and idle deadlines are distinct and use seconds. Output validation is not a hostile-media sandbox. Untrusted inputs require operating-system isolation and resource limits. Known credentials are redacted from diagnostics, but direct signed URLs remain visible in process arguments.

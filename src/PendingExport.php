@@ -43,6 +43,8 @@ class PendingExport
 
     private ?Closure $progress = null;
 
+    private ?Closure $cancellation = null;
+
     private bool $rootConfigured = false;
 
     private bool $running = false;
@@ -55,6 +57,25 @@ class PendingExport
     {
         $this->inputs = [$media];
         $this->disk = $disk;
+    }
+
+    public function queued(
+        ?string $connection = null,
+        ?string $queue = null,
+        \DateTimeInterface|\DateInterval|int|null $delay = null,
+        bool $parallel = false,
+    ): PendingQueuedExport {
+        $this->assertMutable();
+
+        return new PendingQueuedExport($this, $connection, $queue, $delay, $parallel);
+    }
+
+    /** @internal Worker batch cancellation is independent of user progress callbacks. */
+    public function cancelWhen(callable $callback): self
+    {
+        $this->cancellation = Closure::fromCallable($callback);
+
+        return $this;
     }
 
     protected function assertOutputMutable(): void
@@ -543,7 +564,8 @@ class PendingExport
                 }, $outputs);
                 $phase = Progress::ENCODING;
                 $command = $this->command($outputs, $paths, $outputPaths);
-                $command = $this->prepareCommand($workspace, $runner, $command, $outputPaths, $redactions, $this->progress);
+                $onProgress = $this->notify(...);
+                $command = $this->prepareCommand($workspace, $runner, $command, $outputPaths, $redactions, $onProgress);
                 $summaries = [];
                 $totalPasses = $this->twoPass ? 2 : 1;
 
@@ -557,7 +579,7 @@ class PendingExport
 
                     $process = $runner->run(
                         $passCommand, $workspace->path, $redactions,
-                        phase: $phase, progress: new ProgressParser($duration === null ? null : max($durations), $pass, $totalPasses), onProgress: $this->progress,
+                        phase: $phase, progress: new ProgressParser($duration === null ? null : max($durations), $pass, $totalPasses), onProgress: $onProgress,
                     );
 
                     if ($process->exitCode !== 0) {
@@ -948,6 +970,9 @@ class PendingExport
 
     private function notify(Progress $progress): void
     {
+        if ($this->cancellation !== null && ($this->cancellation)()) {
+            throw new ExportCancelled;
+        }
         if ($this->progress !== null) {
             ($this->progress)($progress);
         }
