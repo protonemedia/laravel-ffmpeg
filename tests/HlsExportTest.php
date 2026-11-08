@@ -20,7 +20,7 @@ class HlsExportTest extends TestCase
             ? ',CODECS="[a-zA-Z0-9,.]+"'
             : '(,CODECS="[a-zA-Z0-9,.]+")?';
 
-        return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,},RESOLUTION='.$resolution.$codecs.',FRAME-RATE='.$frameRate;
+        return '#EXT-X-STREAM-INF:BANDWIDTH=[0-9]{4,}(,AVERAGE-BANDWIDTH=[0-9]{4,})?,RESOLUTION='.$resolution.$codecs.',FRAME-RATE='.$frameRate;
     }
 
     #[Test]
@@ -229,6 +229,35 @@ class HlsExportTest extends TestCase
             ->getCommand('adaptive.m3u8');
 
         $this->assertStringContainsString('-preset:v ultrafast', $command);
+    }
+
+    #[Test]
+    /** @test */
+    public function it_can_set_the_hls_playlist_type()
+    {
+        $this->fakeLocalVideoFile();
+
+        $command = (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->setPlaylistType('event')
+            ->addFormat($this->x264()->setKiloBitrate(250))
+            ->toDisk('local')
+            ->getCommand('adaptive.m3u8');
+
+        $this->assertStringContainsString('-hls_playlist_type event', $command);
+    }
+
+    #[Test]
+    /** @test */
+    public function it_throws_an_exception_for_an_invalid_hls_playlist_type()
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        (new MediaOpener)
+            ->open('video.mp4')
+            ->exportForHLS()
+            ->setPlaylistType('invalid');
     }
 
     #[Test]

@@ -31,6 +31,11 @@ class HLSExporter extends MediaExporter
     private $keyFrameInterval = 48;
 
     /**
+     * @var string
+     */
+    private $playlistType = 'vod';
+
+    /**
      * @var \Illuminate\Support\Collection
      */
     private $pendingFormats;
@@ -66,6 +71,22 @@ class HLSExporter extends MediaExporter
     public function setKeyFrameInterval(int $interval): self
     {
         $this->keyFrameInterval = max(2, $interval);
+
+        return $this;
+    }
+
+    /**
+     * Sets the HLS playlist type (vod, event, live).
+     */
+    public function setPlaylistType(string $type): self
+    {
+        $type = strtolower($type);
+
+        if (! in_array($type, ['vod', 'event', 'live'], true)) {
+            throw new \InvalidArgumentException("Invalid HLS playlist type [{$type}]. Expected: vod, event, or live.");
+        }
+
+        $this->playlistType = $type;
 
         return $this;
     }
@@ -174,7 +195,7 @@ class HLSExporter extends MediaExporter
                 '-g',
                 $this->keyFrameInterval,
                 '-hls_playlist_type',
-                'vod',
+                $this->playlistType,
                 '-hls_time',
                 $this->segmentLength,
                 '-hls_segment_filename',
