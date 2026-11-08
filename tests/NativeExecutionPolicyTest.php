@@ -75,9 +75,10 @@ class NativeExecutionPolicyTest extends TestCase
     {
         $pid = $this->root.'/pid';
         $this->binaries('file_put_contents('.var_export($pid, true).', getmypid()); '
-            .'for ($i = 0; $i < 100; $i++) { '.($active ? 'echo "out_time_us=1000\nprogress=continue\n"; flush();' : '').' usleep(30000); }');
+            .'for ($i = 0; $i < 100; $i++) { '.($active ? 'echo "out_time_us=1000\nprogress=continue\n"; flush();' : '').' usleep(30000); }', probeDelay: 100000);
         try {
-            FFMpeg::disk('memory')->open('source.mp4')->export()->{$method}(0.25)->save('late.mp4');
+            // Allow preflight process startup before testing encoder termination.
+            FFMpeg::disk('memory')->open('source.mp4')->export()->{$method}(2)->save('late.mp4');
             $this->fail('The encoder must not outlive its deadline.');
         } catch (MediaException $exception) {
             $this->assertSame('timeout', $exception->category);
