@@ -64,6 +64,58 @@ Publish the config file using the artisan CLI tool:
 php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider"
 ```
 
+### Configuring FFmpeg and FFProbe binaries
+
+By default, this package assumes `ffmpeg` and `ffprobe` are available in your system's `$PATH`. If they are installed in a non-standard location, or your web server's `$PATH` differs from your shell's `$PATH`, you must set the full paths via environment variables in your `.env` file:
+
+```dotenv
+FFMPEG_BINARIES=/usr/local/bin/ffmpeg
+FFPROBE_BINARIES=/usr/local/bin/ffprobe
+```
+
+Common binary locations:
+
+| System | Typical path |
+|---|---|
+| Ubuntu/Debian (`apt install ffmpeg`) | `/usr/bin/ffmpeg`, `/usr/bin/ffprobe` |
+| macOS Homebrew | `/usr/local/bin/ffmpeg` or `/opt/homebrew/bin/ffmpeg` (Apple Silicon) |
+| Manual / static build | Wherever you extracted it, e.g. `/opt/ffmpeg/bin/ffmpeg` |
+
+You can find the exact paths on your system with:
+
+```bash
+which ffmpeg
+which ffprobe
+```
+
+Alternatively, you can set the paths directly in `config/laravel-ffmpeg.php`:
+
+```php
+'ffmpeg' => [
+    'binaries' => env('FFMPEG_BINARIES', '/usr/local/bin/ffmpeg'),
+],
+
+'ffprobe' => [
+    'binaries' => env('FFPROBE_BINARIES', '/usr/local/bin/ffprobe'),
+],
+```
+
+#### Verifying your installation
+
+Run these commands as the **same user your web server runs as** (e.g. `www-data`) to confirm the binaries are accessible:
+
+```bash
+sudo -u www-data ffmpeg -version
+sudo -u www-data ffprobe -version
+```
+
+If those fail but `ffmpeg -version` works in your own shell, the issue is that the web server user has a different `$PATH`. Set the full absolute paths in your `.env` as shown above.
+
+#### Common error messages
+
+- **`Unable to load FFMpeg`** / **`Unable to load FFProbe`** — The package cannot find or execute the binary. Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to absolute paths in your `.env` file.
+- **`ffmpeg failed to execute command`** — The binary was found but the command failed. Check `storage/logs/laravel.log` for the full FFmpeg output. Common causes: missing codecs, permission errors on input/output files, or insufficient memory.
+
 ## Upgrading to v8
 
 * The `set_command_and_error_output_on_exception` configuration key now defaults to `true`, making exceptions more informative. Read more at the [Handling exceptions](#handling-exceptions) section.
