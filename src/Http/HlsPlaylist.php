@@ -101,15 +101,22 @@ class HlsPlaylist implements Responsable
                         [$offset, $length] = $key;
                         $kind = 'key';
                     }
+                } elseif (str_starts_with($line, '#EXT-X-MAP:') || str_starts_with($line, '#EXT-X-MEDIA:')) {
+                    $map = str_starts_with($line, '#EXT-X-MAP:');
+                    $resource = $this->resourceUri($line, $map);
+                    if ($resource !== null) {
+                        [$offset, $length] = $resource;
+                        $kind = $map ? 'media' : 'playlist';
+                    }
                 } elseif ($line !== '' && $line[0] !== '#') {
                     if ($type === null) {
                         throw new MediaException('An HLS URI has no resource declaration.', 'response', 'artifact');
                     }
                     $kind = $type;
                     $type = null;
-                } elseif (preg_match('/\A#EXT-X-(?:MAP|MEDIA|I-FRAME-STREAM-INF|SESSION-KEY|PART|PRELOAD-HINT|RENDITION-REPORT):/', $line)
+                } elseif (preg_match('/\A#EXT-X-(?:I-FRAME-STREAM-INF|SESSION-KEY|PART|PRELOAD-HINT|RENDITION-REPORT):/', $line)
                     || (str_starts_with($line, '#EXT') && preg_match('/[:,]URI\s*=/', $line))) {
-                    throw new MediaException('This response supports MPEG-TS playlists without alternate groups or other resource tags.', 'response', 'artifact');
+                    throw new MediaException('This response does not support this HLS resource tag.', 'response', 'artifact');
                 }
                 if ($kind !== null) {
                     $uri = substr($line, $offset, $length);
@@ -193,6 +200,38 @@ class HlsPlaylist implements Responsable
                 && (! in_array(strtolower($scheme), ['http', 'https'], true) || ! filter_var($uri, FILTER_VALIDATE_URL)))) {
             throw new MediaException('HLS resolvers and references require an HTTP(S) URL or a valid relative URI.', 'response', 'artifact');
         }
+    }
+
+    /** Parse quoted URI attributes without treating commas inside NAME as separators. */
+    private function resourceUri(string $line, bool $required): ?array
+    {
+        $start = strpos($line, ':') + 1;
+        $attributes = substr($line, $start);
+        preg_match_all('/(?:\A|,)([A-Z0-9-]+)=("[^"\r\n]*"|[^,"\r\n]+)/', $attributes, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+        $end = 0;
+        $values = [];
+        $uri = null;
+        foreach ($matches as $match) {
+            [$name, $value] = [$match[1][0], $match[2][0]];
+            if ($match[0][1] !== $end || isset($values[$name])) {
+                throw new MediaException('Invalid HLS resource attributes.', 'response', 'artifact');
+            }
+            $end += strlen($match[0][0]);
+            $values[$name] = $value;
+            if ($name === 'URI') {
+                if (! str_starts_with($value, '"') || ! str_ends_with($value, '"')) {
+                    throw new MediaException('HLS resource URIs must be quoted.', 'response', 'artifact');
+                }
+                $uri = [$start + $match[2][1] + 1, strlen($value) - 2];
+            }
+        }
+        if ($end !== strlen($attributes) || ($required && $uri === null)
+            || (! $required && (! isset($values['TYPE'], $values['GROUP-ID'], $values['NAME'])
+                || ($values['TYPE'] === 'SUBTITLES' && $uri === null)))) {
+            throw new MediaException('Invalid HLS resource attributes.', 'response', 'artifact');
+        }
+
+        return $uri;
     }
 
     /** Return the URI's byte offset and length without changing other key attributes. */

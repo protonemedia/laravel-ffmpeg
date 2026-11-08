@@ -22,9 +22,9 @@ if [[ ! -f /usr/share/keyrings/debsuryorg-archive-keyring.gpg || ! -f /etc/apt/s
     echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ ${VERSION_CODENAME} main" | "${elevate[@]}" tee /etc/apt/sources.list.d/php.list >/dev/null
 fi
 
-echo 'Checking system packages (PHP 8.4, Composer, and FFmpeg)...'
+echo 'Checking system packages (PHP 8.4 and Composer prerequisites)...'
 packages=(
-    ca-certificates curl ffmpeg git unzip
+    ca-certificates curl git unzip
     php8.4-cli php8.4-bcmath php8.4-curl php8.4-gd php8.4-imagick
     php8.4-intl php8.4-mbstring php8.4-mysql php8.4-soap php8.4-sqlite3
     php8.4-xml php8.4-zip
@@ -43,8 +43,7 @@ fi
 "${elevate[@]}" update-alternatives --set php /usr/bin/php8.4
 echo "System packages ready (${SECONDS}s elapsed)."
 
-# Keep distribution FFmpeg for legacy tests until the old backend is removed.
-# Native acceptance uses the separate, matching 9.0.2 pair.
+# Native execution uses a separate, matching 9.0.2 pair.
 .agents/install-ffmpeg
 
 # Debian 12's Composer predates PHP 8.4 support. Install Composer 2 once.

@@ -36,6 +36,7 @@ class CommandCompiler
                 'refs' => 'positive', 'ar' => 'positive', 'ac' => 'positive', 'movflags' => 'word',
                 'fps_mode' => 'fps', 'threads' => 'positive', 'disposition' => 'word', 'streamid' => 'streamid',
                 'tag' => 'word', 'q' => 'unsigned', 'r' => 'rate',
+                'c' => 'subtitle-codec',
             ],
             default => throw new InvalidArgumentException('Invalid FFmpeg option scope.'),
         };
@@ -69,6 +70,7 @@ class CommandCompiler
                 'word' => (bool) preg_match('/^[a-zA-Z0-9_.,+\-]+$/D', $value),
                 'fps' => in_array($value, ['passthrough', 'cfr', 'vfr', 'auto'], true),
                 'format' => ! isset($match[2]) && in_array($value, ['mp4', 'mov', 'matroska', 'webm', 'mpegts', 'mp3', 'adts', 'ogg', 'wav', 'flac', 'avi', 'nut'], true),
+                'subtitle-codec' => ($match[2] ?? null) === 's' && (bool) preg_match('/\A[a-zA-Z0-9_]+\z/', $value),
                 'streamid' => ! isset($match[2]) && (bool) preg_match('/^[0-9]+:[0-9]+$/D', $value),
             };
 

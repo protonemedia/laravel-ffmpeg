@@ -83,6 +83,22 @@ readonly class Media
         return new PendingWaveform($this, $this->defaultOutputDisk(), $width, $height, $colors);
     }
 
+    public function waveformPeaks(int $samplesPerBucket = 256): PendingWaveformPeaks
+    {
+        return new PendingWaveformPeaks($this, $this->defaultOutputDisk(), $samplesPerBucket);
+    }
+
+    public function normalizeLoudness(
+        float $integrated = -23,
+        float $truePeak = -2,
+        float $range = 7,
+        bool $linear = true,
+        int $sampleRate = 48000,
+        int $audio = 0,
+    ): PendingLoudness {
+        return new PendingLoudness($this, $this->defaultOutputDisk(), $integrated, $truePeak, $range, $linear, $sampleRate, $audio);
+    }
+
     /** @internal */
     public function defaultOutputDisk(): string|Filesystem
     {

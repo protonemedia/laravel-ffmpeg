@@ -1,34 +1,16 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
-use FFMpeg\Format\Audio\Mp3;
-use FFMpeg\Format\Video\X264;
+
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\Filesystem;
 use League\Flysystem\InMemory\InMemoryFilesystemAdapter;
 use Orchestra\Testbench\TestCase as BaseTestCase;
-use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
-use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider;
 
 abstract class TestCase extends BaseTestCase
 {
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        FFMpeg::cleanupTemporaryFiles();
-    }
-
-    protected function tearDown(): void
-    {
-        FFMpeg::cleanupTemporaryFiles();
-
-        parent::tearDown();
-    }
-
     protected function getEnvironmentSetUp($app)
     {
         $app['config']->set('filesystems.default', 'local');
@@ -50,16 +32,6 @@ abstract class TestCase extends BaseTestCase
                 $config
             );
         });
-    }
-
-    protected function x264(): X264
-    {
-        return new X264('libmp3lame');
-    }
-
-    protected function Mp3(): Mp3
-    {
-        return new Mp3('libmp3lame');
     }
 
     protected function getPackageProviders($app)
@@ -134,23 +106,5 @@ abstract class TestCase extends BaseTestCase
     {
         $this->fakeLocalDisk();
         $this->addTestFile('video_multi_audio.mp4');
-    }
-
-    protected function assertPlaylistPattern(string $playlist, array $patternLines, ?StdListener $listener = null): self
-    {
-        $playlist = preg_replace('/\n|\r\n?/', "\n", $playlist);
-
-        $pattern = '/'.implode("\n", $patternLines).'/';
-
-        $assertMethod = method_exists($this, 'assertMatchesRegularExpression')
-            ? 'assertMatchesRegularExpression'
-            : 'assertRegExp';
-
-        $this->{$assertMethod}($pattern, $playlist, implode(PHP_EOL.PHP_EOL, [
-            'Playlist does not match pattern',
-            $listener ? implode(PHP_EOL, $listener->get()->all()) : null,
-        ]));
-
-        return $this;
     }
 }

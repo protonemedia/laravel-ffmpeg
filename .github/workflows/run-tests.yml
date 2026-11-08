@@ -13,7 +13,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: [ubuntu-22.04]
+                os: [ubuntu-26.04]
                 php: [8.5, 8.4]
                 laravel: ["12.*", "13.*"]
                 dependency-version: [prefer-lowest, prefer-stable]
@@ -36,16 +36,11 @@ jobs:
                   extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, mysql, mysqli, pdo_mysql, fileinfo
                   coverage: none
 
-            - name: Install FFmpeg
-              run: |
-                  sudo apt-get update
-                  sudo apt-get install -y ffmpeg
-
             - name: Cache native FFmpeg
               uses: actions/cache@v4
               with:
                   path: ${{ runner.temp }}/ffmpeg-9.0.2
-                  key: native-ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.agents/install-ffmpeg') }}
+                  key: native-ffmpeg-${{ matrix.os }}-${{ runner.arch }}-${{ hashFiles('.agents/install-ffmpeg') }}
 
             - name: Install native FFmpeg 9.0.2
               run: .agents/install-ffmpeg "${{ runner.temp }}/ffmpeg-9.0.2"
@@ -65,5 +60,4 @@ jobs:
               run: vendor/bin/phpunit --order-by random --display-deprecations --display-phpunit-deprecations --fail-on-deprecation --fail-on-phpunit-deprecation
               env:
                   FFMPEG_TEMPORARY_FILES_ROOT: ${{ github.workspace }}
-                  FFMPEG_TEMPORARY_ENCRYPTED_HLS: /dev/shm
                   FFMPEG_9_FFPROBE: ${{ runner.temp }}/ffmpeg-9.0.2/bin/ffprobe

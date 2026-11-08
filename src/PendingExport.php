@@ -171,7 +171,7 @@ class PendingExport
     {
         $this->assertMutable();
 
-        if ($this->outputRole !== 'media') {
+        if (! in_array($this->outputRole, ['media', 'hls-playlist'], true)) {
             throw new InvalidArgumentException('Two-pass encoding requires video media outputs, not images.');
         }
 
@@ -271,7 +271,7 @@ class PendingExport
                     : FilterGraph::resources($filter, $resources, $used);
             }, $maps);
 
-            if ($this->twoPass) {
+            if ($this->twoPass && in_array($index, $this->twoPassOutputIndexes($outputs), true)) {
                 $settings = $output->outputConfiguration();
                 $video = $settings['video'];
 
@@ -391,8 +391,9 @@ class PendingExport
                 $this->validateResources($workspace, $runner, $resources);
                 $metadata = array_map(fn ($media) => $workspace->probe($media), $this->inputs);
                 $expected = array_map(fn ($output) => $this->selectedStreams($output, $workspace, $metadata), $outputs);
+                $this->validateStreamSelections($expected);
 
-                if ($this->twoPass && array_any($expected, fn ($streams) => ! in_array('video', $streams, true) && ! in_array(null, $streams, true))) {
+                if ($this->twoPass && array_any($this->twoPassOutputIndexes($outputs), fn ($index) => ! in_array('video', $expected[$index], true) && ! in_array(null, $expected[$index], true))) {
                     throw new MediaException('Every two-pass output must select video.', $phase, 'mapping');
                 }
 
@@ -410,6 +411,7 @@ class PendingExport
                 }, $outputs);
                 $phase = Progress::ENCODING;
                 $command = $this->command($outputs, $paths, $outputPaths);
+                $command = $this->prepareCommand($workspace, $runner, $command, $outputPaths, $redactions, $this->progress);
                 $summaries = [];
                 $totalPasses = $this->twoPass ? 2 : 1;
 
@@ -418,19 +420,7 @@ class PendingExport
                     $passCommand = $command;
 
                     if ($totalPasses === 2 && $pass === 1) {
-                        $passCommand = [];
-
-                        foreach ($command as $index => $token) {
-                            $output = array_search($token, $outputPaths, true);
-
-                            if ($output !== false) {
-                                $target = $workspace->path.'/analysis-'.$output.'.null';
-                                $redactions[$target] = '[analysis:'.$output.']';
-                                array_push($passCommand, '-f', 'null', $target);
-                            } else {
-                                $passCommand[] = ($command[$index - 1] ?? null) === '-pass:v' ? '1' : $token;
-                            }
-                        }
+                        $passCommand = $this->firstPassCommand($command, $outputPaths, $workspace, $redactions);
                     }
 
                     $process = $runner->run(
@@ -449,7 +439,7 @@ class PendingExport
                     $summaries[] = $process->summary();
 
                     if ($totalPasses === 2 && $pass === 1) {
-                        foreach (array_keys($outputs) as $index) {
+                        foreach ($this->twoPassOutputIndexes($outputs) as $index) {
                             $logs = glob($workspace->path.'/pass-'.$index.'-*.log') ?: [];
 
                             if (! array_any($logs, fn ($log) => is_file($log) && filesize($log) > 0)) {
@@ -547,6 +537,39 @@ class PendingExport
         }
 
         Event::dispatch(new Events\ExportCompleted($operationId, $result instanceof ExportResult ? $result->files()->map->toArray()->all() : []));
+
+        return $result;
+    }
+
+    /** @internal Execution-only analyses may replace compiled command tokens. */
+    protected function prepareCommand(Workspace $workspace, ProcessRunner $runner, array $command, array $outputPaths, array $redactions, ?callable $onProgress = null): array
+    {
+        return $command;
+    }
+
+    /** @internal Validate resolved stream types before starting any encoder. */
+    protected function validateStreamSelections(array $expected): void {}
+
+    /** @internal Outputs requiring encoder statistics; packaging-only outputs do not. */
+    protected function twoPassOutputIndexes(array $outputs): array
+    {
+        return array_keys($outputs);
+    }
+
+    /** @internal Keep analysis inside the private workspace, never at publication paths. */
+    protected function firstPassCommand(array $command, array $outputPaths, Workspace $workspace, array &$redactions): array
+    {
+        $result = [];
+        foreach ($command as $index => $token) {
+            $output = array_search($token, $outputPaths, true);
+            if ($output !== false) {
+                $target = $workspace->path.'/analysis-'.$output.'.null';
+                $redactions[$target] = '[analysis:'.$output.']';
+                array_push($result, '-f', 'null', $target);
+            } else {
+                $result[] = ($command[$index - 1] ?? null) === '-pass:v' ? '1' : $token;
+            }
+        }
 
         return $result;
     }

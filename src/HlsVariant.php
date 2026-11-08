@@ -17,6 +17,33 @@ class HlsVariant
 
     private bool $frozen = false;
 
+    private ?string $audioGroup = null;
+
+    private ?string $subtitlesGroup = null;
+
+    /** Reference reusable alternate renditions declared on PendingHlsExport. */
+    public function audioGroup(string $group): self
+    {
+        $this->assertOutputMutable();
+        $this->audioGroup = $group;
+
+        return $this;
+    }
+
+    public function subtitlesGroup(string $group): self
+    {
+        $this->assertOutputMutable();
+        $this->subtitlesGroup = $group;
+
+        return $this;
+    }
+
+    /** @internal */
+    public function groups(): array
+    {
+        return ['AUDIO' => $this->audioGroup, 'SUBTITLES' => $this->subtitlesGroup];
+    }
+
     public function __construct()
     {
         $this->disk = config('filesystems.default');

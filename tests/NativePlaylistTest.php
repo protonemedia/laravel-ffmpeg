@@ -122,7 +122,7 @@ class NativePlaylistTest extends TestCase
             "#EXTM3U\npart.ts\n", "#EXTM3U\n#EXTINF:1,\n", "#EXTM3U\n#EXTINF:1,\n#EXTINF:2,\npart.ts\n",
             "#EXTM3U\n#EXTINF:1,\n%2e%2e/escape.ts\n", "#EXTM3U\n#EXTINF:1,\npart%zz.ts\n", "#EXTM3U\n#EXTINF:1,\npart%ff.ts\n",
             "#EXTM3U\n#EXTINF:1,\nfile:/secret\n", "#EXTM3U\n#EXTINF:1,\n//other.test/part.ts\n",
-            "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n", "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=no-quotes\n",
+            "#EXTM3U\n#EXT-X-MAP:URI=init.mp4\n", "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=no-quotes\n",
             "#EXTM3U\n#EXT-X-KEY:METHOD=NONE,URI=\"key\"\n", "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"key\",URI=\"other\"\n",
         ]);
     }

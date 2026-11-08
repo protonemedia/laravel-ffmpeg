@@ -6,7 +6,7 @@ This file tracks the Laravel-native rewrite. The [design proposal](https://ampco
 
 `FFMpeg::disk($disk)->open($key)` returns a media descriptor with native `probe()` and `export()` operations through Laravel Process. A disk can be a name or an `Illuminate\Contracts\Filesystem\Filesystem` instance. `open()` also accepts `Illuminate\Http\File` and `UploadedFile`. Creating a descriptor or inspecting an export performs no transfers or process launches.
 
-`FFMpeg::disk()->open($key)` and `FFMpeg::disk(null)->open($key)` select `filesystems.default` when `disk()` is called. Existing selectors and media descriptors keep their selected disk when the configuration changes. The legacy `FFMpeg::open()` entry point remains unchanged.
+`FFMpeg::disk()->open($key)` and `FFMpeg::disk(null)->open($key)` select `filesystems.default` when `disk()` is called. Existing selectors and media descriptors keep their selected disk when the configuration changes. The legacy `FFMpeg::open()` entry point is removed. See [UPGRADING.md](UPGRADING.md).
 
 Local disks and file objects use their local paths. Other filesystem instances stream into a private workspace with transfer-size checks. Known remote manifests are rejected because staging a playlist alone loses its dependencies. This detection is not a sandbox for hostile media.
 
@@ -22,7 +22,7 @@ All outputs, including local destinations, are generated in the workspace. Every
 
 `save()` returns generated-file records and bounded, redacted process summaries. Structured progress separates staging, probing, encoding, validation, and publication. Percentage, speed, and remaining time can be unknown. A callback can cancel by throwing `Exceptions\ExportCancelled`; other callback exceptions propagate unchanged as failures. Both stop and reap the child before workspace cleanup. Lifecycle events work without a progress callback, and completion follows publication and cleanup.
 
-The old API and dependency remain temporarily while their replacements are built. The new `disk()` entry point does not invoke the old driver or fall back to it. Additional geometry helpers and the other workflows below remain open. The completed release must remove the old implementation and dependency together.
+The old driver, format/filter objects, and PHP-FFMpeg dependency tree are removed. The package has one execution backend. The README and upgrade guide document the replacement API.
 
 ### HTTP inputs
 
@@ -52,7 +52,7 @@ Protocol capabilities are checked only when a direct URL executes. Local inputs 
 FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by random
 ```
 
-CI uses the same installer and runs native real-media acceptance throughout the PHP 8.4/8.5 and Laravel 12/13 matrix. The compiled pair is cached by operating system, architecture, and installer contents. A cold installation compiles from source; warm setup and cache hits reuse the binaries. Distribution FFmpeg remains separate for legacy tests until the old backend is removed.
+CI uses Ubuntu 26.04 and the same installer throughout the PHP 8.4/8.5 and Laravel 12/13 matrix. The compiled pair is cached by Ubuntu version, architecture, and installer contents. A cold installation compiles from source; warm setup and cache hits reuse the binaries. No distribution FFmpeg or legacy backend is required.
 
 ### Single-frame extraction
 
@@ -185,11 +185,48 @@ $result = $media->hls(segmentDuration: 6)
 	->toDisk('streams')->save('catalog/master.m3u8');
 ```
 
-`playlist:` and `segments:` are optional disk-relative keys, not paths relative to the master. Playlists require an `.m3u8` extension. A segment pattern requires a `.ts` extension and exactly one `%d` or `%01d` through `%09d` placeholder in the filename, with no other percent signs. Numbering starts at zero. Without `segments:`, segments use the variant playlist's directory and the default `segment-%08d.ts` pattern. A playlist at the disk root is supported.
+`playlist:` and `segments:` are optional disk-relative keys, not paths relative to the master. Playlists require an `.m3u8` extension. A segment pattern requires the packaging's extension and exactly one `%d` or `%01d` through `%09d` placeholder in the filename, with no other percent signs. MPEG-TS uses `.ts`, fMP4 uses `.m4s`, and subtitle renditions use `.vtt`. Numbering starts at zero. Without `segments:`, segments use the variant playlist's directory and the default `segment-%08d` basename. A playlist at the disk root is supported.
 
 Each playlist references files relative to its own directory, with path components percent-encoded for URLs. Normalized destination keys remain unchanged in Storage and result records. `variant($name)->files()` selects the files owned by that variant, even when variants share a segment directory or use the same playlist basename. Concrete destination collisions, including equivalent numbering patterns, fail before any publication. Custom destinations never enter FFmpeg arguments.
 
-Two-pass HLS and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
+HLS supports `twoPass()` with bitrate-configured video variants. The first pass writes private encoder statistics through null muxers, without HLS segments or playlists. The final pass packages and validates the artifacts before publication.
+
+### fMP4 and alternate groups
+
+```php
+$result = $media->hls()->fmp4()
+	->variant('720p', fn (HlsVariant $variant) => $variant
+		->resize(height: 720)->audioGroup('sound')->subtitlesGroup('captions'))
+	->audioRendition('sound', 'English', fn (HlsVariant $rendition) => $rendition
+		->map('0:a:0')->audio('aac', bitrate: '128k'), language: 'en', default: true)
+	->subtitleRendition('captions', 'English', fn (HlsVariant $rendition) => $rendition
+		->map('0:s:0'), language: 'en')
+	->toDisk('streams')->save('lesson/master.m3u8');
+```
+
+`fmp4()` changes segment extensions to `.m4s` and owns a validated `hls-init` file per audio/video playlist. Optional `variant(init:)` selects its disk-relative `.mp4` key. AES-128 encryption is rejected for fMP4 in either configuration order. Init files publish before playlists and remain in the variant inventory. Private combined probe files are never published.
+
+`audioRendition()` and `subtitleRendition()` declare reusable groups, referenced through `HlsVariant::audioGroup()` and `subtitlesGroup()`. Renditions require exactly one explicit stream map of the declared type. Group names are simple identifiers. Display names and defaults are unique within each type/group; `default: true` requires autoselection. Optional language, channels, and forced-subtitle attributes appear in `EXT-X-MEDIA`. Variants with alternate audio cannot also map muxed audio. Result lookups use `audioRendition($group, $name)` and `subtitleRendition($group, $name)`.
+
+Audio encodes once per rendition, not once per referencing variant. Subtitles use a full-presentation WebVTT segment with a timestamp map tied to aligned referencing variant clocks. They require a known presentation duration without a complex timing graph. Referencing variants and renditions require matching clips. Encryption with alternate subtitles is rejected rather than publishing plaintext captions under an encrypted-media configuration. Custom `.vtt` patterns, playlist paths, hooks, and publication use the same owned-inventory rules. Dynamic responses recognize `EXT-X-MAP` as media and `EXT-X-MEDIA` as playlist references.
+
+### Loudness and waveform-peaks data
+
+```php
+$normalized = $media->normalizeLoudness(integrated: -18, truePeak: -2, sampleRate: 48000, audio: 1)
+	->clip(3, duration: 4)->audioFilter('pan=mono|c0=c0,volume=0.5')
+	->audio('pcm_s24le')->save('normalized.wav');
+$normalized->measurement;
+$normalized->actualMode();
+
+$peaks = $media->waveformPeaks(samplesPerBucket: 256)->audioTrack(1)->mono()->buckets(1000)->get();
+$peaks->toArray();
+$media->waveformPeaks()->buckets(2000)->save('peaks.json');
+```
+
+Loudness normalization produces one audio-only output. It prepares one private lossless sample snapshot after trim, channel preprocessing, and resampling. Both loudnorm passes read that snapshot. Results retain validated measurement/final statistics, requested and actual normalization modes, and output rate. Nonfinite statistics become null, never zero; silence uses dynamic fallback. Graphs, multiple inputs/outputs, copied audio, video settings, keyframe seeking, and raw rate/channel overrides are rejected.
+
+Peaks decode the selected audio track to signed little-endian 16-bit PCM at that track's rate. Separate channels are the default; `mono()` mixes channels equally before reduction. Fixed-size buckets retain partial tails without zero padding. `buckets(n)` partitions frames into at most n nonempty buckets, with remainder frames in the earlier buckets. Version-1 JSON records rate, source channels, track, mode, frame count, durations, bucket lengths, and channel-major extrema. Empty selections have no buckets. Reads use at most 2,048 frames per chunk; results are capped at 100,000 channel-buckets. Private PCM disk usage remains proportional to duration. Both operations use ordinary staging, publication, cancellation, and workspace cleanup.
 
 ### Playlist hooks
 
@@ -206,7 +243,7 @@ $result = $media->hls()
 	->toDisk('streams')->save('lesson/master.m3u8');
 ```
 
-`playlistUsing()` receives finalized text, the disk-relative destination key, and the variant name. The name is `null` for the master. Callbacks run once per playlist during each save, before publication. Inspection does not call them. The last registration replaces the previous callback. Configuration cannot change while an export runs.
+`playlistUsing()` receives finalized text, the disk-relative destination key, and the variant name or generated rendition identifier. The name is `null` for the master. Callbacks run once per playlist during each save, before publication. Inspection does not call them. The last registration replaces the previous callback. Configuration cannot change while an export runs.
 
 The hook is additive. It can insert comments and `EXT-X-START`, `EXT-X-SESSION-DATA`, `EXT-X-DATERANGE`, and `EXT-X-PROGRAM-DATE-TIME` tags without `URI=` attributes. The application supplies valid attributes and placement for each playlist type. All generated lines must remain unchanged and in order. Changing references, timing, stream information, VOD completion, or encryption through this hook is rejected.
 
@@ -300,7 +337,7 @@ Each resolver receives the canonical disk-relative target, the containing playli
 
 `all()` follows original local playlist references once, including cycles. It does not follow rewritten URLs, root-relative URLs, or external URLs, and never reads keys or media. Each call allows at most 1,024 local playlists and 16 MiB each of aggregate input and output. `get()` has the same byte limits. CRLF becomes LF. URI roles come from `EXT-X-STREAM-INF`, `EXTINF`, and `EXT-X-KEY`, not filename extensions. Key attributes and IVs remain unchanged.
 
-Invalid UTF-8, control characters, malformed URIs, disk-root traversal, incomplete declarations, and unsupported resource tags throw `MediaException` with phase `response` and category `artifact`. Missing or unreadable playlists use category `filesystem`. Adapter messages and secret URIs are omitted. Application callback exceptions propagate unchanged. This helper supports MPEG-TS master and media playlists, including AES-128 rotation. Alternate groups, fMP4, and low-latency resource tags are rejected.
+Invalid UTF-8, control characters, malformed URIs, disk-root traversal, incomplete declarations, and unsupported resource tags throw `MediaException` with phase `response` and category `artifact`. Missing or unreadable playlists use category `filesystem`. Adapter messages and secret URIs are omitted. Application callback exceptions propagate unchanged. This helper supports MPEG-TS, fMP4 initialization references, and alternate audio/subtitle playlists. Low-latency resource tags are rejected.
 
 ### Progress helpers
 
@@ -394,7 +431,7 @@ $media->export()->clip(13.375, duration: '00:00:02.125');
 
 Input options, `globalOptions()`, and `outputOptions()` accept flat option/value pairs from a closed allowlist. Every allowed option has library-defined arity and value validation. Unknown options, aliases, switches with caller-supplied values, duplicate nonrepeatable options, filename controls, authentication headers, and encoder parameter blobs are rejected. Output `-f` permits only listed single-file muxers. These methods are not unrestricted argv passthrough.
 
-Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. Local and downloaded inputs use `-protocol_whitelist file`. Direct HTTP inputs use a transport-specific protocol whitelist. Neither policy isolates local file access or applies to files opened by filters. Untrusted media still requires process isolation and resource limits. A demuxer allowlist remains under investigation and is not implemented in this checkpoint.
+Filters are developer-trusted FFmpeg expressions, not end-user text. They can read local resources or load plugins. Local and downloaded inputs use `-protocol_whitelist file`. Direct HTTP inputs use a transport-specific protocol whitelist. Neither policy isolates local file access or applies to files opened by filters. Untrusted media still requires process isolation and resource limits. There is no generic demuxer allowlist or hostile-media sandbox.
 
 ### Two-pass bitrate encoding
 
@@ -448,7 +485,14 @@ $media->export()->fit(1280, 720, mode: 'cover'); // Fill with a centered crop.
 
 These settings work inside `output()` callbacks too. They append to the video filter chain in call order and cannot accompany video stream copy. Graph-fed streams follow the same simple-versus-complex filter restrictions as `videoFilter()`.
 
-Both helpers produce square pixels and allow upscaling. A one-dimension resize uses display aspect ratio, including the input's sample aspect ratio, and rounds the inferred dimension to a multiple of two. Two explicit resize dimensions stretch the image. `fit()` preserves display aspect ratio within rounding, requires positive even dimensions, and returns that exact canvas size. `contain` preserves the image with black bars. `cover` removes the edges outside a centered crop. Rotation and standalone crop and pad helpers remain open.
+Both helpers produce square pixels and allow upscaling. A one-dimension resize uses display aspect ratio, including the input's sample aspect ratio, and rounds the inferred dimension to a multiple of two. Two explicit resize dimensions stretch the image. `fit()` preserves display aspect ratio within rounding, requires positive even dimensions, and returns that exact canvas size. `contain` preserves the image with black bars. `cover` removes the edges outside a centered crop.
+
+```php
+$media->export()->crop(1280, 720, x: 40, y: 20)->rotate(90)
+	->pad(800, 1280, color: 'black');
+```
+
+`rotate()` accepts clockwise 90, 180, or 270 degrees and negative equivalents, after input autorotation. `crop()` and `pad()` require positive even dimensions and nonnegative optional offsets, centered by default. All three append filters in call order and retain the ordinary copy/filter restrictions. Real decoded pixels verify crop, rotation direction, padding, and order in `NativePreservationTest`.
 
 ### Text and subtitle shortcuts
 
@@ -632,29 +676,32 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Metadata | Preserve chapters, tags, rational rates, null duration, color fields, all streams, and separate cover art from motion video. | `NativeProbeTest` | Implemented for raw data and basic accessors |
 | Process capture | Drain a noisy child, cap metadata output, remove application secrets, terminate on total and idle deadlines, and reap before cleanup. | `NativeProbeTest`, `NativeExportTest` | Shared process boundary; real callback cancellation verified |
 | Network inputs | Read explicit public URLs. Stage authenticated finite downloads through Http. Keep per-input headers separate and redact signed URLs. | `NativeUrlTest` | HTTP direct probe/export and authenticated downloads verified with real network fixtures; redirect, truncation, TLS rejection, capability, redaction, and cleanup checks covered |
-| Scoped and read-only filesystems | Preserve prefixes and wrappers. Never write through a read-only adapter or escape a destination root. | `DiskTest`, new wrapper scenarios required | Open |
-| Ordinary encoding | Encode audio and video to different disks. Verify codecs, duration, channels, geometry, and write options. | `NativeExportTest`, `ExportTest` | Basic CRF encode and Storage publication verified; broader media coverage open |
-| Display geometry | Resize by one dimension or stretch explicitly. Contain or cover an exact canvas, preserving anamorphic display aspect ratio. | `NativeExportTest` | Resize, square pixels, centered padding, centered crop, and independent output geometry verified with real media; rotation helpers open |
-| Independent operations | Start two exports from the same media descriptor without inheriting settings or temporary files. | `NativeExportTest`, `ExportTest`, `MediaOpenerTest` | Single-output builders and repeated real exports verified |
-| Stream selection | Use multilingual audio, forced subtitles, cover art, and chapters. Verify ordered, optional, and negative maps and resulting dispositions. | `NativeExportTest`, `HlsExportTest` | Language selection, negative maps, order, dispositions, and absent optional maps verified; subtitle/artwork exports open |
-| Metadata preservation | Copy global tags. Preserve chapters only for an unchanged timeline unless explicitly transformed. Test remove and override controls. | `NativeExportTest` | Copy, override, and clip chapter omission verified; broader removal cases open |
-| Quality and passes | Compare CRF and target-bitrate contracts. Reject conflicts. Prove explicit two-pass encoding with isolated pass logs. | `NativeExportTest`, `ExportTest`, README pass-progress contract | CRF and conflict checks verified; explicit libx264 two-pass verified with independent output logs and nested exports |
-| Copy and clipping | Remux without changing codecs. Distinguish accurate transcoding from keyframe copy cuts. Preserve audio offsets and VFR. | `NativeExportTest`, `CopyTest` | Remux, accurate duration, and decoded keyframe identity verified; VFR and offset coverage open |
-| Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `NativeCompositionTest`, `AddFilterTest`, `LegacyFilterMappingTest`, `ExportTest` | Simple filters, LUTs, fonts, literal text, and SRT/ASS/WebVTT rendering verified with real media, including clipped cue timing and manifest rejection |
-| Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `NativeCompositionTest`, `ExportTest` | Mixed-disk overlay, LUT, branching, independent clips, copied audio, validation, and partial publication verified |
+| Scoped and read-only filesystems | Preserve prefixes and wrappers. Never write through a read-only adapter or escape a destination root. | `NativePreservationTest` | Real prefixed and read-only adapters verify input retention, scoped publication, rejected writes, and traversal |
+| Ordinary encoding | Encode audio and video to different disks. Verify codecs, duration, channels, geometry, and write options. | `NativeExportTest`, `NativeCompositionTest`, `NativeLoudnessTest` | Real audio/video encodes and cross-disk publication verify stream properties and write options |
+| Display geometry | Resize, contain, cover, crop, rotate, and pad while preserving declared order. | `NativeExportTest`, `NativePreservationTest` | Anamorphic resizing, square pixels, independent outputs, and decoded crop/rotate/pad pixels verified |
+| Independent operations | Start two exports from the same media descriptor without inheriting settings or temporary files. | `NativeExportTest` | Single-output builders and repeated real exports verified |
+| Stream selection | Use multilingual audio, forced subtitles, cover art, and chapters. Verify ordered, optional, and negative maps and resulting dispositions. | `NativeExportTest`, `NativePreservationTest` | Language, optional and negative maps, ordered dispositions, forced subtitles, artwork, and chapters verified |
+| Metadata preservation | Copy global tags. Preserve chapters only for an unchanged timeline unless explicitly transformed. Test remove and override controls. | `NativeExportTest`, `NativePreservationTest` | Copy, override, explicit removal, and clip chapter omission verified |
+| Quality and passes | Compare CRF and target-bitrate contracts. Reject conflicts. Prove explicit two-pass encoding with isolated pass logs. | `NativeExportTest`, `NativeHlsPackagingTest` | CRF conflicts, independent libx264 logs, nested exports, and two-pass HLS verified |
+| Copy and clipping | Remux without changing codecs. Distinguish accurate transcoding from keyframe copy cuts. Preserve audio offsets and VFR. | `NativeExportTest`, `NativePreservationTest` | Remux, accurate duration, decoded keyframe identity, unequal VFR gaps, and delayed audio timestamps verified |
+| Filters and resources | Apply ordered audio and video filters with punctuation, Unicode, fonts, and staged subtitles. Reject filters on copied streams. | `NativeExportTest`, `NativeCompositionTest` | Simple filters, LUTs, fonts, literal text, and SRT/ASS/WebVTT rendering verified, including clipped cue timing and manifest rejection |
+| Multiple inputs and outputs | Compose mixed-disk inputs and map separate audio and video to different output disks. Verify stream identity and common-filter branching. | `NativeCompositionTest` | Mixed-disk overlay, LUT, branching, independent clips, copied audio, validation, and partial publication verified |
 | Concatenation | Copy compatible inputs and report mismatches. Normalize heterogeneous inputs only under an explicit geometry, timing, and audio policy. | `NativeConcatTest` | Compatible video/audio copy, mixed disks, decoded order, layout rejection, source retention, and audio-delay packet timestamps verified; explicit video-only and audio-inclusive normalization graphs verified, including delayed audio across different sample rates and channel layouts |
-| Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `NativeExportTest`, `FrameTest` | Single images and interval/count output sequences verified with real media; image-quality controls remain available through output options |
+| Frames | Seek to a selected timestamp. Return image bytes and save an image with verified dimensions and content. Fail when no frame exists. | `NativeExportTest` | Single images and interval/count output sequences verified with real media; image-quality controls remain available through output options |
 | Image sequences and timelapse | Read a numbered image sequence at a declared input rate and verify output timing. | `NativeSequenceTest` | Local PNG and staged JPEG inputs verified with decoded order, explicit count, decimal and rational rates, non-default starts, exact output duration, source retention, and cleanup; missing, mismatched, disguised, and corrupt images reject publication |
 | Storyboards and VTT | Verify tile order, dimensions, quality, margin, padding, and cue coordinates. Use different VTT and image directories. | `NativeStoryboardTest` | Real PNG and JPEG sheets verify decoded tile order, asymmetric grids, spacing, partial sheets, quality, clipped timing, relative and custom URLs, cue coordinates, validation before publication, partial upload failure, source retention, and cleanup |
-| Waveform images | Generate and inspect an actual waveform image from audio. | `NativeExportTest`; `MediaOpenerTest` only checks the old object type | Real amplitude, muted audio, clipped timing, colors, odd image dimensions, and post-render resize verified |
-| Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `NativeCompositionTest`, `NativeUrlTest`, `NativeHlsTest`, legacy `HlsExportTest` | Ordinary graph exports verify transparency, offsets, scaling, repeated static images, copied audio, and optional private-copy image preparation; URL downloads and callback failure cleanup verified; native HLS verifies a shared overlay graph, two scaled branches, clipped duration, and decoded watermark pixels |
+| Waveform images | Generate and inspect an actual waveform image from audio. | `NativeExportTest` | Real amplitude, muted audio, clipped timing, colors, odd image dimensions, and post-render resize verified |
+| Watermarks | Apply local and staged remote images, offsets, scaling, and optional image preprocessing to ordinary and HLS output. | `NativeCompositionTest`, `NativeUrlTest`, `NativeHlsTest` | Transparency, scaled placement, repeated images, copied audio, private preprocessing, URL staging, and clipped HLS watermark pixels verified |
 | Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Real two-track PCM verifies mean and peak volume, track selection, filters, silence, local and staged inputs, inspectable nonzero exits, opt-in exceptions, redaction, timeout reaping, source retention, and cleanup without publication |
-| Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle and real child reaping verified; both encoding passes, failure cleanup, and cancellation covered |
-| Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `ExportTest`, `TileTest` | Multiple single-file outputs and owned HLS inventories verified, including publication order, validation before writes, concrete partial failures, source protection, and cleanup |
-| Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `NativeHlsTest`, legacy `HlsExportTest`, `HLSPlaylistGeneratorTest` | Multiple variants, complete playlist decoding, segment keyframes and aligned boundaries, audio-only artwork exclusion, silent video, first/all audio, copy, clipped watermarks, staged input, streamed publication, custom nested paths, and additive playlist hooks verified |
-| Encrypted HLS | Decrypt AES-128 segments and verify IVs, supplied keys, key rotation boundaries, private key storage, and failure cleanup. | `NativeHlsTest`, legacy `EncryptedHlsExportTest` | Supplied and generated keys, two-variant rotation boundaries, independent random IVs, byte-identical decryption, complete encrypted playlist decoding, chunk-boundary padding, private key publication, hook protection, repeated saves, and failure cleanup verified |
-| Dynamic HLS | Rewrite master, variant, segment, and key URLs relative to their containing playlists. Verify response integration and missing or invalid input errors. | `NativePlaylistTest`, `NativeHlsTest`, legacy `DynamicHLSPlaylistTest` | Laravel responses and authorization boundaries, nested and encoded paths, source-aware resolvers, unchanged key IVs, fresh signed URLs, cycles, external-reference isolation, byte and playlist limits, sanitized errors, and complete rewritten encrypted master and variant decoding through key rotation verified |
-| Extension points | Inspect scoped argument arrays without execution. Preserve custom filters, playlist hooks, and output configuration without arbitrary driver forwarding. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `BeforeSavingTest`, README | Pure inspection, scoped options, graphs, output callbacks, and additive playlist hooks implemented; arbitrary playlist replacement is not supported |
+| Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `NativeLoudnessTest` | Single-pass lifecycle and real child reaping verified; encoding passes, analysis, failure cleanup, and cancellation covered |
+| Results and publication | Validate artifacts before writes. Stream files, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest` | Single-file outputs and owned HLS inventories verify publication order, false returns, partial failures, source protection, and cleanup |
+| Adaptive HLS | Produce multiple MPEG-TS variants, first/all audio, copy, custom paths, and hooks. | `NativeHlsTest` | Complete decoding, keyframes, alignment, artwork exclusion, silent video, clipped watermarks, custom paths, and hooks verified |
+| Encrypted HLS | Decrypt AES-128 segments and verify IVs, fixed/rotating keys, private storage, and cleanup. | `NativeHlsTest` | Byte-identical decryption, complete decoding, rotation, random IVs, padding, private publication, hook protection, repeated saves, and cleanup verified |
+| Dynamic HLS | Rewrite playlists, media, init, alternate groups, and keys relative to containing playlists. | `NativePlaylistTest`, `NativeHlsTest`, `NativeHlsPackagingTest` | Laravel responses, signed URLs, encrypted playback, group traversal, fMP4 init rewriting, limits, and sanitized errors verified |
+| fMP4 and alternate groups | Own init files and reusable audio/subtitle playlists with correct group metadata and timing. | `NativeHlsPackagingTest` | MPEG-TS/fMP4 decoding, separate audio frequencies, subtitle cues, relative paths, and timestamp maps verified |
+| Loudness normalization | Measure and normalize identical processed samples, reporting requested/actual mode and silence. | `NativeLoudnessTest` | Independent output measurements, track/trim/channel processing, linear/dynamic modes, immutable sample snapshot, and cleanup verified |
+| Waveform peaks | Reduce signed little-endian PCM into bounded versioned channel extrema. | `NativeWaveformPeaksTest` | Asymmetric stereo, mono, partial/chunk boundaries, track/rate selection, filters, clipping, empty input, and publication verified |
+| Extension points | Inspect scoped arguments. Preserve filters, hooks, and output configuration without driver forwarding. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest` | Pure inspection, scoped options, graphs, output callbacks, and additive playlist hooks implemented; arbitrary playlist replacement is not supported |
 
 ## Compiler contracts
 
@@ -670,18 +717,18 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 
 `NativeExportTest` covers the single-output subset. `NativeCompositionTest` adds pure inspection, process fakes, and real-media acceptance for graphs, resources, independent outputs, validation-before-publication, and partial failure. A resource and the same key used as a media input have separate staging entries so resource staging cannot bypass manifest checks.
 
-## Remaining sequence
+## Delivery and limits
 
-1. Secondary-resource and composition acceptance now covers fonts, literal text, staged subtitles, and multiple inputs and outputs. Broader stream and filesystem preservation scenarios remain open in the acceptance table.
-2. Preserve ordinary encoding, composition, concatenation, frames, timelapse, watermarks, waveform images, storyboards, and VTT.
-3. Preserve adaptive and encrypted HLS and dynamic playlist responses against the same execution contract.
-4. Replace the README and upgrade guide, then remove the legacy driver and dependency tree. No parallel legacy backend remains in the released package.
-5. Pass every acceptance row on PHP 8.4 and 8.5, Laravel 12 and 13, and matching tested FFmpeg and FFprobe builds. Pin setup and CI to the tested stable patch. Measure performance before making speed claims.
+The native implementation replaces the legacy backend and dependency tree. [README.md](README.md) contains code-first examples, and [UPGRADING.md](UPGRADING.md) covers the breaking migration. Loudness normalization, fMP4 with alternate groups, and waveform-peaks data are included, with the limits documented above and in the README.
 
-Optional follow-ups remain ordered as loudness normalization, fMP4 HLS and alternate groups, then waveform-peaks data. They do not replace an open 9.0 acceptance row.
+Release verification uses randomized suites with deprecations treated as failures on PHP 8.4 and 8.5, Laravel 12 and 13, and matching FFmpeg/FFprobe 9.0.2. Hosted CI must verify Ubuntu 26.04 execution after pushing. No performance improvement, real-cloud integration, live/event HLS, low-latency HLS, DASH, or DRM is claimed.
 
 ## Test commands
 
-`vendor/bin/phpunit tests/NativeProbeTest.php tests/NativeExportTest.php tests/NativeCompositionTest.php` runs the native process and Storage contract tests. Real-media cases require `FFMPEG_9_FFPROBE` to identify an installed FFprobe 9.0.x binary and report skips when that variable is absent. Export acceptance uses a matching `ffmpeg` binary in the same directory, built with libx264, libfreetype, libharfbuzz, and libass. Font acceptance requires `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`. This is temporary while the legacy suite still uses the distribution build.
+Real-media cases require `FFMPEG_9_FFPROBE` to identify an installed FFprobe 9.0.x binary and report skips when that variable is absent. Acceptance uses a matching `ffmpeg` binary in the same directory, built with libx264, FreeType, HarfBuzz, and libass. Font acceptance requires `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`. Setup and CI install these prerequisites.
 
-`FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit` runs both suites when that binary is installed. Native acceptance uses FFmpeg and FFprobe 9.0.2. Legacy encoding tests still use the separately configured legacy binaries. Passing legacy tests does not establish native support for their workflows. Pinning the matching native build in setup and CI remains a release gate.
+```bash
+FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by random \
+	--display-deprecations --display-phpunit-deprecations \
+	--fail-on-deprecation --fail-on-phpunit-deprecation
+```

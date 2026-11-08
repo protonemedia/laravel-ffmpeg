@@ -1,0 +1,126 @@
+# Upgrade to version 9
+
+Version 9 replaces PHP-FFMpeg with Laravel Process, Storage, and Http. The old builders, format objects, driver forwarding, and filter factories are removed. This is a breaking upgrade, not a compatibility layer.
+
+## Update the runtime
+
+Use PHP 8.4 or later, Laravel 12 or 13, and matching FFmpeg and FFprobe 9.0.x binaries. The tested patch is 9.0.2. Install the codecs, filters, fonts, and HTTPS support that your application needs.
+
+Republish the configuration and review your application's values. Keep `ffmpeg.binaries`, `ffprobe.binaries`, `ffmpeg.threads`, `timeout`, and `temporary_files_root`. `idle_timeout` is separate from the total deadline. The legacy log channel and encrypted-HLS temporary root no longer apply. Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to the matching pair.
+
+## Replace the entrypoint and format objects
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+
+// Before:
+FFMpeg::fromDisk('uploads')->open('lesson.mov')->export()
+	->toDisk('videos')->inFormat(new \FFMpeg\Format\Video\X264)
+	->save('lesson.mp4');
+
+// After:
+$media = FFMpeg::disk('uploads')->open('lesson.mov');
+$result = $media->export()->video('libx264', crf: 23)->audio('aac', bitrate: '128k')
+	->toDisk('videos')->save('lesson.mp4');
+```
+
+Use `disk()` for `filesystems.default` or `disk($filesystem)` for a supplied filesystem. Pass disk-relative keys to `open()`. Pass a Laravel `File` or `UploadedFile` for a local file. Use `openUrl()` for HTTP inputs; authenticated inputs require `download: true` and explicit headers.
+
+Builders do not forward methods to PHP-FFMpeg. Use explicit codecs, scoped `inputOptions:`, `globalOptions()`, `outputOptions()`, and filters. Bitrates include units such as `'2500k'`. `inspect()` returns the argument plan without reading inputs or launching a process. `save()` returns `ExportResult`, not the builder.
+
+## Replace filters and clipping
+
+```php
+$media->export()->video('libx264')->audio('copy')
+	->resize(width: 1280)->crop(1280, 720)->rotate(90)
+	->save('portrait.mp4');
+
+$media->export()->video('libx264')->audio('aac')
+	->clip('00:00:12.500', duration: 8)->save('clip.mp4');
+
+$media->export()->video('copy')->audio('copy')
+	->clip(12.5, end: 20.5, seek: 'keyframe')->save('copy.mkv');
+```
+
+Filters run in registration order. One-dimension resize preserves display aspect ratio; two explicit dimensions stretch. Use `fit()` for a contain or cover policy. Stream copy rejects filters and accurate clipping. Keyframe cuts can begin before the requested time. Timeline changes omit chapters unless explicitly mapped.
+
+Use `addInput()` and `filterComplex()` for watermarks and composition. Use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Image preprocessing is an explicit `prepareImage()` callback on a private copy, with your own image-library dependency.
+
+## Select streams and metadata explicitly
+
+```php
+$media->export()->mapVideo()->mapAudio(language: 'eng')
+	->video('copy')->audio('copy')->withoutMetadata(chapters: true)
+	->streamMetadata('a:0', 'language', 'eng')->disposition('a:0', ['default'])
+	->save('english.mkv');
+
+$metadata = $media->probe();
+$metadata->video()?->width();
+$metadata->audioStreams();
+$metadata->chapters();
+$metadata->toArray();
+```
+
+Without maps, ordinary exports select the first motion-video and audio streams. Subtitles and cover art require explicit maps and container-compatible codecs. Multiple-input outputs require explicit maps and metadata/chapter policy. Stream tags and dispositions address output order, not input indexes.
+
+## Replace image and analysis operations
+
+```php
+$jpeg = $media->frame(at: 12.5)->get();
+$media->frames(every: 2)->resize(width: 320)->save('frames/%05d.jpg');
+$media->storyboard(every: 5, columns: 4, rows: 3, margin: 2, padding: 1)
+	->resize(width: 160)->vtt('previews/lesson.vtt')->save('sheets/%03d.jpg');
+$media->waveform()->save('waveform.png');
+$analysis = $media->analyze('volumedetect');
+$analysis->errorOutput();
+$analysis->throw();
+```
+
+`get()` returns raw JPEG bytes, not Base64. Storyboard geometry applies to each tile before assembly. `waveform()` writes an image; `waveformPeaks()` returns versioned amplitude data. Analysis-only nonzero exits remain inspectable until `throw()` is called.
+
+## Replace HLS builders and responses
+
+```php
+use ProtoneMedia\LaravelFFMpeg\HlsVariant;
+
+$result = $media->hls(segmentDuration: 6)
+	->variant('360p', fn (HlsVariant $variant) => $variant
+		->resize(height: 360)->video('libx264', bitrate: '800k'))
+	->encrypt('secrets', fn ($path) => route('lesson.key', ['key' => basename($path)]), rotateEvery: 3)
+	->toDisk('streams')->save('lesson/master.m3u8');
+
+$result->playlist();
+$result->variant('360p')->files();
+
+return FFMpeg::disk('streams')->playlist('lesson/master.m3u8')
+	->mediaUrlsUsing(fn ($target, $source, $uri) =>
+		$target === null ? $uri : \Illuminate\Support\Facades\Storage::disk('streams')
+			->temporaryUrl($target, now()->addMinutes(10)));
+```
+
+Variants configure encoding only. MPEG-TS remains the default. Private key storage is explicit; key routes return 16 raw bytes after authorization. Keys rotate deterministically by segment group, with a random IV per segment. Playlist hooks are additive and cannot replace generated references or encryption lines. URL resolvers receive the canonical target, containing playlist, and original URI, not just a basename.
+
+Do not expose a generic disk download route. Scope playlist and key paths to the authorized asset. Dynamic responses default to `private, no-store`; your application owns authorization, expiry, CORS, and cache policy.
+
+## Update progress and failure handling
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Progress;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+
+try {
+	$result = $media->export()->video('libx264')->onProgress(function (Progress $progress) {
+		// percentage, speed, and remainingSeconds can be null.
+		// pass and totalPasses describe encoding passes.
+	})->save('lesson.mp4');
+	$file = $result->file();
+} catch (MediaException $exception) {
+	// phase, category, bounded diagnostics, and successfully published siblings.
+}
+```
+
+Completion follows validation, publication, and cleanup. Throw `ExportCancelled` from a callback to stop the operation. Other callback exceptions propagate unchanged. There is no global `cleanupTemporaryFiles()` call and no arbitrary before-save command mutation.
+
+All artifacts validate before the first Storage write, but publication is not transactional. A later transfer failure can leave earlier outputs or replaced objects. Failures report successful writes without deleting them. Streams returned by `GeneratedFile::readStream()` belong to the caller and must be closed.
+
+See the [README](README.md) for executable API examples and the [reference](REWRITE.md) for detailed limits.

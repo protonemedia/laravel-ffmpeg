@@ -812,7 +812,7 @@ class NativeHlsTest extends TestCase
             fn () => $media->hls()->variant('same', fn () => null)->variant('same', fn () => null),
             fn () => $media->hls()->variant('valid', fn () => null)->save('out.mp4'),
             fn () => $media->hls()->variant('valid', fn ($variant) => $variant->outputOptions(['-f', 'mp4']))->inspect(),
-            fn () => $media->hls()->variant('valid', fn () => null)->twoPass(),
+            fn () => $media->hls()->variant('valid', fn () => null)->twoPass()->inspect(),
             fn () => $media->hls()->variant('valid', fn () => null, playlist: '../outside.m3u8'),
             fn () => $media->hls()->variant('valid', fn () => null, playlist: 'https://example.test/list.m3u8'),
             fn () => $media->hls()->variant('valid', fn () => null, segments: 'segment.ts'),

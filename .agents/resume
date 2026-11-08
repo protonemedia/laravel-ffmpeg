@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 # Dependencies are installed during setup, never on resume.
-for tool in php composer ffmpeg ffprobe; do
+for tool in php composer; do
     command -v "$tool" >/dev/null
 done
 for tool in ffmpeg ffprobe; do
