@@ -167,6 +167,22 @@ class DynamicHLSPlaylist implements Responsable
         return ! Str::startsWith($line, '#') && Str::endsWith($line, ['.m3u8', '.ts']);
     }
 
+    private static function isPlaylistFilename(string $line): bool
+    {
+        return Str::endsWith($line, '.m3u8');
+    }
+
+    private static function resolvePathFromPlaylist(string $playlistPath, string $entry): string
+    {
+        if (Str::startsWith($entry, '/')) {
+            return ltrim($entry, '/');
+        }
+
+        $directory = trim(pathinfo($playlistPath, PATHINFO_DIRNAME), '.');
+
+        return ltrim(($directory ? $directory.'/' : '').$entry, '/');
+    }
+
     /**
      * Returns the filename of the encryption key.
      */
@@ -219,6 +235,53 @@ class DynamicHLSPlaylist implements Responsable
             $this->getProcessedPlaylist($this->media->getPath()),
             $this->media->getPath()
         );
+    }
+
+    /**
+     * Deletes the opened HLS playlist and all related playlists, segments, and keys.
+     */
+    public function deleteAllFiles(): self
+    {
+        $playlistsToVisit = Collection::make([$this->media->getPath()]);
+        $visitedPlaylists = [];
+        $filesToDelete = [];
+
+        while ($playlistPath = $playlistsToVisit->shift()) {
+            if (in_array($playlistPath, $visitedPlaylists, true)) {
+                continue;
+            }
+
+            $visitedPlaylists[] = $playlistPath;
+            $filesToDelete[] = $playlistPath;
+
+            $content = $this->getPlaylistContent($playlistPath);
+
+            static::parseLines($content)->each(function ($line) use ($playlistPath, &$filesToDelete, $playlistsToVisit) {
+                if (static::lineHasMediaFilename($line)) {
+                    $resolvedPath = static::resolvePathFromPlaylist($playlistPath, $line);
+                    $filesToDelete[] = $resolvedPath;
+
+                    if (static::isPlaylistFilename($line)) {
+                        $playlistsToVisit->push($resolvedPath);
+                    }
+
+                    return;
+                }
+
+                $key = static::extractKeyFromExtLine($line);
+
+                if ($key) {
+                    $filesToDelete[] = static::resolvePathFromPlaylist($playlistPath, $key);
+                }
+            });
+        }
+
+        Collection::make($filesToDelete)
+            ->filter()
+            ->unique()
+            ->each(fn ($path) => $this->disk->delete($path));
+
+        return $this;
     }
 
     /**
