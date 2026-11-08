@@ -496,6 +496,42 @@ class NativeHlsTest extends TestCase
         $this->assertSame([], glob($this->root.'/*'));
     }
 
+    #[Test]
+    public function dynamically_rewritten_encrypted_playlists_decode_every_variant_through_key_rotation(): void
+    {
+        $media = $this->source();
+        $disk = Storage::disk('local');
+        $secrets = Storage::fake('secrets');
+        $media->hls(segmentDuration: 0.7)
+            ->variant('low', fn ($variant) => $variant->resize(width: 80), playlist: 'lists/low/index.m3u8', segments: 'assets/low/part-%03d.ts')
+            ->variant('high', fn () => null, playlist: 'lists/high/index.m3u8', segments: 'assets/high/part-%d.ts')
+            ->encrypt('secrets', fn ($path) => '/private/'.basename($path), rotateEvery: 2)
+            ->save('master.m3u8');
+        $keys = [];
+        $rewritten = FFMpeg::disk('local')->playlist('master.m3u8')
+            ->playlistUrlsUsing(fn ($target) => $disk->path('responses/'.$target))
+            ->mediaUrlsUsing(fn ($target) => $disk->path($target))
+            ->keyUrlsUsing(function ($target, $source, $uri) use ($secrets, &$keys) {
+                $this->assertNull($target);
+                $this->assertStringStartsWith('lists/', $source);
+                $keys[] = basename($uri);
+
+                return $secrets->path('hls-keys/'.basename($uri));
+            })->all();
+        $this->assertCount(3, $rewritten);
+        $this->assertCount(2, array_unique($keys));
+        foreach ($rewritten as $path => $contents) {
+            $disk->put('responses/'.$path, $contents);
+        }
+        foreach ($rewritten->keys() as $path) {
+            $decoded = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-xerror',
+                '-protocol_whitelist', 'file,crypto', '-allowed_extensions', 'm3u8,ts,key',
+                '-i', $disk->path('responses/'.$path), '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-']);
+            $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+        }
+        $this->assertSame([], glob($this->root.'/*'));
+    }
+
     public static function encryptionModes(): array
     {
         return [["\x00\x01\x02\x03supplied-key", null], [null, null], [null, 2]];

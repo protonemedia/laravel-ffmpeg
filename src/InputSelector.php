@@ -5,10 +5,16 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Http\UploadedFile;
+use ProtoneMedia\LaravelFFMpeg\Http\HlsPlaylist;
 
 class InputSelector
 {
     public function __construct(private readonly string|Filesystem $disk) {}
+
+    public function playlist(string $path): HlsPlaylist
+    {
+        return new HlsPlaylist($this->disk, $path);
+    }
 
     public function open(string|File|UploadedFile $path, array $inputOptions = []): Media
     {

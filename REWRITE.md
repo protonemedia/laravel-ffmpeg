@@ -189,7 +189,7 @@ $result = $media->hls(segmentDuration: 6)
 
 Each playlist references files relative to its own directory, with path components percent-encoded for URLs. Normalized destination keys remain unchanged in Storage and result records. `variant($name)->files()` selects the files owned by that variant, even when variants share a segment directory or use the same playlist basename. Concrete destination collisions, including equivalent numbering patterns, fail before any publication. Custom destinations never enter FFmpeg arguments.
 
-Dynamic responses, two-pass HLS, and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
+Two-pass HLS and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
 
 ### Playlist hooks
 
@@ -257,9 +257,50 @@ $result = $media->hls(segmentDuration: 6)
 
 Without `key:`, each save generates fresh keys and filenames. `rotateEvery:` is a positive segment count, indexed from zero independently within each variant. The same rotation group shares a key across variants. It cannot combine with `key:`. Every segment has its own random 128-bit IV, recorded explicitly in `EXT-X-KEY`. Local post-processing uses AES-128-CBC with PKCS#7 padding, not log-triggered FFmpeg rekeying. Ciphertext sizes determine master bandwidth. First-segment stream validation uses the retained private plaintext.
 
-`keyUrl` runs once per used rotation group per variant during finalization, never inspection. It receives the private disk-relative key, the public playlist key, variant name, and zero-based rotation index. It returns a UTF-8 HTTP(S) URL or relative URI, resolved against that variant playlist. Quotes, backslashes, whitespace, control characters, fragments, and repeated URLs for different keys within a playlist are rejected. The application owns URL expiry, authorization, and CORS. Dynamic response helpers remain open.
+`keyUrl` runs once per used rotation group per variant during finalization, never inspection. It receives the private disk-relative key, the public playlist key, variant name, and zero-based rotation index. It returns a UTF-8 HTTP(S) URL or relative URI, resolved against that variant playlist. Quotes, backslashes, whitespace, control characters, fragments, and repeated URLs for different keys within a playlist are rejected. The application owns URL expiry, authorization, and CORS.
 
 Keys publish with private visibility before any media, regardless of media Storage options. Segments publish before playlists, with the master last. Results retain media-first order and append `hls-key` files; variant results exclude shared keys. Key bytes and URLs never enter FFmpeg commands or process summaries. Finalized playlists retain the 16 MiB limit. Hooks cannot change generated key directives. Validation and callback failures publish nothing and clean the workspace. Later transfer failures report successful uploads, including keys, without deleting them. Publication is not transactional.
+
+### Dynamic playlist responses
+
+```php
+use Illuminate\Support\Facades\URL;
+
+// Inside an authorized controller. Resolve $path from this lesson's owned files.
+return FFMpeg::disk('streams')->playlist($path)
+	->playlistUrlsUsing(fn (?string $target, string $source, string $uri) =>
+		URL::temporarySignedRoute('lesson.playlist', now()->addMinutes(10), [
+			'lesson' => $lesson->id, 'path' => $target,
+		]))
+	->mediaUrlsUsing(fn (?string $target, string $source, string $uri) =>
+		Storage::disk('streams')->temporaryUrl($target, now()->addMinutes(10)))
+	->keyUrlsUsing(function (?string $target, string $source, string $uri) use ($lesson) {
+		// Exported key URLs may be absolute. Look up the original URI in your owned key records.
+		$key = $lesson->keys()->where('playlist_uri', $uri)->firstOrFail();
+
+		return URL::temporarySignedRoute('lesson.key', now()->addMinutes(10), [
+			'lesson' => $lesson->id, 'key' => $key->id,
+		]);
+	});
+```
+
+`playlist()` accepts a disk-relative `.m3u8` key or a filesystem instance through `disk()`. It implements Laravel `Responsable` and sends `application/vnd.apple.mpegurl` with `Cache-Control: private, no-store`. Your application authorizes every playlist request, scopes paths and keys to the lesson, validates signatures, serves the 16 raw key bytes, and configures CORS. A signed URL does not replace ownership checks. The example assumes local playlist and segment references.
+
+```php
+$playlist = FFMpeg::disk('streams')->playlist('lessons/42/master.m3u8')
+	->mediaUrlsUsing(fn (?string $target, string $source, string $uri) =>
+		$target === null ? $uri : Storage::disk('streams')->temporaryUrl($target, now()->addMinutes(10)));
+
+$text = $playlist->get(); // Rewrite only this playlist. No writes.
+$all = $playlist->all();  // Collection keyed by original disk-relative playlist keys.
+$variant = $all->get('lessons/42/720p/index.m3u8');
+```
+
+Each resolver receives the canonical disk-relative target, the containing playlist's disk key, and the original URI including its query. Relative paths decode once and resolve against the containing playlist. HTTP(S) and root-relative URIs have a `null` target. They remain available to the resolver but never trigger network reads. Missing resolvers leave valid URIs unchanged. Repeated references reuse a URL within that render; later calls generate fresh URLs.
+
+`all()` follows original local playlist references once, including cycles. It does not follow rewritten URLs, root-relative URLs, or external URLs, and never reads keys or media. Each call allows at most 1,024 local playlists and 16 MiB each of aggregate input and output. `get()` has the same byte limits. CRLF becomes LF. URI roles come from `EXT-X-STREAM-INF`, `EXTINF`, and `EXT-X-KEY`, not filename extensions. Key attributes and IVs remain unchanged.
+
+Invalid UTF-8, control characters, malformed URIs, disk-root traversal, incomplete declarations, and unsupported resource tags throw `MediaException` with phase `response` and category `artifact`. Missing or unreadable playlists use category `filesystem`. Adapter messages and secret URIs are omitted. Application callback exceptions propagate unchanged. This helper supports MPEG-TS master and media playlists, including AES-128 rotation. Alternate groups, fMP4, and low-latency resource tags are rejected.
 
 ### Progress helpers
 
@@ -612,7 +653,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `ExportTest`, `TileTest` | Multiple single-file outputs and owned HLS inventories verified, including publication order, validation before writes, concrete partial failures, source protection, and cleanup |
 | Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `NativeHlsTest`, legacy `HlsExportTest`, `HLSPlaylistGeneratorTest` | Multiple variants, complete playlist decoding, segment keyframes and aligned boundaries, audio-only artwork exclusion, silent video, first/all audio, copy, clipped watermarks, staged input, streamed publication, custom nested paths, and additive playlist hooks verified |
 | Encrypted HLS | Decrypt AES-128 segments and verify IVs, supplied keys, key rotation boundaries, private key storage, and failure cleanup. | `NativeHlsTest`, legacy `EncryptedHlsExportTest` | Supplied and generated keys, two-variant rotation boundaries, independent random IVs, byte-identical decryption, complete encrypted playlist decoding, chunk-boundary padding, private key publication, hook protection, repeated saves, and failure cleanup verified |
-| Dynamic HLS | Rewrite master, variant, segment, and key URLs relative to their containing playlists. Verify response integration and missing or invalid input errors. | `DynamicHLSPlaylistTest` | Open |
+| Dynamic HLS | Rewrite master, variant, segment, and key URLs relative to their containing playlists. Verify response integration and missing or invalid input errors. | `NativePlaylistTest`, `NativeHlsTest`, legacy `DynamicHLSPlaylistTest` | Laravel responses and authorization boundaries, nested and encoded paths, source-aware resolvers, unchanged key IVs, fresh signed URLs, cycles, external-reference isolation, byte and playlist limits, sanitized errors, and complete rewritten encrypted master and variant decoding through key rotation verified |
 | Extension points | Inspect scoped argument arrays without execution. Preserve custom filters, playlist hooks, and output configuration without arbitrary driver forwarding. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `BeforeSavingTest`, README | Pure inspection, scoped options, graphs, output callbacks, and additive playlist hooks implemented; arbitrary playlist replacement is not supported |
 
 ## Compiler contracts
