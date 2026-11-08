@@ -6,7 +6,7 @@ This file tracks the Laravel-native rewrite. The [design proposal](https://ampco
 
 `FFMpeg::disk($disk)->open($key)` returns a media descriptor with native `probe()` and `export()` operations through Laravel Process. A disk can be a name or an `Illuminate\Contracts\Filesystem\Filesystem` instance. `open()` also accepts `Illuminate\Http\File` and `UploadedFile`. Creating a descriptor or inspecting an export performs no transfers or process launches.
 
-`FFMpeg::disk()->open($key)` and `FFMpeg::disk(null)->open($key)` select `filesystems.default` when `disk()` is called. Existing selectors and media descriptors keep their selected disk when the configuration changes. The legacy `FFMpeg::open()` entry point is removed. See [UPGRADING.md](UPGRADING.md).
+`FFMpeg::open($key)` selects the current `filesystems.default` for string keys. `FFMpeg::open($file)` reads the supplied `Illuminate\Http\File` or `UploadedFile` instead of resolving a Storage key. `FFMpeg::disk($disk)->open($key)` selects a named or supplied filesystem. Calling `disk()` without an argument or with `null` selects `filesystems.default` at that call. Existing selectors and media descriptors keep their selected disk when configuration changes. See [UPGRADING.md](UPGRADING.md).
 
 Local disks and file objects use their local paths. Other filesystem instances stream into a private workspace with transfer-size checks. Known remote manifests are rejected because staging a playlist alone loses its dependencies. This detection is not a sandbox for hostile media.
 
@@ -27,8 +27,8 @@ The old driver, format/filter objects, and PHP-FFMpeg dependency tree are remove
 ### HTTP inputs
 
 ```php
-$public = FFMpeg::disk()->openUrl('https://media.example/video.mp4');
-$private = FFMpeg::disk()->openUrl(
+$public = FFMpeg::openUrl('https://media.example/video.mp4');
+$private = FFMpeg::openUrl(
 	'https://media.example/private.mp4',
 	headers: ['Authorization' => 'Bearer '.$token],
 	download: true,
@@ -36,7 +36,7 @@ $private = FFMpeg::disk()->openUrl(
 $private->export()->video('copy')->audio('copy')->toDisk('videos')->save('private.mp4');
 ```
 
-`InputSelector::openUrl()` accepts HTTP and HTTPS URLs. Direct input is the default for public or signed URLs. Choosing direct input permits the URL in FFmpeg and FFprobe process arguments, visible to operating-system process inspection. Package inspection, process summaries, diagnostics, and probe filenames redact the URL. Query values also receive diagnostic redaction. A direct read has a 15-second network read timeout, plus the configured process deadline.
+`FFMpeg::openUrl()` delegates to `InputSelector::openUrl()` and accepts the same headers, download flag, and input options. Both accept HTTP and HTTPS URLs. Direct input is the default for public or signed URLs. Choosing direct input permits the URL in FFmpeg and FFprobe process arguments, visible to operating-system process inspection. Package inspection, process summaries, diagnostics, and probe filenames redact the URL. Query values also receive diagnostic redaction. A direct read has a 15-second network read timeout, plus the configured process deadline.
 
 Per-input headers require `download: true`. URL user information, fragments, invalid header names, and multiline header values are rejected. Downloads use Laravel Http with a 10-second connection deadline, a 60-second request deadline, TLS verification, and a private file sink. Redirects and transparent decompression are disabled. Only a complete, nonempty HTTP 200 response is accepted. A declared `Content-Length` must match the downloaded file. Headers and downloaded URLs never enter media process arguments. Laravel Http middleware and events still receive the original request, so application HTTP instrumentation must redact credentials.
 
@@ -512,6 +512,39 @@ These helpers append ordinary filters in call order and work in `output()` callb
 `volume($multiplier)` scales amplitude with a finite nonnegative multiplier. Zero mutes; values above one can clip. `delayAudio($seconds)` inserts actual silence on every channel, extending audio rather than shifting its timestamps. It accepts finite nonnegative seconds. Exports with audio delay leave progress percentage unknown because the selected audio can outlast the video.
 
 `fadeIn($duration, $start = 0, $video = true, $audio = true)` and `fadeOut($duration, $start, $video = true, $audio = true)` fade video to or from black and audio to or from silence. Duration must be positive and start nonnegative, both in seconds. At least one stream type must be enabled. Fade-out timing is explicit; the helper does not probe for the end. Timing filters follow FFmpeg's timestamps in filter order, not an automatically rebased clip timeline.
+
+### Audio mixing
+
+```php
+$primary = FFMpeg::open($request->file('video'));
+$music = FFMpeg::disk('music')->open('background.wav');
+
+$primary->backgroundMusic($music, volume: 0.2, loop: true)
+	->video('copy')->audio('aac')->save('background.mp4');
+
+$primary->mixAudio($music, volume: 0.5, originalVolume: 1, normalize: false)
+	->loopAudio(false)->volume(0.8)->fadeIn(1, video: false)
+	->video('copy')->audio('aac')->save('one-shot.mp4');
+
+FFMpeg::open('voice.wav')->mixAudio($music, volume: 0.25)
+	->audio('pcm_s16le')->save('mixed.wav');
+```
+
+`Media::mixAudio(Media $audio, float $volume = 1, float $originalVolume = 1, bool $normalize = false)` returns a `PendingAudioMix` single-output builder. It mixes the primary input's first audio stream, when present, with the added input's first audio stream. `Media::backgroundMusic(Media $music, float $volume = 0.2, bool $loop = true)` is shorthand for `mixAudio($music, $volume)->loopAudio($loop)`. `PendingAudioMix::loopAudio(bool $loop = true)` controls repetition of the added track. Ordinary `mixAudio()` does not loop.
+
+The primary container's finite positive duration determines output length, not the shortest stream or the added track. Both audio branches have silence padding. A short added track plays once then contributes silence, or repeats when looping is enabled. Longer added audio is trimmed at the primary duration. A primary silent video uses only added audio. Audio-only primaries, including WAV files, are supported.
+
+Selection includes the first motion-video stream when present and one mixed audio stream. `withoutVideo()` omits video. The mixed audio is stereo at 48000 Hz. It requires encoding and rejects `audio('copy')`. Source video can use `video('copy')` unless video filters require encoding. Caller audio filters, including `volume()` and audio fades, run after mixing in declaration order. Video filters remain output filters.
+
+The added track's timestamps reset to its first decoded sample. Original audio keeps its nonnegative delay relative to video, with silence inserted before the original samples. A primary containing video requires a known zero container origin and known zero origins on every video stream. Its first audio stream, if present, requires a known nonnegative origin. Audio-only primaries do not require reported timestamp origins. The added input requires a finite positive duration and an audio stream.
+
+`volume` and `originalVolume` are finite nonnegative amplitude multipliers applied before mixing. With `normalize: false`, their signals add and can clip. With original audio present, `normalize: true` divides the two weighted branches equally by two. The divisor stays constant after either track ends because both branches are padded. It does not measure loudness or increase the remaining branch's gain at EOF. A primary without audio has only one branch and no division by two.
+
+Looping requires a local or downloaded added input. URL music must use `FFMpeg::openUrl($url, download: true)` before looping, with the ordinary HTTP header and download rules. Nonlooping direct URLs remain supported for finite sources.
+
+Looping first decodes the added track into a private lossless PCM file, then repeats those samples. This avoids repeating compressed encoder delay and padding. Preparation adds one FFmpeg invocation and disk use proportional to decoded music duration, sample rate, and channel count. The file is removed after success, failure, or cancellation. Result process summaries include preparation and encoding.
+
+The helper owns its graph and maps and accepts only the primary input and one added input. It rejects custom maps, custom graphs, output callbacks, watermarks, clips, audio omission, and two-pass encoding. To mix a clip, save the clip first. Publication defaults to the primary media's output disk. Progress percentage uses the primary duration only when no caller audio filters are present.
 
 ### Playback speed
 

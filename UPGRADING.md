@@ -24,7 +24,15 @@ $result = $media->export()->video('libx264', crf: 23)->audio('aac', bitrate: '12
 	->toDisk('videos')->save('lesson.mp4');
 ```
 
-Use `disk()` for `filesystems.default` or `disk($filesystem)` for a supplied filesystem. Pass disk-relative keys to `open()`. Pass a Laravel `File` or `UploadedFile` for a local file. Use `openUrl()` for HTTP inputs; authenticated inputs require `download: true` and explicit headers.
+Use `FFMpeg::open($key)` for disk-relative keys on the current `filesystems.default`. Keep `disk('uploads')` when selecting a Storage disk, or use `disk($filesystem)` for a supplied filesystem. Pass a Laravel `File` or `UploadedFile` directly to `FFMpeg::open()` to read that local file instead of a Storage key.
+
+```php
+$media = FFMpeg::open($request->file('video'));
+$public = FFMpeg::openUrl('https://cdn.example.com/lesson.mp4');
+$private = FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer '.$token], download: true);
+```
+
+`FFMpeg::openUrl()` uses the same HTTP rules as the disk selector. Headers require `download: true`. Downloads use Laravel Http with TLS verification and reject redirects. Direct URLs enter media process arguments, so do not include reusable credentials. See the [HTTP input reference](REWRITE.md#http-inputs) for transport limits and redaction rules.
 
 Builders do not forward methods to PHP-FFMpeg. Use explicit codecs, scoped `inputOptions:`, `globalOptions()`, `outputOptions()`, and filters. Bitrates include units such as `'2500k'`. `inspect()` returns the argument plan without reading inputs or launching a process. `save()` returns `ExportResult`, not the builder.
 
@@ -67,6 +75,25 @@ $media->concat($second)->export()->video('copy')->audio('copy')->save('joined.mk
 `watermark()` adds inputs and maps automatically for static PNG or JPEG images. The default anchor is bottom-right; offsets are inward margins. Marks run after all output video filters, regardless of call order. Repeated marks and multiple ordinary outputs are supported, but custom maps, graphs, additional media inputs, HLS, and video copy are not. Use `addInput()` and `filterComplex()` for custom composition and HLS overlays.
 
 `concat()` joins compatible streams without silently transcoding. `concatTranscoded()` returns an export builder with one output. Choose `normalizeVideo()` and either `normalizeAudio()` or `withoutAudio()` before saving. Normalization selects each input's first motion-video and audio streams, preserves audio delays, and requires finite sources with zero container/video origins. It rejects root filters, custom graphs, and stream copy. Sources without audio require `withoutAudio()` or a custom graph; the helper does not create missing audio tracks. Source chapters are not combined.
+
+## Replace audio mixing graphs
+
+```php
+$music = FFMpeg::disk('music')->open('background.mp3');
+$media->backgroundMusic($music, volume: 0.2)
+	->video('copy')->audio('aac')->save('with-music.mp4');
+
+$media->mixAudio($music, volume: 0.4, originalVolume: 0.8, normalize: true)
+	->fadeIn(1, video: false)->video('copy')->audio('aac')->save('mixed.mp4');
+```
+
+`backgroundMusic()` loops by default. Use `loop: false` for one playback, or `mixAudio()` for one-shot mixing with explicit gains. Call `loopAudio()` on the returned builder to repeat the added track. The primary container's duration sets output length. Short nonlooping audio ends in silence, and longer audio is trimmed. Silent video and audio-only primaries are supported.
+
+Mixing selects the first audio track from each input and the primary's first motion-video track when present. Output audio is stereo at 48000 Hz and must be encoded. Video copy is allowed without video filters. Audio filters and `volume()` run after mixing. Added audio starts at its first decoded sample; original audio retains its offset relative to video.
+
+The default `normalize: false` adds the weighted signals and can clip. With original audio present, `normalize: true` divides both padded branches equally by two, without changing gain when a track ends. This is not loudness normalization.
+
+Both inputs require finite positive durations, and the added input requires audio. Video primaries require known zero container and video origins and a known nonnegative original-audio origin. Looping URL audio requires `openUrl($url, download: true)`. The builder supports one output and rejects maps, custom graphs, watermarks, clips, and two-pass encoding. Save a clip first if needed. See the [audio mixing reference](REWRITE.md#audio-mixing) for the complete contract.
 
 ## Replace speed and GIF graphs
 

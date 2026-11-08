@@ -71,13 +71,13 @@ Two-pass video encoding owns private statistics for each output. Keyframe cuts c
 ## Inputs and probing
 
 ```php
-$media = FFMpeg::disk()->open('lesson.mp4'); // Current filesystems.default.
+$media = FFMpeg::open('lesson.mp4'); // Current filesystems.default.
 $media = FFMpeg::disk($filesystem)->open('lesson.mp4');
-$media = FFMpeg::disk()->open($request->file('video'));
-$media = FFMpeg::disk()->open(new \Illuminate\Http\File('/absolute/path/lesson.mp4'));
+$media = FFMpeg::open($request->file('video'));
+$media = FFMpeg::open(new \Illuminate\Http\File('/absolute/path/lesson.mp4'));
 
-$public = FFMpeg::disk()->openUrl('https://cdn.example.com/lesson.mp4');
-$private = FFMpeg::disk()->openUrl($url, headers: ['Authorization' => 'Bearer '.$token], download: true);
+$public = FFMpeg::openUrl('https://cdn.example.com/lesson.mp4');
+$private = FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer '.$token], download: true);
 
 $metadata = $media->probe();
 $metadata->duration(); // Nullable seconds.
@@ -87,6 +87,8 @@ $metadata->chapters();
 $metadata->get('format.tags.title');
 $metadata->toArray();
 ```
+
+`FFMpeg::open($key)` resolves string keys against the current `filesystems.default`. Use `FFMpeg::disk('uploads')->open($key)` to select another Storage disk. A `File` or `UploadedFile` uses the supplied local file, not a Storage key. Existing descriptors retain their disk when configuration changes.
 
 Storage paths are disk-relative keys, not URLs or local absolute paths. Descriptor construction and `inspect()` do no I/O. Local inputs can be read in place; other filesystems stream into a private operation workspace. Scoped and read-only input adapters retain their boundaries. Read-only destinations fail publication.
 
@@ -177,6 +179,36 @@ $media->gif(width: 480, frameRate: 12, loop: 0)
 `speed()` changes video timing and audio tempo without changing audio pitch. It requires a finite positive factor, a zero container/video origin, and nonnegative audio origins. It scales an existing audio delay with playback speed. Stream copy, clipping, input options, custom graphs, watermark inputs, and multiple outputs are not supported. Encode a clip first if you need to retime only part of a source.
 
 `gif()` selects the first motion-video stream and omits audio. Width defaults to 480 and frame rate to 12. `loop: 0` loops forever; `-1` disables looping. Accurate `clip()` runs before palette generation. The helper writes a private lossless intermediate, generates a palette, then encodes the GIF. This avoids buffering the entire clip in memory, but adds disk use and processing passes. Keep previews short and small. GIF output rejects custom maps, graphs, additional inputs or outputs, audio settings, and encoder overrides.
+
+## Mix audio and add background music
+
+```php
+$video = FFMpeg::open($request->file('video'));
+$music = FFMpeg::disk('music')->open('background.mp3');
+
+// Repeat the music at 20% volume until the video's presentation ends.
+$video->backgroundMusic($music)
+	->video('copy')->audio('aac', bitrate: '192k')->save('with-music.mp4');
+
+// Play the added track once, then fill the remaining time with silence.
+$video->backgroundMusic($music, volume: 0.2, loop: false)
+	->video('copy')->audio('aac')->save('one-shot.mp4');
+
+// Set both gains, divide the mixed signal by two, then fade the final audio.
+$video->mixAudio($music, volume: 0.4, originalVolume: 0.8, normalize: true)
+	->fadeIn(1, video: false)->fadeOut(2, start: 18, video: false)
+	->video('copy')->audio('aac')->save('mixed.mp4');
+```
+
+`mixAudio()` combines the first audio stream of each input and plays the added track once by default. Call `loopAudio()` to repeat that track. `backgroundMusic($music, volume: 0.2, loop: true)` is shorthand with quieter, looping music and unchanged original volume.
+
+The primary container's duration sets the output length. A short nonlooping track ends in silence; looping repeats it until the primary ends. Longer added audio is trimmed. A silent video receives only the added music. Audio-only inputs also work, including WAV files.
+
+The mix is stereo at 48000 Hz and requires audio encoding. Video copy is allowed unless you add video filters. `volume()`, `audioFilter()`, and audio fades run after mixing. The added track starts at its first decoded sample; original audio retains its offset relative to video.
+
+Gains are finite nonnegative amplitude multipliers. The default `normalize: false` adds the signals and can clip. With original audio present, `normalize: true` divides both weighted branches equally by two. Silence padding keeps the gain constant when either track ends. This is not loudness normalization.
+
+Both sources need finite positive durations, and the added source must contain audio. A primary with video requires zero container and video timestamp origins and a known nonnegative original-audio origin. To loop URL audio, open it with `FFMpeg::openUrl($url, download: true)` first. Mixing supports one output and owns the graph and maps. Custom maps, graphs, watermarks, clips, and two-pass encoding are unsupported. Save a clip first if you need to mix only part of a source. See the [audio mixing reference](REWRITE.md#audio-mixing) for the method signatures and timing policy.
 
 ## Waveform-peaks data
 

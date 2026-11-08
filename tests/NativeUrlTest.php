@@ -73,8 +73,10 @@ class NativeUrlTest extends TestCase
         Http::preventStrayRequests();
         Process::fake();
         $url = 'https://media.example/audio.m4a?signature=private-signed-value';
-        $media = FFMpeg::disk('missing')->openUrl($url);
+        FFMpeg::disk('other');
+        $media = FFMpeg::openUrl($url, inputOptions: ['-probesize', '2048']);
         $command = $media->export()->audio('copy')->inspect();
+        $this->assertContains('2048', $command);
         $this->assertContains('https,tls,tcp', $command);
         $this->assertContains('-tls_verify', $command);
         $this->assertContains('15000000', $command);
@@ -87,7 +89,7 @@ class NativeUrlTest extends TestCase
 
         foreach (['file:///tmp/video', 'ftp://media.example/video', 'https://user:password@media.example/video', "https://media.example/\nvideo"] as $invalid) {
             try {
-                FFMpeg::disk()->openUrl($invalid);
+                FFMpeg::openUrl($invalid);
                 $this->fail('Invalid URL was accepted.');
             } catch (InvalidArgumentException $exception) {
                 $this->assertStringNotContainsString($invalid, $exception->getMessage());
@@ -95,7 +97,7 @@ class NativeUrlTest extends TestCase
         }
 
         $this->expectException(InvalidArgumentException::class);
-        FFMpeg::disk()->openUrl($url, headers: ['Authorization' => 'Bearer secret']);
+        FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer secret']);
     }
 
     #[Test]
@@ -104,7 +106,7 @@ class NativeUrlTest extends TestCase
         $this->native();
         Http::preventStrayRequests();
         $url = $this->server().'/public?signature=private-signed-value';
-        $media = FFMpeg::disk('missing')->openUrl($url);
+        $media = FFMpeg::openUrl($url);
         $metadata = $media->probe();
         $this->assertSame('[url]', $metadata->get('format.filename'));
         $this->assertTrue($metadata->hasAudio());
@@ -140,8 +142,19 @@ class NativeUrlTest extends TestCase
     {
         $this->native();
         $base = $this->server();
-        $first = FFMpeg::disk()->openUrl($base.'/private', ['Authorization' => 'Bearer first-secret'], download: true);
-        $second = FFMpeg::disk()->openUrl($base.'/private', ['Authorization' => 'Bearer second-secret'], download: true);
+        $first = FFMpeg::openUrl($base.'/private?signature=private-download-signature', headers: ['Authorization' => 'Bearer first-secret'], download: true, inputOptions: ['-probesize', '2048']);
+        $second = FFMpeg::openUrl($base.'/private', ['Authorization' => 'Bearer second-secret'], download: true);
+        $command = $first->export()->inspect();
+        $this->assertContains('2048', $command);
+        $this->assertStringNotContainsString('first-secret', json_encode($command));
+        $this->assertStringNotContainsString('private-download-signature', json_encode($command));
+        ob_start();
+        var_dump($first);
+        $debug = ob_get_clean();
+        $this->assertStringNotContainsString('first-secret', $debug);
+        $this->assertStringNotContainsString('private-download-signature', $debug);
+        $this->assertFileDoesNotExist($this->root.'/requests');
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
         $export = $first->export();
         $export->addInput($second);
         $result = $export->map('0:a:0')->map('1:a:0')->audio('copy')
@@ -164,7 +177,7 @@ class NativeUrlTest extends TestCase
         foreach ([false, true] as $authenticated) {
             $calls = 0;
             $url = $base.($authenticated ? '/private' : '/public').'?signature=private-image-signature';
-            $media = FFMpeg::disk()->openUrl($url, $authenticated ? ['Authorization' => 'Bearer first-secret'] : [], download: $authenticated)
+            $media = FFMpeg::openUrl($url, $authenticated ? ['Authorization' => 'Bearer first-secret'] : [], download: $authenticated)
                 ->prepareImage(function (string $path) use (&$calls) {
                     $calls++;
                     $this->assertStringStartsWith($this->root.'/workspaces/', $path);
@@ -189,7 +202,7 @@ class NativeUrlTest extends TestCase
 
         foreach (['/redirect', '/truncated', '/first'] as $path) {
             try {
-                FFMpeg::disk()->openUrl($base.$path.'?signature=hidden-signature', ['Authorization' => 'Bearer wrong-secret'], download: true)
+                FFMpeg::openUrl($base.$path.'?signature=hidden-signature', ['Authorization' => 'Bearer wrong-secret'], download: true)
                     ->export()->toDisk('memory')->save('never.m4a');
                 $this->fail('Invalid download was accepted.');
             } catch (MediaException $exception) {
@@ -214,7 +227,7 @@ class NativeUrlTest extends TestCase
 
         foreach ([["X-Test\r\nAuthorization" => 'secret'], ['Authorization' => "secret\r\nX-Test: value"], ['X-Test' => ['array']]] as $headers) {
             try {
-                FFMpeg::disk()->openUrl('https://media.example/input', $headers, download: true);
+                FFMpeg::openUrl('https://media.example/input', $headers, download: true);
                 $this->fail('Invalid headers were accepted.');
             } catch (InvalidArgumentException $exception) {
                 $this->assertStringNotContainsString('secret', $exception->getMessage());
@@ -222,7 +235,7 @@ class NativeUrlTest extends TestCase
         }
 
         try {
-            FFMpeg::disk()->openUrl('https://media.example/disguised.mp4', download: true)->probe();
+            FFMpeg::openUrl('https://media.example/disguised.mp4', download: true)->probe();
             $this->fail('A downloaded manifest was accepted as a standalone file.');
         } catch (MediaException $exception) {
             $this->assertSame('manifest', $exception->category);
@@ -237,7 +250,7 @@ class NativeUrlTest extends TestCase
             return Process::result(output: in_array('-version', $process->command)
                 ? 'ffprobe version 9.0.2' : "Input:\nfile\nhttp\ntcp\nOutput:\nfile\n");
         });
-        $media = FFMpeg::disk()->openUrl('https://media.example/input?signature=hidden');
+        $media = FFMpeg::openUrl('https://media.example/input?signature=hidden');
         $this->assertContains('https,tls,tcp', $media->export()->inspect());
 
         try {
@@ -257,7 +270,7 @@ class NativeUrlTest extends TestCase
 
         foreach ([false, true] as $download) {
             try {
-                FFMpeg::disk()->openUrl($url, download: $download)->probe();
+                FFMpeg::openUrl($url, download: $download)->probe();
                 $this->fail('An untrusted certificate was accepted.');
             } catch (MediaException $exception) {
                 $this->assertSame($download ? 'staging' : 'probing', $exception->phase);

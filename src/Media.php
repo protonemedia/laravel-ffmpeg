@@ -63,6 +63,16 @@ readonly class Media
         return new PendingGif($this, $this->defaultOutputDisk(), $width, $frameRate, $loop);
     }
 
+    public function mixAudio(Media $audio, float $volume = 1, float $originalVolume = 1, bool $normalize = false): PendingAudioMix
+    {
+        return new PendingAudioMix($this, $audio, $this->defaultOutputDisk(), $volume, $originalVolume, $normalize);
+    }
+
+    public function backgroundMusic(Media $music, float $volume = 0.2, bool $loop = true): PendingAudioMix
+    {
+        return $this->mixAudio($music, $volume)->loopAudio($loop);
+    }
+
     public function concat(Media ...$following): self
     {
         return new self(config('filesystems.default'), new ConcatInput([$this, ...$following]));

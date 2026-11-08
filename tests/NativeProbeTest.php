@@ -26,7 +26,10 @@ class NativeProbeTest extends TestCase
         $this->root = sys_get_temp_dir().'/native-probe-test-'.bin2hex(random_bytes(8));
         mkdir($this->root, 0700);
         mkdir($this->root.'/workspaces', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
+        config([
+            'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
+            'filesystems.disks.local' => ['driver' => 'local', 'root' => $this->root.'/local'],
+        ]);
     }
 
     protected function tearDown(): void
@@ -80,7 +83,7 @@ class NativeProbeTest extends TestCase
     #[Test]
     public function disk_defaults_to_the_current_configuration_without_changing_existing_descriptors(): void
     {
-        $local = $this->fakeLocalDisk();
+        $local = Storage::disk('local');
         $local->put('source.mp4', 'local source');
         Storage::disk('memory')->put('source.mp4', 'memory source');
         $sources = [];
@@ -89,10 +92,17 @@ class NativeProbeTest extends TestCase
         });
 
         config(['filesystems.default' => 'memory']);
-        $memory = FFMpeg::disk()->open('source.mp4');
+        $factory = FFMpeg::getFacadeRoot();
+        $memory = FFMpeg::open('source.mp4');
         config(['filesystems.default' => 'local']);
-        $local = FFMpeg::disk(null)->open('source.mp4');
+        FFMpeg::disk('other');
+        $local = FFMpeg::open('source.mp4', inputOptions: ['-probesize', '2048']);
         $explicit = FFMpeg::disk('memory')->open('source.mp4');
+        $this->assertSame($factory, FFMpeg::getFacadeRoot());
+        $this->assertSame('memory', $memory->defaultOutputDisk());
+        $this->assertSame('local', $local->defaultOutputDisk());
+        $this->assertSame('memory', $explicit->defaultOutputDisk());
+        $this->assertContains('2048', $local->export()->inspect());
         Process::assertNothingRan();
         $this->assertSame([], glob($this->root.'/workspaces/*'));
 
@@ -107,7 +117,7 @@ class NativeProbeTest extends TestCase
     #[Test]
     public function it_probes_a_local_input_without_mutating_or_staging_it(): void
     {
-        $disk = $this->fakeLocalDisk();
+        $disk = Storage::disk('local');
         $key = 'nested/lecture ; $HOME.mp4';
         $disk->put($key, 'source bytes');
         $this->fakeProbe(inspect: function (PendingProcess $process) use ($disk, $key) {
@@ -187,7 +197,11 @@ class NativeProbeTest extends TestCase
     public function it_preserves_unknown_values_and_handles_audio_only_media(): void
     {
         $this->fakeProbe(Process::result(output: '{"format":{},"streams":[{"codec_type":"audio","avg_frame_rate":"0/0"}]}'));
-        $metadata = FFMpeg::disk('local')->open(new File(__DIR__.'/src/guitar.m4a'))->probe();
+        $media = FFMpeg::open(new File(__DIR__.'/src/guitar.m4a'));
+        $media->export()->inspect();
+        Process::assertNothingRan();
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $metadata = $media->probe();
 
         $this->assertNull($metadata->duration());
         $this->assertNull($metadata->video());
@@ -331,7 +345,14 @@ class NativeProbeTest extends TestCase
         $this->fakeProbe();
         $upload = new UploadedFile(__DIR__.'/src/video.mp4', '../../outside.mp4', test: true);
 
-        $metadata = FFMpeg::disk('memory')->open($upload)->probe();
+        FFMpeg::disk('other');
+        $media = FFMpeg::open($upload, inputOptions: ['-probesize', '2048']);
+        $command = $media->export()->inspect();
+        $this->assertContains('2048', $command);
+        $this->assertStringNotContainsString('outside.mp4', json_encode($command));
+        Process::assertNothingRan();
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $metadata = $media->probe();
 
         $this->assertSame($upload->getPathname(), $metadata->get('format.filename'));
         $this->assertSame([], glob($this->root.'/workspaces/*'));
@@ -343,7 +364,7 @@ class NativeProbeTest extends TestCase
     {
         $this->expectException($exception);
 
-        FFMpeg::disk('local')->open($key);
+        FFMpeg::open($key);
     }
 
     public static function invalidKeys(): array
@@ -473,11 +494,12 @@ class NativeProbeTest extends TestCase
         }
 
         config(['laravel-ffmpeg.ffprobe.binaries' => $binary]);
-        $this->fakeLocalVideoFile();
+        $this->addTestFile('video.mp4');
         $this->addTestFile('video.mp4', 'memory');
 
         foreach (['local', 'memory'] as $disk) {
-            $metadata = FFMpeg::disk($disk)->open('video.mp4')->probe();
+            config(['filesystems.default' => $disk]);
+            $metadata = FFMpeg::open('video.mp4')->probe();
             $this->assertEqualsWithDelta(4.72, $metadata->duration(), 0.001);
             $this->assertSame(1920, $metadata->video()->width());
             $this->assertSame(1080, $metadata->video()->height());
