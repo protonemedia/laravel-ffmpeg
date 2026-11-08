@@ -15,15 +15,15 @@ use ProtoneMedia\LaravelFFMpeg\PendingExport;
 
 final class WebVideo
 {
-	public const VERSION = 'web-v2';
+    public const VERSION = 'web-v2';
 
-	public static function apply(PendingExport $export): PendingExport
-	{
-		return $export->video('libx264', crf: 23, preset: 'medium')
-			->audio('aac', bitrate: '128k')
-			->resize(width: 640)
-			->outputOptions(['-movflags', '+faststart']);
-	}
+    public static function apply(PendingExport $export): PendingExport
+    {
+        return $export->video('libx264', crf: 23, preset: 'medium')
+            ->audio('aac', bitrate: '128k')
+            ->resize(width: 640)
+            ->outputOptions(['-movflags', '+faststart']);
+    }
 }
 ```
 
@@ -35,25 +35,25 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 // Synchronous request, command, or application job.
 $result = WebVideo::apply(
-	FFMpeg::disk('media')
-		->open('sources/revision-1.mp4')
-		->export()
-		->toDisk('derived')
+    FFMpeg::disk('media')
+        ->open('sources/revision-1.mp4')
+        ->export()
+        ->toDisk('derived')
 )
-	->save('conversions/sync-attempt/web.mp4');
+    ->save('conversions/sync-attempt/web.mp4');
 $inventory = $result->files()
-	->map
-	->toArray()
-	->all();
+    ->map
+    ->toArray()
+    ->all();
 
 // A separate, fresh queued conversion.
 $queued = WebVideo::apply(
-	FFMpeg::disk('media')
-		->open('sources/revision-1.mp4')
-		->export()
-		->toDisk('derived')
+    FFMpeg::disk('media')
+        ->open('sources/revision-1.mp4')
+        ->export()
+        ->toDisk('derived')
 )
-	->queued(queue: 'media');
+    ->queued(queue: 'media');
 $exportId = $queued->id;
 $job = $queued->job("conversions/{$exportId}/web.mp4");
 // Persist the request and its identity before dispatching $job. See below.
@@ -110,27 +110,27 @@ For example, use this structure in an application job that implements `ShouldQue
 ```php
 public function handle(): void
 {
-	$request = \App\Models\ConversionRequest::findOrFail($this->requestId);
-	$media = \Plank\Mediable\Media::findOrFail($request->media_id);
-	// Resolve only trusted application fields, captured when requesting conversion.
-	$result = \App\Media\WebVideo::apply(
-		\ProtoneMedia\LaravelFFMpeg\Support\FFMpeg::disk($request->source_disk)
-			->open($request->source_path)
-			->export()
-			->toDisk($request->output_disk)
-	)
-		->save("conversions/{$request->export_id}/web.mp4");
+    $request = \App\Models\ConversionRequest::findOrFail($this->requestId);
+    $media = \Plank\Mediable\Media::findOrFail($request->media_id);
+    // Resolve only trusted application fields, captured when requesting conversion.
+    $result = \App\Media\WebVideo::apply(
+        \ProtoneMedia\LaravelFFMpeg\Support\FFMpeg::disk($request->source_disk)
+            ->open($request->source_path)
+            ->export()
+            ->toDisk($request->output_disk)
+    )
+        ->save("conversions/{$request->export_id}/web.mp4");
 
-	app(\App\Media\ConversionInventory::class)
-		->retain(
-			new \ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted(
-				$request->export_id,
-				$result->files()
-					->map
-					->toArray()
-					->all(),
-			),
-		);
+    app(\App\Media\ConversionInventory::class)
+        ->retain(
+            new \ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted(
+                $request->export_id,
+                $result->files()
+                    ->map
+                    ->toArray()
+                    ->all(),
+            ),
+        );
 }
 ```
 
