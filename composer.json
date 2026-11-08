@@ -33,10 +33,10 @@
         "league/flysystem-memory": "^3.10",
         "mockery/mockery": "^1.4.4",
         "nesbot/carbon": "^2.66|^3.0",
-        "orchestra/testbench": "^10.0|^11.0",
+        "orchestra/testbench": "^10.8|^11.0",
         "phpunit/phpunit": "^10.4|^11.5.3|^12.5.12",
         "spatie/image": "^2.2|^3.3",
-        "spatie/phpunit-snapshot-assertions": "^5.0"
+        "spatie/phpunit-snapshot-assertions": "^5.2"
     },
     "autoload": {
         "psr-4": {
