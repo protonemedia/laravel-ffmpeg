@@ -5,7 +5,7 @@
 [![Tests](https://github.com/protonemedia/laravel-ffmpeg/actions/workflows/run-tests.yml/badge.svg?branch=9.x&event=push)](https://github.com/protonemedia/laravel-ffmpeg/actions/workflows/run-tests.yml?query=branch%3A9.x)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
-Encode video, process audio, and publish adaptive streams with Laravel's Process, Storage, Http, and Queue APIs.
+Laravel FFmpeg provides a fluent API for encoding video, processing audio, and publishing adaptive streams. It uses Laravel's Process, Storage, Http, and Queue APIs, so you can work with your application's existing disks and queue connections.
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -18,14 +18,10 @@ $result = FFMpeg::open('lessons/original.mp4')
 	->save('lessons/720p.mp4');
 ```
 
-Work with the disks you already use. Configure an export once, run it immediately or dispatch it to a queue, and retain an inventory of the files it produces.
+You can run an export immediately or [dispatch it to a queue](#queue-conversions). Each completed export provides an inventory of its generated files, including the playlists, segments, and keys needed for streaming playback.
 
-- [Encode and transform media](#encode-and-copy) with explicit codecs, filters, stream selection, and metadata.
-- [Extract frames and storyboards](#frames-timelapse-and-storyboards), generate waveforms, and normalize audio.
-- [Publish HLS and DASH](#streaming), including alternate tracks, shared segments, and protected HLS playback.
-- [Run conversions on Laravel queues](#queue-conversions) with progress events, cancellation, chains, and batches.
-
-> **Version 9 is in development.** These examples follow the `9.x` branch, not a published release. Version 9 replaces PHP-FFMpeg and removes its format/filter objects. For existing applications, start with the [upgrade guide](UPGRADING.md).
+> [!IMPORTANT]
+> Version 9 is in development. These examples follow the `9.x` branch, not a published release. Version 9 replaces PHP-FFMpeg and removes its format and filter objects. If you are upgrading an existing application, consult the [upgrade guide](UPGRADING.md).
 
 ## Documentation
 
@@ -41,18 +37,25 @@ Work with the disks you already use. Configure an export once, run it immediatel
   - [Geometry and filters](#geometry-and-filters)
   - [Frames and storyboards](#frames-timelapse-and-storyboards)
   - [Playback speed and GIFs](#change-playback-speed-and-make-gifs)
-  - [Audio mixing](#mix-audio-and-add-background-music), [waveform data](#waveform-peaks-data), and [loudness](#two-pass-loudness-normalization)
-  - [Watermarks](#add-a-watermark), [concatenation](#join-clips), and [multiple outputs](#compose-multiple-inputs-and-outputs)
+  - [Audio mixing](#mix-audio-and-add-background-music)
+  - [Waveform data](#waveform-peaks-data)
+  - [Loudness normalization](#two-pass-loudness-normalization)
+  - [Watermarks](#add-a-watermark)
+  - [Concatenation](#join-clips)
+  - [Multiple outputs](#compose-multiple-inputs-and-outputs)
 - [Streaming](#streaming)
   - [Adaptive HLS and encryption](#adaptive-hls-and-encryption)
   - [fMP4 and alternate tracks](#fmp4-and-alternate-hls-groups)
   - [DASH and shared segments](#dash-and-shared-hls-segments)
   - [Continuous HLS](#publish-continuous-hls)
-  - [Protected playback](#serve-protected-hls-with-laravel) and [custom responses](#customize-raw-hls-responses)
+  - [Protected playback](#serve-protected-hls-with-laravel)
+  - [Custom playlist responses](#customize-raw-hls-responses)
 - [Running exports](#running-exports)
   - [Progress, results, and failures](#progress-results-and-failures)
   - [Execution limits](#limit-an-operations-execution-time)
-  - [Queues](#queue-conversions), [parallel HLS](#run-independent-hls-conversions-in-parallel), and [completion inventories](#retain-queue-results)
+  - [Queues](#queue-conversions)
+  - [Parallel HLS](#run-independent-hls-conversions-in-parallel)
+  - [Completion inventories](#retain-queue-results)
 - [Deployment and development](#deployment-and-development)
 - [Application integration recipes](docs/integrations.md)
 - [API reference and acceptance contract](REWRITE.md)
@@ -73,13 +76,17 @@ Install the development branch with Composer:
 composer require pbmedia/laravel-ffmpeg:9.x-dev
 ```
 
-Laravel discovers the service provider and facade automatically. Publish the configuration to customize binary paths, timeouts, and queue defaults:
+Laravel discovers the service provider and facade automatically.
+
+#### Publishing the configuration
+
+To customize binary paths, timeouts, or queue defaults, publish the package's configuration file using the `vendor:publish` Artisan command:
 
 ```bash
 php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider" --tag=config
 ```
 
-The configuration lives at `config/laravel-ffmpeg.php`. Binary validation is lazy, so package discovery and configuration caching do not launch FFmpeg.
+The published configuration file is located at `config/laravel-ffmpeg.php`. Package discovery and configuration caching do not launch FFmpeg. The package validates the binaries when you use them.
 
 Set the executable paths and an existing, writable temporary directory in your environment:
 
@@ -117,12 +124,16 @@ A launch failure means the selected executable could not start. A version failur
 
 #### Inspect capabilities
 
+Before processing media, you can use the `ffmpeg:doctor` Artisan command to check the features available in your FFmpeg installation:
+
 ```bash
 php artisan ffmpeg:doctor --encoder=libx264 --muxer=dash --filter=scale
 php artisan ffmpeg:doctor --json
 ```
 
 `ffmpeg:doctor` checks matching binary versions, compiled-in support, and an actual temporary-workspace write. Missing requirements produce a nonzero exit code. Repeat `--encoder`, `--muxer`, `--filter`, `--protocol`, `--bsf`, or `--hwaccel` to check deployment requirements.
+
+You can also inspect capabilities from your application using the `capabilities` method:
 
 ```php
 $capabilities = FFMpeg::capabilities();
@@ -139,7 +150,7 @@ The examples below use the `FFMpeg` facade. Inputs and destinations are relative
 
 ### Encode and copy
 
-Open a source, configure an export, and save it to a destination disk:
+To encode a video, open the source and call the `export` method. You can then configure the video and audio codecs before saving the result to a destination disk:
 
 ```php
 use Illuminate\Support\Facades\Storage;
@@ -154,14 +165,24 @@ $result = $media->export()
 	->resize(width: 1280)
 	->toDisk('videos', ['visibility' => 'private'])
 	->save('lesson.mp4');
+```
 
+#### Copying streams
+
+If you only need to change the container, pass `copy` to the `video` and `audio` methods. This copies the encoded streams without re-encoding them:
+
+```php
 $media->export()
 	->video('copy')
 	->audio('copy')
 	->save('lesson.mkv');
 ```
 
-Each operation has independent settings. Bitrates accept positive integers in bits per second, such as `2500000`, or unit strings such as `'2500k'`. Floats and unitless strings such as `'2500000'` are invalid. CRF and target bitrate cannot combine. Copies reject filters and accurate clipping. A compatible container is still required.
+Each call to `export` creates an independent configuration. Stream copying requires a compatible output container and cannot be combined with filters or accurate clipping.
+
+#### Configuring video quality
+
+The `crf` argument controls constant-quality encoding. To target a bitrate instead, pass a positive integer in bits per second, such as `2500000`, or a unit string such as `'2500k'`. Floats and unitless strings such as `'2500000'` are invalid. You cannot combine CRF and a target bitrate.
 
 #### Two-pass encoding and clipping
 
@@ -191,7 +212,7 @@ Two-pass video encoding owns private statistics for each output. Keyframe cuts c
 
 ### Inputs and probing
 
-Open a Storage key, an uploaded file, a local file object, or an HTTP source. Probe the media before choosing streams or output settings:
+The `open` method accepts a Storage path, an uploaded file, or a local file object. To open an HTTP source, use the `openUrl` method:
 
 ```php
 $media = FFMpeg::open('lesson.mp4'); // Current filesystems.default.
@@ -202,7 +223,20 @@ $media = FFMpeg::open(new \Illuminate\Http\File('/absolute/path/lesson.mp4'));
 
 $public = FFMpeg::openUrl('https://cdn.example.com/lesson.mp4');
 $private = FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer '.$token], download: true);
+```
 
+`FFMpeg::open($key)` resolves string keys against the current `filesystems.default`. Use `FFMpeg::disk('uploads')->open($key)` to select another Storage disk. A `File` or `UploadedFile` uses the supplied local file, not a Storage key. Existing descriptors retain their disk when configuration changes.
+
+Storage paths are disk-relative keys, not URLs or local absolute paths. Descriptor construction and `inspect()` do no I/O. Local inputs can be read in place; other filesystems stream into a private operation workspace. Scoped and read-only input adapters retain their boundaries. Read-only destinations fail publication.
+
+> [!WARNING]
+> Authenticated HTTP inputs require `download: true`. Downloads stream to private disk with deadlines and reject redirects. Direct public or signed URLs enter FFmpeg arguments. Never put reusable credentials in them. HTTPS verification stays enabled. See the [HTTP input reference](REWRITE.md#http-inputs) for transport details.
+
+#### Inspecting media
+
+The `probe` method returns metadata about the source, including its duration, streams, and chapters:
+
+```php
 $metadata = $media->probe();
 $metadata->duration(); // Nullable seconds.
 $metadata->video()
@@ -213,11 +247,9 @@ $metadata->get('format.tags.title');
 $metadata->toArray();
 ```
 
-`FFMpeg::open($key)` resolves string keys against the current `filesystems.default`. Use `FFMpeg::disk('uploads')->open($key)` to select another Storage disk. A `File` or `UploadedFile` uses the supplied local file, not a Storage key. Existing descriptors retain their disk when configuration changes.
+#### Caching metadata
 
-Storage paths are disk-relative keys, not URLs or local absolute paths. Descriptor construction and `inspect()` do no I/O. Local inputs can be read in place; other filesystems stream into a private operation workspace. Scoped and read-only input adapters retain their boundaries. Read-only destinations fail publication.
-
-Authenticated HTTP inputs require `download: true`. Downloads stream to private disk with deadlines and reject redirects. Direct public or signed URLs enter FFmpeg arguments; never put reusable credentials in them. HTTPS verification stays enabled. URL transport details are in the [reference](REWRITE.md#http-inputs).
+To cache a probe result, pass a Laravel cache repository, a versioned cache key, and a lifetime in seconds to the `probeCached` method:
 
 ```php
 use Illuminate\Support\Facades\Cache;
@@ -227,7 +259,15 @@ $metadata = $media->probeCached(
 	versionedKey: 'tenant:42:lesson:7:object-version:abc123',
 	ttl: 600,
 );
+```
 
+Change `versionedKey` whenever the source bytes or object version changes. Your application controls cache freshness, tenant isolation, access, and eviction. A cache hit does not check Storage or reauthorize the source. Protect cached metadata as source data. Ordinary exports still probe their staged inputs.
+
+#### Hardware acceleration
+
+To configure hardware decoding, pass input options when opening the source. Select the corresponding encoder on the export:
+
+```php
 $gpuInput = FFMpeg::disk('uploads')
 	->open('lesson.mp4', inputOptions: [
 		'-hwaccel', 'cuda', '-hwaccel_device', '0', '-hwaccel_output_format', 'cuda',
@@ -236,7 +276,15 @@ $gpuInput->export()
 	->video('h264_nvenc')
 	->audio('copy')
 	->save('gpu.mp4');
+```
 
+GPU flags configure input options. They do not select hardware automatically or provide a CPU fallback. This example requires a CUDA-capable FFmpeg build, an NVIDIA device, and a compatible decoder and encoder. Hardware execution has not been validated in this checkout. Filters that consume CPU frames can require an explicit hardware download and format conversion.
+
+#### Capturing camera snapshots
+
+Use the `openRtsp` method to capture a frame from a trusted camera URL:
+
+```php
 FFMpeg::openRtsp($cameraUrl, transport: 'tcp', timeout: 10)
 	->frame()
 	->resize(width: 640)
@@ -244,13 +292,11 @@ FFMpeg::openRtsp($cameraUrl, transport: 'tcp', timeout: 10)
 	->save('camera.jpg');
 ```
 
-`probeCached()` stores metadata in the Laravel cache repository you supply. Change `versionedKey` whenever source bytes or object versions change. Your application owns freshness, tenant isolation, cache access, and eviction. A cache hit does not check Storage or reauthorize the source. Protect cached metadata as source data. Ordinary exports still probe their staged inputs.
-
-GPU flags are validated input options, not automatic hardware selection or a CPU fallback. The example requires a CUDA-capable FFmpeg build, NVIDIA device, and compatible decoder and encoder. Hardware execution has not been validated in this checkout. Filters that consume CPU frames can require an explicit hardware download and format conversion.
-
 `openRtsp()` returns an `RtspCamera` for bounded snapshots, not a live-export descriptor. `frame()` captures one frame into a private PNG before ordinary image processing and publication. TCP and UDP fixture captures pass. Transport accepts `tcp` or `udp`; timeout is positive and at most 300 seconds. Camera URLs are trusted application configuration. Restrict reachable hosts and protect credentials, which can appear in process arguments. See the [input reference](REWRITE.md#cached-probing-and-hardware-inputs).
 
 #### Query frames and packets
+
+When you need frame or packet data rather than general metadata, use the `probeQuery` method. You can select streams, limit the interval, and request specific fields:
 
 ```php
 $query = $media->probeQuery()
@@ -342,6 +388,8 @@ $media->export()
 `videoStream()` addresses zero-based output video order after mapping, not the input stream index or overall output order. Each track can be configured once. Its codec, bitrate, CRF, and preset override type-wide `video()` settings. CRF and bitrate cannot combine, including inherited settings. Per-track settings do not support two-pass encoding. The WebVTT recipe selects a text subtitle track explicitly; it does not recognize speech or convert bitmap subtitles to text.
 
 #### Configure encoders and individual audio tracks
+
+To configure individual output audio tracks, use the `audioStream` method. The following example maps the source's second audio track first, then applies separate settings to each output track:
 
 ```php
 $media->export()
@@ -485,6 +533,8 @@ Waveform `colors` accepts a string or a nonempty list of strings. One string mea
 
 ### Change playback speed and make GIFs
 
+The `speed` method changes video timing and audio tempo without changing audio pitch. Pass a factor greater than one to speed up playback, or a factor below one to slow it down:
+
 ```php
 $media->speed(2)
 	->video('libx264')
@@ -494,7 +544,11 @@ $media->speed(0.5)
 	->video('libx264')
 	->audio('aac')
 	->save('half-speed.mp4');
+```
 
+To create an animated preview, use the `gif` method. The following example converts a three-second clip into a looping GIF:
+
+```php
 $media->gif(width: 480, frameRate: 12, loop: 0)
 	->clip(4, duration: 3)
 	->toDisk('images')
@@ -506,6 +560,8 @@ $media->gif(width: 480, frameRate: 12, loop: 0)
 `gif()` selects the first motion-video stream and omits audio. Width defaults to 480 and frame rate to 12. `loop: 0` loops forever; `-1` disables looping. Accurate `clip()` runs before palette generation. The helper writes a private lossless intermediate, generates a palette, then encodes the GIF. This avoids buffering the entire clip in memory, but adds disk use and processing passes. Keep previews short and small. GIF output rejects custom maps, graphs, additional inputs or outputs, audio settings, and encoder overrides.
 
 ### Mix audio and add background music
+
+Use the `backgroundMusic` method to add a quieter, looping audio track to a video. You can delay the music with the `at` method or disable looping with the `loop` argument:
 
 ```php
 $video = FFMpeg::open($request->file('video'));
@@ -536,11 +592,15 @@ $video->mixAudio($music, volume: 0.4, originalVolume: 0.8, normalize: true)
 
 `mixAudio()` combines the first audio stream of each input and plays the added track once by default. Call `loopAudio()` to repeat that track. `backgroundMusic($music, volume: 0.2, loop: true)` is shorthand with quieter, looping music and unchanged original volume.
 
+#### Timing and duration
+
 The primary container's duration sets the output length. A short nonlooping track ends in silence; looping repeats it until the primary ends. Longer added audio is trimmed. A silent video receives only the added music. Audio-only inputs also work, including WAV files.
 
 `at($seconds)` delays only the added track, after resetting that track to its first decoded sample. The default is zero. Offsets must be finite and nonnegative and round to the nearest 48 kHz sample. Original timing and gains do not change. A loop starts at the offset, then repeats continuously without repeating the initial silence. An offset at or beyond the primary duration contributes no audio and does not extend the output. Calling `at()` again replaces the offset.
 
 The mix is stereo at 48000 Hz and requires audio encoding. Video copy is allowed unless you add video filters. `volume()`, `audioFilter()`, and audio fades run after mixing. The added track starts at its first decoded sample after any `at()` delay; original audio retains its offset relative to video.
+
+#### Mixing levels
 
 Gains are finite nonnegative amplitude multipliers. The default `normalize: false` adds the signals and can clip. With original audio present, `normalize: true` divides both weighted branches equally by two. Silence padding keeps the gain constant when either track ends. This is not loudness normalization.
 
@@ -574,6 +634,8 @@ Separate channels are the default. `mono()` mixes channels with equal weights be
 
 ### Two-pass loudness normalization
 
+To normalize audio to a measured loudness target, use the `normalizeLoudness` method. You can inspect the measurements and the normalization mode on the returned result:
+
 ```php
 $result = $media->normalizeLoudness(integrated: -18, truePeak: -2, range: 7,
 	linear: true, sampleRate: 48000, audio: 1)
@@ -592,6 +654,8 @@ $result->actualMode(); // FFmpeg can fall back to dynamic normalization.
 Normalization selects one audio track and produces one audio-only output. It decodes the trimmed, preprocessed samples once into a private lossless intermediate, then measures and normalizes those same samples. Channel processing uses `audioFilter()`; `sampleRate:` owns the output rate. Silence remains silence, with nonfinite statistics represented by null. Graphs, additional inputs or outputs, stream copy, and video settings are rejected.
 
 ### Add a watermark
+
+The `watermark` method overlays an image on your video. Open the image on its source disk, then choose its position, size, and opacity:
 
 ```php
 $logo = FFMpeg::disk('assets')
@@ -621,6 +685,8 @@ $logo = FFMpeg::disk('assets')
 ```
 
 ### Join clips
+
+Use `concatTranscoded` to join clips with different dimensions, frame rates, or audio layouts. If the streams are already compatible, use `concat` with stream copying instead:
 
 ```php
 $first = FFMpeg::disk('clips')
@@ -675,6 +741,8 @@ $media->export()
 ```
 
 `lut3d(Media $look)` uses private staging and preserves filter call order. It rejects media input options on the LUT descriptor. Each output runs its filters independently. There is no shared LUT or automatic `split` optimization. To process the LUT once before splitting, keep the raw `resource()` and `filterComplex()` graph shown in the [composition reference](REWRITE.md#composition-and-resources).
+
+#### Custom filter graphs
 
 Use `addInput()` and `filterComplex()` when you need custom branching, stream selection, or an HLS watermark:
 
@@ -736,9 +804,20 @@ $result->files()
 	->where('role', 'hls-key');
 ```
 
-`playlistType('vod')` is the default. Use `playlistType('event')` for `EXT-X-PLAYLIST-TYPE:EVENT`, or `playlistType('live')` to omit the type tag. Both MPEG-TS and fMP4 retain every generated segment and end with `EXT-X-ENDLIST`. Exports still publish only after encoding and validation; these settings do not provide continuous streaming, sliding windows, or playback during encoding. Parallel queued composition and `mergeHls()` require VOD. A single queued export supports all three types.
+#### Playlist types
+
+`playlistType('vod')` is the default. Use `playlistType('event')` for `EXT-X-PLAYLIST-TYPE:EVENT`, or `playlistType('live')` to omit the type tag. Both MPEG-TS and fMP4 retain every generated segment and end with `EXT-X-ENDLIST`. Parallel queued composition and `mergeHls()` require VOD. A single queued export supports all three types.
+
+> [!NOTE]
+> Playlist types do not enable playback during encoding. These exports publish only after encoding and validation. For a sliding playlist that updates while the encoder runs, use [continuous HLS](#publish-continuous-hls).
+
+#### HEVC and hardware encoders
 
 For HEVC HLS, select `video('libx265', crf: 28, preset: 'fast')` on the export or a variant. Add `outputOptions(['-tag:v', 'hvc1'])` so FFmpeg advertises the HEVC codec in the master. MPEG-TS and fMP4 encode and decode with this configuration. Check player support separately. Hardware encoders use the same `video()` API, for example `video('hevc_nvenc')`, with input-scoped decoding options when needed. There is no automatic hardware selection or software fallback. The deployed binary, drivers, device, and filter graph must support the selected path.
+
+#### Watermarks and variant selection
+
+HLS variants support static or animated watermarks. After encoding, use the `playbackForVariants` method to retain a playback inventory for only the variants a viewer may access:
 
 ```php
 $animated = FFMpeg::disk('assets')
@@ -760,9 +839,15 @@ HLS watermark inputs accept static PNG and JPEG or animated GIF. `['-ignore_loop
 
 To combine completed presentations for the same timeline without copying media, see [`PendingHlsMerge`](REWRITE.md#compose-completed-hls-presentations). It requires compatible completed v9 inventories and publishes only a new version-suffixed master. The result owns that master and borrows existing media. Keep the source inventories and application reference counts before deleting any shared files.
 
+#### Encryption and publication
+
 MPEG-TS is the default packaging. Custom paths are disk-relative, with playlist references relative to each containing playlist. Keys live on an explicitly selected private disk and publish before media. A supplied `key:` must contain 16 raw bytes and cannot combine with rotation. Generated keys are fresh for each save; rotation groups share keys across variants. Every segment has an independent random IV.
 
 Your application authorizes key requests and serves the 16 raw bytes. AES-128 is not DRM. OpenSSL is required for encryption. Segments precede playlists, with the master last. All expected artifacts validate before publication, but writes are not transactional.
+
+#### Customizing playlists
+
+The `playlistUsing` method accepts a callback that can add comments and supported non-resource tags to a generated playlist:
 
 ```php
 $media->hls()
@@ -774,6 +859,8 @@ $media->hls()
 Playlist hooks can add comments and supported non-resource tags. They cannot remove or change generated timing, references, stream attributes, or encryption directives.
 
 ### fMP4 and alternate HLS groups
+
+Call the `fmp4` method to package HLS as fragmented MP4. You can define shared audio and subtitle groups, then reference those groups from each variant:
 
 ```php
 $result = $media->hls(segmentDuration: 6)
@@ -816,6 +903,8 @@ fMP4 owns one initialization file per audio/video playlist and uses `.m4s` segme
 
 ### DASH and shared HLS segments
 
+The `dash` method creates a DASH presentation. Define adaptation sets for video and audio, then add representations to each set. To publish HLS playlists that reuse the same media segments, call `sharedHls`:
+
 ```php
 $result = $media->dash(segmentDuration: 2)
 	->adaptationSet('picture', 'video')
@@ -847,6 +936,8 @@ One encoding invocation creates the representations. With `sharedHls()`, both fo
 
 ### Publish continuous HLS
 
+Use the `liveHls` method to publish a sliding HLS playlist while FFmpeg is running. Configure the destination, reconnect policy, and session timeout before calling `run`:
+
 ```php
 $session = FFMpeg::liveHls($trustedCameraUrl, segmentDuration: 2, window: 6)
 	->toDisk('videos')
@@ -869,11 +960,18 @@ $result = $media->liveHls(segmentDuration: 2, window: 6)
 
 `stop()` or `cancelWhen()` returns `cancelled`. An explicit session timeout returns `timed_out`. Both preserve the last partial playlist without `ENDLIST`. Clean EOF returns `completed` with `ENDLIST`. `retry()` has a finite reconnect budget. Set `reconnectOnEof: true` to reconnect clean EOF as well. Encoder restarts inside one session retain monotonic sequence numbers and discontinuities. Storage and exhausted-source failures throw sanitized `MediaException` with a bounded published inventory. Global process deadlines remain hard failure limits.
 
-Use a fresh empty namespace for every session. Your application must supervise the worker and guarantee one writer per namespace. Storage must support atomic replacement of individual objects. Restarting a PHP worker cannot resume a prior session. This builder has no adaptive master playlist, fMP4, encryption, or low-latency HLS support.
+> [!WARNING]
+> Use a fresh empty namespace for every session. Your application must supervise the worker and guarantee one writer per namespace. Storage must support atomic replacement of individual objects. Restarting a PHP worker cannot resume a prior session.
+
+Continuous HLS does not support adaptive master playlists, fMP4, encryption, or low-latency HLS.
 
 Live URLs accept trusted HTTP, HTTPS, or RTSP sources without user information. Restrict reachable hosts in your application, because URL validation does not prevent SSRF. `openRtsp()` remains the separate bounded-snapshot API. Local realtime ingestion and HTTP ingestion have native acceptance tests. Successful RTSP live ingestion still requires deployment testing.
 
 ### Serve protected HLS with Laravel
+
+The `Hls` facade registers signed playback routes for your application. Playback inventories identify the files a route can serve, while your authorization callback determines who can access them.
+
+#### Storing the playback inventory
 
 Configure named private Storage disks for media and keys. After publishing, persist the root result's playback inventory on the lesson for the full presentation:
 
@@ -891,6 +989,8 @@ $lesson->hls_playback = $result->playback()
 	->toArray();
 $lesson->save();
 ```
+
+#### Registering playback routes
 
 Register the definition and explicit model binding in your service provider's `boot()` method:
 
@@ -919,6 +1019,8 @@ use ProtoneMedia\LaravelFFMpeg\Support\Hls;
 Hls::routes('/lessons/{lesson}/hls', name: 'lessons.hls', playback: 'lesson');
 ```
 
+#### Generating playback URLs
+
 Issue an entry URL from an authorized controller:
 
 ```php
@@ -933,7 +1035,10 @@ Every child playlist, segment, init file, and key gets a signed URL with the ent
 
 For single-variant playback, `$result->variant('360p')->playback()` also retains the private-key references it needs internally. `variant('360p')->files()` still excludes shared key files. Prefer the root result when persisting the full presentation.
 
-Keep the inventory server-side. Never restore it from request data or serialize it into a public lesson response. Playback requires named disks, not anonymous filesystem instances. Keep published media and keys private and immutable. Publish replacement exports to new paths and replace the stored inventory instead of changing files under an active inventory.
+> [!WARNING]
+> Keep the inventory server-side. Never restore it from request data or serialize it into a public lesson response. Keep published media and keys private and immutable. Publish replacement exports to new paths and replace the stored inventory instead of changing files under an active inventory.
+
+Playback requires named disks, not anonymous filesystem instances.
 
 If Sanctum is installed, replace middleware with `middleware: ['api', 'auth:sanctum']`. For deliberate bearer-URL playback, use `middleware: ['web']` only when URL issuance stays behind an authorized endpoint. In that mode, URLs are bearer credentials, not proof of a signed-in user. There is no automatic global authentication. The definition's mandatory `authorize` callback must enforce your intended access policy on every request, including requests without a session.
 
@@ -977,6 +1082,8 @@ Synchronous exports return generated-file inventories. Queued exports return Lar
 
 ### Progress, results, and failures
 
+To receive progress updates for an export, pass a callback to the `onProgress` method. When the export completes, the result provides access to its generated files and redacted process summaries:
+
 ```php
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -1014,7 +1121,9 @@ $analysis->throw(); // Opt in to throwing on a nonzero analysis exit.
 
 `save()` throws on encoding, validation, or publication failure. Analysis-only requests retain inspectable exit status. Lifecycle events are `ExportStarting`, `ExportProgress`, `ExportCompleted`, `ExportFailed`, and `ExportCancelled`. Completion follows publication and workspace cleanup. Progress callback and synchronous progress-listener exceptions propagate unchanged.
 
-Listen globally without configuring every export:
+#### Listening for export events
+
+To observe exports without configuring each builder, register a listener for the `ExportProgress` event:
 
 ```php
 use Illuminate\Support\Facades\Event;
@@ -1032,7 +1141,13 @@ Progress events cover staging, probing, encoding, validation, and publication, i
 
 Set `FFMPEG_ENABLE_EVENTS=false` or `laravel-ffmpeg.enable_events` to `false` to suppress all package export events, including `QueuedExportCompleted`. Per-export callbacks, cancellation checks, publication, and Laravel queue chains still run. Keep events enabled if your application relies on listeners to retain completion inventories.
 
+#### Handling partial publication
+
 Failures report successfully published siblings; they do not delete them. Existing objects may already have been replaced. Temporary workspaces and pass statistics are operation-owned and cleaned on success, failure, or cancellation. No global cleanup call is needed.
+
+#### Deleting generated files
+
+After checking authorization and references from other presentations, you can delete the files an export owns using its generated-file inventory:
 
 ```php
 // Only after application authorization and checks for other users of these files:
@@ -1061,6 +1176,8 @@ FFMpeg::disk('streams')
 Resolvers are ignored during deletion. External or root-relative references and invalid playlists fail before deletion. A refused path aborts the whole approval phase, protecting shared files. This operation cannot discover keys stored on another disk. Adapter failures throw and can leave partial deletion; authorization, concurrent-access control, reference tracking, and retry policy remain application responsibilities. Prefer the retained root inventory when it is available.
 
 #### Limit an operation's execution time
+
+Use the `timeout` method to limit the total execution time of an operation. Use `idleTimeout` to limit how long an individual child process can run without producing output:
 
 ```php
 $result = $media->export()
@@ -1100,11 +1217,18 @@ $pending->save('lessons/encoded.mp4')
 
 Inputs, resources, and destinations must use named disks that every worker can access. Store uploads first. `File`, `UploadedFile`, filesystem objects, and open streams are rejected before dispatch. Worker callbacks must be static closures with scalar or array captures. Resolve services inside the callback rather than capturing a request or service instance. Jobs implement `ShouldBeEncrypted`, so workers need the application's encryption key.
 
-For retries, set the queue connection's `retry_after` or visibility timeout above the job timeout. The default job timeout is the operation's `timeout()`, or the configured FFmpeg timeout, plus 30 seconds. Without either limit it is zero, which leaves the worker limit to Laravel. Set a larger job timeout for operations with several process invocations when no cumulative operation budget is set. Retries restart a conversion, not a media checkpoint. Laravel queues provide at-least-once delivery, not exactly-once publication.
+#### Timeouts and retries
+
+The default job timeout is the operation's `timeout()`, or the configured FFmpeg timeout, plus 30 seconds. Without either limit it is zero, which leaves the worker limit to Laravel. Set a larger job timeout for operations with several process invocations when no cumulative operation budget is set.
+
+> [!WARNING]
+> Set the queue connection's `retry_after` or visibility timeout above the job timeout. Retries restart a conversion, not a media checkpoint. Laravel queues provide at-least-once delivery, not exactly-once publication.
 
 The published `queue` configuration can set `connection`, `queue`, `tries`, `backoff`, and `timeout` defaults. Explicit `queued(connection:, queue:)` values take precedence over those defaults. `configureJob()` runs last, including for parallel HLS parts and the finalizer. Operation deadlines are captured in the queued plan and start in the worker, not while the job waits.
 
 A hard worker kill cannot run PHP cleanup and can leave a private workspace behind. Use an application-managed retention policy for stale workspaces, without deleting workspaces used by active jobs. Retry recovery does not reclaim an earlier attempt's workspace. For concurrent workers using SQLite batch metadata, configure WAL and a busy timeout, and set `transaction_mode` to `'IMMEDIATE'` to avoid deferred read-to-write transaction upgrades. Test the batch database configuration used by your deployment.
+
+#### Job chains and batches
 
 Use `job()` instead of `save()` to build a job without dispatching it. Ordinary export jobs work with Laravel chains and batches:
 
@@ -1128,6 +1252,8 @@ Bus::chain([$job, new \App\Jobs\NotifyLessonReady($lessonId)])
 
 #### Run independent HLS conversions in parallel
 
+To encode independent HLS variants on separate workers, pass `parallel: true` to the `queued` method:
+
 ```php
 FFMpeg::disk('uploads')
 	->open('lesson.mp4')
@@ -1150,6 +1276,8 @@ Each group publishes under `laravel-ffmpeg/queued/{exportId}/parts/` on the dest
 Parallel exports reject custom playlist callbacks, complex graphs, and unreferenced alternate groups. Use one queued export for those operations. Compose a parallel workflow with `Bus::chain()`, not inside another `Bus::batch()`. `configureJob()` applies to the coordinator, conversions, and finalizer. Add downstream jobs through `save()->chain()` or `Bus::chain()`, not inside that callback. Keep batch records until finalization finishes.
 
 #### Retain queue results
+
+Queued exports deliver their generated-file and playback inventories through the `QueuedExportCompleted` event. Register a listener to persist these inventories in your application:
 
 ```php
 use Illuminate\Support\Facades\Event;
@@ -1180,6 +1308,8 @@ Configuration is published as `config/laravel-ffmpeg.php`. Total and idle deadli
 Use `inspect()` for pure argument inspection, `globalOptions()`, `outputOptions()`, and `inputOptions:` for supported scoped options. Reserved filenames, binaries, progress transport, and statistics paths cannot be overridden. There is no driver forwarding or arbitrary before-save command mutation.
 
 ### Testing and development
+
+To prepare a development environment and run the test suite, use the repository's setup script and PHPUnit:
 
 ```bash
 .agents/setup
