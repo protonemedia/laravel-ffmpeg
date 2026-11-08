@@ -6,7 +6,9 @@ use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Execution\HlsEncryption;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use SensitiveParameter;
 
 class PendingHlsExport extends PendingExport
 {
@@ -19,6 +21,8 @@ class PendingHlsExport extends PendingExport
     private array $variantFiles = [];
 
     private ?Closure $playlistCallback = null;
+
+    private ?HlsEncryption $encryption = null;
 
     public function __construct(Media $media, string|Filesystem $disk, private readonly float $segmentDuration)
     {
@@ -69,6 +73,19 @@ class PendingHlsExport extends PendingExport
         return $this;
     }
 
+    public function encrypt(
+        string|Filesystem $keysDisk,
+        callable $keyUrl,
+        #[SensitiveParameter] ?string $key = null,
+        ?int $rotateEvery = null,
+        string $directory = 'hls-keys',
+    ): self {
+        $this->assertOutputMutable();
+        $this->encryption = new HlsEncryption($keysDisk, $keyUrl, $key, $rotateEvery, $directory);
+
+        return $this;
+    }
+
     public function output(string $path, callable $configure): self
     {
         throw new InvalidArgumentException('Configure HLS outputs with variant(), not output().');
@@ -114,8 +131,9 @@ class PendingHlsExport extends PendingExport
 
         $this->variantFiles = [];
         $result = parent::save($path);
+        [$keys, $files] = $result->files()->partition(fn ($file) => $file->role === 'hls-key');
 
-        return new HlsExportResult($result->files()->all(), $result->processes()->all(), $this->variantFiles);
+        return new HlsExportResult([...$files, ...$keys], $result->processes()->all(), $this->variantFiles);
     }
 
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
@@ -154,6 +172,7 @@ class PendingHlsExport extends PendingExport
     protected function artifacts(array $outputs, array $paths): array
     {
         $segments = $playlists = [];
+        $encryption = $this->encryption === null ? null : clone $this->encryption;
         $masterLines = ['#EXTM3U', '#EXT-X-VERSION:3'];
         foreach (array_slice($outputs, 0, -1) as $index => $output) {
             $lines = $this->playlistLines($paths[$index]);
@@ -169,10 +188,11 @@ class PendingHlsExport extends PendingExport
             $longest = 0;
             $count = $bytes = $total = $peak = 0;
             $owned = [];
+            $keyTags = [];
             $name = array_keys($this->variants)[$index];
             $pattern = $this->variantPaths[$name]['segments'] ?? dirname($output->destination()['path']).'/segment-%08d.ts';
             $directory = dirname($pattern);
-            foreach ($lines as &$line) {
+            foreach ($lines as $lineIndex => &$line) {
                 if (str_starts_with($line, '#EXTINF:')) {
                     if ($duration !== null || ! preg_match('/\A#EXTINF:([0-9]+(?:\.[0-9]+)?),\z/', $line, $match)
                         || ! is_finite($duration = (float) $match[1]) || $duration <= 0) {
@@ -190,6 +210,11 @@ class PendingHlsExport extends PendingExport
                     $local = dirname($paths[$index]).'/'.$filename;
                     $size = $this->validateArtifact($local, 'hls-segment');
                     $owned[] = $local;
+                    $encrypted = $encryption?->segment($local, $count, $output->destination()['path'], $name);
+                    if ($encrypted !== null) {
+                        $keyTags[$lineIndex] = $encrypted['tag'];
+                        $size = $this->validateArtifact($encrypted['path'], 'hls-segment');
+                    }
                     $bytes += $size;
                     $total += $duration;
                     $peak = max($peak, (int) ceil(8 * $size / $duration));
@@ -198,7 +223,8 @@ class PendingHlsExport extends PendingExport
                     $destination['path'] = ($directory === '.' ? '' : $directory.'/').sprintf(basename($pattern), $count++);
                     $line = $this->relativeUrl($destination['path'], $output->destination()['path']);
                     $this->variantFiles[$name][$destination['path']] = true;
-                    $segments[] = ['path' => $local, 'output' => $index, 'role' => 'hls-segment', 'destination' => $destination, 'probe' => $count === 1];
+                    $segments[] = ['path' => $encrypted['path'] ?? $local, 'probePath' => $local, 'output' => $index,
+                        'role' => 'hls-segment', 'destination' => $destination, 'probe' => $count === 1];
                     $duration = null;
                 }
             }
@@ -220,17 +246,26 @@ class PendingHlsExport extends PendingExport
                 .($attributes === '' ? '' : ','.$attributes);
             $masterLines[] = $this->relativeUrl($output->destination()['path'], $outputs[array_key_last($outputs)]->destination()['path']);
             $lines[$targets[0]] = '#EXT-X-TARGETDURATION:'.max(1, (int) ceil($longest));
-            $this->writePlaylist($paths[$index], $lines, $output->destination()['path'], $name);
+            $rendered = [];
+            foreach ($lines as $lineIndex => $line) {
+                if (isset($keyTags[$lineIndex])) {
+                    $rendered[] = $keyTags[$lineIndex];
+                }
+                $rendered[] = $line;
+            }
+            $this->writePlaylist($paths[$index], $rendered, $output->destination()['path'], $name);
             $this->variantFiles[$name][$output->destination()['path']] = true;
             $playlists[] = ['path' => $paths[$index], 'output' => $index, 'role' => 'hls-playlist', 'destination' => $output->destination()];
         }
 
         $master = array_key_last($outputs);
         $this->writePlaylist($paths[$master], $masterLines, $outputs[$master]->destination()['path'], null);
-        $artifacts = [...$segments, ...$playlists, [
+        $artifacts = [...($encryption?->artifacts() ?? []), ...$segments, ...$playlists, [
             'path' => $paths[$master], 'output' => $master, 'role' => 'hls-master', 'destination' => $outputs[$master]->destination(),
         ]];
-        $this->validateDestinations(array_map(fn ($artifact) => new ExportOutput($artifact['destination']['path'], $outputs[$artifact['output']]->filesystem()), $artifacts));
+        $this->validateDestinations(array_map(fn ($artifact) => new ExportOutput(
+            $artifact['destination']['path'], ($artifact['target'] ?? $outputs[$artifact['output']])->filesystem(),
+        ), $artifacts));
 
         return $artifacts;
     }
@@ -260,6 +295,9 @@ class PendingHlsExport extends PendingExport
     private function writePlaylist(string $path, array $lines, string $destination, ?string $variant): void
     {
         $bytes = implode("\n", $lines)."\n";
+        if (strlen($bytes) > 16777216) {
+            throw new MediaException('Finalized HLS playlists must fit within the 16 MiB limit.', Progress::VALIDATION, 'artifact');
+        }
         if ($this->playlistCallback !== null) {
             $modified = ($this->playlistCallback)($bytes, $destination, $variant);
             if (! is_string($modified) || strlen($modified) > 16777216) {

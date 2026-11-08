@@ -162,7 +162,7 @@ $result->variant('720p')->files();     // This variant's segments and playlist.
 
 `hls()` returns a fresh `PendingHlsExport` for MPEG-TS VOD. Its default codecs are `libx264` and `aac`. At least one named variant is required. Names contain ASCII letters, digits, underscores, or hyphens and start with a letter or digit. Names must be unique. Variant callbacks run immediately and configure encoding, maps, and filters, without `save()` or `toDisk()` methods.
 
-Shared defaults resolve at compilation, including settings declared after a variant. Variants override individual codec settings, metadata tags, maps, and matching output-option flags. Variant filters append after shared filters. Explicitly repeatable stream IDs remain ordered. Rate-control conflicts still fail rather than silently dropping a bitrate or CRF. Shared Storage options apply to every generated file. Variants freeze when execution starts.
+Shared defaults resolve at compilation, including settings declared after a variant. Variants override individual codec settings, metadata tags, maps, and matching output-option flags. Variant filters append after shared filters. Explicitly repeatable stream IDs remain ordered. Rate-control conflicts still fail rather than silently dropping a bitrate or CRF. Shared Storage options apply to media and playlists, not encryption keys. Variants freeze when execution starts.
 
 All variants run in one FFmpeg invocation against the same staged inputs. Explicit graphs can share processing through `split` or `asplit`. Different variants still encode separately. When a variant maps a graph-produced stream, its geometry and other video filters belong inside that graph, not in a separate `resize()` or `videoFilter()` chain. Multi-input operations retain the explicit map, metadata, and chapter-source requirements of ordinary composition. Accurate clips and watermark graphs use the shared execution pipeline. No performance improvement has been measured.
 
@@ -170,9 +170,9 @@ Without explicit maps, each variant selects the first motion-video and audio str
 
 Segment duration ranges from 0.001 to 86400 seconds. Encoded video requests closed GOPs and keyframes at segment-duration intervals. Actual boundaries depend on available frame timestamps and the encoder. Copy mode retains source keyframes and cannot promise exact segment lengths. Neither mode advertises independent segments. Finalization sets a positive integer target duration that covers the longest segment. Master bandwidth includes MPEG-TS overhead: `BANDWIDTH` conservatively uses the highest individual segment bitrate, and `AVERAGE-BANDWIDTH` uses total bytes divided by total duration. FFmpeg-supplied codec and resolution attributes are retained when available.
 
-The default layout places each variant's `index.m3u8` and `segment-00000000.ts` files in a subdirectory beside the master. Playlist references are relative to their containing playlist. Encoder filenames stay private. Finalization requires complete VOD playlists, contiguous referenced segments, nonempty files, and no unreferenced matching segments. External, traversal, duplicate, missing, and encrypted references fail before any Storage write. Playlist reads are limited to 16 MiB each. Validation also probes each variant's first segment for the expected stream count and directly mapped stream types, catching extra unlabeled graph outputs. It does not decode every encoded frame or probe every segment.
+The default layout places each variant's `index.m3u8` and `segment-00000000.ts` files in a subdirectory beside the master. Playlist references are relative to their containing playlist. Encoder filenames stay private. Finalization requires complete VOD playlists, contiguous referenced segments, nonempty files, and no unreferenced matching segments. External, traversal, duplicate, and missing references, or unexpected encryption directives from FFmpeg, fail before any Storage write. Playlist reads are limited to 16 MiB each. Validation also probes each variant's first segment for the expected stream count and directly mapped stream types, catching extra unlabeled graph outputs. It does not decode every encoded frame or probe every segment.
 
-The result lists all segments first, then variant playlists, then the master. Their roles are `hls-segment`, `hls-playlist`, and `hls-master`. Publication follows that order. A failed upload identifies the concrete published siblings and failed destination without deleting successful uploads. Saving replaces the requested definitions, does not append variants or remove old files, and is not transactional. Existing segments may already be replaced when a later upload fails.
+The result lists all segments first, then variant playlists, then the master. Their roles are `hls-segment`, `hls-playlist`, and `hls-master`. Publication follows that media order, with encryption keys uploaded first when enabled. A failed upload identifies the concrete published siblings and failed destination without deleting successful uploads. Saving replaces the requested definitions, does not append variants or remove old files, and is not transactional. Existing segments may already be replaced when a later upload fails.
 
 Variant playlists and segments can use separate destination directories:
 
@@ -189,7 +189,7 @@ $result = $media->hls(segmentDuration: 6)
 
 Each playlist references files relative to its own directory, with path components percent-encoded for URLs. Normalized destination keys remain unchanged in Storage and result records. `variant($name)->files()` selects the files owned by that variant, even when variants share a segment directory or use the same playlist basename. Concrete destination collisions, including equivalent numbering patterns, fail before any publication. Custom destinations never enter FFmpeg arguments.
 
-AES-128 encryption and rotation, dynamic responses, two-pass HLS, and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
+Dynamic responses, two-pass HLS, and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
 
 ### Playlist hooks
 
@@ -211,6 +211,55 @@ $result = $media->hls()
 The hook is additive. It can insert comments and `EXT-X-START`, `EXT-X-SESSION-DATA`, `EXT-X-DATERANGE`, and `EXT-X-PROGRAM-DATE-TIME` tags without `URI=` attributes. The application supplies valid attributes and placement for each playlist type. All generated lines must remain unchanged and in order. Changing references, timing, stream information, VOD completion, or encryption through this hook is rejected.
 
 Callbacks return UTF-8 text of at most 16 MiB, starting with `#EXTM3U` and a newline. CRLF becomes LF. Other control characters are rejected. Invalid output throws `MediaException` with phase `validation` and category `artifact`. Application exceptions propagate unchanged. Throwing `ExportCancelled` cancels the operation. Failures and cancellation remove the private workspace without publishing any files.
+
+### AES-128 encryption and key rotation
+
+```php
+$result = $media->hls(segmentDuration: 6)
+	->variant('720p', fn (HlsVariant $variant) => $variant->resize(height: 720))
+	->encrypt(
+		keysDisk: 'secrets',
+		keyUrl: fn (string $path) => route('lesson.key', ['key' => basename($path)]),
+		directory: 'lessons/42/keys',
+	)
+	->toDisk('streams')->save('lessons/42/master.m3u8');
+
+$result->playlist();                             // The master playlist, not a key.
+$result->file();                                 // Still the first media segment.
+$keys = $result->files()->where('role', 'hls-key'); // Owned private key copies.
+```
+
+Configure `secrets` as a non-public disk. Your application serves each key URL with authorization and the key's 16 raw bytes, not hex or Base64. AES-128 is access control, not DRM. PHP's OpenSSL extension is required.
+
+```php
+// Supply an existing 16-byte key. The export owns a new private copy.
+$key = Storage::disk('secrets')->get('lessons/42/source.key');
+
+$media->hls()->variant('720p', fn () => null)
+	->encrypt('secrets', fn ($path) => route('lesson.key', ['key' => basename($path)]), key: $key)
+	->toDisk('streams')->save('lesson/master.m3u8');
+```
+
+```php
+// Generate a new key for segments 0–2, 3–5, and so on, shared across variants.
+$result = $media->hls(segmentDuration: 6)
+	->variant('360p', fn (HlsVariant $variant) => $variant->resize(height: 360))
+	->variant('720p', fn (HlsVariant $variant) => $variant->resize(height: 720))
+	->encrypt(
+		keysDisk: 'secrets',
+		keyUrl: function (string $keyPath, string $playlistPath, string $variant, int $rotation): string {
+			return route('lesson.key', ['key' => basename($keyPath)]);
+		},
+		rotateEvery: 3,
+	)
+	->toDisk('streams')->save('lesson/master.m3u8');
+```
+
+Without `key:`, each save generates fresh keys and filenames. `rotateEvery:` is a positive segment count, indexed from zero independently within each variant. The same rotation group shares a key across variants. It cannot combine with `key:`. Every segment has its own random 128-bit IV, recorded explicitly in `EXT-X-KEY`. Local post-processing uses AES-128-CBC with PKCS#7 padding, not log-triggered FFmpeg rekeying. Ciphertext sizes determine master bandwidth. First-segment stream validation uses the retained private plaintext.
+
+`keyUrl` runs once per used rotation group per variant during finalization, never inspection. It receives the private disk-relative key, the public playlist key, variant name, and zero-based rotation index. It returns a UTF-8 HTTP(S) URL or relative URI, resolved against that variant playlist. Quotes, backslashes, whitespace, control characters, fragments, and repeated URLs for different keys within a playlist are rejected. The application owns URL expiry, authorization, and CORS. Dynamic response helpers remain open.
+
+Keys publish with private visibility before any media, regardless of media Storage options. Segments publish before playlists, with the master last. Results retain media-first order and append `hls-key` files; variant results exclude shared keys. Key bytes and URLs never enter FFmpeg commands or process summaries. Finalized playlists retain the 16 MiB limit. Hooks cannot change generated key directives. Validation and callback failures publish nothing and clean the workspace. Later transfer failures report successful uploads, including keys, without deleting them. Publication is not transactional.
 
 ### Progress helpers
 
@@ -562,7 +611,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle and real child reaping verified; both encoding passes, failure cleanup, and cancellation covered |
 | Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `ExportTest`, `TileTest` | Multiple single-file outputs and owned HLS inventories verified, including publication order, validation before writes, concrete partial failures, source protection, and cleanup |
 | Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `NativeHlsTest`, legacy `HlsExportTest`, `HLSPlaylistGeneratorTest` | Multiple variants, complete playlist decoding, segment keyframes and aligned boundaries, audio-only artwork exclusion, silent video, first/all audio, copy, clipped watermarks, staged input, streamed publication, custom nested paths, and additive playlist hooks verified |
-| Encrypted HLS | Decrypt AES-128 segments and verify IVs, supplied keys, key rotation boundaries, private key storage, and failure cleanup. | `EncryptedHlsExportTest` | Open |
+| Encrypted HLS | Decrypt AES-128 segments and verify IVs, supplied keys, key rotation boundaries, private key storage, and failure cleanup. | `NativeHlsTest`, legacy `EncryptedHlsExportTest` | Supplied and generated keys, two-variant rotation boundaries, independent random IVs, byte-identical decryption, complete encrypted playlist decoding, chunk-boundary padding, private key publication, hook protection, repeated saves, and failure cleanup verified |
 | Dynamic HLS | Rewrite master, variant, segment, and key URLs relative to their containing playlists. Verify response integration and missing or invalid input errors. | `DynamicHLSPlaylistTest` | Open |
 | Extension points | Inspect scoped argument arrays without execution. Preserve custom filters, playlist hooks, and output configuration without arbitrary driver forwarding. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `BeforeSavingTest`, README | Pure inspection, scoped options, graphs, output callbacks, and additive playlist hooks implemented; arbitrary playlist replacement is not supported |
 

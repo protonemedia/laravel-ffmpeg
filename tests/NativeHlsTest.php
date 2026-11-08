@@ -496,6 +496,180 @@ class NativeHlsTest extends TestCase
         $this->assertSame([], glob($this->root.'/*'));
     }
 
+    public static function encryptionModes(): array
+    {
+        return [["\x00\x01\x02\x03supplied-key", null], [null, null], [null, 2]];
+    }
+
+    #[Test]
+    #[DataProvider('encryptionModes')]
+    public function encrypted_variants_decrypt_to_the_original_bytes_and_play_through_rotation(?string $key, ?int $rotateEvery): void
+    {
+        $media = $this->source();
+        $disk = Storage::disk('local');
+        $secrets = Storage::fake('secrets');
+        $export = $media->hls(segmentDuration: 0.7)
+            ->variant('low', fn ($variant) => $variant->resize(width: 80), playlist: 'lists/low/index.m3u8', segments: 'assets/low/part-%03d.ts')
+            ->variant('high', fn () => null, playlist: 'lists/high/index.m3u8', segments: 'assets/high/part-%d.ts');
+        $plain = $export->save('master.m3u8');
+        $original = $plain->files()->where('role', 'hls-segment')->mapWithKeys(fn ($file) => [$file->path => $disk->get($file->path)])->all();
+        $command = $export->inspect();
+        $export->encrypt('secrets', fn ($path) => $secrets->path($path), key: $key, rotateEvery: $rotateEvery, directory: 'lesson/keys')
+            ->playlistUsing(fn ($text) => str_replace("#EXTM3U\n", "#EXTM3U\n# Encrypted lesson\n", $text));
+        $this->assertSame($command, $export->inspect());
+        $this->assertSame([], $secrets->allFiles());
+        $result = $export->save('master.m3u8');
+        $this->assertSame($plain->file()->path, $result->file()->path);
+        $this->assertSame('hls-segment', $result->file()->role);
+        $keys = $result->files()->where('role', 'hls-key')->values();
+        $this->assertCount($rotateEvery === null ? 1 : 2, $keys);
+        foreach ($keys as $file) {
+            $this->assertSame(['secrets', 16, 'private'], [$file->disk, $file->size, $secrets->getVisibility($file->path)]);
+            $this->assertFalse($disk->exists($file->path));
+            if ($key !== null) {
+                $this->assertSame($key, $secrets->get($file->path));
+            }
+        }
+        $ivs = [];
+        foreach (['low', 'high'] as $name) {
+            $variant = $result->variant($name);
+            $this->assertCount(5, $variant->files());
+            $text = $disk->get($variant->playlist()->path);
+            preg_match_all('/#EXT-X-KEY:METHOD=AES-128,URI="([^"]+)",IV=0x([0-9a-f]{32})\n([^#\n][^\n]*)/', $text, $tags, PREG_SET_ORDER);
+            $this->assertCount(4, $tags);
+            foreach ($tags as $sequence => $tag) {
+                $index = $rotateEvery === null ? 0 : intdiv($sequence, 2);
+                $this->assertSame($secrets->path($keys[$index]->path), $tag[1]);
+                $ivs[] = $tag[2];
+                $path = $variant->files()->where('role', 'hls-segment')->values()[$sequence]->path;
+                $ciphertext = $disk->get($path);
+                $this->assertSame((intdiv(strlen($original[$path]), 16) + 1) * 16, strlen($ciphertext));
+                $this->assertSame($original[$path], openssl_decrypt($ciphertext, 'aes-128-cbc', $secrets->get($keys[$index]->path), OPENSSL_RAW_DATA, hex2bin($tag[2])));
+            }
+            $decoded = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-xerror',
+                '-protocol_whitelist', 'file,crypto', '-allowed_extensions', 'm3u8,ts,key', '-i', $disk->path($variant->playlist()->path),
+                '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-']);
+            $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+        }
+        $this->assertCount(8, array_unique($ivs));
+        $decoded = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-xerror',
+            '-protocol_whitelist', 'file,crypto', '-allowed_extensions', 'm3u8,ts,key', '-i', $disk->path($result->playlist()->path), '-f', 'null', '-']);
+        $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+        $this->assertStringNotContainsString('EXT-X-KEY', $disk->get($result->playlist()->path));
+        $summaries = json_encode($result->processes()->all());
+        foreach ($keys as $file) {
+            $this->assertStringNotContainsString($file->path, $summaries);
+            $this->assertStringNotContainsString(bin2hex($secrets->get($file->path)), $summaries);
+        }
+        $second = $export->save('again/master.m3u8')->files()->where('role', 'hls-key')->values();
+        $this->assertNotSame($keys->pluck('path')->all(), $second->pluck('path')->all());
+        if ($key === null) {
+            $this->assertNotSame($secrets->get($keys[0]->path), $secrets->get($second[0]->path));
+        }
+        $this->assertTrue($disk->exists('source.mkv'));
+        $this->assertSame([], glob($this->root.'/*'));
+    }
+
+    #[Test]
+    public function encryption_handles_padding_and_cbc_chaining_across_large_segments(): void
+    {
+        $disk = Storage::disk('memory');
+        $disk->put('source.mp4', 'source');
+        $secrets = Storage::fake('secrets');
+        foreach ([16, 1048576, 1048593] as $length) {
+            $plain = substr(str_repeat("\x00\x01\x7f\xffasymmetric", 90000), 0, $length);
+            $this->assertSame($length, strlen($plain));
+            $this->fakePipeline(fn ($process) => file_put_contents($process->path.'/segment-0-00000000.ts', $plain));
+            $result = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
+                ->encrypt('secrets', fn ($path) => 'https://keys.example.test/'.$path, key: '0123456789abcdef')->save('out/master.m3u8');
+            preg_match('/IV=0x([0-9a-f]{32})/', $disk->get('out/test/index.m3u8'), $match);
+            $ciphertext = $disk->get('out/test/segment-00000000.ts');
+            $this->assertSame((intdiv($length, 16) + 1) * 16, strlen($ciphertext));
+            $this->assertSame($plain, openssl_decrypt($ciphertext, 'aes-128-cbc', '0123456789abcdef', OPENSSL_RAW_DATA, hex2bin($match[1])));
+        }
+        $this->assertSame([], glob($this->root.'/*'));
+    }
+
+    #[Test]
+    public function encryption_failures_and_hook_tampering_publish_nothing_and_clean_private_files(): void
+    {
+        $disk = Storage::disk('memory');
+        $disk->put('source.mp4', 'source');
+        $secrets = Storage::fake('secrets');
+        foreach ([null, '', 'file:///secret', "https://example.test/key\n#EXT-X-KEY:METHOD=NONE", 'https://example.test/"key', 'https://example.test/key#fragment', '//example.test/key',
+            "/keys/\xff.key", "/keys/\u{0085}.key", new \RuntimeException('key URL failure'), new ExportCancelled, 'tamper', 'reuse'] as $case) {
+            $this->fakePipeline(function ($process) use ($case) {
+                if ($case === 'reuse') {
+                    file_put_contents($process->path.'/segment-0-00000001.ts', 'next segment');
+                    $path = $process->path.'/playlist-0.m3u8';
+                    file_put_contents($path, str_replace('#EXT-X-ENDLIST', "#EXTINF:1.000000,\nsegment-0-00000001.ts\n#EXT-X-ENDLIST", file_get_contents($path)));
+                }
+            });
+            $export = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
+                ->encrypt('secrets', function () use ($case) {
+                    if ($case instanceof \Throwable) {
+                        throw $case;
+                    }
+
+                    return in_array($case, ['tamper', 'reuse'], true) ? '/keys/test' : $case;
+                }, rotateEvery: $case === 'reuse' ? 1 : null);
+            if ($case === 'tamper') {
+                $export->playlistUsing(fn ($text) => preg_replace('/#EXT-X-KEY:[^\n]+\n/', '', $text));
+            }
+            foreach ([false, true] as $identityHook) {
+                if ($identityHook && $case !== 'tamper') {
+                    $export->playlistUsing(fn ($text) => $text);
+                }
+                try {
+                    $export->save('out/master.m3u8');
+                    $this->fail('Invalid encryption was published.');
+                } catch (\RuntimeException $exception) {
+                    if ($case instanceof \Throwable) {
+                        $this->assertSame($case, $exception);
+                    } else {
+                        $this->assertInstanceOf(MediaException::class, $exception);
+                        $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
+                    }
+                }
+                $this->assertSame(['source.mp4'], $disk->allFiles());
+                $this->assertSame([], $secrets->allFiles());
+                $this->assertSame([], glob($this->root.'/*'));
+            }
+        }
+    }
+
+    #[Test]
+    public function failed_private_key_publication_precedes_media_and_reports_successful_keys(): void
+    {
+        $disk = Storage::disk('memory');
+        $disk->put('source.mp4', 'source');
+        $storedKeys = Storage::fake('secrets');
+        $this->fakePipeline();
+        foreach ([false, true] as $keysSucceed) {
+            $secrets = Mockery::mock(Filesystem::class);
+            $secrets->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $keysSucceed && $storedKeys->put($path, $stream, $options));
+            $secrets->shouldReceive('size')->andReturnUsing(fn ($path) => $storedKeys->size($path));
+            $failedMedia = Mockery::mock(Filesystem::class);
+            $failedMedia->shouldReceive('put')->andReturnFalse();
+            try {
+                FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
+                    ->encrypt($secrets, fn ($path) => '/keys/'.$path)->toDisk($failedMedia)->save('out/master.m3u8');
+                $this->fail('A failed encrypted export was accepted.');
+            } catch (MediaException $exception) {
+                $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
+                $this->assertCount($keysSucceed ? 1 : 0, $exception->published);
+                if ($keysSucceed) {
+                    $this->assertSame(16, $storedKeys->size($exception->published[0]['path']));
+                    $this->assertSame('out/test/segment-00000000.ts', $exception->destination['path']);
+                } else {
+                    $this->assertStringEndsWith('.key', $exception->destination['path']);
+                }
+            }
+        }
+        $this->assertSame(['source.mp4'], $disk->allFiles());
+        $this->assertSame([], glob($this->root.'/*'));
+    }
+
     public static function invalidPlaylistHooks(): array
     {
         return [
@@ -609,6 +783,11 @@ class NativeHlsTest extends TestCase
             fn () => $media->hls()->variant('valid', fn () => null, segments: 'seg-%d-%d.ts'),
             fn () => $media->hls()->variant('valid', fn () => null, segments: '%d/segment.ts'),
             fn () => $media->hls()->variant('valid', fn () => null, segments: 'seg-%10d.ts'),
+            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: 'short'),
+            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: str_repeat('x', 17)),
+            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', rotateEvery: 0),
+            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: str_repeat('x', 16), rotateEvery: 2),
+            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', directory: '../escape'),
         ] as $invalid) {
             try {
                 $invalid();

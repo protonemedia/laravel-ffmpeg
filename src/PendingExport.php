@@ -473,7 +473,7 @@ class PendingExport
                     if (($artifact['probe'] ?? false)
                         || (in_array($role, ['media', 'image'], true) && (count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null))) {
                         try {
-                            $actual = $this->media->probePath($outputPath, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
+                            $actual = $this->media->probePath($artifact['probePath'] ?? $outputPath, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
                         } catch (MediaException $exception) {
                             throw new MediaException('Cannot validate the encoded media.', $phase, 'artifact', $exception->diagnostics);
                         }
@@ -501,7 +501,7 @@ class PendingExport
                 $files = [];
 
                 foreach ($artifacts as $index => $artifact) {
-                    $output = $outputs[$artifact['output']];
+                    $output = $artifact['target'] ?? $outputs[$artifact['output']];
                     $destination = $artifact['destination'];
                     $stream = null;
 
@@ -580,6 +580,9 @@ class PendingExport
 
         if (! is_file($path) || ($size = filesize($path)) === false || $size === 0) {
             throw new MediaException('FFmpeg did not produce a nonempty media file.', Progress::VALIDATION, 'artifact');
+        }
+        if ($role === 'hls-key' && $size !== 16) {
+            throw new MediaException('An AES-128 HLS key must contain exactly 16 bytes.', Progress::VALIDATION, 'artifact');
         }
 
         return $size;
