@@ -494,6 +494,51 @@ $media->export()->crop(1280, 720, x: 40, y: 20)->rotate(90)
 
 `rotate()` accepts clockwise 90, 180, or 270 degrees and negative equivalents, after input autorotation. `crop()` and `pad()` require positive even dimensions and nonnegative optional offsets, centered by default. All three append filters in call order and retain the ordinary copy/filter restrictions. Real decoded pixels verify crop, rotation direction, padding, and order in `NativePreservationTest`.
 
+### Video and audio adjustments
+
+```php
+$media->export()->video('libx264')->audio('aac')
+	->deinterlace(mode: 'frame', parity: 'auto', onlyInterlaced: true)
+	->resize(width: 1280)->frameRate('30000/1001')
+	->flipHorizontal()->flipVertical()->grayscale()
+	->volume(0.5)->delayAudio(0.25)
+	->fadeIn(1)->fadeOut(1, start: 9)->save('adjusted.mp4');
+```
+
+These helpers append ordinary filters in call order and work in `output()` callbacks. They do not support stream copy for the affected type. `videoFilter()` and `audioFilter()` remain available for trusted expressions. Graph-fed streams retain the simple-versus-complex filter restrictions described below.
+
+`frameRate($rate)` accepts a positive numeric or rational rate and drops or duplicates frames without changing playback speed. `flipHorizontal()` and `flipVertical()` mirror the image. `grayscale()` removes color. `deinterlace()` uses `bwdif`; call it before geometry filters. Its default `frame` mode outputs one frame per input frame, while `field` outputs one per field. Parity accepts `auto`, `tff`, or `bff`. `onlyInterlaced: true` processes only frames marked interlaced; false processes all frames.
+
+`volume($multiplier)` scales amplitude with a finite nonnegative multiplier. Zero mutes; values above one can clip. `delayAudio($seconds)` inserts actual silence on every channel, extending audio rather than shifting its timestamps. It accepts finite nonnegative seconds. Exports with audio delay leave progress percentage unknown because the selected audio can outlast the video.
+
+`fadeIn($duration, $start = 0, $video = true, $audio = true)` and `fadeOut($duration, $start, $video = true, $audio = true)` fade video to or from black and audio to or from silence. Duration must be positive and start nonnegative, both in seconds. At least one stream type must be enabled. Fade-out timing is explicit; the helper does not probe for the end. Timing filters follow FFmpeg's timestamps in filter order, not an automatically rebased clip timeline.
+
+### Playback speed
+
+```php
+$media->speed(2)->video('libx264', crf: 23)->audio('aac')->save('faster.mp4');
+$media->speed(0.5)->withoutVideo()->audio('aac')->save('slower.m4a');
+```
+
+`Media::speed(float $factor)` returns a single-output builder. A finite positive factor above one speeds up playback; a factor below one slows playback. Video timestamps and audio delays are divided by the factor, while chained `atempo` filters preserve audio pitch. Existing simple filters run before the speed adjustment. The default selection remains the first motion-video and audio streams; explicit audio and video maps are supported.
+
+Sources require a zero container origin, zero origins on every video track, and nonnegative origins on every audio track, including unselected tracks. Missing origins fail rather than trigger a guessed correction. Clipping, input options, additional inputs, custom graphs, watermarks, selections other than audio or video, and multiple outputs are rejected. Filtered streams require transcoding. Chapters are omitted by default because their timestamps no longer match. Progress uses known source duration divided by the factor only with unmodified default selection and at most one audio and one motion-video track. Extra tracks, cover art, custom maps, filters, or output timing options leave percentage unknown. Encoding cost still depends on the decoded source frames, not just the shorter output duration.
+
+### Animated GIF previews
+
+```php
+$media->gif(width: 480, frameRate: 12, loop: 0)
+	->clip(4, duration: 3)->toDisk('images')->save('preview.gif');
+```
+
+`Media::gif(int $width = 480, int|float $frameRate = 12, int $loop = 0)` selects the first motion-video stream and omits audio. Width must be between 1 and 65535; frame rate must be finite and positive. The inferred height preserves display aspect ratio. Loop count accepts -1 through 65535; zero loops forever and -1 disables looping.
+
+GIF stores frame delays in centiseconds, so requested frame rates can require rounded or alternating frame delays.
+
+Accurate clipping and timestamp reset precede resizing, frame-rate conversion, and palette generation. The helper first writes those processed frames to a private lossless intermediate, then generates a palette, then encodes with `paletteuse`. These are three FFmpeg invocations, not two-pass bitrate encoding. Caller filters run once. The intermediate avoids buffering the entire clip in memory, but private disk use grows with duration, dimensions, and frame rate. Short, reduced-resolution previews reduce processing time and disk use. Cleanup removes the intermediate and palette after success, failure, or cancellation.
+
+GIF owns its graph, maps, codec, muxer, and loop options. It supports one output and rejects additional inputs, custom graphs or maps, audio settings or filters, encoder overrides, raw output options, keyframe clips, and `twoPass()`. Ordinary string video filters can follow the initial resize and frame-rate filters; resource-backed filters are not supported by this builder.
+
 ### Text and subtitle shortcuts
 
 ```php
@@ -517,6 +562,27 @@ Filters run in call order. Burning subtitles before resizing scales the rendered
 ```php
 $first = FFMpeg::disk('uploads')->open('first.mp4');
 $second = FFMpeg::disk('archive')->open('second.mp4');
+
+$first->concatTranscoded($second)
+	->normalizeVideo(1280, 720, frameRate: 30, fit: 'contain')
+	->normalizeAudio(sampleRate: 48000, channels: 2)
+	->video('libx264', crf: 23)->audio('aac', bitrate: '128k')
+	->toDisk('videos')->save('normalized.mp4');
+
+$first->concatTranscoded($second)
+	->normalizeVideo(1280, 720, frameRate: 30, fit: 'cover')->withoutAudio()
+	->video('libx264')->toDisk('videos')->save('silent.mp4');
+```
+
+`concatTranscoded()` accepts at least one following source and returns a single-output export builder, not a media descriptor. `normalizeVideo()` is required and takes positive even dimensions, a positive numeric or rational frame rate, and `contain`, `cover`, or `stretch`. It produces square pixels. `contain` adds centered black padding; `cover` crops centrally; `stretch` uses the exact dimensions without preserving aspect ratio.
+
+Choose either `normalizeAudio()` or `withoutAudio()`. Audio normalization defaults to 48000 Hz and two channels. `channels` accepts one or two; optional `channel` selects a zero-based source channel before conversion. For example, `normalizeAudio(16000, channels: 1, channel: 0)` keeps the first channel instead of mixing channels. Every source must have a first audio stream when normalization is enabled. Resampling inserts silence for its original nonnegative delay relative to video. The helper does not create audio tracks for sources without audio.
+
+Each source must have a finite positive duration, a zero container origin, and a zero first motion-video origin. Missing origins and input options are rejected. Selection uses the first motion-video and first audio streams, not cover art. The helper owns the graph and output maps and omits global metadata and chapters. It rejects caller maps and source metadata or chapter overrides rather than silently ignoring them. Additional inputs, custom graphs, output callbacks, root video/audio filters, and stream copy are unsupported. Use ordinary `export()->filterComplex()` for other policies. Every clip is decoded and encoded; frame rounding and audio tails can affect the total duration, so percentage remains unknown.
+
+For compatible inputs, copy concatenation avoids re-encoding:
+
+```php
 $joined = $first->concat($second);
 $joined->export()->video('copy')->audio('copy')->toDisk('videos')->save('joined.mp4');
 ```
@@ -527,7 +593,7 @@ Stream order, codecs, profiles, time bases, geometry, pixel formats, sample rate
 
 The operation writes its own relative-name manifest with declared durations. Safe generated aliases isolate FFconcat filename syntax from caller keys, including quotes, Unicode, and newlines in local filenames. Aliases use private symlinks where supported, otherwise private copies. Cleanup does not modify or delete source files. Original chapter timelines are not combined. Results and publication use the ordinary export pipeline.
 
-Heterogeneous inputs use the existing composition API with an explicit normalization policy. This video-only example stretches both inputs to the requested geometry, sets square pixels and a common frame rate, resets video timestamps, and deliberately excludes audio:
+Custom normalization policies use the composition API. This video-only graph stretches both inputs, sets square pixels and a common frame rate, resets video timestamps, and excludes audio:
 
 ```php
 $export = $first->export();
@@ -540,9 +606,9 @@ $export->filterComplex(
 	->toDisk('videos')->save('normalized.mp4');
 ```
 
-Audio-inclusive graphs must declare their audio policy and preserve each segment's audio delay relative to video. Resetting each stream independently to its first sample can erase that delay. The library does not infer silence insertion, audio layout conversion, or intermediate encodes. Graph timing leaves percentage unknown.
+Audio-inclusive custom graphs must declare their audio policy and preserve each segment's audio delay relative to video. Resetting each stream independently to its first sample can erase that delay. Unlike `concatTranscoded()`, raw graphs do not add silence or channel conversion for you. Graph timing leaves percentage unknown.
 
-`NativeConcatTest` verifies a zero-origin policy with different dimensions, frame rates, sample rates, and channel layouts. It selects the first audio channel, resamples to 16000 Hz with `aresample=16000:async=1:first_pts=0`, and pads and trims each audio segment to its video duration before concatenation. Decoded PCM confirms silence during each original audio delay and the expected signal afterward. Inputs with other origins require a common timeline correction, not independent first-sample resets.
+`NativeConcatTest` verifies a zero-origin policy with different dimensions, frame rates, sample rates, and channel layouts. It selects the first audio channel and resamples to 16000 Hz with `aresample=16000:async=1:first_pts=0`. The concat filter pads shorter intermediate audio segments. Decoded PCM confirms silence during each original audio delay and the expected signal afterward. Inputs with other origins require a common timeline correction, not independent first-sample resets.
 
 ### Image-sequence inputs and timelapse
 
@@ -562,7 +628,20 @@ Sequences can be graph inputs but are not standalone files for copy concatenatio
 
 ### Watermarks and image preparation
 
-Watermarks are ordinary graph inputs. FFmpeg controls placement, scaling, and alpha compositing. This example keeps a static image visible through the end of the video and copies the source audio:
+```php
+$logo = FFMpeg::disk('assets')->open('brand/logo.png');
+
+FFMpeg::disk('videos')->open('source.mkv')->export()
+	->watermark($logo, position: 'bottom-right', x: 20, y: 15, width: 160, opacity: 0.8)
+	->resize(width: 1280)->video('libx264', crf: 23)->audio('copy')
+	->toDisk('videos')->save('branded.mkv');
+```
+
+`PendingExport::watermark()` owns the image inputs, graph, and maps. It accepts standalone static PNG or JPEG images, including prepared images and staged Storage inputs, without input options. Animated images and other formats are rejected. Defaults are `position: 'bottom-right'`, `x: 0`, `y: 0`, no resize, and `opacity: 1`. Opacity ranges from zero to one. Anchors accept `top-left`, `top-right`, `bottom-left`, `bottom-right`, and `center`.
+
+Offsets are nonnegative inward margins at corners; center offsets move right and down. A single positive width or height preserves the image aspect ratio; supplying both stretches it. Repeated calls layer marks in call order. Each output's video filters run before all marks, regardless of registration order, so offsets refer to the final video canvas. Static images remain visible through the end of the video.
+
+The helper supports ordinary media exports, including multiple `output()` callbacks. Marks apply to each output; configure codecs, geometry, destinations, and audio separately inside the callbacks. Video copy, custom maps, custom graphs, additional media inputs, and HLS are unsupported. Audio copy remains valid. Use a raw graph for those composition requirements:
 
 ```php
 $export = FFMpeg::disk('videos')->open('source.mkv')->export();
@@ -584,7 +663,7 @@ $logo = FFMpeg::disk('assets')->open('brand/logo.png')
 	->prepareImage(function (string $path) {
 		\Spatie\Image\Image::load($path)->width(320)->save();
 	});
-// Pass $logo to addInput(), then compose it with an overlay graph.
+// Pass $logo to watermark(), or addInput() for a custom overlay graph.
 ```
 
 Preparation returns an immutable media descriptor. Construction and inspection do no IO and do not call the callback. The callback runs during staging once per media identity and staging purpose in each execution. Reusing the descriptor in a later execution creates a new private copy and reruns preparation. Callback results do not persist across executions. Input options and multi-file sources are rejected.

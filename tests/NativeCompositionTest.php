@@ -640,10 +640,9 @@ class NativeCompositionTest extends TestCase
                     });
                 }
                 $export = FFMpeg::disk('local')->open('source.mkv')->export();
-                $index = $export->addInput($logo);
-                $export->filterComplex('['.$index.':v]scale=16:8,format=rgba[logo];'
-                    .'[0:v][logo]overlay=x=main_w-overlay_w-7:y=main_h-overlay_h-5:eof_action=repeat:repeatlast=1:shortest=0[video]')
-                    ->map('[video]')->map('0:a')->video('ffv1')->audio('copy')->withoutMetadata(chapters: true)
+                $export->resize(width: 80, height: 60)
+                    ->watermark($logo, position: 'bottom-right', x: 7, y: 5, width: 16, height: 8)
+                    ->video('ffv1')->audio('copy')->withoutMetadata(chapters: true)
                     ->toDisk('memory')->save('watermarked.mkv');
                 $this->assertCount($preprocess ? 1 : 0, $paths);
                 foreach ($paths as $path) {
@@ -676,6 +675,71 @@ class NativeCompositionTest extends TestCase
                 $this->assertSame([], glob($this->root.'/workspaces/*'));
             }
         }
+    }
+
+    #[Test]
+    public function watermark_helpers_compose_images_after_each_outputs_geometry_and_reject_conflicts(): void
+    {
+        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real watermark acceptance.');
+        }
+        $binary = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $binary, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $local = $this->fakeLocalDisk();
+        $generation = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=1',
+            '-c:v', 'ffv1', $local->path('source.mkv')]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $bitmap = imagecreatetruecolor(8, 8);
+        imagefill($bitmap, 0, 0, imagecolorallocate($bitmap, 0, 0, 255));
+        imagepng($bitmap, $local->path('logo.png'));
+        imagedestroy($bitmap);
+        $media = FFMpeg::disk('local')->open('source.mkv');
+        $logo = FFMpeg::disk('local')->open('logo.png');
+        $export = $media->export()->watermark($logo, position: 'top-left', x: 4, y: 2)
+            ->watermark($logo, position: 'center', opacity: 0.5)
+            ->output('large.mkv', fn ($out) => $out->resize(80, 60)->video('ffv1')->withoutAudio()->toDisk('memory'))
+            ->output('small.mkv', fn ($out) => $out->resize(40, 30)->video('ffv1')->withoutAudio()->toDisk('memory'));
+        $this->assertSame($export->inspect(), $export->inspect());
+        $export->save();
+        foreach ([['large.mkv', 80, 60], ['small.mkv', 40, 30]] as [$path, $width, $height]) {
+            $output = FFMpeg::disk('memory')->open($path);
+            $this->assertEqualsWithDelta(1, $output->probe()->duration(), 0.001);
+            $frame = imagecreatefromstring($output->frame(at: 0.8)->get());
+            $this->assertSame($width, imagesx($frame));
+            $this->assertSame($height, imagesy($frame));
+            $blue = imagecolorsforindex($frame, imagecolorat($frame, 6, 4));
+            $this->assertGreaterThan(220, $blue['blue']);
+            $mixed = imagecolorsforindex($frame, imagecolorat($frame, intdiv($width, 2), intdiv($height, 2)));
+            $this->assertEqualsWithDelta(127, $mixed['red'], 15);
+            $this->assertEqualsWithDelta(127, $mixed['blue'], 15);
+            $red = imagecolorsforindex($frame, imagecolorat($frame, $width - 2, $height - 2));
+            $this->assertGreaterThan(220, $red['red']);
+            imagedestroy($frame);
+        }
+        foreach ([
+            fn () => $media->export()->watermark($logo)->video('copy')->inspect(),
+            fn () => $media->export()->watermark($logo)->withoutVideo()->inspect(),
+            fn () => $media->export()->watermark($logo)->map('0:v')->inspect(),
+            fn () => $media->export()->watermark($logo)->filterComplex('[0:v]null[v]')->inspect(),
+            fn () => $media->export()->watermark($logo, opacity: NAN),
+            fn () => $media->export()->watermark($logo, width: 0),
+            fn () => $media->export()->watermark($logo, position: 'unknown'),
+        ] as $invalid) {
+            try {
+                $invalid();
+                $this->fail('Expected invalid watermark settings to fail.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        try {
+            $media->export()->watermark($media)->video('ffv1')->save('invalid.mkv');
+            $this->fail('A video must not silently become a static watermark.');
+        } catch (MediaException $exception) {
+            $this->assertSame('watermark', $exception->category);
+        }
+        $this->assertFalse($local->exists('invalid.mkv'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     #[Test]

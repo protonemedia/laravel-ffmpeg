@@ -33,6 +33,8 @@ class PendingExport
 
     private ?string $graph = null;
 
+    private array $watermarks = [];
+
     private ?Closure $progress = null;
 
     private bool $rootConfigured = false;
@@ -130,6 +132,24 @@ class PendingExport
         return $this;
     }
 
+    /** Overlay a still image after each output's video filters. Offsets are inward margins. */
+    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
+    {
+        $this->assertMutable();
+
+        if (! in_array($position, ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'], true)
+            || $x < 0 || $y < 0 || ($width !== null && $width <= 0) || ($height !== null && $height <= 0)
+            || ! is_finite($opacity) || $opacity < 0 || $opacity > 1 || $image->inputOptions() !== []) {
+            throw new InvalidArgumentException('Watermarks require an anchor, nonnegative margins, positive dimensions, opacity between zero and one, and an image without input options.');
+        }
+
+        $this->inputs[] = $image;
+        $input = array_key_last($this->inputs);
+        $this->watermarks[] = compact('input', 'position', 'x', 'y', 'width', 'height', 'opacity');
+
+        return $this;
+    }
+
     public function output(string $path, callable $configure): self
     {
         $this->assertMutable();
@@ -221,9 +241,20 @@ class PendingExport
         return $names;
     }
 
+    protected function filterGraph(): ?string
+    {
+        return $this->graph;
+    }
+
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
-        $composition = count($this->inputs) > 1 || $this->graph !== null;
+        $graph = $this->filterGraph();
+        $watermarking = $this->watermarks !== [];
+        if ($watermarking && ($graph !== null || count($this->inputs) !== count($this->watermarks) + 1
+            || $this->outputRole !== 'media')) {
+            throw new InvalidArgumentException('Watermarks require a media export and own their image inputs and graph; use filterComplex() for custom compositions.');
+        }
+        $composition = ! $watermarking && (count($this->inputs) > 1 || $graph !== null);
         $mappedLabels = $used = $compiledOutputs = [];
         $resources = $this->resourceNames($outputs);
 
@@ -233,6 +264,15 @@ class PendingExport
         }
 
         foreach ($outputs as $index => $output) {
+            if ($watermarking) {
+                $settings = $output->outputConfiguration();
+                if ($output->hasMaps() || $settings['omitVideo'] || ($settings['video']['codec'] ?? null) === 'copy') {
+                    throw new InvalidArgumentException('Watermarks require automatically selected, transcoded video.');
+                }
+                $settings['metadataSource'] ??= 0;
+                $settings['chapterSource'] ??= $settings['clip'] === null ? 0 : -1;
+                $output = (new ExportOutput($output->destination()['path'], $output->filesystem()))->configure($settings);
+            }
             if ($composition && ! $output->hasMaps()) {
                 throw new InvalidArgumentException('Every composition output requires explicit maps.');
             }
@@ -247,7 +287,7 @@ class PendingExport
                 }
             }
 
-            if ($output->inputSeekOptions() !== [] && (count($this->inputs) > 1 || count($outputs) > 1 || $this->graph !== null)) {
+            if ($output->inputSeekOptions() !== [] && (count($this->inputs) > 1 || count($outputs) > 1 || $graph !== null)) {
                 throw new InvalidArgumentException('Keyframe clips require one input and one output without a complex graph.');
             }
 
@@ -255,7 +295,7 @@ class PendingExport
 
             foreach ($maps as $map) {
                 if (str_starts_with($map, '[')) {
-                    if ($this->graph === null) {
+                    if ($graph === null) {
                         throw new InvalidArgumentException('A graph map requires filterComplex().');
                     }
 
@@ -270,6 +310,35 @@ class PendingExport
                     ? $filter->toFilter(fn ($role) => $resources['helper:'.spl_object_id($filter).':'.$role]['path'])
                     : FilterGraph::resources($filter, $resources, $used);
             }, $maps);
+
+            if ($watermarking) {
+                $filter = 'null';
+                $processed = [];
+                for ($i = 0; $i < count($options); $i++) {
+                    if ($options[$i] === '-filter:v') {
+                        $filter = $options[++$i];
+                    } elseif ($options[$i] === '-map' && str_starts_with($options[$i + 1], '0:V:0')) {
+                        array_push($processed, '-map', '[watermark_out'.$index.']');
+                        $i++;
+                    } else {
+                        $processed[] = $options[$i];
+                    }
+                }
+                $options = $processed;
+                $branches = ['[0:V:0]'.$filter.'[watermark_base'.$index.'_0]'];
+                foreach ($this->watermarks as $n => $mark) {
+                    ['input' => $input, 'position' => $position, 'x' => $x, 'y' => $y, 'width' => $width, 'height' => $height, 'opacity' => $opacity] = $mark;
+                    $imageFilters = $width === null && $height === null ? '' : 'scale=w='.($width ?? -1).':h='.($height ?? -1).',';
+                    $label = 'watermark_image'.$index.'_'.$n;
+                    $branches[] = '['.$input.':v:0]'.$imageFilters.'format=rgba,colorchannelmixer=aa='.$opacity.'['.$label.']';
+                    $horizontal = str_ends_with($position, 'right') ? 'main_w-overlay_w-'.$x : ($position === 'center' ? '(main_w-overlay_w)/2+'.$x : (string) $x);
+                    $vertical = str_starts_with($position, 'bottom') ? 'main_h-overlay_h-'.$y : ($position === 'center' ? '(main_h-overlay_h)/2+'.$y : (string) $y);
+                    $out = $n === count($this->watermarks) - 1 ? 'watermark_out'.$index : 'watermark_base'.$index.'_'.($n + 1);
+                    $branches[] = '[watermark_base'.$index.'_'.$n.']['.$label.']overlay=x='.$horizontal.':y='.$vertical.':eof_action=repeat:repeatlast=1:shortest=0['.$out.']';
+                }
+                $graph = ($graph === null ? '' : $graph.';').implode(';', $branches);
+                $mappedLabels[] = 'watermark_out'.$index;
+            }
 
             if ($this->twoPass && in_array($index, $this->twoPassOutputIndexes($outputs), true)) {
                 $settings = $output->outputConfiguration();
@@ -288,9 +357,9 @@ class PendingExport
 
         $globals = $this->globalOptions;
 
-        if ($this->graph !== null) {
-            FilterGraph::validate($this->graph, count($this->inputs), $mappedLabels);
-            array_push($globals, '-filter_complex', FilterGraph::resources($this->graph, $resources, $used));
+        if ($graph !== null) {
+            FilterGraph::validate($graph, count($this->inputs), $mappedLabels);
+            array_push($globals, '-filter_complex', FilterGraph::resources($graph, $resources, $used));
         }
 
         if (count($used) !== count($this->resources)) {
@@ -592,8 +661,23 @@ class PendingExport
 
     protected function prepareEncoding(array $metadata): ?float
     {
+        foreach ($this->watermarks as $mark) {
+            if (! in_array($metadata[$mark['input']]->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true)) {
+                throw new MediaException('Watermarks require a standalone PNG or JPEG image.', 'probing', 'watermark');
+            }
+        }
+        foreach ($this->configuredOutputs() as $output) {
+            // Inserted silence extends the selected audio, not necessarily the video.
+            if (array_any($output->outputConfiguration()['audioFilters'], fn ($filter) => preg_match('/(?:^|,)\s*adelay=/', $filter))) {
+                return null;
+            }
+        }
+        if ($this->watermarks !== []) {
+            return $metadata[0]->duration();
+        }
+
         // Graphs can change timing arbitrarily; do not invent a percentage.
-        return $this->graph === null && ! array_any($metadata, fn ($item) => $item->duration() === null)
+        return $this->filterGraph() === null && ! array_any($metadata, fn ($item) => $item->duration() === null)
             ? max(array_map(fn ($item) => $item->duration(), $metadata)) : null;
     }
 

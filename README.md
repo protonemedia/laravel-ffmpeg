@@ -124,10 +124,15 @@ $media->export()->video('libx264')->audio('copy')
 
 $media->export()->fit(1280, 720, mode: 'contain'); // Black bars.
 $media->export()->fit(1280, 720, mode: 'cover');   // Center crop.
-$media->export()->videoFilter('hflip')->audioFilter('volume=0.5');
+$media->export()->video('libx264')->audio('aac')
+	->deinterlace()->frameRate('30000/1001')->flipHorizontal()->grayscale()
+	->volume(0.5)->delayAudio(0.25)
+	->fadeIn(1)->fadeOut(1, start: 9)->save('treated.mp4');
 ```
 
 Filters run in registration order. One-dimension `resize()` preserves display aspect ratio; two dimensions stretch. `fit()` produces square pixels. Crop and pad use positive even dimensions and centered offsets by default. Rotation accepts clockwise quarter turns and negative equivalents, after input autorotation. FFmpeg validates source-dependent geometry.
+
+`frameRate()` drops or duplicates frames without changing playback speed. Deinterlace before resizing; the default `frame` mode preserves frame count, while `mode: 'field'` produces a frame per field. `flipVertical()` is also available. `volume()` takes a linear multiplier, where zero mutes. `delayAudio()` inserts silence on every channel and extends the audio. Fades affect both video and audio unless you pass `video: false` or `audio: false`; `fadeOut()` requires an explicit start in seconds. Filtered streams must be encoded, not copied. Use `videoFilter()` and `audioFilter()` for other trusted FFmpeg expressions.
 
 ```php
 $media->export()
@@ -158,6 +163,20 @@ $media->waveform(width: 800, height: 120, colors: ['blue'])
 ```
 
 Image patterns require one integer placeholder. Storyboard VTT references are relative to the cue file, even when images use a different directory. JPEG quality uses `outputOptions(['-q:v', '3'])`. A waveform PNG is distinct from waveform-peaks data.
+
+## Change playback speed and make GIFs
+
+```php
+$media->speed(2)->video('libx264')->audio('aac')->save('double-speed.mp4');
+$media->speed(0.5)->video('libx264')->audio('aac')->save('half-speed.mp4');
+
+$media->gif(width: 480, frameRate: 12, loop: 0)
+	->clip(4, duration: 3)->toDisk('images')->save('preview.gif');
+```
+
+`speed()` changes video timing and audio tempo without changing audio pitch. It requires a finite positive factor, a zero container/video origin, and nonnegative audio origins. It scales an existing audio delay with playback speed. Stream copy, clipping, input options, custom graphs, watermark inputs, and multiple outputs are not supported. Encode a clip first if you need to retime only part of a source.
+
+`gif()` selects the first motion-video stream and omits audio. Width defaults to 480 and frame rate to 12. `loop: 0` loops forever; `-1` disables looping. Accurate `clip()` runs before palette generation. The helper writes a private lossless intermediate, generates a palette, then encodes the GIF. This avoids buffering the entire clip in memory, but adds disk use and processing passes. Keep previews short and small. GIF output rejects custom maps, graphs, additional inputs or outputs, audio settings, and encoder overrides.
 
 ## Waveform-peaks data
 
@@ -192,7 +211,49 @@ $result->actualMode(); // FFmpeg can fall back to dynamic normalization.
 
 Normalization selects one audio track and produces one audio-only output. It decodes the trimmed, preprocessed samples once into a private lossless intermediate, then measures and normalizes those same samples. Channel processing uses `audioFilter()`; `sampleRate:` owns the output rate. Silence remains silence, with nonfinite statistics represented by null. Graphs, additional inputs or outputs, stream copy, and video settings are rejected.
 
-## Multiple inputs, watermarks, and outputs
+## Add a watermark
+
+```php
+$logo = FFMpeg::disk('assets')->open('logo.png');
+
+$media->export()->resize(width: 1280)
+	->watermark($logo, position: 'bottom-right', x: 20, y: 15, width: 160, opacity: 0.8)
+	->video('libx264')->audio('copy')->toDisk('videos')->save('branded.mp4');
+```
+
+`watermark()` adds the image input and maps for you. It accepts static PNG and JPEG images from local or non-local Storage. Marks render after all output video filters, regardless of where you call `watermark()`. Offsets are inward margins from the chosen corner. Anchors also include `top-left`, `top-right`, `bottom-left`, and `center`. Call the helper again to add another mark.
+
+Watermarks work with ordinary single or multiple media outputs and copied audio, but require video encoding. Custom maps, custom graphs, additional media inputs, and HLS require an explicit overlay graph instead. For image preprocessing, call `prepareImage()` with your own image-library callback; it receives a private writable copy:
+
+```php
+$logo = FFMpeg::disk('assets')->open('logo.png')->prepareImage(function (string $privatePath) {
+	\Spatie\Image\Image::load($privatePath)->width(160)->save();
+});
+```
+
+## Join clips
+
+```php
+$first = FFMpeg::disk('clips')->open('first.mp4');
+$second = FFMpeg::disk('archive')->open('second.mp4');
+
+// Different dimensions, frame rates, or audio layouts: encode a common format.
+$first->concatTranscoded($second)
+	->normalizeVideo(1280, 720, frameRate: 30, fit: 'contain')
+	->normalizeAudio(sampleRate: 48000, channels: 2)
+	->video('libx264')->audio('aac')->toDisk('videos')->save('joined.mp4');
+
+// Compatible streams: join without re-encoding.
+$first->concat($second)->export()->video('copy')->audio('copy')->save('joined.mkv');
+```
+
+`concatTranscoded()` requires a video policy and either `normalizeAudio()` or `withoutAudio()`. `contain` adds black bars; `cover` crops; `stretch` changes the aspect ratio. It selects each source's first motion-video and audio streams and preserves delayed audio through silence. Sources must be finite with zero container/video origins. Audio normalization requires audio in every source; it does not invent a track for a silent clip. The helper owns one output and its graph, so root filters, custom graphs, and stream copy are rejected. See the [concat reference](REWRITE.md#concatenation) for limits and raw graphs.
+
+Copy concatenation requires compatible streams and never falls back to transcoding. Transcoded concatenation decodes and encodes every clip. Neither method combines source chapters.
+
+## Compose multiple inputs and outputs
+
+Use `addInput()` and `filterComplex()` when you need custom branching, stream selection, or an HLS watermark:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
@@ -212,18 +273,6 @@ $result = $export
 ```
 
 Mixed-disk inputs stage once per execution. Each output requires explicit maps, metadata/chapter policy, and a destination. Consume each graph label once; use `split` or `asplit` to branch. Resources such as LUTs use `resource('look', $media)` and whole named placeholders such as `lut3d=file={{look}}`.
-
-```php
-$logo = FFMpeg::disk('assets')->open('logo.png')->prepareImage(function (string $privatePath) {
-	\Spatie\Image\Image::load($privatePath)->width(160)->save();
-});
-
-FFMpeg::disk('clips')->open('first.mp4')
-	->concat(FFMpeg::disk('archive')->open('second.mp4'))
-	->export()->video('copy')->audio('copy')->save('joined.mkv');
-```
-
-Image preparation needs your chosen image library; it changes a private copy. Copy concatenation requires compatible streams and does not silently transcode. For different geometries or audio layouts, use an explicit normalization and concat graph as shown in the [reference](REWRITE.md#concatenation).
 
 ## Adaptive HLS and encryption
 

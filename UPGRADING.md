@@ -44,7 +44,41 @@ $media->export()->video('copy')->audio('copy')
 
 Filters run in registration order. One-dimension resize preserves display aspect ratio; two explicit dimensions stretch. Use `fit()` for a contain or cover policy. Stream copy rejects filters and accurate clipping. Keyframe cuts can begin before the requested time. Timeline changes omit chapters unless explicitly mapped.
 
-Use `addInput()` and `filterComplex()` for watermarks and composition. Use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Image preprocessing is an explicit `prepareImage()` callback on a private copy, with your own image-library dependency.
+Use `frameRate()`, `flipHorizontal()`, `flipVertical()`, `grayscale()`, and `deinterlace()` instead of filter-factory callbacks. Deinterlace before resizing. `volume()` takes a linear multiplier; `delayAudio()` inserts silence on all channels. `fadeIn()` and `fadeOut()` affect video and audio by default. Fade-out requires an explicit start in seconds. Disable either stream type with `video: false` or `audio: false`.
+
+Use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Image preprocessing is an explicit `prepareImage()` callback on a private copy, with your own image-library dependency. `videoFilter()` and `audioFilter()` remain available for trusted expressions.
+
+## Replace watermark and concat builders
+
+```php
+$logo = FFMpeg::disk('assets')->open('logo.png');
+$media->export()->watermark($logo, x: 20, y: 15, width: 160)
+	->resize(width: 1280)->video('libx264')->audio('copy')->save('branded.mp4');
+
+$second = FFMpeg::disk('uploads')->open('second.mp4');
+$media->concatTranscoded($second)
+	->normalizeVideo(1280, 720, frameRate: 30, fit: 'contain')
+	->normalizeAudio(sampleRate: 48000, channels: 2)
+	->video('libx264')->audio('aac')->save('joined.mp4');
+
+$media->concat($second)->export()->video('copy')->audio('copy')->save('joined.mkv');
+```
+
+`watermark()` adds inputs and maps automatically for static PNG or JPEG images. The default anchor is bottom-right; offsets are inward margins. Marks run after all output video filters, regardless of call order. Repeated marks and multiple ordinary outputs are supported, but custom maps, graphs, additional media inputs, HLS, and video copy are not. Use `addInput()` and `filterComplex()` for custom composition and HLS overlays.
+
+`concat()` joins compatible streams without silently transcoding. `concatTranscoded()` returns an export builder with one output. Choose `normalizeVideo()` and either `normalizeAudio()` or `withoutAudio()` before saving. Normalization selects each input's first motion-video and audio streams, preserves audio delays, and requires finite sources with zero container/video origins. It rejects root filters, custom graphs, and stream copy. Sources without audio require `withoutAudio()` or a custom graph; the helper does not create missing audio tracks. Source chapters are not combined.
+
+## Replace speed and GIF graphs
+
+```php
+$media->speed(2)->video('libx264')->audio('aac')->save('faster.mp4');
+$media->gif(width: 480, frameRate: 12, loop: 0)
+	->clip(4, duration: 3)->save('preview.gif');
+```
+
+`speed()` retimes video and preserves audio pitch. It requires a finite positive factor, zero container/video origins, and nonnegative audio origins. It rejects clipping, input options, custom graphs, watermark inputs, multiple outputs, and stream copy. To retime a clip, save that clip first.
+
+`gif()` owns the palette graph, maps, and encoder and produces no audio. Accurate clipping happens before palette generation. A private lossless intermediate avoids buffering the entire clip in memory, at the cost of disk space and additional processing passes. Keep clips short and dimensions small. Custom maps, graphs, additional inputs or outputs, audio settings, and encoder overrides are rejected.
 
 ## Select streams and metadata explicitly
 

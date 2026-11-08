@@ -279,6 +279,111 @@ trait ConfiguresOutput
         return $this;
     }
 
+    /** Resample video frames in filter order, without changing playback speed. */
+    public function frameRate(int|float|string $rate): self
+    {
+        if (is_float($rate) && ! is_finite($rate)) {
+            throw new InvalidArgumentException('Frame rate requires a finite positive number or positive rational.');
+        }
+
+        $parts = explode('/', (string) $rate);
+
+        if (count($parts) > 2 || array_any($parts, fn ($part) => ! preg_match('/\A(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\z/', $part)
+            || ! is_finite((float) $part) || (float) $part <= 0)
+            || ! is_finite((float) $parts[0] / (float) ($parts[1] ?? 1))
+            || (float) $parts[0] / (float) ($parts[1] ?? 1) <= 0) {
+            throw new InvalidArgumentException('Frame rate requires a finite positive number or positive rational.');
+        }
+
+        return $this->videoFilter('fps=fps='.$rate);
+    }
+
+    public function flipHorizontal(): self
+    {
+        return $this->videoFilter('hflip');
+    }
+
+    public function flipVertical(): self
+    {
+        return $this->videoFilter('vflip');
+    }
+
+    public function grayscale(): self
+    {
+        return $this->videoFilter('hue=s=0');
+    }
+
+    /**
+     * Deinterlace before calling geometry helpers. Frame mode preserves frame count,
+     * unlike FFmpeg's default field mode, which outputs a frame for each field.
+     */
+    public function deinterlace(string $mode = 'frame', string $parity = 'auto', bool $onlyInterlaced = true): self
+    {
+        if (! in_array($mode, ['frame', 'field'], true) || ! in_array($parity, ['auto', 'tff', 'bff'], true)) {
+            throw new InvalidArgumentException('Deinterlace requires frame or field mode and auto, tff, or bff parity.');
+        }
+
+        return $this->videoFilter('bwdif=mode=send_'.$mode.':parity='.$parity.':deint='.($onlyInterlaced ? 'interlaced' : 'all'));
+    }
+
+    /** Linear amplitude multiplier; zero mutes the audio. */
+    public function volume(float $multiplier): self
+    {
+        if (! is_finite($multiplier) || $multiplier < 0) {
+            throw new InvalidArgumentException('Volume requires a finite nonnegative multiplier.');
+        }
+
+        return $this->audioFilter('volume='.$multiplier);
+    }
+
+    /** Insert real silence on all channels, extending audio rather than shifting timestamps. */
+    public function delayAudio(float $seconds): self
+    {
+        if (! is_finite($seconds) || $seconds < 0) {
+            throw new InvalidArgumentException('Audio delay requires finite nonnegative seconds.');
+        }
+
+        // FFmpeg 9 treats fractional values with an 's' suffix as milliseconds.
+        $delay = floor($seconds) === $seconds
+            ? sprintf('%.0F', $seconds).'s'
+            : rtrim(rtrim(sprintf('%.17F', $seconds * 1000), '0'), '.');
+
+        return $this->audioFilter('adelay=delays='.$delay.':all=1');
+    }
+
+    /** Fade both video and audio by default, starting at zero seconds. */
+    public function fadeIn(float $duration, float $start = 0, bool $video = true, bool $audio = true): self
+    {
+        return $this->fade('in', $duration, $start, $video, $audio);
+    }
+
+    /** Fade both video and audio by default; start is an explicit time in seconds. */
+    public function fadeOut(float $duration, float $start, bool $video = true, bool $audio = true): self
+    {
+        return $this->fade('out', $duration, $start, $video, $audio);
+    }
+
+    private function fade(string $type, float $duration, float $start, bool $video, bool $audio): self
+    {
+        $this->assertOutputMutable();
+
+        if (! is_finite($duration) || $duration <= 0 || ! is_finite($start) || $start < 0 || (! $video && ! $audio)) {
+            throw new InvalidArgumentException('Fades require a finite positive duration, a finite nonnegative start, and video or audio.');
+        }
+
+        $timing = 't='.$type.':st='.rtrim(rtrim(sprintf('%.17F', $start), '0'), '.').':d='.rtrim(rtrim(sprintf('%.17F', $duration), '0'), '.');
+
+        if ($video) {
+            $this->videoFilter('fade='.$timing);
+        }
+
+        if ($audio) {
+            $this->audioFilter('afade='.$timing);
+        }
+
+        return $this;
+    }
+
     public function outputOptions(array $tokens): self
     {
         $this->assertOutputMutable();

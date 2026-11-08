@@ -53,9 +53,24 @@ readonly class Media
         return new PendingHlsExport($this, $this->defaultOutputDisk(), $segmentDuration);
     }
 
+    public function speed(float $factor): PendingSpeed
+    {
+        return new PendingSpeed($this, $this->defaultOutputDisk(), $factor);
+    }
+
+    public function gif(int $width = 480, int|float $frameRate = 12, int $loop = 0): PendingGif
+    {
+        return new PendingGif($this, $this->defaultOutputDisk(), $width, $frameRate, $loop);
+    }
+
     public function concat(Media ...$following): self
     {
         return new self(config('filesystems.default'), new ConcatInput([$this, ...$following]));
+    }
+
+    public function concatTranscoded(Media ...$following): PendingConcat
+    {
+        return new PendingConcat([$this, ...$following], config('filesystems.default'));
     }
 
     public function prepareImage(callable $prepare): self
