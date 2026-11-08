@@ -21,10 +21,12 @@
     ],
     "require": {
         "php": "^8.4",
+        "illuminate/auth": "^12.0|^13.0",
         "illuminate/contracts": "^12.0|^13.0",
         "illuminate/filesystem": "^12.0|^13.0",
         "illuminate/http": "^12.0|^13.0",
         "illuminate/process": "^12.0|^13.0",
+        "illuminate/routing": "^12.0|^13.0",
         "illuminate/support": "^12.0|^13.0"
     },
     "require-dev": {

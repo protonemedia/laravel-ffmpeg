@@ -54,7 +54,7 @@ $result = $media->export()
 $media->export()->video('copy')->audio('copy')->save('lesson.mkv');
 ```
 
-Each operation has independent settings. Bitrates require units such as `'2500k'`, not bare numbers. CRF and target bitrate cannot combine. Copies reject filters and accurate clipping. A compatible container is still required.
+Each operation has independent settings. Bitrates accept positive integers in bits per second, such as `2500000`, or unit strings such as `'2500k'`. Floats and unitless strings such as `'2500000'` are invalid. CRF and target bitrate cannot combine. Copies reject filters and accurate clipping. A compatible container is still required.
 
 ```php
 $media->export()->video('libx264', bitrate: '2500k')->audio('aac')->twoPass()->save('two-pass.mp4');
@@ -132,7 +132,7 @@ $media->export()->video('libx264')->audio('aac')
 	->fadeIn(1)->fadeOut(1, start: 9)->save('treated.mp4');
 ```
 
-Filters run in registration order. One-dimension `resize()` preserves display aspect ratio; two dimensions stretch. `fit()` produces square pixels. Crop and pad use positive even dimensions and centered offsets by default. Rotation accepts clockwise quarter turns and negative equivalents, after input autorotation. FFmpeg validates source-dependent geometry.
+Ordinary filters run in registration order. All output video filters run before generated `watermark()` overlays, even filters called after `watermark()`. One-dimension `resize()` preserves display aspect ratio; two dimensions stretch. `fit()` produces square pixels. Crop and pad use positive even dimensions and centered offsets by default. Rotation accepts clockwise quarter turns and negative equivalents, after input autorotation. FFmpeg validates source-dependent geometry.
 
 `frameRate()` drops or duplicates frames without changing playback speed. Deinterlace before resizing; the default `frame` mode preserves frame count, while `mode: 'field'` produces a frame per field. `flipVertical()` is also available. `volume()` takes a linear multiplier, where zero mutes. `delayAudio()` inserts silence on every channel and extends the audio. Fades affect both video and audio unless you pass `video: false` or `audio: false`; `fadeOut()` requires an explicit start in seconds. Filtered streams must be encoded, not copied. Use `videoFilter()` and `audioFilter()` for other trusted FFmpeg expressions.
 
@@ -160,11 +160,13 @@ $media->storyboard(every: 5, columns: 5, rows: 3, margin: 2, padding: 1)
 	->resize(width: 160)->vtt('cues/lesson.vtt')->toDisk('images')
 	->save('sheets/lesson-%03d.jpg');
 
-$media->waveform(width: 800, height: 120, colors: ['blue'])
+$media->waveform(width: 800, height: 120, colors: 'blue')
 	->clip(2, duration: 10)->save('waveform.png');
 ```
 
 Image patterns require one integer placeholder. Storyboard VTT references are relative to the cue file, even when images use a different directory. JPEG quality uses `outputOptions(['-q:v', '3'])`. A waveform PNG is distinct from waveform-peaks data.
+
+Waveform `colors` accepts a string or a nonempty list of strings. One string means one color, not a delimited list. Use names such as `'blue'` or RGB/RGBA hexadecimal colors with a `#` or `0x` prefix.
 
 ## Change playback speed and make GIFs
 
@@ -285,6 +287,22 @@ Copy concatenation requires compatible streams and never falls back to transcodi
 
 ## Compose multiple inputs and outputs
 
+Use `lut3d()` for a staged LUT without a raw graph. Each output can apply the LUT and resize independently:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\ExportOutput;
+
+$look = FFMpeg::disk('assets')->open('looks/grade.cube');
+$media->export()
+	->output('full.mp4', fn (ExportOutput $out) => $out
+		->lut3d($look)->resize(width: 1920)->video('libx264')->audio('aac')->toDisk('videos'))
+	->output('preview.mp4', fn (ExportOutput $out) => $out
+		->lut3d($look)->resize(width: 640)->video('libx264')->audio('aac')->toDisk('previews'))
+	->save();
+```
+
+`lut3d(Media $look)` uses private staging and preserves filter call order. It rejects media input options on the LUT descriptor. Each output runs its filters independently. There is no shared LUT or automatic `split` optimization. To process the LUT once before splitting, keep the raw `resource()` and `filterComplex()` graph shown in the [composition reference](REWRITE.md#composition-and-resources).
+
 Use `addInput()` and `filterComplex()` when you need custom branching, stream selection, or an HLS watermark:
 
 ```php
@@ -368,7 +386,73 @@ Each audio rendition encodes once and can serve several variants. Renditions req
 
 fMP4 owns one initialization file per audio/video playlist and uses `.m4s` segments. AES-128 encryption is supported only with MPEG-TS and is rejected with fMP4 or alternate subtitles. Referencing variants and renditions require matching clips. `twoPass()` measures bitrate-configured video variants without producing first-pass HLS files. Init files and media publish before playlists. Dynamic responses rewrite init references through `mediaUrlsUsing()` and traverse alternate playlists through `playlistUrlsUsing()`.
 
-## Dynamic HLS responses
+## Serve protected HLS with Laravel
+
+Configure named private Storage disks for media and keys. After publishing, persist the root result's playback inventory on the lesson for the full presentation:
+
+```php
+// In App\Models\Lesson. Add a JSON column named hls_playback in your migration.
+protected function casts(): array
+{
+	return ['hls_playback' => 'array'];
+}
+```
+
+```php
+// After the HLS export above completes:
+$lesson->hls_playback = $result->playback()->toArray();
+$lesson->save();
+```
+
+Register the definition and explicit model binding in your service provider's `boot()` method:
+
+```php
+use App\Models\Lesson;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
+use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
+use ProtoneMedia\LaravelFFMpeg\Support\Hls;
+
+// Inside AppServiceProvider::boot():
+Route::model('lesson', Lesson::class);
+Hls::define('lesson',
+	resolve: fn (Lesson $lesson) => HlsPresentation::fromArray($lesson->hls_playback),
+	authorize: fn (Lesson $lesson) => Gate::authorize('view', $lesson),
+);
+```
+
+The `authorize` callback is mandatory. Define your lesson's `view` policy before serving playback. Laravel does not infer implicit model bindings from these callbacks, so register `Route::model()` explicitly for each model parameter.
+
+Register the controller route in `routes/web.php`:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Support\Hls;
+
+Hls::routes('/lessons/{lesson}/hls', name: 'lessons.hls', playback: 'lesson');
+```
+
+Issue an entry URL from an authorized controller:
+
+```php
+Gate::authorize('view', $lesson);
+$url = Hls::url('lessons.hls', ['lesson' => $lesson], expires: now()->addMinutes(10));
+```
+
+`Hls::routes()` defaults to `['web', 'auth']`. The route action is a controller, so `php artisan route:cache` works. Definition closures live in the service provider, not in cached route actions. Keep any application configuration closures out of cached route actions too.
+
+Every child playlist, segment, init file, and key gets a signed URL with the entry URL's exact deadline. Requests do not renew expiry. Child URLs preserve validated signed query context, such as grants or editions, with route parameters taking precedence. Every request validates its signature and runs the definition's authorization callback again. The controller serves only inventory-owned files through opaque resource IDs, never arbitrary disk paths. Responses use `private, no-store` and `nosniff`. Media supports single byte ranges and `HEAD`; keys return exactly 16 raw bytes, not hex or Base64.
+
+For single-variant playback, `$result->variant('360p')->playback()` also retains the private-key references it needs internally. `variant('360p')->files()` still excludes shared key files. Prefer the root result when persisting the full presentation.
+
+Keep the inventory server-side. Never restore it from request data or serialize it into a public lesson response. Playback requires named disks, not anonymous filesystem instances. Keep published media and keys private and immutable. Publish replacement exports to new paths and replace the stored inventory instead of changing files under an active inventory.
+
+If Sanctum is installed, replace middleware with `middleware: ['api', 'auth:sanctum']`. For deliberate bearer-URL playback, use `middleware: ['web']` only when URL issuance stays behind an authorized endpoint. In that mode, URLs are bearer credentials, not proof of a signed-in user. There is no automatic global authentication. The definition's mandatory `authorize` callback must enforce your intended access policy on every request, including requests without a session.
+
+CORS and trusted proxy configuration remain your application's responsibility. Signed playback and AES-128 encryption are not DRM.
+
+## Customize raw HLS responses
+
+Use the lower-level playlist API when you need application-owned URL rewriting instead of the protected playback controller:
 
 ```php
 // Inside an authorized controller. Resolve the path from this lesson's owned inventory.

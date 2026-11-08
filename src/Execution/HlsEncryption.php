@@ -119,4 +119,19 @@ class HlsEncryption
     {
         return array_column($this->keys, 'artifact');
     }
+
+    public function references(): array
+    {
+        $references = [];
+        foreach ($this->urls as $playlist => $urls) {
+            foreach ($urls as $index => $uri) {
+                $references[$playlist][$uri] = [
+                    'disk' => $this->keys[$index]['artifact']['destination']['disk'],
+                    'path' => $this->keys[$index]['artifact']['destination']['path'],
+                ];
+            }
+        }
+
+        return $references;
+    }
 }

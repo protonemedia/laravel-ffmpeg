@@ -85,8 +85,9 @@ trait ConfiguresOutput
 
     private function bitrate(mixed $bitrate): void
     {
-        if ($bitrate !== null && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
-            throw new InvalidArgumentException('Bitrates require an explicit unit string, such as 2500k.');
+        if ($bitrate !== null && ! (is_int($bitrate) && $bitrate > 0)
+            && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
+            throw new InvalidArgumentException('Bitrates require a positive integer in bits per second or an explicit unit string, such as 2500k.');
         }
     }
 
@@ -260,6 +261,14 @@ trait ConfiguresOutput
     {
         $this->assertOutputMutable();
         $this->videoFilters[] = ResourceFilter::burnSubtitles($subtitles);
+
+        return $this;
+    }
+
+    public function lut3d(Media $look): self
+    {
+        $this->assertOutputMutable();
+        $this->videoFilters[] = ResourceFilter::lut3d($look);
 
         return $this;
     }

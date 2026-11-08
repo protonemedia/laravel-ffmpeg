@@ -103,7 +103,7 @@ readonly class Media
         return new PendingStoryboard($this, $this->defaultOutputDisk(), $every, $columns, $rows, $margin, $padding);
     }
 
-    public function waveform(int $width = 640, int $height = 120, array $colors = ['blue']): PendingWaveform
+    public function waveform(int $width = 640, int $height = 120, string|array $colors = ['blue']): PendingWaveform
     {
         return new PendingWaveform($this, $this->defaultOutputDisk(), $width, $height, $colors);
     }

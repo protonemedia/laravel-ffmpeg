@@ -14,7 +14,7 @@ Probing requires FFprobe 9.0.x. It reads format, streams, and chapters together.
 
 The process boundary clears inherited application environment variables, limits JSON capture to 16 MiB, and retains only the last 64 KiB of stderr. Internal callbacks drain both streams without Symfony retaining a second copy. `laravel-ffmpeg.timeout` sets the total deadline. Optional `laravel-ffmpeg.idle_timeout` sets the silence deadline. Both use seconds. Failures expose a `MediaException` with `phase`, `category`, and bounded diagnostics, without a raw credential-bearing exception chain. Workspaces are removed after the child stops, including on failure.
 
-Exports support codecs, explicit-unit bitrates, CRF and preset settings, ordered stream maps, audio and video filter chains, metadata and chapter controls, and accurate or keyframe clipping. An explicit map replaces default selection. Selector-specific FFprobe queries validate maps against the staged asset without interpreting FFmpeg's selector grammar in PHP. Empty explicit selection fails rather than allowing FFmpeg to select tracks automatically.
+Exports support codecs, positive integer bitrates in bits per second or explicit-unit strings, CRF and preset settings, ordered stream maps, audio and video filter chains, metadata and chapter controls, and accurate or keyframe clipping. For both `video()` and `audio()`, `2500000` and `'2500k'` are valid bitrates. Floats, zero, negative values, and unitless strings are invalid. An explicit map replaces default selection. Selector-specific FFprobe queries validate maps against the staged asset without interpreting FFmpeg's selector grammar in PHP. Empty explicit selection fails rather than allowing FFmpeg to select tracks automatically.
 
 `addInput(Media)` returns a stable numeric input index. Repeated descriptors share staging and probe results within an execution, but retain separate `-i` entries. `filterComplex()` compiles one graph argument. `output($path, $callback)` configures independent destinations and encoding settings. Every output in a multi-input or graph operation requires explicit maps. Multiple inputs also require explicit metadata and chapter sources, or explicit omission. Output callbacks run immediately. Settings freeze when execution starts.
 
@@ -118,7 +118,7 @@ $media->waveform(width: 640, height: 120, colors: ['red'])
 	->resize(width: 320)->save('audio/excerpt.jpg');
 ```
 
-`waveform()` renders the first audio stream through FFmpeg's `showwavespic` filter. Defaults are 640 × 120 pixels with blue channels on one canvas. Dimensions are positive integers and may be odd. Colors are a nonempty list of FFmpeg color names, six-digit RGB strings, or eight-digit RGBA strings. Hexadecimal colors require a `#` or `0x` prefix. Filter syntax is not accepted as a color.
+`waveform()` renders the first audio stream through FFmpeg's `showwavespic` filter. Defaults are 640 × 120 pixels with blue channels on one canvas. Dimensions are positive integers and may be odd. The `colors` parameter accepts `string|array`. A string is one color, not a delimited list. An array must be a nonempty list of color strings. Colors are FFmpeg names, six-digit RGB strings, or eight-digit RGBA strings. Hexadecimal colors require a `#` or `0x` prefix. Filter syntax is not accepted as a color.
 
 Audio filters run before accurate audio trimming and waveform rendering. Geometry and other video filters run after rendering, inside the same owned graph. Keyframe clips are rejected. Each call creates fresh settings. `save()` publishes a validated JPEG or PNG with the image role, using the same Storage options, lifecycle events, cancellation, and workspace cleanup as other images. Percentage remains unknown. A waveform image is not waveform-peaks data or a live audio visualizer.
 
@@ -297,6 +297,28 @@ Without `key:`, each save generates fresh keys and filenames. `rotateEvery:` is 
 `keyUrl` runs once per used rotation group per variant during finalization, never inspection. It receives the private disk-relative key, the public playlist key, variant name, and zero-based rotation index. It returns a UTF-8 HTTP(S) URL or relative URI, resolved against that variant playlist. Quotes, backslashes, whitespace, control characters, fragments, and repeated URLs for different keys within a playlist are rejected. The application owns URL expiry, authorization, and CORS.
 
 Keys publish with private visibility before any media, regardless of media Storage options. Segments publish before playlists, with the master last. Results retain media-first order and append `hls-key` files; variant results exclude shared keys. Key bytes and URLs never enter FFmpeg commands or process summaries. Finalized playlists retain the 16 MiB limit. Hooks cannot change generated key directives. Validation and callback failures publish nothing and clean the workspace. Later transfer failures report successful uploads, including keys, without deleting them. Publication is not transactional.
+
+### Protected Laravel playback
+
+`HlsExportResult::playback()` returns `Http\HlsPresentation`. Call it on the root export result so the inventory includes the master, variants, renditions, media, init files, and shared keys. `toArray()` returns a persistable inventory with `files`, `playlist`, and `keys`. `HlsPresentation::fromArray()` restores trusted server-side data. Named disks and canonical disk-relative paths are required. Anonymous filesystem instances are not supported for playback. Never accept an inventory from a request or expose it through a public model response.
+
+`variant($name)->playback()` retains the private-key references needed for that variant internally, although `variant($name)->files()` excludes shared key files. Root-result persistence remains the recommended choice for a full presentation.
+
+The `Support\Hls` facade provides these methods:
+
+- `define(string $name, callable $resolve, callable $authorize)` registers a presentation definition. The resolver returns `HlsPresentation`. Authorization is mandatory and must return `true` or an allowed Laravel authorization response, such as `Gate::authorize('view', $lesson)`.
+- `routes(string $uri, string $name, string $playback, array $middleware = ['web', 'auth'])` registers a GET/HEAD controller route with an optional opaque `hlsResource` parameter.
+- `url(string $route, array $parameters = [], ?DateTimeInterface $expires = null)` signs the entry URL. The default expiry is 30 minutes.
+
+Register definitions in a service provider, and register routes in the application's routes file. Register `Route::model('lesson', Lesson::class)` explicitly. Laravel does not infer model bindings from definition callbacks. Definition and application configuration closures are not cached route actions. The controller route supports Laravel route caching. The [protected playback guide](README.md#serve-protected-hls-with-laravel) includes persistence, policy, binding, route, and URL examples.
+
+Every request verifies a signed URL with an expiry and calls authorization before resolving the presentation. All rewritten child URLs inherit the entry URL's exact expiry, without renewal. Child URLs preserve validated signed query context, including grants or editions. Route parameters take precedence over query parameters. Lookup permits only inventory-owned files with the expected role. Key URI mappings recorded during encryption link playlist references to private key files. Resource IDs are opaque SHA-256 identifiers, not caller-supplied disk paths.
+
+Responses set `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`. Media and init responses support `HEAD` and a single byte range, including suffix ranges. Invalid or unsatisfiable ranges return 416. Key responses contain exactly 16 raw bytes, never hex or Base64. Keys support `HEAD` without a body. Missing files and unknown resources return 404.
+
+With Sanctum installed, middleware can be replaced with `['api', 'auth:sanctum']`. Deliberate bearer-URL playback can use `['web']`, but URL issuance must remain behind an authorized endpoint. Signed-only mode does not enable global authentication. URLs are bearer credentials, and the definition's mandatory authorization callback still runs on every request. A session-dependent policy can deny a bearer URL without a session.
+
+Keep published media and keys private and immutable. Replace an export by publishing to new paths and updating its inventory. CORS, trusted proxies, and secure URL issuance remain application responsibilities. This controller and AES-128 encryption do not provide DRM.
 
 ### Dynamic playlist responses
 
@@ -588,7 +610,7 @@ $media->export()
 
 `drawText()` stages literal UTF-8 text in a private file with expansion and reload disabled. Font descriptors can use any supported disk. Size must be positive, coordinates are integers, and color accepts a name or `0xRRGGBB` with optional alpha bytes. `burnSubtitles()` uses the subtitle validation described below. Both helpers work in `output()` callbacks and share staged assets across outputs without named placeholders.
 
-Filters run in call order. Burning subtitles before resizing scales the rendered text with the image. Burning them after resizing renders at the final resolution. Any subtitle helper rejects input/keyframe seeking, even when it belongs to another output. Settings freeze at execution, and resource failures identify the output index and helper. Font files must be readable regular files; FFmpeg validates the font contents when rendering.
+Ordinary filters run in call order, before all generated watermark overlays, even when called after `watermark()`. Burning subtitles before resizing scales the rendered text with the image. Burning them after resizing renders at the final resolution. Any subtitle helper rejects input/keyframe seeking, even when it belongs to another output. Settings freeze at execution, and resource failures identify the output index and helper. Font files must be readable regular files; FFmpeg validates the font contents when rendering.
 
 ### Concatenation
 
@@ -706,6 +728,10 @@ URL images always download through Laravel Http before preparation, even when th
 Ordinary exports are verified with transparent local and staged PNGs, scaled bottom-right offsets, persistent overlays, unchanged decoded audio, private-copy preprocessing, source retention, and repeated executions. Native HLS acceptance also verifies a shared overlay graph with two scaled branches, accurate clipping, and decoded watermark pixels.
 
 ### Composition and resources
+
+`lut3d(Media $look)` adds an ordered video filter backed by a privately staged LUT file. It works on the export builder and independently in each `output()` callback, including alongside `resize()`. LUT descriptors cannot contain media input options. Filenames do not enter filter expressions directly. FFmpeg validates the LUT contents.
+
+Reusing a LUT descriptor does not share decoded filter work. Each output runs its own LUT and resize filters. The helper does not generate a shared LUT or `split`. For shared-before-split processing, use the raw graph below, which applies the LUT once before branching.
 
 ```php
 $export = FFMpeg::disk('uploads')->open('source.mov')->export();

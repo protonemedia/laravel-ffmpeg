@@ -20,5 +20,6 @@ class ServiceProvider extends BaseServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../../config/config.php', 'laravel-ffmpeg');
 
         $this->app->singleton('laravel-ffmpeg', fn () => new MediaOpenerFactory);
+        $this->app->singleton(\ProtoneMedia\LaravelFFMpeg\Http\HlsPlayback::class);
     }
 }

@@ -173,6 +173,7 @@ class NativeCompositionTest extends TestCase
         $lut = FFMpeg::disk('missing')->open("a 'quoted', 日本語: look.cube");
         $export = $media->export()->resource('look', $lut)->videoFilter('lut3d=file={{look}}');
         $this->assertContains('lut3d=file=resource-0.cube', $export->inspect());
+        $this->assertSame($export->inspect(), $media->export()->lut3d($lut)->inspect());
 
         foreach (["lut3d=file='{{look}}'", 'lut3d=file=prefix{{look}}', 'lut3d=file={{look}}suffix', 'movie=filename={{look}}', 'subtitles=filename={{look}}', 'lut3d=file={{missing}}', 'hflip'] as $filter) {
             try {
@@ -766,6 +767,23 @@ class NativeCompositionTest extends TestCase
         $lut = "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
         $lutKey = "looks/a 'quoted', 日本語: invert.cube";
         Storage::disk('memory')->put($lutKey, $lut);
+        $look = FFMpeg::disk('memory')->open($lutKey);
+        $helper = FFMpeg::disk('memory')->open('nested/red 日本語.mkv')->export()
+            ->output('graded.mkv', fn ($out) => $out->mapVideo(0)->lut3d($look)->video('ffv1')
+                ->withoutMetadata(chapters: true)->toDisk('local'))
+            ->output('graded-preview.mkv', fn ($out) => $out->mapVideo(0)->lut3d($look)->resize(40, 30)->video('ffv1')
+                ->withoutMetadata(chapters: true)->toDisk('local'))->save();
+        $this->assertCount(2, $helper->files());
+        foreach (['graded.mkv' => [80, 60], 'graded-preview.mkv' => [40, 30]] as $path => [$width, $height]) {
+            $metadata = FFMpeg::disk('local')->open($path)->probe();
+            $this->assertSame([$width, $height], [$metadata->video()->width(), $metadata->video()->height()]);
+            $pixels = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path($path), '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']);
+            $this->assertTrue($pixels->successful(), $pixels->errorOutput());
+            $rgb = array_values(unpack('C*', substr($pixels->output(), 0, 3)));
+            $this->assertLessThan(25, $rgb[0]);
+            $this->assertGreaterThan(225, $rgb[1]);
+            $this->assertGreaterThan(225, $rgb[2]);
+        }
         $export = FFMpeg::disk('memory')->open('nested/red 日本語.mkv')->export();
         $this->assertSame(1, $export->addInput(FFMpeg::disk('local')->open('blue.mkv')));
         $retained = null;

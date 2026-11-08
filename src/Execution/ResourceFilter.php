@@ -34,6 +34,15 @@ readonly class ResourceFilter
         ], 'subtitles=filename=%s');
     }
 
+    public static function lut3d(Media $look): self
+    {
+        if ($look->inputOptions() !== []) {
+            throw new InvalidArgumentException('LUT resources do not accept media input options.');
+        }
+
+        return new self('lut3d', ['look' => ['type' => 'file', 'source' => $look]], 'lut3d=file=%s');
+    }
+
     public function toFilter(callable $resolve): string
     {
         return sprintf($this->template, ...array_map($resolve, array_keys($this->resources)));

@@ -24,6 +24,8 @@ class PendingHlsExport extends PendingExport
 
     private ?HlsEncryption $encryption = null;
 
+    private array $keyReferences = [];
+
     private string $segmentType = 'mpegts';
 
     private array $renditions = [];
@@ -273,6 +275,7 @@ class PendingHlsExport extends PendingExport
         }
 
         $this->variantFiles = [];
+        $this->keyReferences = [];
         $result = parent::save($path);
         [$keys, $files] = $result->files()->partition(fn ($file) => $file->role === 'hls-key');
 
@@ -281,7 +284,7 @@ class PendingHlsExport extends PendingExport
             $renditions[$rendition['type']][$rendition['group']][$rendition['name']] = $id;
         }
 
-        return new HlsExportResult([...$files, ...$keys], $result->processes()->all(), $this->variantFiles, $renditions);
+        return new HlsExportResult([...$files, ...$keys], $result->processes()->all(), $this->variantFiles, $renditions, $this->keyReferences);
     }
 
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
@@ -569,6 +572,7 @@ class PendingHlsExport extends PendingExport
             $masterLines[] = $this->relativeUrl($info['path'], $outputs[$master]->destination()['path']);
         }
         $this->writePlaylist($paths[$master], $masterLines, $outputs[$master]->destination()['path'], null);
+        $this->keyReferences = $encryption?->references() ?? [];
         $artifacts = [...($encryption?->artifacts() ?? []), ...$segments, ...$playlists, [
             'path' => $paths[$master], 'output' => $master, 'role' => 'hls-master', 'destination' => $outputs[$master]->destination(),
         ]];

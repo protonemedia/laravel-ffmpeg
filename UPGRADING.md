@@ -34,7 +34,7 @@ $private = FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer '.$token],
 
 `FFMpeg::openUrl()` uses the same HTTP rules as the disk selector. Headers require `download: true`. Downloads use Laravel Http with TLS verification and reject redirects. Direct URLs enter media process arguments, so do not include reusable credentials. See the [HTTP input reference](REWRITE.md#http-inputs) for transport limits and redaction rules.
 
-Builders do not forward methods to PHP-FFMpeg. Use explicit codecs, scoped `inputOptions:`, `globalOptions()`, `outputOptions()`, and filters. Bitrates include units such as `'2500k'`. `inspect()` returns the argument plan without reading inputs or launching a process. `save()` returns `ExportResult`, not the builder.
+Builders do not forward methods to PHP-FFMpeg. Use explicit codecs, scoped `inputOptions:`, `globalOptions()`, `outputOptions()`, and filters. Bitrates accept positive integers in bits per second, such as `2500000`, or unit strings such as `'2500k'`. Floats and unitless strings are invalid. `inspect()` returns the argument plan without reading inputs or launching a process. `save()` returns `ExportResult`, not the builder.
 
 ## Replace filters and clipping
 
@@ -50,11 +50,13 @@ $media->export()->video('copy')->audio('copy')
 	->clip(12.5, end: 20.5, seek: 'keyframe')->save('copy.mkv');
 ```
 
-Filters run in registration order. One-dimension resize preserves display aspect ratio; two explicit dimensions stretch. Use `fit()` for a contain or cover policy. Stream copy rejects filters and accurate clipping. Keyframe cuts can begin before the requested time. Timeline changes omit chapters unless explicitly mapped.
+Ordinary filters run in registration order. All output video filters run before generated watermark overlays, even filters called after `watermark()`. One-dimension resize preserves display aspect ratio; two explicit dimensions stretch. Use `fit()` for a contain or cover policy. Stream copy rejects filters and accurate clipping. Keyframe cuts can begin before the requested time. Timeline changes omit chapters unless explicitly mapped.
 
 Use `frameRate()`, `flipHorizontal()`, `flipVertical()`, `grayscale()`, and `deinterlace()` instead of filter-factory callbacks. Deinterlace before resizing. `volume()` takes a linear multiplier; `delayAudio()` inserts silence on all channels. `fadeIn()` and `fadeOut()` affect video and audio by default. Fade-out requires an explicit start in seconds. Disable either stream type with `video: false` or `audio: false`.
 
 Use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Image preprocessing is an explicit `prepareImage()` callback on a private copy, with your own image-library dependency. `videoFilter()` and `audioFilter()` remain available for trusted expressions.
+
+Use `lut3d($look)` with a `Media` descriptor for a privately staged LUT. In each `output()` callback, call `lut3d($look)->resize(...)` to configure that output independently. The helper does not share LUT processing or generate a `split`. Keep raw `resource()` and `filterComplex()` graphs when you need to apply a LUT once before splitting into outputs. See the [composition example](README.md#compose-multiple-inputs-and-outputs).
 
 ## Replace watermark and concat builders
 
@@ -139,6 +141,8 @@ $analysis->throw();
 
 `get()` returns raw JPEG bytes, not Base64. Storyboard geometry applies to each tile before assembly. `waveform()` writes an image; `waveformPeaks()` returns versioned amplitude data. Analysis-only nonzero exits remain inspectable until `throw()` is called.
 
+Waveform `colors` accepts a string or a nonempty list of color strings. For example, `waveform(colors: 'blue')` selects one color. A scalar string is not a delimited list. RGB and RGBA hexadecimal colors require a `#` or `0x` prefix.
+
 ## Replace HLS builders and responses
 
 ```php
@@ -161,7 +165,15 @@ return FFMpeg::disk('streams')->playlist('lesson/master.m3u8')
 
 Variants configure encoding only. MPEG-TS remains the default. Private key storage is explicit; key routes return 16 raw bytes after authorization. Keys rotate deterministically by segment group, with a random IV per segment. Playlist hooks are additive and cannot replace generated references or encryption lines. URL resolvers receive the canonical target, containing playlist, and original URI, not just a basename.
 
-Do not expose a generic disk download route. Scope playlist and key paths to the authorized asset. Dynamic responses default to `private, no-store`; your application owns authorization, expiry, CORS, and cache policy.
+For protected Laravel playback, replace handwritten playlist and key routes with `Support\Hls`. Persist `$result->playback()->toArray()` from the root export result in the lesson's JSON column with an `array` cast for the full presentation. A variant's `playback()` also retains its needed private-key references internally, while its `files()` still excludes shared key files. Restore the inventory with `Http\HlsPresentation::fromArray($lesson->hls_playback)` in the definition's resolver.
+
+Register `Hls::define()` in a service provider with a mandatory authorization callback such as `fn (Lesson $lesson) => Gate::authorize('view', $lesson)`. Register `Route::model('lesson', Lesson::class)` explicitly. Laravel does not infer model bindings from definition callbacks. Register `Hls::routes()` in the routes file, then issue `Hls::url(..., expires: now()->addMinutes(10))` from an authorized endpoint. Follow the [complete protected playback setup](README.md#serve-protected-hls-with-laravel).
+
+Routes default to `['web', 'auth']` and support route caching. Definition and application configuration closures are not cached route actions. If Sanctum is installed, replace middleware with `['api', 'auth:sanctum']`. Deliberate bearer-URL playback can use `['web']` only with authorized URL issuance. There is no automatic global authentication in signed-only mode. URLs are bearer credentials, and the definition's authorization callback remains mandatory on every request.
+
+All child URLs keep the entry URL's exact deadline without renewal. They preserve validated signed query context, such as grants or editions, with route parameters taking precedence. Every request revalidates the signature and authorization. Only inventory-owned resources are served, using opaque IDs and `private, no-store` headers. Media supports single byte ranges and `HEAD`; key responses contain 16 raw bytes. Keep inventories server-side and use named disks with private, immutable published media and keys. Publish replacements to new paths.
+
+Keep the raw playlist API above for custom URL policies. Do not expose a generic disk download route. Your application still owns CORS and trusted proxy configuration. Signed playback and AES-128 encryption are not DRM.
 
 ## Update progress and failure handling
 

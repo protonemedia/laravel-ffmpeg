@@ -260,7 +260,7 @@ class NativeExportTest extends TestCase
         $media = FFMpeg::disk('memory')->open('source.mp4');
 
         foreach ([
-            fn () => $media->export()->video('libx264', bitrate: 2500)->inspect(),
+            fn () => $media->export()->video('libx264', bitrate: 800_000, crf: 23)->inspect(),
             fn () => $media->export()->video('libx264', bitrate: '2500k', crf: 23)->inspect(),
             fn () => $media->export()->video('copy')->videoFilter('hflip')->inspect(),
             fn () => $media->export()->audio('copy')->clip(1, duration: 2)->inspect(),
@@ -281,6 +281,61 @@ class NativeExportTest extends TestCase
         $this->assertLessThan(array_search('-i', $command), array_search('-ss', $command));
         $this->assertContains('-noaccurate_seek', $command);
         Process::assertNothingRan();
+    }
+
+    #[Test]
+    public function bitrates_accept_positive_integer_bits_per_second_and_preserve_explicit_units(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('absent.mkv');
+
+        foreach ([1, 2500, 800_000, PHP_INT_MAX, '800k', '1.5M', '2G', '96K', '0.5m', '0.1g'] as $bitrate) {
+            $command = $media->export()->video('libx264', bitrate: $bitrate)->audio('aac', bitrate: $bitrate)->inspect();
+            $this->assertSame((string) $bitrate, $command[array_search('-b:v', $command, true) + 1]);
+            $this->assertSame((string) $bitrate, $command[array_search('-b:a', $command, true) + 1]);
+        }
+
+        foreach ([0, -1, 800_000.0, 0.5, INF, NAN, true, false, [], '', '800000', '0k', '0.0M', '-1k', '1e3k', "800k\n"] as $bitrate) {
+            foreach (['video', 'audio'] as $type) {
+                try {
+                    $media->export()->{$type}(bitrate: $bitrate)->inspect();
+                    $this->fail('An invalid bitrate was accepted.');
+                } catch (InvalidArgumentException) {
+                    $this->addToAssertionCount(1);
+                }
+            }
+        }
+        Process::assertNothingRan();
+    }
+
+    #[Test]
+    public function real_integer_bitrates_encode_identically_to_explicit_unit_strings(): void
+    {
+        $probe = getenv('FFMPEG_9_FFPROBE');
+
+        if (! $probe) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real bitrate encoding.');
+        }
+
+        $ffmpeg = dirname($probe).'/ffmpeg';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $fixture = $this->root.'/bitrates.mkv';
+        $generation = Process::run([
+            $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=1',
+            '-f', 'lavfi', '-i', 'sine=frequency=700:sample_rate=48000:duration=1',
+            '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $fixture,
+        ]);
+        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        Storage::disk('memory')->put('bitrates.mkv', file_get_contents($fixture));
+        $media = FFMpeg::disk('memory')->open('bitrates.mkv');
+        $media->export()->video('libx264', bitrate: 800_000)->audio('aac', bitrate: 64_000)->save('integer.mp4');
+        $media->export()->video('libx264', bitrate: '800k')->audio('aac', bitrate: '64k')->save('units.mp4');
+
+        $this->assertSame(Storage::disk('memory')->get('units.mp4'), Storage::disk('memory')->get('integer.mp4'));
+        $metadata = FFMpeg::disk('memory')->open('integer.mp4')->probe();
+        $this->assertSame('h264', $metadata->video()->codec());
+        $this->assertSame('aac', $metadata->audio()->codec());
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     #[Test]
@@ -740,6 +795,12 @@ class NativeExportTest extends TestCase
             fn () => $media->waveform(colors: ['red:draw=full']),
             fn () => $media->waveform(colors: ['#fff']),
             fn () => $media->waveform(colors: [123]),
+            fn () => $media->waveform(colors: ['color' => 'red']),
+            fn () => $media->waveform(colors: ''),
+            fn () => $media->waveform(colors: 'red|blue'),
+            fn () => $media->waveform(colors: 'red:draw=full'),
+            fn () => $media->waveform(colors: '#fff'),
+            fn () => $media->waveform(colors: "blue\n"),
             fn () => $media->waveform()->clip(0, duration: 1, seek: 'keyframe')->inspect(),
         ] as $invalid) {
             try {
@@ -796,6 +857,16 @@ class NativeExportTest extends TestCase
         $media->waveform(width: 80, height: 41)->audioFilter('volume=0')->save('muted.png');
         $muted = imagecreatefromstring(Storage::disk('memory')->get('muted.png'));
         $this->assertSame(0, imagecolorsforindex($muted, imagecolorat($muted, 60, 10))['blue']);
+
+        foreach (['red', '#ff0000', '0xff0000ff'] as $index => $color) {
+            $scalar = $media->waveform(width: 80, height: 41, colors: $color);
+            $this->assertSame($media->waveform(width: 80, height: 41, colors: [$color])->inspect(), $scalar->inspect());
+            $scalar->save('scalar-'.$index.'.png');
+            $colored = imagecreatefromstring(Storage::disk('memory')->get('scalar-'.$index.'.png'));
+            $pixel = imagecolorsforindex($colored, imagecolorat($colored, 60, 10));
+            $this->assertGreaterThan(200, $pixel['red']);
+            $this->assertSame(0, $pixel['blue']);
+        }
 
         $media->waveform(width: 80, height: 41, colors: ['#ff0000'])->clip(0.6, duration: 0.3)
             ->resize(width: 40)->save('clipped.jpg');

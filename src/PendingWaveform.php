@@ -7,9 +7,11 @@ use InvalidArgumentException;
 
 class PendingWaveform extends PendingImages
 {
-    public function __construct(Media $media, string|Filesystem $disk, int $width, int $height, array $colors)
+    public function __construct(Media $media, string|Filesystem $disk, int $width, int $height, string|array $colors)
     {
         parent::__construct($media, $disk, '[waveform]');
+
+        $colors = is_string($colors) ? [$colors] : $colors;
 
         if ($width < 1 || $height < 1 || $colors === [] || ! array_is_list($colors)
             || array_any($colors, fn ($color) => ! is_string($color)
