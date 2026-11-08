@@ -21,6 +21,8 @@ trait ConfiguresOutput
 
     private array $audio = [];
 
+    private array $audioStreams = [];
+
     private array $maps = [];
 
     private array $videoFilters = [];
@@ -61,6 +63,44 @@ trait ConfiguresOutput
         $this->videoStreams[$track] = $settings->settings();
 
         return $this;
+    }
+
+    /** Override encoding in mapped output audio order, not input stream order. */
+    public function audioStream(int $track, callable $configure): self
+    {
+        $this->assertOutputMutable();
+        if ($track < 0 || isset($this->audioStreams[$track])) {
+            throw new InvalidArgumentException('Audio track indexes must be nonnegative and configured once.');
+        }
+        $settings = new AudioStreamSettings;
+        $configure($settings);
+        $this->audioStreams[$track] = $settings->settings();
+
+        return $this;
+    }
+
+    public function videoOptions(array $tokens): self
+    {
+        $this->assertOutputMutable();
+        $this->video = array_replace($this->video, (new VideoStreamSettings)->options($tokens)->settings());
+
+        return $this;
+    }
+
+    public function audioOptions(array $tokens): self
+    {
+        $this->assertOutputMutable();
+        $this->audio = array_replace($this->audio, (new AudioStreamSettings)->options($tokens)->settings());
+
+        return $this;
+    }
+
+    /** Signal color characteristics; this does not transform pixel values. */
+    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): self
+    {
+        $this->videoOptions(['-color_primaries', $primaries, '-color_trc', $transfer, '-colorspace', $space, '-color_range', $range]);
+
+        return $this->videoFilter(VideoStreamSettings::colorFilter($primaries, $transfer, $space, $range));
     }
 
     public function video(?string $codec = null, mixed $bitrate = null, ?float $crf = null, ?string $preset = null): self
@@ -600,6 +640,16 @@ trait ConfiguresOutput
             }
         }
 
+        foreach ($this->audioStreams as $overrides) {
+            $encoding = array_replace($this->audio, $overrides);
+            if (($encoding['codec'] ?? null) === 'copy' && (count($encoding) > 1 || $this->audioFilters !== []
+                || ($this->clip !== null && $this->clip['seek'] === 'accurate'))) {
+                throw new InvalidArgumentException('Copied audio tracks cannot have filters or encoder settings.');
+            }
+        }
+
+        $this->validateCopyOptions();
+
         if ($this->clip !== null) {
             if ($this->clip['seek'] === 'accurate') {
                 array_push($options, '-ss', $this->clipTimestamp($this->clip['start']));
@@ -630,10 +680,16 @@ trait ConfiguresOutput
             }
         }
 
-        foreach ($this->videoStreams as $track => $encoding) {
-            foreach ($encoding as $name => $value) {
-                $option = match ($name) { 'codec' => 'c', 'bitrate' => 'b', default => $name };
-                array_push($options, '-'.$option.':v:'.$track, (string) $value);
+        foreach ([['v', $this->videoStreams, $this->videoFilters], ['a', $this->audioStreams, $this->audioFilters]] as [$type, $streams, $baseFilters]) {
+            foreach ($streams as $track => $encoding) {
+                foreach ($encoding as $name => $value) {
+                    if ($name === 'filters') {
+                        array_push($options, '-filter:'.$type.':'.$track, implode(',', array_map($compileFilter, [...$baseFilters, ...$value])));
+                        continue;
+                    }
+                    $option = match ($name) { 'codec' => 'c', 'bitrate' => 'b', default => $name };
+                    array_push($options, '-'.$option.':'.$type.':'.$track, (string) $value);
+                }
             }
         }
 
@@ -661,6 +717,30 @@ trait ConfiguresOutput
         }
 
         return [...$options, ...$this->outputOptions];
+    }
+
+    private function validateCopyOptions(): void
+    {
+        $encoderOptions = ['preset', 'tune', 'profile', 'level', 'pix_fmt', 'maxrate', 'minrate', 'bufsize',
+            'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'ar', 'ac', 'q', 'r', 'x264-params', 'x265-params',
+            'cpu-used', 'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength',
+            'color_primaries', 'color_trc', 'colorspace', 'color_range', 'compression_level', 'sample_fmt', 'channel_layout'];
+        for ($i = 0; $i < count($this->outputOptions); $i += 2) {
+            $parts = explode(':', substr($this->outputOptions[$i], 1));
+            if (! in_array($parts[0], $encoderOptions, true)) {
+                continue;
+            }
+            foreach ([['v', $this->video, $this->videoStreams], ['a', $this->audio, $this->audioStreams]] as [$type, $base, $streams]) {
+                if (isset($parts[1]) && $parts[1] !== $type) {
+                    continue;
+                }
+                $encodings = isset($parts[2]) ? [array_replace($base, $streams[(int) $parts[2]] ?? [])]
+                    : [$base, ...array_map(fn ($override) => array_replace($base, $override), $streams)];
+                if (array_any($encodings, fn ($encoding) => ($encoding['codec'] ?? null) === 'copy')) {
+                    throw new InvalidArgumentException('Copied streams cannot have encoder output options.');
+                }
+            }
+        }
     }
 
     public function inputSeekOptions(): array
@@ -706,6 +786,7 @@ trait ConfiguresOutput
             'video' => $this->video,
             'videoStreams' => $this->videoStreams,
             'audio' => $this->audio,
+            'audioStreams' => $this->audioStreams,
             'maps' => $this->maps,
             'videoFilters' => $this->videoFilters,
             'audioFilters' => $this->audioFilters,

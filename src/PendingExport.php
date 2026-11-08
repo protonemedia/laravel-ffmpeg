@@ -51,6 +51,12 @@ class PendingExport
 
     private bool $twoPass = false;
 
+    private ?float $timeoutSeconds = null;
+
+    private ?float $idleTimeoutSeconds = null;
+
+    protected ?ProcessRunner $runner = null;
+
     protected string $outputRole = 'media';
 
     public function __construct(private readonly Media $media, string|Filesystem $disk)
@@ -67,7 +73,30 @@ class PendingExport
     ): PendingQueuedExport {
         $this->assertMutable();
 
-        return new PendingQueuedExport($this, $connection, $queue, $delay, $parallel);
+        return new PendingQueuedExport($this, $connection, $queue, $delay, $parallel, $this->timeoutSeconds);
+    }
+
+    /** A cumulative budget for this execution; null restores the configured process limits. */
+    public function timeout(?float $seconds): self
+    {
+        $this->assertMutable();
+        if ($seconds !== null && (! is_finite($seconds) || $seconds <= 0)) {
+            throw new InvalidArgumentException('An operation timeout must be finite, positive seconds or null.');
+        }
+        $this->timeoutSeconds = $seconds;
+
+        return $this;
+    }
+
+    public function idleTimeout(?float $seconds): self
+    {
+        $this->assertMutable();
+        if ($seconds !== null && (! is_finite($seconds) || $seconds <= 0)) {
+            throw new InvalidArgumentException('An idle timeout must be finite, positive seconds or null.');
+        }
+        $this->idleTimeoutSeconds = $seconds;
+
+        return $this;
     }
 
     /** @internal Worker batch cancellation is independent of user progress callbacks. */
@@ -318,6 +347,7 @@ class PendingExport
                 if (! in_array(strtolower(pathinfo($output->destination()['path'], PATHINFO_EXTENSION)), ['mp4', 'm4a', 'mp3'], true)
                     || $output->hasMaps() || $settings['omitVideo'] || $settings['omitAudio']
                     || $settings['videoFilters'] !== [] || $settings['audioFilters'] !== [] || $settings['videoStreams'] !== []
+                    || $settings['audioStreams'] !== []
                     || $settings['outputOptions'] !== [] || $settings['dispositions'] !== [] || $settings['clip'] !== null
                     || ! in_array($settings['video'], [[], ['codec' => 'copy']], true)
                     || ! in_array($settings['audio'], [[], ['codec' => 'copy']], true)) {
@@ -484,6 +514,7 @@ class PendingExport
         $onProgress = fn (Progress $progress) => $this->notify($progress, $operationId, $destinations);
 
         try {
+            $this->runner = new ProcessRunner($this->timeoutSeconds, $this->idleTimeoutSeconds);
             if (config('laravel-ffmpeg.enable_events', true)) {
                 Event::dispatch(new Events\ExportStarting($operationId, $destinations));
             }
@@ -523,7 +554,7 @@ class PendingExport
                     $staged[$target] = true;
                 }
 
-                $runner = new ProcessRunner;
+                $runner = $workspace->runner;
                 $phase = Progress::PROBING;
                 $onProgress(new Progress($phase));
                 $ffmpeg = $runner->version(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), 'ffmpeg', $workspace->path);
@@ -541,10 +572,12 @@ class PendingExport
                 $metadata = array_map(fn ($media) => $workspace->probe($media), $this->inputs);
                 $expected = array_map(fn ($output) => $this->selectedStreams($output, $workspace, $metadata), $outputs);
                 foreach ($outputs as $index => $output) {
-                    $tracks = $output->outputConfiguration()['videoStreams'];
-                    if ($tracks !== [] && ! in_array(null, $expected[$index], true)
-                        && max(array_keys($tracks)) >= count(array_filter($expected[$index], fn ($type) => $type === 'video'))) {
-                        throw new MediaException('Video track settings require existing output video tracks.', 'probing', 'mapping');
+                    foreach (['video' => 'videoStreams', 'audio' => 'audioStreams'] as $type => $key) {
+                        $tracks = $output->outputConfiguration()[$key];
+                        if ($tracks !== [] && ! in_array(null, $expected[$index], true)
+                            && max(array_keys($tracks)) >= count(array_filter($expected[$index], fn ($selected) => $selected === $type))) {
+                            throw new MediaException(ucfirst($type).' track settings require existing output '.$type.' tracks.', 'probing', 'mapping');
+                        }
                     }
                 }
                 $this->validateStreamSelections($expected);
@@ -611,25 +644,32 @@ class PendingExport
                 $sizes = [];
 
                 foreach ($artifacts as $artifact) {
+                    $runner->check(Progress::VALIDATION);
                     $outputPath = $artifact['path'];
                     $index = $artifact['output'];
                     $role = $artifact['role'] ?? $this->outputRole;
                     $size = $this->validateArtifact($outputPath, $role);
-                    $tracks = $outputs[$index]->outputConfiguration()['videoStreams'];
+                    $settings = $outputs[$index]->outputConfiguration();
+                    $configuredTracks = $settings['videoStreams'] !== [] || $settings['audioStreams'] !== [];
 
                     if (($artifact['probe'] ?? false)
-                        || (in_array($role, ['media', 'image'], true) && ($tracks !== [] || count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null))) {
+                        || (in_array($role, ['media', 'image'], true) && ($configuredTracks || count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null))) {
                         try {
                             $actual = $this->media->probePath($artifact['probePath'] ?? $outputPath, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
                         } catch (MediaException $exception) {
+                            if ($exception->category === 'timeout') {
+                                throw $exception;
+                            }
                             throw new MediaException('Cannot validate the encoded media.', $phase, 'artifact', $exception->diagnostics);
                         }
 
                         if (count($actual) !== count($expected[$index]) || array_any(array_keys($actual), fn ($i) => $expected[$index][$i] !== null && $actual[$i] !== $expected[$index][$i])) {
                             throw new MediaException('Encoded streams do not match the explicit output maps.', $phase, 'mapping');
                         }
-                        if ($tracks !== [] && max(array_keys($tracks)) >= count(array_filter($actual, fn ($type) => $type === 'video'))) {
-                            throw new MediaException('Video track settings require existing encoded output video tracks.', $phase, 'mapping');
+                        foreach (['video' => 'videoStreams', 'audio' => 'audioStreams'] as $type => $key) {
+                            if ($settings[$key] !== [] && max(array_keys($settings[$key])) >= count(array_filter($actual, fn ($selected) => $selected === $type))) {
+                                throw new MediaException(ucfirst($type).' track settings require existing encoded output '.$type.' tracks.', $phase, 'mapping');
+                            }
                         }
                     }
 
@@ -651,6 +691,7 @@ class PendingExport
                 $files = [];
 
                 foreach ($artifacts as $index => $artifact) {
+                    $runner->check(Progress::PUBLICATION);
                     $output = $artifact['target'] ?? $outputs[$artifact['output']];
                     $destination = $artifact['destination'];
                     $stream = null;
@@ -680,9 +721,15 @@ class PendingExport
                     $files[] = new GeneratedFile($disk, $destination['disk'], $destination['path'], $sizes[$index], role: $artifact['role'] ?? $this->outputRole);
                 }
 
+                $runner->check(Progress::PUBLICATION);
+
                 return new ExportResult($files, $summaries);
-            });
+            }, $this->runner);
         } catch (Throwable $exception) {
+            if ($exception instanceof MediaException && $exception->category === 'timeout' && $published !== []) {
+                $exception = new MediaException($exception->getMessage(), $exception->phase, $exception->category,
+                    $exception->diagnostics, published: $published);
+            }
             $event = $exception instanceof ExportCancelled ? Events\ExportCancelled::class : Events\ExportFailed::class;
 
             try {
@@ -696,6 +743,7 @@ class PendingExport
             throw $exception;
         } finally {
             $this->running = false;
+            $this->runner = null;
         }
 
         if (config('laravel-ffmpeg.enable_events', true)) {

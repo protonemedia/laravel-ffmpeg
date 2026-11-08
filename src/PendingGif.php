@@ -48,6 +48,7 @@ class PendingGif extends PendingExport
         $settings = $this->outputConfiguration();
 
         if ($settings['omitVideo'] || $settings['maps'] !== [] || $settings['audio'] !== [] || $settings['audioFilters'] !== []
+            || $settings['audioStreams'] !== [] || $settings['videoStreams'] !== []
             || ($settings['video'] !== [] && $settings['video'] !== ['codec' => 'gif'])
             || $settings['outputOptions'] !== [] || ($settings['clip']['seek'] ?? 'accurate') !== 'accurate'
             || array_any($settings['videoFilters'], fn ($filter) => ! is_string($filter))) {

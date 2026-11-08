@@ -992,13 +992,13 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 
 ## Delivery and limits
 
-The native implementation replaces the legacy backend and dependency tree. [README.md](README.md) contains code-first examples, and [UPGRADING.md](UPGRADING.md) covers the breaking migration. Loudness normalization, fMP4 with alternate groups, and waveform-peaks data are included, with the limits documented above and in the README.
+The native implementation replaces the legacy backend and dependency tree. [README.md](README.md) contains code-first examples, and [UPGRADING.md](UPGRADING.md) covers the breaking migration. Additional contracts include bounded frame/packet queries, capability diagnostics, operation deadlines, per-track audio encoding, finite clear DASH with shared HLS segments, and single-rendition continuous HLS. Their limits are documented in the README. [Laravel application integrations](docs/integrations.md) covers profiles and durable application-owned inventories without adding package-owned media models.
 
-Release verification uses randomized suites with deprecations treated as failures on PHP 8.4 and 8.5, Laravel 12 and 13, and matching FFmpeg/FFprobe 9.0.2. Hosted CI must verify Ubuntu 26.04 execution after pushing. No performance improvement, real-cloud integration, continuous live HLS publication, low-latency HLS, DASH, or DRM is claimed.
+Release verification uses randomized suites with deprecations treated as failures on PHP 8.4 and 8.5, Laravel 12 and 13, and matching FFmpeg/FFprobe 9.0.2. Hosted CI must verify Ubuntu 26.04 execution after pushing. No performance improvement, real-cloud integration, low-latency HLS, DRM, GPU usability, or cross-worker live-session recovery is claimed.
 
 ## Test commands
 
-Real-media cases require `FFMPEG_9_FFPROBE` to identify an installed FFprobe 9.0.x binary and report skips when that variable is absent. Acceptance uses a matching `ffmpeg` binary in the same directory, built with libx264, FreeType, HarfBuzz, and libass. Font acceptance requires `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`. Setup and CI install these prerequisites.
+Real-media cases require `FFMPEG_9_FFPROBE` to identify an installed FFprobe 9.0.x binary and report skips when that variable is absent. Acceptance uses a matching `ffmpeg` binary in the same directory, built with libx264, libx265, libxml2, FreeType, HarfBuzz, and libass. Font acceptance requires `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`. Setup and CI install these prerequisites.
 
 ```bash
 FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by random \

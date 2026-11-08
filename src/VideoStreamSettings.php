@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 
 /** Encoding overrides for one zero-based output video track. */
 class VideoStreamSettings
@@ -48,6 +49,44 @@ class VideoStreamSettings
         $this->settings['preset'] = $preset;
 
         return $this;
+    }
+
+    /** Curated, scalar encoder settings; never arbitrary command arguments. */
+    public function options(array $tokens): self
+    {
+        CommandCompiler::options($tokens, 'output');
+        for ($i = 0; $i < count($tokens); $i += 2) {
+            $name = substr($tokens[$i], 1);
+            if (! in_array($name, ['preset', 'tune', 'profile', 'level', 'pix_fmt', 'maxrate', 'minrate', 'bufsize',
+                'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'x264-params', 'x265-params', 'cpu-used',
+                'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength',
+                'color_primaries', 'color_trc', 'colorspace', 'color_range'], true)) {
+                throw new InvalidArgumentException('Unsupported video stream setting.');
+            }
+            $this->settings[$name] = $tokens[$i + 1];
+        }
+
+        return $this;
+    }
+
+    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): self
+    {
+        $this->options(['-color_primaries', $primaries, '-color_trc', $transfer, '-colorspace', $space, '-color_range', $range]);
+        // FFmpeg 9 encoders may prefer frame metadata over codec-context defaults.
+        $this->settings['filters'][] = self::colorFilter($primaries, $transfer, $space, $range);
+
+        return $this;
+    }
+
+    /** @internal Values must first pass color option validation. */
+    public static function colorFilter(string $primaries, string $transfer, string $space, string $range): string
+    {
+        $primaries = $primaries === 'unspecified' ? 'unknown' : $primaries;
+        $transfer = match ($transfer) { 'gamma22' => 'bt470m', 'gamma28' => 'bt470bg', 'unspecified' => 'unknown', default => $transfer };
+        $space = match ($space) { 'rgb' => 'gbr', 'unspecified' => 'unknown', default => $space };
+        $range = match ($range) { 'tv' => 'limited', 'pc' => 'full', 'unspecified' => 'unknown', default => $range };
+
+        return 'setparams=color_primaries='.$primaries.':color_trc='.$transfer.':colorspace='.$space.':range='.$range;
     }
 
     /** @internal Snapshot; later callback mutations cannot change the output. */

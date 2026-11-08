@@ -87,7 +87,7 @@ class PendingAudioMix extends PendingExport
         $settings = $this->outputConfiguration();
 
         if ($settings['maps'] !== [] || $settings['omitAudio'] || $settings['clip'] !== null
-            || ($settings['audio']['codec'] ?? null) === 'copy') {
+            || $settings['audioStreams'] !== [] || ($settings['audio']['codec'] ?? null) === 'copy') {
             throw new InvalidArgumentException('Audio mixing requires encoded audio, automatic maps, and an unclipped primary source.');
         }
         if ($this->loop && $this->added->protocolWhitelist() !== 'file') {

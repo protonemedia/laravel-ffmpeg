@@ -36,7 +36,7 @@ FFPROBE_BINARIES=/opt/ffmpeg/bin/ffprobe
 FFMPEG_TEMPORARY_FILES_ROOT=/var/tmp/media
 ```
 
-The temporary root must exist and be writable. FFmpeg needs the encoders, filters, and protocols used by your application. The repository's `.agents/install-ffmpeg` builds the tested binary pair with libx264, libass, fonts, image support, and HTTPS.
+The temporary root must exist and be writable. FFmpeg needs the encoders, filters, and protocols used by your application. The repository's `.agents/install-ffmpeg` builds the tested binary pair with libx264, libx265, libass, fonts, image support, DASH decoding, and HTTPS. PHP's DOM extension is required for DASH manifest validation.
 
 ### Find and verify the executables
 
@@ -61,6 +61,24 @@ sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
 If the shell command succeeds but the application fails, check the application's cached configuration, executable permissions, and directory traversal permissions. Rebuild Laravel's configuration cache and restart long-running queue workers after changing binary paths. Also check that the temporary root and Storage destinations are writable by those users.
 
 A launch failure means the selected executable could not start. A version failure means the pair is unsupported or mismatched. An encoding failure means FFmpeg started but rejected the command or media. Inspect `MediaException::phase`, `category`, and bounded, redacted `diagnostics` to distinguish these cases. Check required encoders and filters with the configured executable's `-encoders` and `-filters` options. Raw commands and unredacted process exceptions can contain credentials; do not publish them in logs or error responses.
+
+### Inspect capabilities
+
+```bash
+php artisan ffmpeg:doctor --encoder=libx264 --muxer=dash --filter=scale
+php artisan ffmpeg:doctor --json
+```
+
+`ffmpeg:doctor` checks matching binary versions, compiled-in support, and an actual temporary-workspace write. Missing requirements produce a nonzero exit code. Repeat `--encoder`, `--muxer`, `--filter`, `--protocol`, `--bsf`, or `--hwaccel` to check deployment requirements.
+
+```php
+$capabilities = FFMpeg::capabilities();
+$capabilities->has('encoders', 'libx264');
+$capabilities->require(['encoders' => ['libx264', 'aac'], 'muxers' => ['dash']]);
+$capabilities->toArray();
+```
+
+Each call captures a fresh report. Compiled-in hardware support does not prove device access, driver compatibility, or encoder usability.
 
 ## Encode and copy
 
@@ -144,6 +162,28 @@ GPU flags are validated input options, not automatic hardware selection or a CPU
 
 `openRtsp()` returns an `RtspCamera` for bounded snapshots, not a live-export descriptor. `frame()` captures one frame into a private PNG before ordinary image processing and publication. TCP and UDP fixture captures pass. Transport accepts `tcp` or `udp`; timeout is positive and at most 300 seconds. Camera URLs are trusted application configuration. Restrict reachable hosts and protect credentials, which can appear in process arguments. See the [input reference](REWRITE.md#cached-probing-and-hardware-inputs).
 
+### Query frames and packets
+
+```php
+$query = $media->probeQuery()
+	->selectStreams('v:0')->keyframes()
+	->readInterval(12, 5)
+	->entries(['frame' => ['pts_time', 'key_frame', 'pict_type']])
+	->limits(outputBytes: 4194304, timeout: 30)
+	->get();
+
+$query->frames();
+$query->bounds();
+$query->toArray();
+
+$packets = $media->probeQuery()->selectStreams('a:0')->packets()
+	->readPackets(100, start: 2)->countPackets()->get();
+```
+
+`probeQuery()` returns a separate `ProbeResult`, not full-asset `Metadata`. The default query reads the first 10 seconds. `frames()`, `packets()`, and `keyframes()` select the record type. `countFrames()` and `countPackets()` add bounded stream counts. FFprobe seeking is approximate, and a packet limit is not a frame limit.
+
+Time intervals are at most 300 seconds. Packet limits are at most 100,000 demuxed packets. Captured output defaults to 4 MiB and cannot exceed 16 MiB. The cumulative query timeout defaults to 30 seconds and cannot exceed 120 seconds. Global process limits still apply. Queries retain the input's staging, transport restrictions, and redaction rules.
+
 ## Tracks and metadata
 
 ```php
@@ -181,6 +221,26 @@ $media->export()->map('0:s:0')->outputOptions(['-c:s', 'webvtt'])
 `coverArt()` attaches one standalone PNG or JPEG to MP4, M4A, or MP3 while copying all motion-video and audio tracks. It refuses existing attached art rather than replacing it. Encoding, filters, clipping, custom maps, and disposition overrides are unsupported in this mode.
 
 `videoStream()` addresses zero-based output video order after mapping, not the input stream index or overall output order. Each track can be configured once. Its codec, bitrate, CRF, and preset override type-wide `video()` settings. CRF and bitrate cannot combine, including inherited settings. Per-track settings do not support two-pass encoding. The WebVTT recipe selects a text subtitle track explicitly; it does not recognize speech or convert bitmap subtitles to text.
+
+### Configure encoders and individual audio tracks
+
+```php
+$media->export()->map('0:v:0')->map('0:a:1')->map('0:a:0')
+	->video('libx264', crf: 22)->audio('aac', bitrate: '128k')
+	->videoOptions(['-x264-params', 'keyint=48:scenecut=0'])
+	->color('bt709', 'bt709', 'bt709')
+	->audioStream(0, fn ($audio) => $audio->sampleRate(48000)->channels(2))
+	->audioStream(1, fn ($audio) => $audio->bitrate('96k')->filter('volume=0.5'))
+	->save('selected.mp4');
+```
+
+`audioStream()` and `videoStream()` address zero-based **output** track order after mapping. Their callbacks run during configuration and retain scalar snapshots, not closures. Audio settings include codec, bitrate, sample rate, channel count, sample format, channel layout, compression level, and filters. Per-track filters follow shared filters. Missing output tracks fail before encoding.
+
+`videoOptions()` and `audioOptions()` accept curated option/value pairs. Supported controls include numeric x264/x265 parameters, selected VPx/AV1 and NVENC settings, and color signaling. Unknown parameters and file-producing encoder options are rejected. Availability depends on your FFmpeg build and hardware. The acceptance build has no AV1 encoder or GPU device.
+
+`color()` sets frame and codec metadata without converting pixel values. Use a color-conversion filter when changing the image's color space. Owned GIF, loudness, audio-mix, concat, and DASH workflows reject conflicting per-track overrides.
+
+`outputOptions()` also supports selected single-file muxer settings and argument-free bitstream filters, for example `['-bsf:v', 'h264_mp4toannexb']` during a copy remux. These options cannot choose sidecar paths. `globalOptions()` accepts named hardware initialization and derivation, for example `['-init_hw_device', 'vaapi=base:/dev/dri/renderD128', '-init_hw_device', 'qsv=derived@base', '-filter_hw_device', 'derived']`. Derived devices must reference an earlier declaration. No automatic hardware fallback is provided.
 
 ## Geometry and filters
 
@@ -491,6 +551,54 @@ Each audio rendition encodes once and can serve several variants. Renditions req
 
 fMP4 owns one initialization file per audio/video playlist and uses `.m4s` segments. AES-128 encryption is supported only with MPEG-TS and is rejected with fMP4 or alternate subtitles. Referencing variants and renditions require matching clips. `twoPass()` measures bitrate-configured video variants without producing first-pass HLS files. Init files and media publish before playlists. Dynamic responses rewrite init references through `mediaUrlsUsing()` and traverse alternate playlists through `playlistUrlsUsing()`.
 
+## DASH and shared HLS segments
+
+```php
+$result = $media->dash(segmentDuration: 2)
+	->adaptationSet('picture', 'video')->adaptationSet('sound', 'audio')
+	->representation('low', 'picture', fn ($video) => $video
+		->map('0:v:0')->resize(width: 640)->video(bitrate: '800k'))
+	->representation('high', 'picture', fn ($video) => $video
+		->map('0:v:0')->video(bitrate: '2500k'))
+	->representation('audio', 'sound', fn ($audio) => $audio
+		->map('0:a:0')->audio(bitrate: '128k'))
+	->sharedHls()->toDisk('videos')->save('course/manifest.mpd');
+
+$result->manifest();
+$result->hlsPlaylist(); // Available only with sharedHls().
+$result->representation('low')->files();
+$result->adaptationSets();
+```
+
+DASH supports finite, clear H.264/AAC presentations. Each representation maps exactly one stream into a declared adaptation set. Video boundaries align within a set. All representations use the same accurate clip. The builder owns codecs, muxers, and GOP alignment. Live DASH, two-pass encoding, encryption, DRM, and protected playback descriptors are not supported.
+
+One encoding invocation creates the representations. With `sharedHls()`, both formats reference the same initialization files and media segments. The package validates bounded XML and the complete owned inventory before publication. Segments publish before playlists, with the MPD last. Publication across objects is not atomic. Results report `dash-init`, `dash-segment`, `dash-manifest`, and optional HLS roles. Ordinary queued exports, execution limits, cancellation, progress, and completion events apply.
+
+## Publish continuous HLS
+
+```php
+$session = FFMpeg::liveHls($trustedCameraUrl, segmentDuration: 2, window: 6)
+	->toDisk('videos')->retry(maxRetries: 3, delay: 1)
+	->timeout(3600)->cancelWhen(fn () => $this->shouldStop())
+	->onPublish(function ($snapshot) {
+		// The playlist and its referenced segments are readable now.
+	});
+
+$result = $session->run('live/unique-session-id');
+
+// Realtime playback of a finite input uses the same lifecycle.
+$result = $media->liveHls(segmentDuration: 2, window: 6)
+	->toDisk('videos')->run('live/another-session-id');
+```
+
+`run()` blocks and publishes a single H.264/AAC MPEG-TS rendition while FFmpeg remains alive. The playlist slides over `window` segments, with one extra destination window retained for stale readers. The result contains the playlist path, current segment paths, status, attempt count, cumulative published count, and first/last sequence numbers.
+
+`stop()` or `cancelWhen()` returns `cancelled`. An explicit session timeout returns `timed_out`. Both preserve the last partial playlist without `ENDLIST`. Clean EOF returns `completed` with `ENDLIST`. `retry()` has a finite reconnect budget. Set `reconnectOnEof: true` to reconnect clean EOF as well. Encoder restarts inside one session retain monotonic sequence numbers and discontinuities. Storage and exhausted-source failures throw sanitized `MediaException` with a bounded published inventory. Global process deadlines remain hard failure limits.
+
+Use a fresh empty namespace for every session. Your application must supervise the worker and guarantee one writer per namespace. Storage must support atomic replacement of individual objects. Restarting a PHP worker cannot resume a prior session. This builder has no adaptive master playlist, fMP4, encryption, or low-latency HLS support.
+
+Live URLs accept trusted HTTP, HTTPS, or RTSP sources without user information. Restrict reachable hosts in your application, because URL validation does not prevent SSRF. `openRtsp()` remains the separate bounded-snapshot API. Local realtime ingestion and HTTP ingestion have native acceptance tests. Successful RTSP live ingestion still requires deployment testing.
+
 ## Serve protected HLS with Laravel
 
 Configure named private Storage disks for media and keys. After publishing, persist the root result's playback inventory on the lesson for the full presentation:
@@ -662,6 +770,20 @@ FFMpeg::disk('streams')->playlist('lesson/master.m3u8')
 
 Resolvers are ignored during deletion. External or root-relative references and invalid playlists fail before deletion. A refused path aborts the whole approval phase, protecting shared files. This operation cannot discover keys stored on another disk. Adapter failures throw and can leave partial deletion; authorization, concurrent-access control, reference tracking, and retry policy remain application responsibilities. Prefer the retained root inventory when it is available.
 
+### Limit an operation's execution time
+
+```php
+$result = $media->export()
+	->timeout(900)
+	->idleTimeout(30)
+	->video('libx264', bitrate: '2500k')->twoPass()
+	->save('lesson.mp4');
+```
+
+`timeout()` sets one cumulative budget in seconds for this execution, including probing, analysis, both encoding passes, validation, and publication. Each new execution starts a fresh budget. `idleTimeout()` limits how long an individual child may produce no output. Both settings must be positive and finite. Passing `null` removes the operation override. These methods do not change shared Laravel configuration.
+
+The configured `timeout` and `idle_timeout` remain per-process maximums. The first applicable limit wins. A timeout stops and reaps a running child before workspace cleanup. Storage transfers and application callbacks are synchronous; budgets are checked at their boundaries, not by interrupting an adapter or callback midway. Configure network timeouts on the relevant adapters. Files already published remain in the exception's `published` inventory.
+
 ## Queue conversions
 
 Use `queued()` after configuring an export. It captures the builder's current settings without staging inputs or starting FFmpeg. `save()` returns Laravel's `PendingDispatch`, not an `ExportResult`.
@@ -682,7 +804,9 @@ $pending->save('lessons/encoded.mp4')->afterCommit();
 
 Inputs, resources, and destinations must use named disks that every worker can access. Store uploads first. `File`, `UploadedFile`, filesystem objects, and open streams are rejected before dispatch. Worker callbacks must be static closures with scalar or array captures. Resolve services inside the callback rather than capturing a request or service instance. Jobs implement `ShouldBeEncrypted`, so workers need the application's encryption key.
 
-For retries, set the queue connection's `retry_after` or visibility timeout above the job timeout. The default job timeout is the configured FFmpeg timeout plus 30 seconds. Set a larger job timeout for operations with several process invocations, including two-pass encoding. Retries restart a conversion, not a media checkpoint. Laravel queues provide at-least-once delivery, not exactly-once publication.
+For retries, set the queue connection's `retry_after` or visibility timeout above the job timeout. The default job timeout is the operation's `timeout()`, or the configured FFmpeg timeout, plus 30 seconds. Without either limit it is zero, which leaves the worker limit to Laravel. Set a larger job timeout for operations with several process invocations when no cumulative operation budget is set. Retries restart a conversion, not a media checkpoint. Laravel queues provide at-least-once delivery, not exactly-once publication.
+
+The published `queue` configuration can set `connection`, `queue`, `tries`, `backoff`, and `timeout` defaults. Explicit `queued(connection:, queue:)` values take precedence over those defaults. `configureJob()` runs last, including for parallel HLS parts and the finalizer. Operation deadlines are captured in the queued plan and start in the worker, not while the job waits.
 
 A hard worker kill cannot run PHP cleanup and can leave a private workspace behind. Use an application-managed retention policy for stale workspaces, without deleting workspaces used by active jobs. Retry recovery does not reclaim an earlier attempt's workspace. For concurrent workers using SQLite batch metadata, configure WAL and a busy timeout, and set `transaction_mode` to `'IMMEDIATE'` to avoid deferred read-to-write transaction upgrades. Test the batch database configuration used by your deployment.
 
@@ -735,6 +859,8 @@ Event::listen(QueuedExportCompleted::class, function ($event) {
 ```
 
 Completion follows publication. Listeners must tolerate duplicate delivery. Parallel composition marks its source artifacts as borrowed, just like `mergeHls()`. Retain the part inventories for ownership-aware cleanup. No queue database tables or application result models are created by this package.
+
+See [application integration recipes](docs/integrations.md) for versioned profiles, durable inventories, stale-result protection, application tests, and Plank media associations. Media-library dependencies and database schemas remain application-owned.
 
 ## Configuration and security
 

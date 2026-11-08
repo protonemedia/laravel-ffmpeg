@@ -20,14 +20,21 @@ class PendingQueuedExport
 
     private readonly ExportPlan $plan;
 
+    private readonly ?string $connection;
+
+    private readonly ?string $queue;
+
     public function __construct(
         PendingExport $export,
-        private readonly ?string $connection = null,
-        private readonly ?string $queue = null,
+        ?string $connection = null,
+        ?string $queue = null,
         private readonly DateTimeInterface|DateInterval|int|null $delay = null,
         private readonly bool $parallel = false,
+        private readonly ?float $timeout = null,
     ) {
         $this->id = bin2hex(random_bytes(16));
+        $this->connection = $connection ?? config('laravel-ffmpeg.queue.connection');
+        $this->queue = $queue ?? config('laravel-ffmpeg.queue.queue');
         $this->plan = new ExportPlan($export);
     }
 
@@ -85,7 +92,10 @@ class PendingQueuedExport
     private function configure(ExportJob|HlsBatchJob $job, bool $initial = true): ExportJob|HlsBatchJob
     {
         $job->onConnection($this->connection)->onQueue($this->queue)->delay($initial ? $this->delay : null);
-        $job->timeout = (int) config('laravel-ffmpeg.timeout', 3600) + 30;
+        $timeout = $this->timeout ?? config('laravel-ffmpeg.timeout', 3600);
+        $job->timeout = config('laravel-ffmpeg.queue.timeout') ?? ($timeout === null ? 0 : (int) ceil($timeout) + 30);
+        $job->tries = config('laravel-ffmpeg.queue.tries', 1);
+        $job->backoff = config('laravel-ffmpeg.queue.backoff', 0);
         if ($this->configure !== null) {
             ($this->configure)($job);
         }

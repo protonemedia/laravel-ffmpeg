@@ -53,6 +53,7 @@ class PendingLoudness extends PendingExport
         $settings = $outputs[0]->outputConfiguration();
 
         if (($settings['audio']['codec'] ?? null) === 'copy' || $settings['videoFilters'] !== []
+            || $settings['videoStreams'] !== [] || $settings['audioStreams'] !== []
             || $settings['video'] !== [] || $outputs[0]->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Loudness normalization requires audio encoding without video or keyframe seeking.');
         }
@@ -195,7 +196,7 @@ class PendingLoudness extends PendingExport
     {
         $size = parent::validateArtifact($path, $role);
         $this->normalization = $this->readStats($this->statisticsPath ?? '');
-        $probe = (new ProcessRunner)->run([
+        $probe = $this->runner->run([
             config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-of', 'json',
             '-show_entries', 'stream=codec_type,sample_rate', $path,
         ], dirname($path), [$path => '[output:0]'], phase: 'validation');

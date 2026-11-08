@@ -12,6 +12,7 @@ class ServiceProvider extends BaseServiceProvider
             $this->publishes([
                 __DIR__.'/../../config/config.php' => config_path('laravel-ffmpeg.php'),
             ], 'config');
+            $this->commands([\ProtoneMedia\LaravelFFMpeg\Console\DoctorCommand::class]);
         }
     }
 

@@ -22,7 +22,7 @@ class Workspace
 
     private int $nextAsset = 0;
 
-    public function __construct()
+    public function __construct(public readonly ProcessRunner $runner = new ProcessRunner)
     {
         $root = config('laravel-ffmpeg.temporary_files_root') ?: sys_get_temp_dir();
         $this->path = rtrim($root, '/\\').DIRECTORY_SEPARATOR.'laravel-ffmpeg-'.bin2hex(random_bytes(16));
@@ -34,6 +34,7 @@ class Workspace
 
     public function stage(Media $media, bool $resource = false): string
     {
+        $this->runner->check('staging');
         // Keep purpose entries separate: a resource may contain manifest-like
         // text, but that must never bypass validation when used as media later.
         // The trade-off is a second transfer if both purposes use a remote key.
@@ -49,6 +50,8 @@ class Workspace
             $this->assets[$identity] = ['media' => $media, 'path' => $path];
         }
 
+        $this->runner->check('staging');
+
         return $this->assets[$identity]['path'];
     }
 
@@ -61,7 +64,7 @@ class Workspace
             $binary = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
 
             if (! isset($this->probeVersions[$binary])) {
-                (new ProcessRunner)->version($binary, 'ffprobe', $this->path);
+                $this->runner->version($binary, 'ffprobe', $this->path);
                 $this->probeVersions[$binary] = true;
             }
 
@@ -78,7 +81,7 @@ class Workspace
         }
 
         if (! isset($this->protocols[$binary])) {
-            $result = (new ProcessRunner)->run([$binary, '-hide_banner', '-protocols'], $this->path, outputLimit: 65536);
+            $result = $this->runner->run([$binary, '-hide_banner', '-protocols'], $this->path, outputLimit: 65536);
             $this->protocols[$binary] = $result->exitCode === 0 && preg_match('/Input:\s*(.*?)\s*Output:/s', $result->output, $matches)
                 ? preg_split('/\s+/', trim($matches[1])) : [];
         }

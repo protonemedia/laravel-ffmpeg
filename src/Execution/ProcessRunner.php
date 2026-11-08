@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
 use Illuminate\Support\Facades\Process;
+use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ProcessResult;
 use Throwable;
@@ -10,6 +11,26 @@ use Throwable;
 /** @internal */
 class ProcessRunner
 {
+    private readonly int $startedAt;
+
+    public function __construct(private readonly ?float $timeout = null, private readonly ?float $idleTimeout = null)
+    {
+        foreach ([$timeout, $idleTimeout] as $seconds) {
+            if ($seconds !== null && (! is_finite($seconds) || $seconds <= 0)) {
+                throw new InvalidArgumentException('Process deadlines must be finite, positive seconds or null.');
+            }
+        }
+        $this->startedAt = hrtime(true);
+    }
+
+    /** The operation budget is shared by staging, probing, analysis and encoding. */
+    public function check(string $phase): void
+    {
+        if ($this->timeout !== null && (hrtime(true) - $this->startedAt) / 1e9 >= $this->timeout) {
+            throw new MediaException('The media operation timed out.', $phase, 'timeout');
+        }
+    }
+
     public function version(string $binary, string $tool, string $directory): string
     {
         $result = $this->run([$binary, '-version'], $directory, outputLimit: 65536);
@@ -31,6 +52,7 @@ class ProcessRunner
         ?callable $onProgress = null,
         bool $redactOutput = false,
         ?float $timeout = null,
+        ?callable $tick = null,
     ): ProcessResult {
         $output = $diagnostics = '';
         $overflow = false;
@@ -42,6 +64,7 @@ class ProcessRunner
         $captureFailure = null;
 
         try {
+            $this->check($phase);
             // An internal callback is required at start: quietly() disables capture,
             // but Symfony still drains both pipes into this handler. It never calls
             // application code or throws before we retain the child handle.
@@ -80,12 +103,26 @@ class ProcessRunner
                     throw new MediaException('Media process output exceeds the capture limit.', $phase, 'output_limit');
                 }
 
+                if ($tick !== null) {
+                    try {
+                        $tick();
+                    } catch (Throwable $exception) {
+                        $applicationFailure = $exception;
+
+                        throw $exception;
+                    }
+                }
+
+                $this->check($phase);
                 $now = hrtime(true);
                 $totalDeadline = config('laravel-ffmpeg.timeout', 3600);
                 if ($timeout !== null) {
                     $totalDeadline = $totalDeadline === null ? $timeout : min($timeout, $totalDeadline);
                 }
                 $idleDeadline = config('laravel-ffmpeg.idle_timeout');
+                if ($this->idleTimeout !== null) {
+                    $idleDeadline = $idleDeadline === null ? $this->idleTimeout : min($idleDeadline, $this->idleTimeout);
+                }
 
                 if (($totalDeadline !== null && ($now - $started) / 1e9 >= $totalDeadline)
                     || ($idleDeadline !== null && ($now - $lastOutput) / 1e9 >= $idleDeadline)) {

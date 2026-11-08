@@ -56,6 +56,21 @@ readonly class Media
         return new PendingHlsExport($this, $this->defaultOutputDisk(), $segmentDuration);
     }
 
+    public function dash(float $segmentDuration = 6): PendingDashExport
+    {
+        return new PendingDashExport($this, $this->defaultOutputDisk(), $segmentDuration);
+    }
+
+    public function liveHls(float $segmentDuration = 6, int $window = 6): PendingLiveHls
+    {
+        return new PendingLiveHls($this, $this->defaultOutputDisk(), $segmentDuration, $window);
+    }
+
+    public function probeQuery(): PendingProbe
+    {
+        return new PendingProbe($this);
+    }
+
     public function speed(float $factor): PendingSpeed
     {
         return new PendingSpeed($this, $this->defaultOutputDisk(), $factor);
@@ -219,7 +234,7 @@ readonly class Media
         }
 
         return $this->withInput(function (string $path, Workspace $workspace) use ($audioFilter, $audio) {
-            $runner = new ProcessRunner;
+            $runner = $workspace->runner;
             $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
             $runner->version($binary, 'ffmpeg', $workspace->path);
             $workspace->requireProtocols($binary, $this->protocolWhitelist());
@@ -233,9 +248,9 @@ readonly class Media
     }
 
     /** @internal */
-    public function withInput(callable $operation): mixed
+    public function withInput(callable $operation, ?ProcessRunner $runner = null): mixed
     {
-        $workspace = new Workspace;
+        $workspace = new Workspace($runner ?? new ProcessRunner);
         $failure = null;
 
         try {
@@ -280,7 +295,7 @@ readonly class Media
             $options = [...($this->source instanceof StillInput ? [] : $this->transportOptions()), ...$options];
         }
 
-        $result = (new ProcessRunner)->run([
+        $result = $workspace->runner->run([
             config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-print_format', 'json',
             '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', $protocols, ...$options, $path,
         ], $workspace->path, [$path => '[input]'] + $this->redactions());

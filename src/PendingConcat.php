@@ -84,6 +84,7 @@ class PendingConcat extends PendingExport
 
         if ($settings['omitVideo'] || ($settings['omitAudio'] && $this->audioNormalization !== null)
             || $settings['videoFilters'] !== [] || $settings['audioFilters'] !== []
+            || $settings['videoStreams'] !== [] || $settings['audioStreams'] !== []
             || $settings['maps'] !== [] || ($settings['metadataSource'] ?? -1) >= 0 || ($settings['chapterSource'] ?? -1) >= 0
             || ($settings['video']['codec'] ?? null) === 'copy' || ($settings['audio']['codec'] ?? null) === 'copy') {
             throw new InvalidArgumentException('Transcoded concat owns its maps and source metadata policy, and requires transcoded video without root filters or conflicting audio policy.');

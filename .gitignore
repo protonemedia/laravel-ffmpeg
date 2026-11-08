@@ -1,6 +1,9 @@
 build
 composer.lock
 docs
+!docs/
+docs/*
+!docs/integrations.md
 vendor
 .phpunit.result.cache
 src/EncryptedHLSExporter.php

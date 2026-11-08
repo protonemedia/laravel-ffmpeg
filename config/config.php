@@ -15,6 +15,15 @@ return [
 
     'idle_timeout' => null,
 
+    'queue' => [
+        'connection' => null,
+        'queue' => null,
+        'tries' => 1,
+        'backoff' => 0,
+        // null derives the worker timeout from the operation or process limit.
+        'timeout' => null,
+    ],
+
     'enable_events' => env('FFMPEG_ENABLE_EVENTS', true),
 
     'temporary_files_root' => env('FFMPEG_TEMPORARY_FILES_ROOT', sys_get_temp_dir()),

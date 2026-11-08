@@ -5,7 +5,6 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\InputSource;
-use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
 /** Capture one bounded snapshot. Camera URLs are trusted application configuration. */
@@ -77,7 +76,7 @@ readonly class RtspCamera implements InputSource
             throw new MediaException('Capture an RTSP snapshot before using it as a resource.', 'staging', 'resource');
         }
         $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
-        $runner = new ProcessRunner;
+        $runner = $workspace->runner;
         $runner->version($binary, 'ffmpeg', $workspace->path);
         $path = $workspace->path.'/'.$name;
         $result = $runner->run([
