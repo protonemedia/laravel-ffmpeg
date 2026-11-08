@@ -38,6 +38,30 @@ FFMPEG_TEMPORARY_FILES_ROOT=/var/tmp/media
 
 The temporary root must exist and be writable. FFmpeg needs the encoders, filters, and protocols used by your application. The repository's `.agents/install-ffmpeg` builds the tested binary pair with libx264, libass, fonts, image support, and HTTPS.
 
+### Find and verify the executables
+
+The defaults resolve `ffmpeg` and `ffprobe` through the running process's `PATH`. Your shell, web server, and queue workers can have different paths and permissions.
+
+```bash
+command -v ffmpeg
+command -v ffprobe
+```
+
+Common locations are `/usr/bin` for Linux distribution packages, `/opt/homebrew/bin` for Apple Silicon Homebrew, and `/usr/local/bin` for Intel Homebrew. Manual builds use their installation directory, such as `/opt/ffmpeg-9.0.2/bin`. These locations do not guarantee a supported version. Both executables must report the same 9.0.x release.
+
+Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to the full executable paths, not their containing directories. Alternatively, edit `ffmpeg.binaries` and `ffprobe.binaries` in the published `config/laravel-ffmpeg.php` file.
+
+On a Linux deployment, test the configured paths as the actual web-server or worker user. Replace `www-data` and the paths with your deployment's values:
+
+```bash
+sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffmpeg -version
+sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
+```
+
+If the shell command succeeds but the application fails, check the application's cached configuration, executable permissions, and directory traversal permissions. Rebuild Laravel's configuration cache and restart long-running queue workers after changing binary paths. Also check that the temporary root and Storage destinations are writable by those users.
+
+A launch failure means the selected executable could not start. A version failure means the pair is unsupported or mismatched. An encoding failure means FFmpeg started but rejected the command or media. Inspect `MediaException::phase`, `category`, and bounded, redacted `diagnostics` to distinguish these cases. Check required encoders and filters with the configured executable's `-encoders` and `-filters` options. Raw commands and unredacted process exceptions can contain credentials; do not publish them in logs or error responses.
+
 ## Encode and copy
 
 ```php
@@ -587,7 +611,25 @@ $analysis->errorOutput();
 $analysis->throw(); // Opt in to throwing on a nonzero analysis exit.
 ```
 
-`save()` throws on encoding, validation, or publication failure. Analysis-only requests retain inspectable exit status. Lifecycle events are `ExportStarting`, `ExportCompleted`, `ExportFailed`, and `ExportCancelled`. Completion follows publication and workspace cleanup. Callback exceptions propagate unchanged.
+`save()` throws on encoding, validation, or publication failure. Analysis-only requests retain inspectable exit status. Lifecycle events are `ExportStarting`, `ExportProgress`, `ExportCompleted`, `ExportFailed`, and `ExportCancelled`. Completion follows publication and workspace cleanup. Progress callback and synchronous progress-listener exceptions propagate unchanged.
+
+Listen globally without configuring every export:
+
+```php
+use Illuminate\Support\Facades\Event;
+use ProtoneMedia\LaravelFFMpeg\Events\ExportProgress;
+
+Event::listen(ExportProgress::class, function (ExportProgress $event) {
+	$operationId = $event->operationId;
+	$outputs = $event->outputs; // Destination disk names (or null) and paths, not input URLs.
+	$progress = $event->progress; // The same structured Progress value as onProgress().
+	// Broadcast an application event or update application-owned progress state.
+});
+```
+
+Progress events cover staging, probing, encoding, validation, and publication, including updates with unknown percentages. They work for ordinary exports, HLS, and queued conversion parts. Each operation has its own ID; use `QueuedExportCompleted` for whole-workflow completion. Worker cancellation is checked before callbacks and progress listeners. Synchronous listeners can cancel by throwing `Exceptions\ExportCancelled`. Asynchronous listeners observe progress but cannot block or cancel encoding.
+
+Set `FFMPEG_ENABLE_EVENTS=false` or `laravel-ffmpeg.enable_events` to `false` to suppress all package export events, including `QueuedExportCompleted`. Per-export callbacks, cancellation checks, publication, and Laravel queue chains still run. Keep events enabled if your application relies on listeners to retain completion inventories.
 
 Failures report successfully published siblings; they do not delete them. Existing objects may already have been replaced. Temporary workspaces and pass statistics are operation-owned and cleaned on success, failure, or cancellation. No global cleanup call is needed.
 
@@ -601,6 +643,8 @@ foreach ($result->files() as $file) {
 ```
 
 Use the root result's inventory, not a variant view, for complete HLS deletion. `GeneratedFile::delete(): bool` deletes exactly that destination through its captured filesystem, not a directory or prefix. A borrowed file with `owned=false` returns `false` without touching Storage. Filesystem exceptions propagate. The application owns authorization and reference tracking; an owned file can still be referenced by another presentation. Deletion is not transactional and does not revoke cached client copies.
+
+Retain the trusted generated-file inventory when publishing HLS. Reopening a master playlist alone does not establish ownership of its segments or keys, so `playlist()` deliberately has no recursive delete operation. Merged presentations can borrow shared artifacts that must survive deletion of the merged master.
 
 ## Queue conversions
 
@@ -623,6 +667,8 @@ $pending->save('lessons/encoded.mp4')->afterCommit();
 Inputs, resources, and destinations must use named disks that every worker can access. Store uploads first. `File`, `UploadedFile`, filesystem objects, and open streams are rejected before dispatch. Worker callbacks must be static closures with scalar or array captures. Resolve services inside the callback rather than capturing a request or service instance. Jobs implement `ShouldBeEncrypted`, so workers need the application's encryption key.
 
 For retries, set the queue connection's `retry_after` or visibility timeout above the job timeout. The default job timeout is the configured FFmpeg timeout plus 30 seconds. Set a larger job timeout for operations with several process invocations, including two-pass encoding. Retries restart a conversion, not a media checkpoint. Laravel queues provide at-least-once delivery, not exactly-once publication.
+
+A hard worker kill cannot run PHP cleanup and can leave a private workspace behind. Use an application-managed retention policy for stale workspaces, without deleting workspaces used by active jobs. Retry recovery does not reclaim an earlier attempt's workspace. For concurrent workers using SQLite batch metadata, configure WAL and a busy timeout, and set `transaction_mode` to `'IMMEDIATE'` to avoid deferred read-to-write transaction upgrades. Test the batch database configuration used by your deployment.
 
 Use `job()` instead of `save()` to build a job without dispatching it. Ordinary export jobs work with Laravel chains and batches:
 

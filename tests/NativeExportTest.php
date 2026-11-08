@@ -963,6 +963,79 @@ class NativeExportTest extends TestCase
     }
 
     #[Test]
+    public function global_progress_events_work_without_a_per_export_callback(): void
+    {
+        $this->fakePipeline();
+        Event::fake();
+
+        FFMpeg::disk('memory')->open('source.mp4')->export()->save('events.mp4');
+
+        $starting = Event::dispatched(Events\ExportStarting::class)->sole()[0];
+        $updates = Event::dispatched(Events\ExportProgress::class)->map(fn ($arguments) => $arguments[0]);
+        $this->assertSame(['staging', 'probing', 'encoding', 'encoding', 'validation', 'publication'],
+            $updates->map(fn ($event) => $event->progress->phase)->all());
+        $this->assertSame([$starting->operationId], $updates->pluck('operationId')->unique()->values()->all());
+        $this->assertSame([['disk' => 'memory', 'path' => 'events.mp4']], $updates->first()->outputs);
+        $encoded = $updates->first(fn ($event) => $event->progress->elapsedSeconds !== null)->progress;
+        $this->assertSame(40.0, $encoded->percentage);
+        $this->assertSame(2.0, $encoded->speed);
+        $this->assertSame(3.0, $encoded->remainingSeconds);
+        Event::assertDispatched(Events\ExportCompleted::class,
+            fn ($event) => $event->operationId === $starting->operationId);
+        $this->assertSame('encoded media', Storage::disk('memory')->get('events.mp4'));
+    }
+
+    #[Test]
+    public function disabling_events_preserves_callbacks_publication_and_callback_failures(): void
+    {
+        $this->fakePipeline();
+        config(['laravel-ffmpeg.enable_events' => false]);
+        Event::fake();
+        $phases = [];
+        FFMpeg::disk('memory')->open('source.mp4')->export()->onProgress(function ($progress) use (&$phases) {
+            $phases[] = $progress->phase;
+        })->save('disabled.mp4');
+
+        $this->assertContains('encoding', $phases);
+        $this->assertSame('encoded media', Storage::disk('memory')->get('disabled.mp4'));
+        $failure = new RuntimeException('Application callback failure');
+        try {
+            FFMpeg::disk('memory')->open('source.mp4')->export()->onProgress(function () use ($failure) {
+                throw $failure;
+            })->save('failed.mp4');
+            $this->fail('Callback failure must still propagate with events disabled.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame($failure, $exception);
+        }
+        $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
+        Event::assertNothingDispatched();
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function global_progress_listeners_can_cancel_before_publication(): void
+    {
+        $this->fakePipeline();
+        $cancelled = new ExportCancelled('Global listener cancellation');
+        Event::listen(Events\ExportProgress::class, function ($event) use ($cancelled) {
+            if ($event->progress->elapsedSeconds !== null) {
+                throw $cancelled;
+            }
+        });
+
+        try {
+            FFMpeg::disk('memory')->open('source.mp4')->export()->save('cancelled.mp4');
+            $this->fail('A global listener must be able to cancel an export.');
+        } catch (ExportCancelled $exception) {
+            $this->assertSame($cancelled, $exception);
+        }
+        Event::assertDispatched(Events\ExportCancelled::class);
+        Event::assertNotDispatched(Events\ExportCompleted::class);
+        $this->assertFalse(Storage::disk('memory')->exists('cancelled.mp4'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
     public function progress_chunks_are_parsed_without_inventing_unknown_percentages(): void
     {
         $this->fakePipeline(function (PendingProcess $process) {

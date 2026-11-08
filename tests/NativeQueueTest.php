@@ -332,6 +332,22 @@ class NativeQueueTest extends TestCase
     }
 
     #[Test]
+    public function disabling_export_events_preserves_queue_publication_and_chains(): void
+    {
+        config(['laravel-ffmpeg.enable_events' => false]);
+        $this->source()->export()->video('libx264', preset: 'ultrafast')->resize(width: 48)
+            ->queued(connection: 'database', queue: 'media')->save('quiet.mp4')->chain([new QueueFollowUp]);
+        $this->work();
+        $this->work();
+
+        $this->assertSame(48, FFMpeg::disk('queued')->open('quiet.mp4')->probe()->video()->get('width'));
+        $this->assertSame('published', Storage::disk('queued')->get('follow-up'));
+        $this->assertSame([], $this->completed);
+        $this->assertSame([], $this->errors);
+        $this->assertSame(0, DB::table('jobs')->count());
+    }
+
+    #[Test]
     public function queued_plans_reject_request_local_inputs_before_dispatch(): void
     {
         foreach ([FFMpeg::open(new File(Storage::disk('queued')->path('source.mp4'))), FFMpeg::disk(Storage::disk('queued'))->open('source.mp4')] as $source) {

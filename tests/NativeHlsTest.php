@@ -115,6 +115,10 @@ class NativeHlsTest extends TestCase
     public function real_variants_have_usable_segments_aligned_keyframes_and_relative_nested_playlists(): void
     {
         $media = $this->source();
+        $progressEvents = [];
+        Event::listen(Events\ExportProgress::class, function ($event) use (&$progressEvents) {
+            $progressEvents[] = $event;
+        });
         $original = Storage::disk('local')->get('source.mkv');
         Storage::disk('memory')->put('original/source.mkv', $original);
         $media = FFMpeg::disk('memory')->open('original/source.mkv');
@@ -181,6 +185,12 @@ class NativeHlsTest extends TestCase
         $this->assertSame($original, $storage->get('original/source.mkv'));
         $this->assertSame([], glob($this->root.'/*'));
         Event::assertDispatchedTimes(Events\ExportCompleted::class, 1);
+        $this->assertNotEmpty(array_filter($progressEvents, fn ($event) => $event->progress->isEncoding()
+            && $event->progress->elapsedSeconds !== null));
+        $this->assertSame('publication', end($progressEvents)->progress->phase);
+        Event::assertDispatched(Events\ExportCompleted::class,
+            fn ($event) => $event->operationId === $progressEvents[0]->operationId);
+        $this->assertContains('course/é #?/master.m3u8', array_column($progressEvents[0]->outputs, 'path'));
     }
 
     #[Test]

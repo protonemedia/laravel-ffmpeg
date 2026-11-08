@@ -24,6 +24,8 @@ All outputs, including local destinations, are generated in the workspace. Every
 
 `save()` returns generated-file records and bounded, redacted process summaries. Structured progress separates staging, probing, encoding, validation, and publication. Percentage, speed, and remaining time can be unknown. A callback can cancel by throwing `Exceptions\ExportCancelled`; other callback exceptions propagate unchanged as failures. Both stop and reap the child before workspace cleanup. Lifecycle events work without a progress callback, and completion follows publication and cleanup.
 
+`Events\ExportProgress` carries `operationId`, the structured `Progress`, and destination `outputs`. It fires for phase changes and parsed encoder updates, independently of a per-export callback. Queue cancellation is checked first, followed by the per-export callback and then synchronous progress listeners. Listener exceptions follow the same cleanup and failure path as callback exceptions. `laravel-ffmpeg.enable_events` defaults to true through `FFMPEG_ENABLE_EVENTS`. Disabling it suppresses all package export events, including `QueuedExportCompleted`, without disabling callbacks, queue chains, or cancellation checks.
+
 The old driver, format/filter objects, and PHP-FFMpeg dependency tree are removed. The package has one execution backend. The README and upgrade guide document the replacement API.
 
 ### HTTP inputs
@@ -439,7 +441,7 @@ $media->export()->onProgress(function (Progress $progress) {
 });
 ```
 
-`Progress` defines typed string constants `STAGING`, `PROBING`, `ENCODING`, `VALIDATION`, and `PUBLICATION`. Their values remain `staging`, `probing`, `encoding`, `validation`, and `publication`. The `phase` property remains a string, so existing callback comparisons continue to work. `isEncoding()` is true for the encoding-start notification and encoder updates, including updates without a known percentage. Other progress phases return false. Callback timing, cancellation, and lifecycle events are unchanged; these helpers add no progress events or completion phase.
+`Progress` defines typed string constants `STAGING`, `PROBING`, `ENCODING`, `VALIDATION`, and `PUBLICATION`. Their values remain `staging`, `probing`, `encoding`, `validation`, and `publication`. The `phase` property remains a string, so existing callback comparisons continue to work. `isEncoding()` is true for the encoding-start notification and encoder updates, including updates without a known percentage. Other progress phases return false. `Events\ExportProgress` wraps these values for global listeners; completion remains a separate `Events\ExportCompleted` event after publication and cleanup, not a progress phase.
 
 ### Generated-file lookup
 

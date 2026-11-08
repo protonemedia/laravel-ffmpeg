@@ -81,7 +81,9 @@ class ExportJob implements ShouldQueue, ShouldBeEncrypted
 
             return;
         }
-        Event::dispatch(new QueuedExportCompleted($this->exportId, $result->files()->map->toArray()->all(),
-            $result instanceof HlsExportResult ? $result->playback()->toArray() : null));
+        if (config('laravel-ffmpeg.enable_events', true)) {
+            Event::dispatch(new QueuedExportCompleted($this->exportId, $result->files()->map->toArray()->all(),
+                $result instanceof HlsExportResult ? $result->playback()->toArray() : null));
+        }
     }
 }

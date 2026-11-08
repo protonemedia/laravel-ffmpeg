@@ -252,6 +252,8 @@ try {
 
 Completion follows validation, publication, and cleanup. Throw `ExportCancelled` from a callback to stop the operation. Other callback exceptions propagate unchanged. There is no global `cleanupTemporaryFiles()` call and no arbitrary before-save command mutation.
 
+Global `Events\ExportProgress` listeners receive the operation ID, destination outputs, and the same structured `Progress` value as `onProgress()`. No per-export callback is required. Synchronous progress listeners can cancel or fail an operation; asynchronous listeners cannot block encoding. Set `FFMPEG_ENABLE_EVENTS=false` to suppress package events, including `QueuedExportCompleted`, while retaining callbacks and native queue chains.
+
 All artifacts validate before the first Storage write, but publication is not transactional. A later transfer failure can leave earlier outputs or replaced objects. Failures report successful writes without deleting them. Streams returned by `GeneratedFile::readStream()` belong to the caller and must be closed.
 
 ```php
@@ -279,6 +281,8 @@ FFMpeg::disk('uploads')->open('lesson.mp4')->export()
 Queued `save()` returns Laravel's `PendingDispatch`, not an export result. Listen for `QueuedExportCompleted` to retain file metadata and protected-HLS inventories. Use `job()` to build jobs for native chains or ordinary batches without dispatching them immediately.
 
 Store uploads on durable named disks before dispatch. Workers need matching disk configuration, FFmpeg binaries, and the application's encryption key. Filesystem instances and request-local `File` inputs are not portable queue inputs. Worker callbacks require static closures with scalar or array captures. Set queue visibility above the job timeout. Retries restart conversions rather than resuming media checkpoints.
+
+Hard worker kills cannot run PHP cleanup. Configure safe retention for stale private workspaces as well as published artifacts. A recovered retry does not clean an interrupted attempt's workspace.
 
 For independent HLS groups, `queued(parallel: true)` uses a Laravel batch and a final publication job. Shared rendition groups remain together. The versioned final master and borrowed-source ownership follow `mergeHls()`. Persist the event's actual playback inventory rather than constructing a filename. Keep part artifacts and batch records until finalization finishes. Use a chain rather than nesting a parallel workflow inside another batch. See [queue examples](README.md#queue-conversions) for retry, result, and retention details.
 

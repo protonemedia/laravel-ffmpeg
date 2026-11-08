@@ -481,11 +481,14 @@ class PendingExport
         $destinations = $contents ? [] : array_map(fn ($output) => $output->destination(), $outputs);
         $published = [];
         $phase = Progress::STAGING;
+        $onProgress = fn (Progress $progress) => $this->notify($progress, $operationId, $destinations);
 
         try {
-            Event::dispatch(new Events\ExportStarting($operationId, $destinations));
-            $this->notify(new Progress($phase));
-            $result = $this->media->withInput(function (string $input, Workspace $workspace) use ($outputs, $contents, &$phase, &$published) {
+            if (config('laravel-ffmpeg.enable_events', true)) {
+                Event::dispatch(new Events\ExportStarting($operationId, $destinations));
+            }
+            $onProgress(new Progress($phase));
+            $result = $this->media->withInput(function (string $input, Workspace $workspace) use ($outputs, $contents, $onProgress, &$phase, &$published) {
                 $paths = array_map(fn ($media) => $workspace->stage($media), $this->inputs);
                 $redactions = [];
 
@@ -522,7 +525,7 @@ class PendingExport
 
                 $runner = new ProcessRunner;
                 $phase = Progress::PROBING;
-                $this->notify(new Progress($phase));
+                $onProgress(new Progress($phase));
                 $ffmpeg = $runner->version(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), 'ffmpeg', $workspace->path);
                 $ffprobe = $runner->version(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), 'ffprobe', $workspace->path);
 
@@ -564,13 +567,12 @@ class PendingExport
                 }, $outputs);
                 $phase = Progress::ENCODING;
                 $command = $this->command($outputs, $paths, $outputPaths);
-                $onProgress = $this->notify(...);
                 $command = $this->prepareCommand($workspace, $runner, $command, $outputPaths, $redactions, $onProgress);
                 $summaries = [];
                 $totalPasses = $this->twoPass ? 2 : 1;
 
                 for ($pass = 1; $pass <= $totalPasses; $pass++) {
-                    $this->notify(new Progress($phase, pass: $pass, totalPasses: $totalPasses));
+                    $onProgress(new Progress($phase, pass: $pass, totalPasses: $totalPasses));
                     $passCommand = $command;
 
                     if ($totalPasses === 2 && $pass === 1) {
@@ -604,7 +606,7 @@ class PendingExport
                 }
 
                 $phase = Progress::VALIDATION;
-                $this->notify(new Progress($phase));
+                $onProgress(new Progress($phase));
                 $artifacts = $this->artifacts($outputs, $outputPaths);
                 $sizes = [];
 
@@ -645,7 +647,7 @@ class PendingExport
                 }
 
                 $phase = Progress::PUBLICATION;
-                $this->notify(new Progress($phase));
+                $onProgress(new Progress($phase));
                 $files = [];
 
                 foreach ($artifacts as $index => $artifact) {
@@ -684,7 +686,9 @@ class PendingExport
             $event = $exception instanceof ExportCancelled ? Events\ExportCancelled::class : Events\ExportFailed::class;
 
             try {
-                Event::dispatch(new $event($operationId, $exception instanceof MediaException ? $exception->phase : $phase, $destinations, $published));
+                if (config('laravel-ffmpeg.enable_events', true)) {
+                    Event::dispatch(new $event($operationId, $exception instanceof MediaException ? $exception->phase : $phase, $destinations, $published));
+                }
             } catch (Throwable) {
                 // Preserve the primary process or Storage failure.
             }
@@ -694,7 +698,9 @@ class PendingExport
             $this->running = false;
         }
 
-        Event::dispatch(new Events\ExportCompleted($operationId, $result instanceof ExportResult ? $result->files()->map->toArray()->all() : []));
+        if (config('laravel-ffmpeg.enable_events', true)) {
+            Event::dispatch(new Events\ExportCompleted($operationId, $result instanceof ExportResult ? $result->files()->map->toArray()->all() : []));
+        }
 
         return $result;
     }
@@ -968,13 +974,16 @@ class PendingExport
         return array_column($selected, 'type');
     }
 
-    private function notify(Progress $progress): void
+    private function notify(Progress $progress, string $operationId, array $outputs): void
     {
         if ($this->cancellation !== null && ($this->cancellation)()) {
             throw new ExportCancelled;
         }
         if ($this->progress !== null) {
             ($this->progress)($progress);
+        }
+        if (config('laravel-ffmpeg.enable_events', true)) {
+            Event::dispatch(new Events\ExportProgress($operationId, $progress, $outputs));
         }
     }
 }
