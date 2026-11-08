@@ -452,18 +452,124 @@ class NativeHlsTest extends TestCase
     public function custom_nested_playlists_decode_with_segments_in_separate_directories(): void
     {
         $media = $this->source();
-        $result = $media->hls(segmentDuration: 0.7)
+        $seen = [];
+        $export = $media->hls(segmentDuration: 0.7)
             ->variant('low', fn ($variant) => $variant->resize(width: 80), playlist: 'lists/low/index.m3u8', segments: 'assets/low/part-%03d.ts')
             ->variant('high', fn () => null, playlist: 'lists/high/index.m3u8', segments: 'assets/high/part-%d.ts')
-            ->save('catalog/master.m3u8');
+            ->playlistUsing(function (string $contents, string $path, ?string $variant) use (&$seen) {
+                $seen[$path] = $variant;
+                $this->assertSame(['source.mkv'], Storage::disk('local')->allFiles());
+                $tag = $variant === null
+                    ? '#EXT-X-SESSION-DATA:DATA-ID="com.example.title",VALUE="Café"'
+                    : '#EXT-X-START:TIME-OFFSET=0.2,PRECISE=YES';
+                if ($variant === 'high') {
+                    $tag .= "\n#EXT-X-PROGRAM-DATE-TIME:2026-01-01T00:00:00Z\n"
+                        .'#EXT-X-DATERANGE:ID="intro",START-DATE="2026-01-01T00:00:00Z",DURATION=0.2';
+                }
+
+                return str_replace("\n", "\r\n", str_replace("#EXTM3U\n", "#EXTM3U\n# Prepared for ".$path."\n".$tag."\n", $contents));
+            });
+        $export->inspect();
+        $this->assertSame([], $seen);
+        $result = $export->save('catalog/master.m3u8');
+        $this->assertEquals(['lists/low/index.m3u8' => 'low', 'lists/high/index.m3u8' => 'high', 'catalog/master.m3u8' => null], $seen);
+        $master = Storage::disk('local')->get($result->playlist()->path);
+        $this->assertStringContainsString('#EXT-X-SESSION-DATA:DATA-ID="com.example.title",VALUE="Café"', $master);
+        $this->assertStringContainsString("../lists/low/index.m3u8\n", $master);
         foreach (['low', 'high'] as $name) {
             $playlist = $result->variant($name)->playlist();
+            $contents = Storage::disk('local')->get($playlist->path);
+            $this->assertStringContainsString('# Prepared for '.$playlist->path, $contents);
+            $this->assertStringContainsString('#EXT-X-START:TIME-OFFSET=0.2,PRECISE=YES', $contents);
+            if ($name === 'high') {
+                $this->assertStringContainsString('#EXT-X-PROGRAM-DATE-TIME:2026-01-01T00:00:00Z', $contents);
+                $this->assertStringContainsString('#EXT-X-DATERANGE:ID="intro"', $contents);
+            }
             $decoded = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-xerror',
                 '-i', Storage::disk('local')->path($playlist->path), '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-']);
             $this->assertTrue($decoded->successful(), $decoded->errorOutput());
             $this->assertCount(5, $result->variant($name)->files());
         }
+        $decoded = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-xerror',
+            '-i', Storage::disk('local')->path($result->playlist()->path), '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-']);
+        $this->assertTrue($decoded->successful(), $decoded->errorOutput());
         $this->assertSame([], glob($this->root.'/*'));
+    }
+
+    public static function invalidPlaylistHooks(): array
+    {
+        return [
+            ['type', null], ['empty', null], ['reference', null], ['stream', null],
+            ['key', null], ['resource', null], ['duplicate', null], ['large', null],
+            ['control', null], ['header', null], ['endlist', 'test'], ['target', 'test'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('invalidPlaylistHooks')]
+    public function invalid_playlist_hooks_prevent_all_publication(string $case, ?string $target): void
+    {
+        Storage::disk('memory')->put('source.mp4', 'source');
+        $this->fakePipeline();
+        $export = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
+            ->playlistUsing(function (string $contents, string $path, ?string $variant) use ($case, $target) {
+                if ($variant !== $target) {
+                    return $contents;
+                }
+
+                return match ($case) {
+                    'type' => null,
+                    'empty' => '',
+                    'reference' => str_replace('test/index.m3u8', 'https://example.test/external.m3u8', $contents),
+                    'stream' => str_replace('#EXT-X-STREAM-INF:', '#EXT-X-STREAM-INF:FRAME-RATE=25,', $contents),
+                    'key' => str_replace("#EXTM3U\n", "#EXTM3U\n#EXT-X-KEY:METHOD=NONE\n", $contents),
+                    'resource' => str_replace("#EXTM3U\n", "#EXTM3U\n#EXT-X-SESSION-DATA:DATA-ID=\"external\",URI = \"https://example.test/info\"\n", $contents),
+                    'duplicate' => $contents."#EXTM3U\n",
+                    'large' => $contents.str_repeat('#', 16777216),
+                    'control' => $contents."# comment\r#EXT-X-KEY:METHOD=NONE\n",
+                    'header' => "\n".$contents,
+                    'endlist' => str_replace('#EXT-X-ENDLIST', '', $contents),
+                    'target' => str_replace('#EXT-X-TARGETDURATION:2', '#EXT-X-TARGETDURATION:99', $contents),
+                };
+            });
+        try {
+            $export->save('out/master.m3u8');
+            $this->fail('Invalid hook output was published.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
+        }
+        $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+        $this->assertSame([], glob($this->root.'/*'));
+        Event::assertNotDispatched(Events\ExportCompleted::class);
+    }
+
+    #[Test]
+    public function playlist_hooks_freeze_configuration_and_propagate_failures_without_publication(): void
+    {
+        Storage::disk('memory')->put('source.mp4', 'source');
+        $this->fakePipeline();
+        foreach ([new \RuntimeException('application failure'), new ExportCancelled] as $failure) {
+            $export = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null);
+            $export->playlistUsing(function () use ($export, $failure) {
+                try {
+                    $export->playlistUsing(fn ($contents) => $contents);
+                    $this->fail('A running playlist hook could be replaced.');
+                } catch (InvalidArgumentException) {
+                    throw $failure;
+                }
+            });
+            try {
+                $export->save('out/master.m3u8');
+                $this->fail('A playlist callback failure was swallowed.');
+            } catch (\RuntimeException $exception) {
+                $this->assertSame($failure, $exception);
+            }
+            $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+            $this->assertSame([], glob($this->root.'/*'));
+        }
+        Event::assertDispatchedTimes(Events\ExportFailed::class, 1);
+        Event::assertDispatchedTimes(Events\ExportCancelled::class, 1);
+        Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
     #[Test]

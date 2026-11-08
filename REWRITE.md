@@ -189,7 +189,28 @@ $result = $media->hls(segmentDuration: 6)
 
 Each playlist references files relative to its own directory, with path components percent-encoded for URLs. Normalized destination keys remain unchanged in Storage and result records. `variant($name)->files()` selects the files owned by that variant, even when variants share a segment directory or use the same playlist basename. Concrete destination collisions, including equivalent numbering patterns, fail before any publication. Custom destinations never enter FFmpeg arguments.
 
-Playlist hooks, AES-128 encryption and rotation, dynamic responses, two-pass HLS, and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
+AES-128 encryption and rotation, dynamic responses, two-pass HLS, and fMP4 packaging remain separate increments. The legacy HLS implementation remains until native acceptance covers its required workflows.
+
+### Playlist hooks
+
+```php
+$result = $media->hls()
+	->variant('720p', fn (HlsVariant $variant) => $variant->resize(height: 720))
+	->playlistUsing(function (string $playlist, string $path, ?string $variant): string {
+		$tag = $variant === null
+			? '#EXT-X-SESSION-DATA:DATA-ID="com.example.title",VALUE="Lesson"'
+			: '#EXT-X-START:TIME-OFFSET=2.0,PRECISE=YES';
+
+		return str_replace("#EXTM3U\n", "#EXTM3U\n# Playlist: ".$path."\n".$tag."\n", $playlist);
+	})
+	->toDisk('streams')->save('lesson/master.m3u8');
+```
+
+`playlistUsing()` receives finalized text, the disk-relative destination key, and the variant name. The name is `null` for the master. Callbacks run once per playlist during each save, before publication. Inspection does not call them. The last registration replaces the previous callback. Configuration cannot change while an export runs.
+
+The hook is additive. It can insert comments and `EXT-X-START`, `EXT-X-SESSION-DATA`, `EXT-X-DATERANGE`, and `EXT-X-PROGRAM-DATE-TIME` tags without `URI=` attributes. The application supplies valid attributes and placement for each playlist type. All generated lines must remain unchanged and in order. Changing references, timing, stream information, VOD completion, or encryption through this hook is rejected.
+
+Callbacks return UTF-8 text of at most 16 MiB, starting with `#EXTM3U` and a newline. CRLF becomes LF. Other control characters are rejected. Invalid output throws `MediaException` with phase `validation` and category `artifact`. Application exceptions propagate unchanged. Throwing `ExportCancelled` cancels the operation. Failures and cancellation remove the private workspace without publishing any files.
 
 ### Progress helpers
 
@@ -540,10 +561,10 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 | Analysis | Inspect volume-analysis output and nonzero status without requiring a media artifact. | `VolumeDetectTest` | Real two-track PCM verifies mean and peak volume, track selection, filters, silence, local and staged inputs, inspectable nonzero exits, opt-in exceptions, redaction, timeout reaping, source retention, and cleanup without publication |
 | Progress and events | Parse fragmented protocol records. Handle unknown duration and multiple passes. Stop on callback failure. Complete only after validation and publication. | `NativeExportTest`, `ExportTest` | Single-pass lifecycle and real child reaping verified; both encoding passes, failure cleanup, and cancellation covered |
 | Results and publication | Validate nonempty expected artifacts before remote writes. Stream files, handle false Storage returns, report partial publication, and clean only owned temporary files. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `ExportTest`, `TileTest` | Multiple single-file outputs and owned HLS inventories verified, including publication order, validation before writes, concrete partial failures, source protection, and cleanup |
-| Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `NativeHlsTest`, legacy `HlsExportTest`, `HLSPlaylistGeneratorTest` | Multiple variants, complete playlist decoding, segment keyframes and aligned boundaries, audio-only artwork exclusion, silent video, first/all audio, copy, clipped watermarks, staged input, streamed publication, and custom nested playlist and segment paths verified; playlist hooks remain open |
+| Adaptive HLS | Produce multiple MPEG-TS variants, audio-only media with artwork, silent video, first or all audio, copy output, and custom nested paths. Verify every playlist reference. | `NativeHlsTest`, legacy `HlsExportTest`, `HLSPlaylistGeneratorTest` | Multiple variants, complete playlist decoding, segment keyframes and aligned boundaries, audio-only artwork exclusion, silent video, first/all audio, copy, clipped watermarks, staged input, streamed publication, custom nested paths, and additive playlist hooks verified |
 | Encrypted HLS | Decrypt AES-128 segments and verify IVs, supplied keys, key rotation boundaries, private key storage, and failure cleanup. | `EncryptedHlsExportTest` | Open |
 | Dynamic HLS | Rewrite master, variant, segment, and key URLs relative to their containing playlists. Verify response integration and missing or invalid input errors. | `DynamicHLSPlaylistTest` | Open |
-| Extension points | Inspect scoped argument arrays without execution. Preserve custom filters, playlist hooks, and output configuration without arbitrary driver forwarding. | `NativeExportTest`, `NativeCompositionTest`, `BeforeSavingTest`, README | Pure inspection, scoped options, graphs, and output callbacks implemented; playlist hooks open |
+| Extension points | Inspect scoped argument arrays without execution. Preserve custom filters, playlist hooks, and output configuration without arbitrary driver forwarding. | `NativeExportTest`, `NativeCompositionTest`, `NativeHlsTest`, `BeforeSavingTest`, README | Pure inspection, scoped options, graphs, output callbacks, and additive playlist hooks implemented; arbitrary playlist replacement is not supported |
 
 ## Compiler contracts
 

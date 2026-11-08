@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -16,6 +17,8 @@ class PendingHlsExport extends PendingExport
     private array $variantPaths = [];
 
     private array $variantFiles = [];
+
+    private ?Closure $playlistCallback = null;
 
     public function __construct(Media $media, string|Filesystem $disk, private readonly float $segmentDuration)
     {
@@ -54,6 +57,14 @@ class PendingHlsExport extends PendingExport
         $configure($variant);
         $this->variants[$name] = $variant;
         $this->variantPaths[$name] = $paths;
+
+        return $this;
+    }
+
+    public function playlistUsing(callable $callback): self
+    {
+        $this->assertOutputMutable();
+        $this->playlistCallback = Closure::fromCallable($callback);
 
         return $this;
     }
@@ -209,13 +220,13 @@ class PendingHlsExport extends PendingExport
                 .($attributes === '' ? '' : ','.$attributes);
             $masterLines[] = $this->relativeUrl($output->destination()['path'], $outputs[array_key_last($outputs)]->destination()['path']);
             $lines[$targets[0]] = '#EXT-X-TARGETDURATION:'.max(1, (int) ceil($longest));
-            $this->writePlaylist($paths[$index], $lines);
+            $this->writePlaylist($paths[$index], $lines, $output->destination()['path'], $name);
             $this->variantFiles[$name][$output->destination()['path']] = true;
             $playlists[] = ['path' => $paths[$index], 'output' => $index, 'role' => 'hls-playlist', 'destination' => $output->destination()];
         }
 
         $master = array_key_last($outputs);
-        $this->writePlaylist($paths[$master], $masterLines);
+        $this->writePlaylist($paths[$master], $masterLines, $outputs[$master]->destination()['path'], null);
         $artifacts = [...$segments, ...$playlists, [
             'path' => $paths[$master], 'output' => $master, 'role' => 'hls-master', 'destination' => $outputs[$master]->destination(),
         ]];
@@ -246,9 +257,32 @@ class PendingHlsExport extends PendingExport
         return array_values(array_filter(explode("\n", str_replace("\r\n", "\n", rtrim($bytes, "\r\n"))), fn ($line) => $line !== ''));
     }
 
-    private function writePlaylist(string $path, array $lines): void
+    private function writePlaylist(string $path, array $lines, string $destination, ?string $variant): void
     {
         $bytes = implode("\n", $lines)."\n";
+        if ($this->playlistCallback !== null) {
+            $modified = ($this->playlistCallback)($bytes, $destination, $variant);
+            if (! is_string($modified) || strlen($modified) > 16777216) {
+                throw new MediaException('Playlist hooks must return text within the 16 MiB limit.', Progress::VALIDATION, 'artifact');
+            }
+            $bytes = str_replace("\r\n", "\n", $modified);
+            $modified = array_values(array_filter(explode("\n", rtrim($bytes, "\n")), fn ($line) => $line !== ''));
+            if (! str_starts_with($bytes, "#EXTM3U\n") || preg_match('/[\x00-\x09\x0B-\x1F\x7F]/', $bytes) || ! preg_match('//u', $bytes)) {
+                throw new MediaException('Playlist hooks must return a UTF-8 playlist without control characters.', Progress::VALIDATION, 'artifact');
+            }
+            $position = 0;
+            foreach ($modified as $line) {
+                if ($line === ($lines[$position] ?? null)) {
+                    $position++;
+                } elseif (! str_starts_with($line, '#') || (str_starts_with($line, '#EXT')
+                    && (! preg_match('/\A#EXT-X-(?:START|SESSION-DATA|DATERANGE|PROGRAM-DATE-TIME):/', $line) || preg_match('/\bURI\s*=/i', $line)))) {
+                    throw new MediaException('Playlist hooks may only add comments and non-resource START, SESSION-DATA, DATERANGE, or PROGRAM-DATE-TIME tags.', Progress::VALIDATION, 'artifact');
+                }
+            }
+            if ($position !== count($lines)) {
+                throw new MediaException('Playlist hooks must preserve generated lines in order.', Progress::VALIDATION, 'artifact');
+            }
+        }
         if (@file_put_contents($path, $bytes) !== strlen($bytes) || ! chmod($path, 0600)) {
             throw new MediaException('Cannot finalize the generated HLS playlist.', Progress::VALIDATION, 'filesystem');
         }
