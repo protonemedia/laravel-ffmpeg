@@ -4,17 +4,41 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\HlsEncryption;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\PackagesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\SplitsTwoPass;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\WritesManifest;
 use SensitiveParameter;
 
-class PendingHlsExport extends PendingExport
+final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, SplitsTwoPass, ValidatesSelections, WritesManifest
 {
-    protected string $outputRole = 'hls-playlist';
+    use Concerns\AudioCodec;
+    use Concerns\AudioFilters;
+    use Concerns\Clips;
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\Mapping;
+    use Concerns\Metadata;
+    use Concerns\OutputOptions;
+    use Concerns\ResourceFilters;
+    use Concerns\Resources;
+    use Concerns\RunsExport;
+    use Concerns\VideoCodec;
+    use Concerns\VideoFilters;
+    use Conditionable;
+
+    private readonly PendingExport $export;
 
     private array $variants = [];
 
@@ -38,25 +62,55 @@ class PendingHlsExport extends PendingExport
 
     private array $provenance = [];
 
-    private readonly Media $source;
-
     private ?Workspace $workspace = null;
 
-    public function __construct(Media $media, string|Filesystem $disk, private readonly float $segmentDuration)
+    public function __construct(private readonly Media $media, string|Filesystem $disk, private readonly float $segmentDuration)
     {
-        parent::__construct($media, $disk);
-        $this->source = $media;
-
         if (! is_finite($segmentDuration) || $segmentDuration < 0.001 || $segmentDuration > 86400) {
             throw new InvalidArgumentException('HLS segment duration must be between 0.001 and 86400 seconds.');
         }
 
-        $this->video('libx264')->audio('aac');
+        $this->export = new PendingExport($media, $disk, $this, 'hls-playlist');
+        $this->export->video('libx264')->audio('aac');
+    }
+
+    /** Returns the stable FFmpeg input index; staging reuse never removes an input. */
+    public function addInput(Media $media): int
+    {
+        return $this->export->addInput($media);
+    }
+
+    public function filterComplex(string $expression): self
+    {
+        $this->export->filterComplex($expression);
+
+        return $this;
+    }
+
+    /** Overlay a PNG/JPEG or animated GIF after video filters. Offsets are inward margins. */
+    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
+    {
+        $this->export->watermark($image, $position, $x, $y, $width, $height, $opacity);
+
+        return $this;
+    }
+
+    public function twoPass(): self
+    {
+        $this->export->twoPass();
+
+        return $this;
+    }
+
+    /** @internal Parallel queueing writes every part to one shared named disk. */
+    public function filesystem(): string|Filesystem
+    {
+        return $this->export->filesystem();
     }
 
     public function playlistType(string $type): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         $type = strtolower($type);
         if (! in_array($type, ['vod', 'event', 'live'], true)) {
             throw new InvalidArgumentException('HLS playlist type must be vod, event, or live.');
@@ -69,7 +123,7 @@ class PendingHlsExport extends PendingExport
     /** Use fragmented MP4 with one owned initialization file per rendition. AES-128 is MPEG-TS only. */
     public function fmp4(): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         if ($this->encryption !== null) {
             throw new InvalidArgumentException('AES-128 encryption is supported only for MPEG-TS HLS.');
         }
@@ -80,7 +134,7 @@ class PendingHlsExport extends PendingExport
 
     public function variant(string $name, callable $configure, ?string $playlist = null, ?string $segments = null, ?string $init = null): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
 
         if (! preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9_-]*\z/', $name) || isset($this->variants[$name])) {
             throw new InvalidArgumentException('HLS variant names must be unique simple path components.');
@@ -91,7 +145,7 @@ class PendingHlsExport extends PendingExport
             if ($path === null) {
                 continue;
             }
-            $path = (new ExportOutput($path, $this->filesystem()))->destination()['path'];
+            $path = (new ExportOutput($path, $this->export->filesystem()))->destination()['path'];
             if (! in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), match ($type) {
                 'playlist' => ['m3u8'], 'init' => ['mp4'], default => ['ts', 'm4s', 'vtt'],
             }, true)
@@ -112,7 +166,7 @@ class PendingHlsExport extends PendingExport
 
     public function playlistUsing(callable $callback): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         $this->playlistCallback = Closure::fromCallable($callback);
 
         return $this;
@@ -163,7 +217,7 @@ class PendingHlsExport extends PendingExport
         ?string $segments,
         ?string $init,
     ): self {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         if (! preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9_-]*\z/', $group)
             || $name === '' || ! preg_match('//u', $name) || preg_match('/["\\\\\x00-\x1F\x7F-\x9F]/u', $name)
             || ($language !== null && ! preg_match('/\A[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*\z/', $language))
@@ -191,7 +245,7 @@ class PendingHlsExport extends PendingExport
         ?int $rotateEvery = null,
         string $directory = 'hls-keys',
     ): self {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         if ($this->segmentType === 'fmp4') {
             throw new InvalidArgumentException('AES-128 encryption is supported only for MPEG-TS HLS.');
         }
@@ -200,12 +254,8 @@ class PendingHlsExport extends PendingExport
         return $this;
     }
 
-    public function output(string $path, callable $configure): self
-    {
-        throw new InvalidArgumentException('Configure HLS outputs with variant(), not output().');
-    }
-
-    protected function configuredOutputs(?string $path = null): array
+    /** @internal */
+    public function outputs(array $default, ?string $path): array
     {
         if (count($this->variants) === count($this->renditions)) {
             throw new InvalidArgumentException('An HLS export requires at least one variant.');
@@ -214,8 +264,8 @@ class PendingHlsExport extends PendingExport
             throw new InvalidArgumentException('Encrypted alternate subtitle renditions are not supported.');
         }
 
-        $master = (new ExportOutput($path ?? 'master.m3u8', $this->filesystem()))->configure(array_replace(
-            $this->outputConfiguration(), ['maps' => [], 'omitAudio' => false, 'omitVideo' => false],
+        $master = (new ExportOutput($path ?? 'master.m3u8', $this->export->filesystem()))->configure(array_replace(
+            $this->export->outputConfiguration(), ['maps' => [], 'omitAudio' => false, 'omitVideo' => false],
         ));
         $path = $master->destination()['path'];
 
@@ -233,7 +283,7 @@ class PendingHlsExport extends PendingExport
                 || ($this->variantPaths[$name]['init'] !== null && $this->segmentType !== 'fmp4')) {
                 throw new InvalidArgumentException('Segment and initialization paths must match the selected HLS packaging.');
             }
-            $settings = $variant->inherit($this->outputConfiguration());
+            $settings = $variant->inherit($this->export->outputConfiguration());
             if ($rendition !== null) {
                 if ($settings['maps'] === [] || array_any($variant->groups(), fn ($group) => $group !== null)) {
                     throw new InvalidArgumentException('Alternate renditions require explicit maps and cannot reference groups.');
@@ -258,7 +308,7 @@ class PendingHlsExport extends PendingExport
                     $settings['audioFilters'] = [];
                 }
             }
-            $outputs[] = (new ExportOutput($this->variantPaths[$name]['playlist'] ?? $directory.$name.'/index.m3u8', $this->filesystem()))->configure($settings);
+            $outputs[] = (new ExportOutput($this->variantPaths[$name]['playlist'] ?? $directory.$name.'/index.m3u8', $this->export->filesystem()))->configure($settings);
         }
         $outputs[] = $master;
         foreach ($this->variants as $name => $variant) {
@@ -282,11 +332,11 @@ class PendingHlsExport extends PendingExport
     /** @internal Keep variants sharing alternate groups together so each rendition encodes once. */
     public function queueParts(string $path, string $prefix): array
     {
-        $this->configuredOutputs($path);
+        $this->outputs([], $path);
         if ($this->playlistType !== 'vod') {
             throw new InvalidArgumentException('Parallel HLS composition requires VOD playlists. Use a single queued export for event or live playlist types.');
         }
-        if ($this->playlistCallback !== null || in_array('-filter_complex', $this->inspect(), true)) {
+        if ($this->playlistCallback !== null || in_array('-filter_complex', $this->export->inspect(), true)) {
             throw new InvalidArgumentException('Parallel HLS does not accept custom playlist callbacks or complex graphs. Use a single queued export.');
         }
         $remaining = array_diff(array_keys($this->variants), array_keys($this->renditions));
@@ -338,13 +388,13 @@ class PendingHlsExport extends PendingExport
 
     public function save(?string $path = null): HlsExportResult
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         if ($path === null) {
             throw new InvalidArgumentException('An HLS export requires a master playlist destination.');
         }
 
-        $this->configuredOutputs($path);
-        $this->inspect();
+        $this->outputs([], $path);
+        $this->export->inspect();
         foreach ($this->variants as $variant) {
             $variant->freeze();
         }
@@ -353,7 +403,7 @@ class PendingHlsExport extends PendingExport
         $this->keyReferences = [];
         $this->provenance = [];
         try {
-            $result = parent::save($path);
+            $result = $this->export->save($path);
         } finally {
             // The workspace belongs to one execution; a saved builder may still be queued.
             $this->workspace = null;
@@ -369,26 +419,25 @@ class PendingHlsExport extends PendingExport
             variantGroups: array_map(fn ($variant) => array_filter($variant->groups(), fn ($group) => $group !== null), $this->variants), provenance: $this->provenance);
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    /** @internal */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
-        $encoding = array_slice($outputs, 0, -1);
-        foreach ($encoding as $output) {
+        foreach ($outputs as $output) {
             if (in_array('-f', $output->outputConfiguration()['outputOptions'], true)) {
                 throw new InvalidArgumentException('HLS owns the output muxer.');
             }
         }
 
-        $command = parent::command($encoding, $paths, $outputPaths);
         $result = [];
-        foreach ($command as $token) {
-            $index = array_search($token, $outputPaths ?? array_map(fn ($i) => '[output:'.$i.']', array_keys($encoding)), true);
+        foreach ($default as $token) {
+            $index = array_search($token, $outputPaths ?? array_map(fn ($i) => '[output:'.$i.']', array_keys($outputs)), true);
             if ($index !== false) {
                 if ($this->isSubtitle($index)) {
                     array_push($result, '-c:s', 'webvtt', '-f', 'webvtt', $token);
 
                     continue;
                 }
-                $settings = $encoding[$index]->outputConfiguration();
+                $settings = $outputs[$index]->outputConfiguration();
                 if (! isset($this->renditions[array_keys($this->variants)[$index]])
                     && ! $settings['omitVideo'] && ($settings['video']['codec'] ?? null) !== 'copy') {
                     array_push($result, '-force_key_frames:v', 'expr:gte(t,n_forced*'.CommandCompiler::timestamp($this->segmentDuration).')', '-flags:v', '+cgop');
@@ -409,7 +458,8 @@ class PendingHlsExport extends PendingExport
         return $result;
     }
 
-    protected function validateStreamSelections(array $expected): void
+    /** @internal */
+    public function selections(array $expected): void
     {
         foreach (array_keys($this->variants) as $index => $name) {
             if (isset($this->renditions[$name])) {
@@ -423,12 +473,14 @@ class PendingHlsExport extends PendingExport
         }
     }
 
-    protected function twoPassOutputIndexes(array $outputs): array
+    /** @internal Alternate renditions are packaged, not two-pass encoded. */
+    public function twoPassOutputs(array $default, array $outputs): array
     {
         return array_values(array_filter(array_keys(array_values($this->variants)), fn ($index) => ! isset($this->renditions[array_keys($this->variants)[$index]])));
     }
 
-    protected function firstPassCommand(array $command, array $outputPaths, Workspace $workspace, array &$redactions): array
+    /** @internal */
+    public function analysisCommand(array $command): array
     {
         $analysis = [];
         for ($index = 0; $index < count($command); $index++) {
@@ -440,10 +492,11 @@ class PendingHlsExport extends PendingExport
             }
         }
 
-        return parent::firstPassCommand($analysis, $outputPaths, $workspace, $redactions);
+        return $analysis;
     }
 
-    protected function outputPaths(array $outputs, Workspace $workspace): array
+    /** @internal */
+    public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
         $this->workspace = $workspace;
 
@@ -455,9 +508,10 @@ class PendingHlsExport extends PendingExport
         return ($this->renditions[array_keys($this->variants)[$index] ?? '']['type'] ?? null) === 'SUBTITLES';
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** @internal Subtitle playlists need the presentation duration later, in artifacts(). */
+    public function duration(array $metadata, ?float $default): ?float
     {
-        $this->presentationDuration = parent::prepareEncoding($metadata);
+        $this->presentationDuration = $default;
         if (array_any($this->renditions, fn ($item) => $item['type'] === 'SUBTITLES')
             && ($this->presentationDuration === null || $this->presentationDuration <= 0)) {
             throw new InvalidArgumentException('Subtitle renditions require a known presentation duration without a complex timing graph.');
@@ -466,7 +520,8 @@ class PendingHlsExport extends PendingExport
         return $this->presentationDuration;
     }
 
-    protected function artifacts(array $outputs, array $paths): array
+    /** @internal */
+    public function artifacts(array $default, array $outputs, array $paths): array
     {
         $segments = $playlists = [];
         $encryption = $this->encryption === null ? null : clone $this->encryption;
@@ -518,7 +573,7 @@ class PendingHlsExport extends PendingExport
                         throw new MediaException('An HLS playlist references an unexpected initialization file.', Progress::VALIDATION, 'artifact');
                     }
                     $init = dirname($paths[$index]).'/init-'.$index.'.mp4';
-                    $this->validateArtifact($init, 'hls-init');
+                    $this->export->validateArtifact($init, 'hls-init');
                     $destination = $output->destination();
                     $destination['path'] = $this->variantPaths[$name]['init'] ?? (dirname($destination['path']) === '.' ? '' : dirname($destination['path']).'/').'init.mp4';
                     $line = '#EXT-X-MAP:URI="'.HlsPresentation::relativeUrl($destination['path'], $output->destination()['path']).'"';
@@ -534,12 +589,12 @@ class PendingHlsExport extends PendingExport
                         throw new MediaException('An HLS playlist references an unowned or unordered segment.', Progress::VALIDATION, 'artifact');
                     }
                     $local = dirname($paths[$index]).'/'.$filename;
-                    $size = $this->validateArtifact($local, 'hls-segment');
+                    $size = $this->export->validateArtifact($local, 'hls-segment');
                     $owned[] = $local;
                     $encrypted = $this->isSubtitle($index) ? null : $encryption?->segment($local, $count, $output->destination()['path'], $name);
                     if ($encrypted !== null) {
                         $keyTags[$lineIndex] = $encrypted['tag'];
-                        $size = $this->validateArtifact($encrypted['path'], 'hls-segment');
+                        $size = $this->export->validateArtifact($encrypted['path'], 'hls-segment');
                     }
                     $bytes += $size;
                     $total += $duration;
@@ -553,7 +608,7 @@ class PendingHlsExport extends PendingExport
                     if ($this->isSubtitle($index)) {
                         $subtitlePath = $local;
                     } elseif ($count === 1) {
-                        $metadata = $this->source->probeArtifact($probePath, $this->workspace);
+                        $metadata = $this->media->probeArtifact($probePath, $this->workspace);
                         $stream = $metadata->video() ?? $metadata->audio();
                         $start = $stream?->get('start_time');
                     }
@@ -665,7 +720,7 @@ class PendingHlsExport extends PendingExport
         $artifacts = [...($encryption?->artifacts() ?? []), ...$segments, ...$playlists, [
             'path' => $paths[$master], 'output' => $master, 'role' => 'hls-master', 'destination' => $outputs[$master]->destination(),
         ]];
-        $this->validateDestinations(array_map(fn ($artifact) => new ExportOutput(
+        $this->export->validateDestinations(array_map(fn ($artifact) => new ExportOutput(
             $artifact['destination']['path'], ($artifact['target'] ?? $outputs[$artifact['output']])->filesystem(),
         ), $artifacts));
 

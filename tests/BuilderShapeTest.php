@@ -11,6 +11,7 @@ use ProtoneMedia\LaravelFFMpeg\PendingDashExport;
 use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\PendingFrame;
 use ProtoneMedia\LaravelFFMpeg\PendingGif;
+use ProtoneMedia\LaravelFFMpeg\PendingHlsExport;
 use ProtoneMedia\LaravelFFMpeg\PendingLoudness;
 use ProtoneMedia\LaravelFFMpeg\PendingFrames;
 use ProtoneMedia\LaravelFFMpeg\PendingSpeed;
@@ -53,6 +54,7 @@ class BuilderShapeTest extends TestCase
                 'videoStream', 'videoFilter', 'resize', 'drawText', 'resource', 'textResource', 'subtitleResource']],
             'dash' => [PendingDashExport::class, ['output', 'twoPass', 'coverArt', 'watermark', 'filterComplex', 'delayAudio',
                 'withoutAudio', 'withoutVideo', 'videoStream', 'audioStream']],
+            'hls' => [PendingHlsExport::class, ['output', 'coverArt']],
             'still' => [PendingStill::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
                 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'mapAudio', 'withoutAudio', 'withoutVideo']],
         ];
