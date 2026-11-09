@@ -959,16 +959,23 @@ Each execution stages non-local images and prepares safe private numbered aliase
 
 Sequences can be graph inputs but are not standalone files for copy concatenation or filter resources. Encode a sequence to a regular media file before passing it to `concat()`.
 
-### Watermarks and image preparation
+### Watermarks
 
 ```php
+use ProtoneMedia\LaravelFFMpeg\Watermark;
+
 $logo = FFMpeg::disk('assets')
     ->open('brand/logo.png');
 
 FFMpeg::disk('videos')
     ->open('source.mkv')
     ->export()
-    ->watermark($logo, position: 'bottom-right', x: 20, y: 15, width: 160, opacity: 0.8)
+    ->watermark($logo, fn (Watermark $watermark) => $watermark
+        ->right(20)
+        ->bottom(15)
+        ->size(width: 160)
+        ->opacity(0.8)
+        ->grayscale())
     ->resize(width: 1280)
     ->video('libx264', crf: 23)
     ->audio('copy')
@@ -976,24 +983,35 @@ FFMpeg::disk('videos')
     ->save('branded.mkv');
 ```
 
-`PendingExport::watermark()` owns the image inputs, graph, and maps. It accepts standalone PNG, JPEG, or GIF images, including prepared images and staged Storage inputs. Only GIF can have `inputOptions: ['-ignore_loop', '0']` or `['-ignore_loop', '1']`; other image input options are rejected. Defaults are `position: 'bottom-right'`, `x: 0`, `y: 0`, no resize, and `opacity: 1`. Opacity ranges from zero to one. Anchors accept `top-left`, `top-right`, `bottom-left`, `bottom-right`, and `center`.
+`PendingExport::watermark(Media $image, ?callable $configure = null)` owns the image inputs, graph, and maps. It accepts standalone PNG, JPEG, or GIF images from local or staged Storage inputs and URLs. Image input options are rejected. The callback receives a `ProtoneMedia\LaravelFFMpeg\Watermark`, runs immediately, and its return value is ignored. Every `Watermark` method validates its arguments immediately and throws `InvalidArgumentException`.
 
-Offsets are nonnegative inward margins at corners; center offsets move right and down. A single positive width or height preserves the image aspect ratio; supplying both stretches it. Repeated calls layer marks in call order. Each output's video filters run before all marks, regardless of registration order, so offsets refer to the final video canvas. Static images remain visible through the end of the video.
+Placement, `size()`, `opacity()`, and `loop()` control how FFmpeg draws the mark, in output pixels:
+
+- `left()`, `right()`, `top()`, and `bottom()` take a nonnegative margin from that edge. Repeating an edge replaces its margin; pinning opposite edges of one axis throws.
+- `center()` centers every axis that no edge method pins, regardless of call order, so `center()->bottom(40)` is bottom-center.
+- Defaults are `right(0)`, `bottom(0)`, the original size, and opacity 1.
+- `size(width:, height:)` scales the mark. A single positive dimension preserves the aspect ratio; both stretch it.
+- `opacity()` ranges from zero to one.
+- `loop()` repeats an animated GIF for the whole video with `-stream_loop -1`, whatever loop count the GIF embeds. It requires a GIF.
+
+Repeated calls layer marks in call order. Each output's video filters run before all marks, regardless of registration order, so offsets refer to the final video canvas. Static images remain visible through the end of the video.
 
 The helper supports ordinary media exports, including multiple `output()` callbacks, and HLS variants. Marks apply to each output; configure codecs, geometry, destinations, and audio separately inside the callbacks. Video copy, custom maps, custom graphs, and additional media inputs are unsupported. Audio copy remains valid. Use a raw graph for other composition requirements:
 
 ```php
 $badge = FFMpeg::disk('assets')
-    ->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
+    ->open('badge.gif');
 $media->hls()
-    ->watermark($badge, width: 96)
+    ->watermark($badge, fn (Watermark $watermark) => $watermark
+        ->size(width: 96)
+        ->loop())
     ->variant('720p', fn ($variant) => $variant->resize(height: 720)
         ->video('libx264', bitrate: '2500k'))
     ->toDisk('streams')
     ->save('branded/master.m3u8');
 ```
 
-`-ignore_loop 0` honors the GIF's embedded loop instructions. It does not force infinite repetition when the image specifies a finite loop. `-ignore_loop 1` ignores the loop instructions. At EOF the overlay repeats its final frame. A looping overlay ends with the main video, and audio or other streams keep their own length. All ordinary video filters, including HLS variant geometry, run before overlays regardless of registration order.
+Without `loop()`, a GIF plays once and the overlay repeats its final frame. A looping overlay ends with the main video, and audio or other streams keep their own length. All ordinary video filters, including HLS variant geometry, run before overlays regardless of registration order.
 
 ```php
 $export = FFMpeg::disk('videos')
@@ -1017,22 +1035,23 @@ $export->filterComplex(
 
 Local and non-local Storage images use the same API. A downloaded URL image uses `openUrl($url, headers: $headers, download: true)`. No filename is embedded in the filter graph.
 
-`Media::prepareImage(callable(Illuminate\Image\Image): Illuminate\Image\Image $prepare)` optionally preprocesses an image before FFmpeg reads it. The callback receives a Laravel `Image` of a private copy, never the original file or its path, and returns the image to use. The package encodes the returned image and replaces the private copy with it. The format stays the same unless the callback converts it. Laravel's GD and Imagick image drivers require `intervention/image:^4.2`, which the package suggests but does not require:
+Image edits change the image itself before FFmpeg reads it, in the image's own pixels. The `Watermark` methods `grayscale()`, `blur(int $amount = 5)`, `sharpen(int $amount = 10)`, `rotate(float $angle, ?string $background = null)`, `crop(int $width, int $height, int $x = 0, int $y = 0)`, `flipHorizontally()`, and `flipVertically()` match Laravel's `Illuminate\Image\Image` names and defaults. They reject out-of-range arguments instead of clamping them. Each edit is recorded as Laravel's own `Illuminate\Image\Transformations\*` value object and replayed in call order with `Image::transform()`. Laravel's GD and Imagick image drivers require `intervention/image:^4.2`, which the package suggests but does not require; the first edit throws when it is missing. Image-side scaling is deliberately absent: Laravel's `scale()` only scales down, and `size()` already scales every GIF frame in FFmpeg.
+
+Configuration and inspection do no IO. Edits run during staging on a private copy, never the original file or its path, once per identical image and edit list in each execution. The format stays the same, and GIF edits keep every frame. Because edits are plain value objects rather than closures, queued exports serialize them like any other setting. Reusing an export in a later execution creates a new private copy and reruns the edits.
+
+URL images with edits always download through Laravel Http first, even when the source descriptor selects direct input, so FFmpeg receives local filenames, never URLs or headers. Without edits, a URL image follows its descriptor. Input images must have readable raster image headers. Image-processing errors and a missing driver at execution fail with phase `staging` and category `resource`, without publication or an exception chain that could expose private paths or credentials. FFmpeg still validates image decoding.
+
+For a custom overlay graph through `addInput()`, or for `coverArt()` and `still()`, render the edited image once with Laravel and open the stored result:
 
 ```php
-use Illuminate\Image\Image;
+use Illuminate\Support\Facades\Image;
 
-$logo = FFMpeg::disk('assets')
-    ->open('brand/logo.png')
-    ->prepareImage(fn (Image $image) => $image->scale(width: 320));
-// Pass $logo to watermark(), or addInput() for a custom overlay graph.
+Image::fromStorage('brand/logo.png', 'assets')
+    ->grayscale()
+    ->storeAs('brand/logo-gray.png', disk: 'assets');
 ```
 
-Preparation returns an immutable media descriptor. Construction and inspection do no IO and do not call the callback. The callback runs during staging once per media identity and staging purpose in each execution. Reusing the descriptor in a later execution creates a new private copy and reruns preparation. Callback results do not persist across executions. Input options and multi-file sources are rejected.
-
-URL images always download through Laravel Http before preparation, even when the source descriptor selects direct input. Callbacks receive images of local private copies, and FFmpeg receives local filenames, never URLs or headers. Input and prepared output must have readable raster image headers. Callback errors, image-processing errors, a missing image driver, a return value that is not an `Image`, and invalid prepared images fail with phase `staging` and category `resource`, without publication or an exception chain that could expose private paths or credentials. FFmpeg still validates image decoding. The callback is trusted application code, not a sandbox.
-
-Ordinary exports are verified with transparent local and staged PNGs, scaled bottom-right offsets, persistent overlays, unchanged decoded audio, private-copy preprocessing, source retention, and repeated executions. Native HLS acceptance also verifies a shared overlay graph with two scaled branches, accurate clipping, and decoded watermark pixels.
+Ordinary exports are verified with transparent local and staged PNGs, scaled bottom-right offsets, persistent overlays, unchanged decoded audio, private-copy edits, source retention, and repeated executions. Native HLS acceptance also verifies a shared overlay graph with two scaled branches, accurate clipping, and decoded watermark pixels.
 
 ### Composition and resources
 

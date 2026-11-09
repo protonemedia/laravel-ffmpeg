@@ -3,7 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Filesystem\Filesystem;
-use Illuminate\Image\Image;
+use Illuminate\Http\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -11,6 +11,7 @@ use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Watermark;
 use Symfony\Component\Process\Process as Server;
 
 class NativeUrlTest extends TestCase
@@ -172,26 +173,19 @@ class NativeUrlTest extends TestCase
     }
 
     #[Test]
-    public function prepared_url_images_download_once_per_execution_without_exposing_urls_to_callbacks_or_processes(): void
+    public function edited_url_watermarks_download_once_per_execution_without_exposing_urls_to_processes(): void
     {
         $this->native();
         $base = $this->server(fixture: __DIR__.'/src/logo.png');
         foreach ([false, true] as $authenticated) {
-            $calls = 0;
             $url = $base.($authenticated ? '/private' : '/public').'?signature=private-image-signature';
-            $media = FFMpeg::openUrl($url, $authenticated ? ['Authorization' => 'Bearer first-secret'] : [], download: $authenticated)
-                ->prepareImage(function (Image $image) use (&$calls) {
-                    $calls++;
-                    $this->assertSame(hash_file('sha256', __DIR__.'/src/logo.png'), hash('sha256', $image->toBytes()));
-
-                    return $image;
-                });
-            $result = $media->export()->video('ffv1')->toDisk('memory')->save('logo.mkv');
-            $this->assertSame(1, $calls);
+            $logo = FFMpeg::openUrl($url, $authenticated ? ['Authorization' => 'Bearer first-secret'] : [], download: $authenticated);
+            $result = FFMpeg::open(new File(__DIR__.'/src/video.mp4'))->export()->clip(0, 0.2)
+                ->watermark($logo, fn (Watermark $watermark) => $watermark->flipHorizontally())
+                ->video('ffv1')->withoutAudio()->toDisk('memory')->save('logo.mkv');
             $this->assertStringNotContainsString($base, json_encode($result->processes()));
             $this->assertStringNotContainsString('private-image-signature', json_encode($result->processes()));
             $this->assertStringNotContainsString('first-secret', json_encode($result->processes()));
-            $this->assertSame(getimagesize(__DIR__.'/src/logo.png')[0], FFMpeg::disk('memory')->open('logo.mkv')->probe()->video()->width());
             $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
         $requests = array_map(fn ($line) => json_decode($line, true), file($this->root.'/requests'));

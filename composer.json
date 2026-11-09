@@ -39,7 +39,7 @@
         "rector/rector": "^2.3"
     },
     "suggest": {
-        "intervention/image": "Required to prepare images with prepareImage() (^4.2)."
+        "intervention/image": "Required to edit watermark images, for example grayscale() or blur() (^4.2)."
     },
     "autoload": {
         "psr-4": {

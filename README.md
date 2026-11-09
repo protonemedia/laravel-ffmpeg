@@ -76,7 +76,7 @@ Install the development branch with Composer:
 composer require pbmedia/laravel-ffmpeg:9.x-dev
 ```
 
-Laravel discovers the service provider and facade automatically. To prepare images with `prepareImage()`, also install [Intervention Image](https://image.intervention.io), which drives [Laravel's image manipulation](https://laravel.com/docs/13.x/images):
+Laravel discovers the service provider and facade automatically. To edit watermark images, for example to blur or grayscale them, also install [Intervention Image](https://image.intervention.io), which drives [Laravel's image manipulation](https://laravel.com/docs/13.x/images):
 
 ```bash
 composer require intervention/image:^4.2
@@ -663,32 +663,48 @@ Normalization selects one audio track and produces one audio-only output. It dec
 
 ### Add a watermark
 
-The `watermark` method overlays an image on your video. Open the image on its source disk, then choose its position, size, and opacity:
+The `watermark` method overlays an image on your video. Open the image on its source disk, then configure the mark in a closure that receives a `Watermark` instance:
 
 ```php
+use ProtoneMedia\LaravelFFMpeg\Watermark;
+
 $logo = FFMpeg::disk('assets')
     ->open('logo.png');
 
 $media->export()
     ->resize(width: 1280)
-    ->watermark($logo, position: 'bottom-right', x: 20, y: 15, width: 160, opacity: 0.8)
+    ->watermark($logo, fn (Watermark $watermark) => $watermark
+        ->right(20)
+        ->bottom(15)
+        ->size(width: 160)
+        ->opacity(0.8))
     ->video('libx264')
     ->audio('copy')
     ->toDisk('videos')
     ->save('branded.mp4');
 ```
 
-`watermark()` adds the image input and maps for you. It accepts PNG, JPEG, and GIF images from local or non-local Storage. Marks render after all output video filters, regardless of where you call `watermark()`. Offsets are inward margins from the chosen corner. Anchors also include `top-left`, `top-right`, `bottom-left`, and `center`. Call the helper again to add another mark.
+Without a closure, the mark is drawn at its original size in the bottom-right corner. The `left`, `right`, `top`, and `bottom` methods keep the mark a number of pixels from that edge. The `center` method centers the mark on every axis that no edge method pins, so `center()->bottom(40)` places it at the bottom center. Pinning opposite edges, such as `left()->right()`, throws an exception.
 
-Watermarks work with ordinary single or multiple media outputs, HLS variants, and copied audio, but require video encoding. Custom maps, custom graphs, and additional media inputs require an explicit overlay graph instead. To edit the image first, call `prepareImage()`. Its callback receives a Laravel [`Image`](https://laravel.com/docs/13.x/images) of a private copy and returns the image to use:
+`watermark()` adds the image input and maps for you. It accepts PNG, JPEG, and GIF images from local or non-local Storage. Marks render after all output video filters, regardless of where you call `watermark()`. Call the method again to add another mark. Watermarks work with ordinary single or multiple media outputs, HLS variants, and copied audio, but require video encoding. Custom maps, custom graphs, and additional media inputs require an explicit overlay graph instead.
+
+#### Editing the watermark image
+
+The `Watermark` instance also edits the image itself using [Laravel's image manipulation](https://laravel.com/docs/13.x/images), with the same method names and arguments: `grayscale`, `blur`, `sharpen`, `rotate`, `crop`, `flipHorizontally`, and `flipVertically`. Edits require `intervention/image` and run in call order on a private copy of the image, just before FFmpeg reads it. The original file never changes:
 
 ```php
-use Illuminate\Image\Image;
-
-$logo = FFMpeg::disk('assets')
-    ->open('logo.png')
-    ->prepareImage(fn (Image $image) => $image->scale(width: 160));
+$media->export()
+    ->watermark($logo, fn (Watermark $watermark) => $watermark
+        ->right(25)
+        ->bottom(25)
+        ->size(width: 100)
+        ->grayscale()
+        ->blur(10))
+    ->video('libx264')
+    ->save('branded.mp4');
 ```
+
+Edits work in the image's own pixels, while placement, `size`, and `opacity` work in output pixels, so `size` applies after the edits.
 
 ### Join clips
 
@@ -827,9 +843,13 @@ HLS variants support static or animated watermarks. After encoding, use the `pla
 
 ```php
 $animated = FFMpeg::disk('assets')
-    ->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
+    ->open('badge.gif');
 $media->hls()
-    ->watermark($animated, width: 96, x: 16, y: 16)
+    ->watermark($animated, fn (Watermark $watermark) => $watermark
+        ->right(16)
+        ->bottom(16)
+        ->size(width: 96)
+        ->loop())
     ->variant('720p', fn ($variant) => $variant->resize(height: 720)
         ->video('libx264', bitrate: '2500k'))
     ->toDisk('streams')
@@ -839,7 +859,7 @@ $selected = $result->playbackForVariants(['720p']);
 $lesson->hls_playback = $selected->toArray();
 ```
 
-HLS watermark inputs accept static PNG and JPEG or animated GIF. `['-ignore_loop', '0']` honors the GIF's embedded loop instructions; it does not force a finite GIF to loop forever. With `1`, FFmpeg ignores those instructions. After image EOF, the overlay holds the last frame. All ordinary video filters still precede overlays, including each variant's resize, regardless of method call order.
+HLS watermark inputs accept static PNG and JPEG or animated GIF. By default, an animated GIF plays once and then holds its last frame. The `loop` method repeats it for the whole video instead, whatever loop count the GIF embeds. Watermark images take no input options. All ordinary video filters still precede overlays, including each variant's resize, regardless of method call order.
 
 `playbackForVariants()` returns a playback inventory for a nonempty set of unique variant names. It retains required audio, subtitle, initialization, and key dependencies. Protected playback renders a filtered master without modifying published playlists. Persist this selected inventory instead of the full `playback()` inventory when a viewer may access only those variants.
 

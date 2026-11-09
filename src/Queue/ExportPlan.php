@@ -70,7 +70,9 @@ final readonly class ExportPlan
             return $value;
         }
 
-        if (! str_starts_with($value::class, 'ProtoneMedia\\LaravelFFMpeg\\') || $value instanceof Workspace) {
+        // Laravel's image transformations are scalar value objects that extend nothing.
+        if ((! str_starts_with($value::class, 'ProtoneMedia\\LaravelFFMpeg\\') && ! str_starts_with($value::class, 'Illuminate\\Image\\Transformations\\'))
+            || $value instanceof Workspace) {
             throw new InvalidArgumentException('Queued export plans accept fresh native builders and serializable callbacks, not runtime services.');
         }
 

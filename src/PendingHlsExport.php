@@ -88,10 +88,14 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
         return $this;
     }
 
-    /** Overlay a PNG/JPEG or animated GIF after video filters. Offsets are inward margins. */
-    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
+    /**
+     * Overlay a PNG, JPEG or GIF after all video filters, including each variant's resize.
+     *
+     * @param  (callable(Watermark): mixed)|null  $configure  Runs immediately; its return value is ignored.
+     */
+    public function watermark(Media $image, ?callable $configure = null): self
     {
-        $this->export->watermark($image, $position, $x, $y, $width, $height, $opacity);
+        $this->export->watermark($image, $configure);
 
         return $this;
     }

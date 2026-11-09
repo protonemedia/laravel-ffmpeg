@@ -2,15 +2,14 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
-use Closure;
 use DateInterval;
 use DateTimeInterface;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Contracts\Image\Transformation;
 use Illuminate\Filesystem\LocalFilesystemAdapter;
 use Illuminate\Http\File;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Image\Image;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use JsonException;
@@ -111,13 +110,13 @@ readonly class Media
     }
 
     /**
-     * Prepare a private copy of this image before FFmpeg reads it.
+     * @internal The image a watermark reads, edited on a private copy when it has edits.
      *
-     * @param  callable(Image): Image  $prepare
+     * @param  list<Transformation>  $edits
      */
-    public function prepareImage(callable $prepare): self
+    public function forWatermark(array $edits): self
     {
-        return new self($this->defaultOutputDisk(), new PreparedImageInput($this, Closure::fromCallable($prepare)));
+        return $edits === [] ? $this : new self($this->defaultOutputDisk(), new PreparedImageInput($this, $edits));
     }
 
     public function frame(float|string $at = 0): PendingFrame

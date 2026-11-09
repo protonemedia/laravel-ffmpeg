@@ -6,7 +6,6 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Filesystem\Filesystem;
-use Illuminate\Image\Image;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\WorkerOptions;
 use Illuminate\Support\Facades\Bus;
@@ -20,6 +19,7 @@ use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Watermark;
 use RuntimeException;
 
 class NativeQueueTest extends TestCase
@@ -211,26 +211,32 @@ class NativeQueueTest extends TestCase
     #[Test]
     public function native_batches_can_cancel_queued_conversions_before_they_start(): void
     {
-        Storage::disk('queued')->put('logo.png', file_get_contents(__DIR__.'/src/logo.png'));
+        $bitmap = imagecreatetruecolor(8, 8);
+        imagefill($bitmap, 0, 0, imagecolorallocate($bitmap, 255, 0, 0));
+        ob_start();
+        imagepng($bitmap);
+        Storage::disk('queued')->put('logo.png', ob_get_clean());
+        imagedestroy($bitmap);
         $hash = hash('sha256', Storage::disk('queued')->get('logo.png'));
-        $image = FFMpeg::disk('queued')->open('logo.png')->prepareImage(static function (Image $image) {
-            Storage::disk('queued')->put('prepared', hash('sha256', $image->toBytes()));
-
-            return $image;
-        });
+        $logo = FFMpeg::disk('queued')->open('logo.png');
         Bus::batch([
             $this->source()->frame(0.5)->queued(connection: 'database', queue: 'media')->job('preview.jpg'),
             $this->source()->export()->queued(connection: 'database', queue: 'media')->job('ready.mp4'),
-            $image->still(0.6, frameRate: 5)->resize(width: 48)->video('libx264')
-                ->queued(connection: 'database', queue: 'media')->job('still.mp4'),
+            // The callback runs before capture, so an ordinary closure that captures $this queues.
+            $this->source()->export()->watermark($logo, fn (Watermark $watermark) => $watermark->grayscale())->video('libx264')
+                ->queued(connection: 'database', queue: 'media')->job('watermarked.mp4'),
         ])->onConnection('database')->onQueue('media')->dispatch();
         $this->work();
         $this->work();
         $this->work();
         $this->assertSame([96, 64], array_slice(getimagesize(Storage::disk('queued')->path('preview.jpg')), 0, 2));
         $this->assertSame(96, FFMpeg::disk('queued')->open('ready.mp4')->probe()->video()->get('width'));
-        $this->assertSame(48, FFMpeg::disk('queued')->open('still.mp4')->probe()->video()->get('width'));
-        $this->assertSame($hash, Storage::disk('queued')->get('prepared'));
+        // The recorded edit survives the queue: the red mark in the bottom-right corner is gray.
+        $frame = imagecreatefromstring(FFMpeg::disk('queued')->open('watermarked.mp4')->frame(0.5)->get());
+        $pixel = imagecolorsforindex($frame, imagecolorat($frame, 92, 60));
+        imagedestroy($frame);
+        $this->assertLessThan(30, abs($pixel['red'] - $pixel['blue']), json_encode($pixel));
+        $this->assertLessThan(150, $pixel['red'], json_encode($pixel));
         $this->assertSame($hash, hash('sha256', Storage::disk('queued')->get('logo.png')));
         $this->assertCount(3, $this->completed);
         $this->completed = [];

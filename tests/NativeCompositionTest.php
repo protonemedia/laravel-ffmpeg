@@ -4,7 +4,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\File;
-use Illuminate\Image\Image;
 use Illuminate\Process\Factory;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
@@ -21,6 +20,7 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Watermark;
 
 class NativeCompositionTest extends TestCase
 {
@@ -582,35 +582,79 @@ class NativeCompositionTest extends TestCase
     }
 
     #[Test]
-    public function image_preparation_is_deferred_and_failures_cannot_mutate_originals_or_publish(): void
+    public function watermark_edits_are_deferred_and_failures_cannot_mutate_originals_or_publish(): void
     {
         Process::fake();
         $local = $this->fakeLocalDisk();
         $this->addTestFile('logo.png');
+        $this->addTestFile('video.mp4');
         $hash = hash_file('sha256', $local->path('logo.png'));
-        foreach ([fn ($image) => throw new \RuntimeException('application-secret'), fn ($image) => $image->toBytes(),
-            fn ($image) => \Illuminate\Support\Facades\Image::fromBytes('not an image')->grayscale()] as $prepare) {
-            $image = FFMpeg::disk('local')->open('logo.png')->prepareImage($prepare);
-            $this->assertContains('[input:0]', $image->export()->video('ffv1')->inspect());
-            Process::assertNothingRan();
-            try {
-                $image->export()->video('ffv1')->toDisk('memory')->save('failed.mkv');
-                $this->fail('Invalid image preparation was accepted.');
-            } catch (MediaException $exception) {
-                $this->assertSame('staging', $exception->phase);
-                $this->assertSame('resource', $exception->category);
-                $this->assertNull($exception->getPrevious());
-                $this->assertStringNotContainsString('application-secret', $exception->getMessage());
-                $this->assertFalse(Storage::disk('memory')->exists('failed.mkv'));
-            }
-            $this->assertSame($hash, hash_file('sha256', $local->path('logo.png')));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+        // The driver rejects the color only when it processes the image; the color stands in for a private value.
+        $export = FFMpeg::disk('local')->open('video.mp4')->export()->video('ffv1')
+            ->watermark(FFMpeg::disk('local')->open('logo.png'), fn (Watermark $watermark) => $watermark->rotate(10, background: 'application-secret'));
+        $this->assertContains('[input:1]', $export->inspect());
+        Process::assertNothingRan();
+        try {
+            $export->toDisk('memory')->save('failed.mkv');
+            $this->fail('An image edit that cannot be processed was accepted.');
+        } catch (MediaException $exception) {
+            $this->assertSame('staging', $exception->phase);
+            $this->assertSame('resource', $exception->category);
+            $this->assertNull($exception->getPrevious());
+            $this->assertStringNotContainsString('application-secret', $exception->getMessage());
+            $this->assertFalse(Storage::disk('memory')->exists('failed.mkv'));
         }
+        $this->assertSame($hash, hash_file('sha256', $local->path('logo.png')));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
         Process::assertNothingRan();
     }
 
     #[Test]
-    public function image_watermarks_preserve_alpha_offsets_duration_and_audio_with_optional_private_preparation(): void
+    public function watermark_placement_reads_as_edge_margins_in_any_order(): void
+    {
+        $this->fakeLocalDisk();
+        $media = FFMpeg::disk('local')->open('video.mp4');
+        $logo = FFMpeg::disk('local')->open('logo.png');
+        $overlay = function (?callable $configure) use ($media, $logo): string {
+            $command = $media->export()->watermark($logo, $configure)->video('libx264')->inspect();
+            preg_match('/overlay=x=([^:]+):y=([^:]+):/', $command[array_search('-filter_complex', $command, true) + 1], $match);
+
+            return $match[1].' '.$match[2];
+        };
+        $this->assertSame('main_w-overlay_w-0 main_h-overlay_h-0', $overlay(null));
+        $this->assertSame('25 main_h-overlay_h-10', $overlay(fn (Watermark $watermark) => $watermark->left(25)->bottom(10)));
+        $this->assertSame('main_w-overlay_w-5 3', $overlay(fn (Watermark $watermark) => $watermark->top(3)->right(5)));
+        $this->assertSame('(main_w-overlay_w)/2 main_h-overlay_h-40', $overlay(fn (Watermark $watermark) => $watermark->center()->bottom(40)));
+        $this->assertSame('(main_w-overlay_w)/2 main_h-overlay_h-40', $overlay(fn (Watermark $watermark) => $watermark->bottom(40)->center()));
+        $this->assertSame('(main_w-overlay_w)/2 (main_h-overlay_h)/2', $overlay(fn (Watermark $watermark) => $watermark->center()));
+        // Repeating an edge replaces its margin; the callback's return value is ignored.
+        $this->assertSame('main_w-overlay_w-9 main_h-overlay_h-0', $overlay(function (Watermark $watermark) {
+            $watermark->right(1)->right(9);
+
+            return 'ignored';
+        }));
+        foreach ([
+            fn (Watermark $watermark) => $watermark->left()->right(),
+            fn (Watermark $watermark) => $watermark->bottom()->top(),
+            fn (Watermark $watermark) => $watermark->left(-1),
+            fn (Watermark $watermark) => $watermark->size(),
+            fn (Watermark $watermark) => $watermark->size(width: 0),
+            fn (Watermark $watermark) => $watermark->opacity(1.5),
+            fn (Watermark $watermark) => $watermark->blur(101),
+            fn (Watermark $watermark) => $watermark->crop(0, 10),
+            fn (Watermark $watermark) => $watermark->rotate(INF),
+        ] as $invalid) {
+            try {
+                $media->export()->watermark($logo, $invalid);
+                $this->fail('Expected invalid watermark settings to fail.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
+
+    #[Test]
+    public function image_watermarks_preserve_alpha_offsets_duration_and_audio_with_optional_edits(): void
     {
         if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
             $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real watermark acceptance.');
@@ -632,27 +676,21 @@ class NativeCompositionTest extends TestCase
         $key = "logos/blue 'é.png";
         foreach (['local', 'memory'] as $disk) {
             Storage::disk($disk)->put($key, $bytes);
-            foreach ([false, true] as $preprocess) {
-                $prepared = [];
+            foreach ([false, true] as $flipped) {
                 $logo = FFMpeg::disk($disk)->open($key);
-                if ($preprocess) {
-                    $logo = $logo->prepareImage(function (Image $image) use (&$prepared) {
-                        $prepared[] = $image->dimensions();
-
-                        return $image->scale(width: 24);
-                    });
-                }
                 $export = FFMpeg::disk('local')->open('source.mkv')->export();
                 $export->resize(width: 80, height: 60)
-                    ->watermark($logo, position: 'bottom-right', x: 7, y: 5, width: 16, height: 8)
+                    ->watermark($logo, fn (Watermark $watermark) => $watermark->right(7)->bottom(5)->size(16, 8)
+                        ->when($flipped, fn (Watermark $watermark) => $watermark->flipHorizontally()))
                     ->video('ffv1')->audio('copy')->withoutMetadata(chapters: true)
                     ->toDisk('memory')->save('watermarked.mkv');
-                $this->assertSame($preprocess ? [[32, 16]] : [], $prepared);
                 $output = FFMpeg::disk('memory')->open('watermarked.mkv');
                 $this->assertEqualsWithDelta(2, $output->probe()->duration(), 0.001);
                 foreach ([0.2, 1.7] as $at) {
                     $frame = imagecreatefromstring($output->frame(at: $at)->get());
-                    foreach ([[59, 49, 'blue'], [69, 49, 'red'], [53, 49, 'red'], [59, 43, 'red'], [59, 57, 'red']] as [$x, $y, $channel]) {
+                    // The opaque half of the logo lands left of the transparent half unless the edit flips it.
+                    [$opaque, $transparent] = $flipped ? [69, 59] : [59, 69];
+                    foreach ([[$opaque, 49, 'blue'], [$transparent, 49, 'red'], [53, 49, 'red'], [59, 43, 'red'], [59, 57, 'red']] as [$x, $y, $channel]) {
                         $pixel = imagecolorsforindex($frame, imagecolorat($frame, $x, $y));
                         $this->assertGreaterThan(220, $pixel[$channel]);
                         $this->assertLessThan(35, $pixel[$channel === 'blue' ? 'red' : 'blue']);
@@ -665,11 +703,6 @@ class NativeCompositionTest extends TestCase
                 $this->assertTrue($original->successful(), $original->errorOutput());
                 $this->assertTrue($audio->successful(), $audio->errorOutput());
                 $this->assertSame($original->output(), $audio->output());
-                if ($preprocess) {
-                    $logo->frame()->save('prepared.png');
-                    $this->assertSame(24, getimagesizefromstring(Storage::disk($disk)->get('prepared.png'))[0]);
-                    $this->assertSame([[32, 16], [32, 16]], $prepared);
-                }
                 $this->assertSame($bytes, Storage::disk($disk)->get($key));
                 $this->assertSame([], glob($this->root.'/workspaces/*'));
             }
@@ -694,8 +727,8 @@ class NativeCompositionTest extends TestCase
         imagedestroy($bitmap);
         $media = FFMpeg::disk('local')->open('source.mkv');
         $logo = FFMpeg::disk('local')->open('logo.png');
-        $export = $media->export()->watermark($logo, position: 'top-left', x: 4, y: 2)
-            ->watermark($logo, position: 'center', opacity: 0.5)
+        $export = $media->export()->watermark($logo, fn (Watermark $watermark) => $watermark->left(4)->top(2))
+            ->watermark($logo, fn (Watermark $watermark) => $watermark->center()->opacity(0.5))
             ->output('large.mkv', fn ($out) => $out->resize(80, 60)->video('ffv1')->withoutAudio()->toDisk('memory'))
             ->output('small.mkv', fn ($out) => $out->resize(40, 30)->video('ffv1')->withoutAudio()->toDisk('memory'));
         $this->assertSame($export->inspect(), $export->inspect());
@@ -726,9 +759,8 @@ class NativeCompositionTest extends TestCase
             fn () => $media->export()->watermark($logo)->withoutVideo()->inspect(),
             fn () => $media->export()->watermark($logo)->map('0:v')->inspect(),
             fn () => $media->export()->watermark($logo)->filterComplex('[0:v]null[v]')->inspect(),
-            fn () => $media->export()->watermark($logo, opacity: NAN),
-            fn () => $media->export()->watermark($logo, width: 0),
-            fn () => $media->export()->watermark($logo, position: 'unknown'),
+            fn () => $media->export()->watermark($logo, fn (Watermark $watermark) => $watermark->opacity(NAN)),
+            fn () => $media->export()->watermark(FFMpeg::disk('local')->open('logo.png', ['-ignore_loop', '0'])),
         ] as $invalid) {
             try {
                 $invalid();

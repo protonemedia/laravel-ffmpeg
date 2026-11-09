@@ -213,21 +213,28 @@ final class PendingExport implements Exportable
         return $this;
     }
 
-    /** Overlay a PNG/JPEG or animated GIF after video filters. Offsets are inward margins. */
-    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
+    /**
+     * Overlay a PNG, JPEG or GIF after all video filters, bottom-right by default.
+     *
+     * @param  (callable(Watermark): mixed)|null  $configure  Runs immediately; its return value is ignored.
+     */
+    public function watermark(Media $image, ?callable $configure = null): self
     {
         $this->assertMutable();
 
-        if (! in_array($position, ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'], true)
-            || $x < 0 || $y < 0 || ($width !== null && $width <= 0) || ($height !== null && $height <= 0)
-            || ! is_finite($opacity) || $opacity < 0 || $opacity > 1
-            || ! in_array($image->inputOptions(), [[], ['-ignore_loop', '0'], ['-ignore_loop', '1']], true)) {
-            throw new InvalidArgumentException('Watermarks require an anchor, nonnegative margins, positive dimensions, opacity between zero and one, and no input options except GIF ignore_loop.');
+        if ($image->inputOptions() !== []) {
+            throw new InvalidArgumentException('Watermark images take no input options. Call loop() on the watermark to repeat a GIF.');
         }
 
-        $this->inputs[] = $image;
-        $input = array_key_last($this->inputs);
-        $this->watermarks[] = ['input' => $input, 'position' => $position, 'x' => $x, 'y' => $y, 'width' => $width, 'height' => $height, 'opacity' => $opacity];
+        $watermark = new Watermark;
+        if ($configure !== null) {
+            $configure($watermark);
+        }
+
+        $settings = $watermark->settings();
+        $this->inputs[] = $image->forWatermark($settings['edits']);
+        unset($settings['edits']);
+        $this->watermarks[] = ['input' => array_key_last($this->inputs)] + $settings;
 
         return $this;
     }
@@ -473,15 +480,19 @@ final class PendingExport implements Exportable
                 $options = $processed;
                 $branches = ['[0:V:0]'.$filter.'[watermark_base'.$index.'_0]'];
                 foreach ($this->watermarks as $n => $mark) {
-                    ['input' => $input, 'position' => $position, 'x' => $x, 'y' => $y, 'width' => $width, 'height' => $height, 'opacity' => $opacity] = $mark;
+                    ['input' => $input, 'horizontal' => [$left, $x], 'vertical' => [$top, $y], 'width' => $width, 'height' => $height, 'opacity' => $opacity, 'loop' => $loop] = $mark;
                     $imageFilters = $width === null && $height === null ? '' : 'scale=w='.($width ?? -1).':h='.($height ?? -1).',';
                     $label = 'watermark_image'.$index.'_'.$n;
                     $branches[] = '['.$input.':v:0]'.$imageFilters.'format=rgba,colorchannelmixer=aa='.$opacity.'['.$label.']';
-                    $horizontal = str_ends_with($position, 'right') ? 'main_w-overlay_w-'.$x : ($position === 'center' ? '(main_w-overlay_w)/2+'.$x : (string) $x);
-                    $vertical = str_starts_with($position, 'bottom') ? 'main_h-overlay_h-'.$y : ($position === 'center' ? '(main_h-overlay_h)/2+'.$y : (string) $y);
+                    $horizontal = match ($left) {
+                        'right' => 'main_w-overlay_w-'.$x, 'center' => '(main_w-overlay_w)/2', default => (string) $x,
+                    };
+                    $vertical = match ($top) {
+                        'bottom' => 'main_h-overlay_h-'.$y, 'center' => '(main_h-overlay_h)/2', default => (string) $y,
+                    };
                     $out = $n === count($this->watermarks) - 1 ? 'watermark_out'.$index : 'watermark_base'.$index.'_'.($n + 1);
-                    // A looping GIF never ends, so the main video bounds it; other streams keep their own length.
-                    $shortest = $this->inputs[$input]->inputOptions() === ['-ignore_loop', '0'] ? 1 : 0;
+                    // A looping mark never ends, so the main video bounds it; other streams keep their own length.
+                    $shortest = $loop ? 1 : 0;
                     $branches[] = '[watermark_base'.$index.'_'.$n.']['.$label.']overlay=x='.$horizontal.':y='.$vertical.':eof_action=repeat:repeatlast=1:shortest='.$shortest.'['.$out.']';
                 }
 
@@ -519,11 +530,14 @@ final class PendingExport implements Exportable
         }
 
         $compiledInputs = [];
+        // The demuxer repeats a looping mark, so a GIF loops for the whole video whatever loop count it embeds.
+        $looping = array_column(array_filter($this->watermarks, fn (array $mark): bool => $mark['loop']), 'loop', 'input');
 
         foreach ($this->inputs as $index => $input) {
             $compiledInputs[] = [
                 'path' => $paths[$index], 'protocols' => $input->protocolWhitelist(),
-                'options' => [...$input->transportOptions(), ...$input->inputOptions(), ...($index === 0 ? $outputs[0]->inputSeekOptions() : [])],
+                'options' => [...$input->transportOptions(), ...$input->inputOptions(), ...(isset($looping[$index]) ? ['-stream_loop', '-1'] : []),
+                    ...($index === 0 ? $outputs[0]->inputSeekOptions() : [])],
             ];
         }
 
@@ -910,8 +924,8 @@ final class PendingExport implements Exportable
             $image = $metadata[$mark['input']];
             $gif = $image->get('format.format_name') === 'gif' && $image->video()?->get('codec_name') === 'gif';
             if ((! $gif && ! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true))
-                || $image->streams()->count() !== 1 || (! $gif && $this->inputs[$mark['input']]->inputOptions() !== [])) {
-                throw new MediaException('Watermarks require a standalone PNG, JPEG, or GIF image; ignore_loop is GIF-only.', 'probing', 'watermark');
+                || $image->streams()->count() !== 1 || (! $gif && $mark['loop'])) {
+                throw new MediaException('Watermarks require a standalone PNG, JPEG, or GIF image; loop() requires a GIF.', 'probing', 'watermark');
             }
         }
     }

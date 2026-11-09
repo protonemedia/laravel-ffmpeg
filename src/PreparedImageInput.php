@@ -2,7 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
-use Closure;
+use Illuminate\Contracts\Image\Transformation;
 use Illuminate\Image\Image;
 use Illuminate\Support\Facades\Image as Images;
 use InvalidArgumentException;
@@ -14,7 +14,8 @@ use Throwable;
 /** @internal */
 readonly class PreparedImageInput implements InputSource
 {
-    public function __construct(private Media $image, private Closure $prepare)
+    /** @param  list<Transformation>  $edits */
+    public function __construct(private Media $image, private array $edits)
     {
         if ($image->inputOptions() !== [] || ($image->protocolWhitelist() === 'file' && $image->transportOptions() !== [])) {
             throw new InvalidArgumentException('Image preparation requires a standalone image without input options.');
@@ -23,7 +24,7 @@ readonly class PreparedImageInput implements InputSource
 
     public function identity(): string
     {
-        return hash('sha256', serialize([$this->image->identity(), spl_object_id($this->prepare)]));
+        return hash('sha256', serialize([$this->image->identity(), $this->edits]));
     }
 
     public function extension(): string
@@ -54,7 +55,7 @@ readonly class PreparedImageInput implements InputSource
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         // URL images always download through Http, even if their descriptor
-        // selected direct input. Callbacks never receive an original file.
+        // selected direct input. Edits never touch an original file.
         $source = $workspace->stage($this->image, resource: true);
         $this->validate($source);
         $target = $workspace->path.'/'.$name;
@@ -63,17 +64,12 @@ readonly class PreparedImageInput implements InputSource
         }
 
         try {
-            $prepared = ($this->prepare)(Images::fromPath($target));
-            // Transformations run lazily, so encoding failures surface here too.
-            $bytes = $prepared instanceof Image ? $prepared->toBytes() : null;
+            // Transformations run lazily: decoding, editing and encoding all happen in toBytes().
+            $bytes = array_reduce($this->edits, fn (Image $image, Transformation $edit): Image => $image->transform($edit), Images::fromPath($target))->toBytes();
         } catch (Throwable) {
             // Image drivers can include private paths and URL credentials in
             // their errors. Do not retain their exception chain.
-            throw new MediaException('The image preparation callback failed.', 'staging', 'resource');
-        }
-
-        if ($bytes === null) {
-            throw new MediaException('The image preparation callback must return an Illuminate\\Image\\Image.', 'staging', 'resource');
+            throw new MediaException('Cannot edit the watermark image.', 'staging', 'resource');
         }
 
         if (@file_put_contents($target, $bytes) !== strlen($bytes)) {

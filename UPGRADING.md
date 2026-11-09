@@ -94,17 +94,22 @@ For portrait sources, use `resize(height: 1920)` to preserve the autorotated dis
 
 Use `frameRate()`, `flipHorizontal()`, `flipVertical()`, `grayscale()`, and `deinterlace()` instead of filter-factory callbacks. Deinterlace before resizing. `volume()` takes a linear multiplier; `delayAudio()` inserts silence on all channels. `fadeIn()` and `fadeOut()` affect video and audio by default. Fade-out requires an explicit start in seconds. Disable either stream type with `video: false` or `audio: false`.
 
-Use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Image preprocessing is an explicit `prepareImage()` callback that receives and returns a Laravel `Image`. `videoFilter()` and `audioFilter()` remain available for trusted expressions.
+Use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Watermark images are edited inside the `watermark()` callback. `videoFilter()` and `audioFilter()` remain available for trusted expressions.
 
 Use `lut3d($look)` with a `Media` descriptor for a privately staged LUT. In each `output()` callback, call `lut3d($look)->resize(...)` to configure that output independently. The helper does not share LUT processing or generate a `split`. Keep raw `resource()` and `filterComplex()` graphs when you need to apply a LUT once before splitting into outputs. See the [composition example](README.md#compose-multiple-inputs-and-outputs).
 
 ## Replace watermark and concat builders
 
 ```php
+use ProtoneMedia\LaravelFFMpeg\Watermark;
+
 $logo = FFMpeg::disk('assets')
     ->open('logo.png');
 $media->export()
-    ->watermark($logo, x: 20, y: 15, width: 160)
+    ->watermark($logo, fn (Watermark $watermark) => $watermark
+        ->right(20)
+        ->bottom(15)
+        ->size(width: 160))
     ->resize(width: 1280)
     ->video('libx264')
     ->audio('copy')
@@ -126,27 +131,32 @@ $media->concat($second)
     ->save('joined.mkv');
 ```
 
-`watermark()` adds inputs and maps automatically for PNG, JPEG, or GIF images. The default anchor is bottom-right; offsets are inward margins. Marks run after all output video filters, regardless of call order. Repeated marks, multiple ordinary outputs, and HLS variants are supported. Custom maps, graphs, additional media inputs, and video copy require another composition policy. Use `addInput()` and `filterComplex()` for custom graphs.
+`watermark()` adds inputs and maps automatically for PNG, JPEG, or GIF images. Its optional callback receives a `Watermark` instance and runs immediately. The mark defaults to the bottom-right corner, at its original size and fully opaque. `left()`, `right()`, `top()`, and `bottom()` take a margin from that edge, and `center()` centers every axis no edge method pins. Marks run after all output video filters, regardless of call order. Repeated marks, multiple ordinary outputs, and HLS variants are supported. Custom maps, graphs, additional media inputs, and video copy require another composition policy. Use `addInput()` and `filterComplex()` for custom graphs.
 
-Version 8 forwarded unknown `WatermarkFactory` methods, such as `width()` or `greyscale()`, to Spatie Image. Version 9 uses Laravel's [image manipulation](https://laravel.com/docs/13.x/images) instead. Install `intervention/image:^4.2`, size and position the mark with `watermark()` arguments, and edit the image itself in a `prepareImage()` callback. The callback receives an `Image` of a private copy and returns the image to use:
+Version 8 forwarded unknown `WatermarkFactory` methods, such as `width()`, `blur()`, or `greyscale()`, to Spatie Image. Version 9 edits the image with Laravel's [image manipulation](https://laravel.com/docs/13.x/images) instead, so install `intervention/image:^4.2`. The `Watermark` instance offers Laravel's edit methods with the same names and arguments: `grayscale()`, `blur()`, `sharpen()`, `rotate()`, `crop()`, `flipHorizontally()`, and `flipVertically()`. Replace Spatie's `width()` and `height()` with `size()`, which FFmpeg applies in output pixels after the edits. Open the image like any other media instead of calling `open()` inside the callback:
 
 ```php
-use Illuminate\Image\Image;
-
 // Before:
 $media->addWatermark(function (WatermarkFactory $watermark) {
-    $watermark->open('logo.png')
+    $watermark->fromDisk('assets')
+        ->open('logo.png')
         ->right(25)
         ->bottom(25)
+        ->width(100)
+        ->blur(10)
         ->greyscale();
 });
 
 // After:
 $logo = FFMpeg::disk('assets')
-    ->open('logo.png')
-    ->prepareImage(fn (Image $image) => $image->grayscale());
+    ->open('logo.png');
 $media->export()
-    ->watermark($logo, position: 'bottom-right', x: 25, y: 25)
+    ->watermark($logo, fn (Watermark $watermark) => $watermark
+        ->right(25)
+        ->bottom(25)
+        ->size(width: 100)
+        ->blur(10)
+        ->grayscale())
     ->video('libx264')
     ->save('branded.mp4');
 ```
@@ -313,9 +323,11 @@ To clean up an old same-disk presentation, call `playlist($path)->deleteAllFiles
 
 ```php
 $badge = FFMpeg::disk('assets')
-    ->open('badge.gif', inputOptions: ['-ignore_loop', '0']);
+    ->open('badge.gif');
 $media->hls()
-    ->watermark($badge, width: 96)
+    ->watermark($badge, fn (Watermark $watermark) => $watermark
+        ->size(width: 96)
+        ->loop())
     ->variant('720p', fn ($variant) => $variant->resize(height: 720)
         ->video('libx264', bitrate: '2500k'))
     ->toDisk('streams')
@@ -325,7 +337,7 @@ $lesson->hls_playback = $result->playbackForVariants(['360p'])
     ->toArray();
 ```
 
-GIF `-ignore_loop 0` honors embedded loop instructions rather than forcing every GIF to loop forever. The final frame remains visible at EOF. All ordinary filters, including variant resizing, precede overlays. `playbackForVariants()` requires nonempty unique known variant names and retains their required rendition, initialization, and key dependencies. Protected responses filter master declarations without changing Storage files. Authorize the selected inventory before issuing URLs; public disk URLs bypass this selection.
+An animated GIF plays once and then holds its final frame. Call `loop()` on the watermark to repeat it for the whole video, whatever loop count the GIF embeds. Watermark images reject input options such as `-ignore_loop`. All ordinary filters, including variant resizing, precede overlays. `playbackForVariants()` requires nonempty unique known variant names and retains their required rendition, initialization, and key dependencies. Protected responses filter master declarations without changing Storage files. Authorize the selected inventory before issuing URLs; public disk URLs bypass this selection.
 
 To combine completed presentations for the same timeline, see [`PendingHlsMerge`](REWRITE.md#compose-completed-hls-presentations). It writes only a fresh version-suffixed master, not new media. Inputs need trusted v9 inventories, disjoint destinations, compatible VOD clocks and packaging, and a common media disk. Its result owns only the new master. Borrowed media stays owned by the source inventories, so retain application reference counts before deletion.
 
