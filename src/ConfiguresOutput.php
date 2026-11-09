@@ -710,7 +710,8 @@ trait ConfiguresOutput
             array_push($options, '-fps_mode:v', 'passthrough');
         }
 
-        $threads = config('laravel-ffmpeg.ffmpeg.threads');
+        // A published ffmpeg array replaces the package one; omit threads only when it is false or null.
+        $threads = config('laravel-ffmpeg.ffmpeg.threads', 12);
 
         if ($threads !== false && $threads !== null && ! in_array('-threads', $this->outputOptions, true)) {
             array_push($options, '-threads', (string) $threads);

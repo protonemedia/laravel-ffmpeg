@@ -35,6 +35,17 @@ class NativeEncodingOptionsTest extends TestCase
     }
 
     #[Test]
+    public function partially_published_ffmpeg_config_keeps_the_default_thread_count(): void
+    {
+        // mergeConfigFrom() merges only the top level, so a published ffmpeg array may lack threads.
+        config(['laravel-ffmpeg.ffmpeg' => ['binaries' => 'ffmpeg']]);
+        $arguments = $this->arguments($this->destination());
+        $this->assertSame('12', $arguments[array_search('-threads', $arguments, true) + 1]);
+        config(['laravel-ffmpeg.ffmpeg.threads' => false]);
+        $this->assertNotContains('-threads', $this->arguments($this->destination()));
+    }
+
+    #[Test]
     public function stream_settings_are_output_ordered_snapshots_and_serializable(): void
     {
         $retained = null;
