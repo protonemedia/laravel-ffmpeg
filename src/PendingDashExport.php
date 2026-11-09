@@ -380,6 +380,62 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /** @internal */
     public function artifacts(array $default, array $outputs, array $paths): array
     {
+        [$document, $root, $sets] = $this->createManifest();
+        $segments = [];
+        $playlists = [];
+        $info = [];
+        $clocks = [];
+        $total = 0;
+        $longest = 0;
+        foreach (array_keys($this->representations) as $index => $name) {
+            $type = $this->type($name);
+            $parsed = DashManifest::read($paths[$index], $type);
+            $total += count($parsed['durations']);
+            if ($total > DashManifest::LIMIT) {
+                DashManifest::fail();
+            }
+
+            // Each adaptation set declares segment alignment, so all of its representations
+            // must share one segment clock or players could not switch between them.
+            $setName = array_find_key($this->sets, fn ($set): bool => in_array($name, $set['representations'], true));
+            $this->ensureClocksAlign($clocks[$setName] ?? null, $parsed['durations']);
+            $clocks[$setName] = $parsed['durations'];
+            $longest = max($longest, array_sum($parsed['durations']));
+            $representation = $this->importRepresentation($document, $parsed['representation'], $name);
+            $sets[$setName]->appendChild($representation);
+
+            [$files, $peak, $bytes] = $this->representationArtifacts($index, $name, $outputs[$index], $paths[$index], $parsed);
+            array_push($segments, ...$files);
+            $info[$name] = ['type' => $type, 'bandwidth' => $peak, 'average' => (int) ceil(8 * $bytes / array_sum($parsed['durations'])),
+                'codecs' => $representation->getAttribute('codecs'), 'width' => $representation->getAttribute('width'), 'height' => $representation->getAttribute('height')];
+            if ($this->sharedHls) {
+                $playlists[] = $this->writeRepresentationPlaylist($index, $name, $outputs[$index], $paths[$index], $parsed['durations']);
+            }
+        }
+
+        $root->setAttribute('mediaPresentationDuration', 'PT'.CommandCompiler::timestamp($longest).'S');
+        $root->setAttribute('maxSegmentDuration', 'PT'.CommandCompiler::timestamp(max(array_map(max(...), $clocks))).'S');
+
+        $master = array_key_last($outputs);
+        if ($this->sharedHls) {
+            $playlists[] = $this->writeSharedHlsMaster($info, $master, $outputs[$master], $paths[$master]);
+        }
+
+        $this->write($paths[$master], $document->saveXML());
+        $artifacts = [...$segments, ...$playlists, ['path' => $paths[$master], 'output' => $master,
+            'role' => 'dash-manifest', 'destination' => $outputs[$master]->destination()]];
+        $this->export->validateDestinations(array_map(fn (array $artifact): ExportOutput => new ExportOutput($artifact['destination']['path'], $this->export->filesystem()), $artifacts));
+
+        return $artifacts;
+    }
+
+    /**
+     * Create the static manifest document with an empty node for each adaptation set.
+     *
+     * @return array{0: DOMDocument, 1: DOMElement, 2: array<int|string, DOMElement>}
+     */
+    protected function createManifest(): array
+    {
         $document = new DOMDocument('1.0', 'UTF-8');
         $root = $document->createElementNS(DashManifest::NS, 'MPD');
         $document->appendChild($root);
@@ -400,129 +456,145 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             $sets[$name] = $node;
         }
 
-        $segments = [];
-        $playlists = [];
-        $info = [];
-        $clocks = [];
-        $total = 0;
-        $longest = 0;
-        foreach (array_keys($this->representations) as $index => $name) {
-            $type = $this->type($name);
-            $parsed = DashManifest::read($paths[$index], $type);
-            $total += count($parsed['durations']);
-            if ($total > DashManifest::LIMIT) {
-                DashManifest::fail();
-            }
+        return [$document, $root, $sets];
+    }
 
-            $setName = array_find_key($this->sets, fn ($set): bool => in_array($name, $set['representations'], true));
-            if (isset($clocks[$setName])) {
-                if (count($clocks[$setName]) !== count($parsed['durations'])) {
-                    DashManifest::fail();
-                }
-
-                foreach ($parsed['durations'] as $i => $duration) {
-                    if (abs($duration - $clocks[$setName][$i]) > 0.000001) {
-                        DashManifest::fail();
-                    }
-                }
-            }
-
-            $clocks[$setName] = $parsed['durations'];
-            $longest = max($longest, array_sum($parsed['durations']));
-            $representation = $document->importNode($parsed['representation'], true);
-            if (! $representation instanceof DOMElement) {
-                DashManifest::fail();
-            }
-
-            $representation->setAttribute('id', $name);
-            $template = $representation->getElementsByTagNameNS(DashManifest::NS, 'SegmentTemplate')->item(0);
-            if (! $template instanceof DOMElement) {
-                DashManifest::fail();
-            }
-
-            $template->setAttribute('initialization', $name.'/init.mp4');
-            $template->setAttribute('media', $name.'/segment-$Number%08d$.m4s');
-            $sets[$setName]->appendChild($representation);
-            $destination = $outputs[$index]->destination();
-            $prefix = dirname($destination['path']).'/';
-            $peak = 0;
-            $bytes = 0;
-            foreach ($parsed['files'] as $fileIndex => $filename) {
-                $local = dirname($paths[$index]).'/'.$filename;
-                if ($fileIndex > 0) {
-                    $size = $this->export->validateArtifact($local, 'dash-segment');
-                    $bytes += $size;
-                    $peak = max($peak, (int) ceil(8 * $size / $parsed['durations'][$fileIndex - 1]));
-                }
-
-                $target = $destination;
-                $target['path'] = $prefix.$filename;
-                $this->representationFiles[$name][$target['path']] = true;
-                $artifact = ['path' => $local, 'output' => $index, 'role' => $fileIndex === 0 ? 'dash-init' : 'dash-segment', 'destination' => $target];
-                if ($fileIndex === 1) {
-                    $directory = dirname($paths[$index]);
-                    $artifact += ['probe' => true, 'probePath' => PendingExport::fragmentProbe($directory.'/init.mp4', $local, $directory.'/probe.mp4')];
-                }
-
-                $segments[] = $artifact;
-            }
-
-            $info[$name] = ['type' => $type, 'bandwidth' => $peak, 'average' => (int) ceil(8 * $bytes / array_sum($parsed['durations'])),
-                'codecs' => $representation->getAttribute('codecs'), 'width' => $representation->getAttribute('width'), 'height' => $representation->getAttribute('height')];
-            if ($this->sharedHls) {
-                $lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-TARGETDURATION:'.max(1, (int) ceil(max($parsed['durations']))),
-                    '#EXT-X-MEDIA-SEQUENCE:1', '#EXT-X-PLAYLIST-TYPE:VOD', '#EXT-X-MAP:URI="init.mp4"'];
-                foreach ($parsed['durations'] as $i => $duration) {
-                    $lines[] = '#EXTINF:'.sprintf('%.9f', $duration).',';
-                    $lines[] = sprintf('segment-%08d.m4s', $i + 1);
-                }
-
-                $lines[] = '#EXT-X-ENDLIST';
-                $local = dirname($paths[$index]).'/index.m3u8';
-                $this->write($local, implode("\n", $lines)."\n");
-                $destination['path'] = $prefix.'index.m3u8';
-                $this->representationFiles[$name][$destination['path']] = true;
-                $playlists[] = ['path' => $local, 'output' => $index, 'role' => 'hls-playlist', 'destination' => $destination];
-            }
+    /**
+     * Ensure the segment durations match those of the adaptation set's earlier representations.
+     *
+     * @param  list<float>|null  $clock
+     * @param  list<float>  $durations
+     */
+    protected function ensureClocksAlign(?array $clock, array $durations): void
+    {
+        if ($clock === null) {
+            return;
         }
 
-        $root->setAttribute('mediaPresentationDuration', 'PT'.CommandCompiler::timestamp($longest).'S');
-        $root->setAttribute('maxSegmentDuration', 'PT'.CommandCompiler::timestamp(max(array_map(max(...), $clocks))).'S');
-
-        $master = array_key_last($outputs);
-        if ($this->sharedHls) {
-            $lines = ['#EXTM3U', '#EXT-X-VERSION:7'];
-            $audio = array_filter($info, fn (array $item): bool => $item['type'] === 'audio');
-            foreach ($audio as $name => $item) {
-                $lines[] = '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="'.$name.'",DEFAULT='.(array_key_first($audio) === $name ? 'YES' : 'NO').',AUTOSELECT=YES,URI="'.$name.'/index.m3u8"';
-            }
-
-            foreach ($info as $name => $item) {
-                if ($item['type'] === 'audio' && count($info) !== count($audio)) {
-                    continue;
-                }
-
-                $bandwidth = (int) $item['bandwidth'] + ($item['type'] === 'video' && $audio !== [] ? max(array_column($audio, 'bandwidth')) : 0);
-                $average = $item['average'] + ($item['type'] === 'video' && $audio !== [] ? max(array_column($audio, 'average')) : 0);
-                $codecs = array_unique([$item['codecs'], ...($item['type'] === 'video' ? array_column($audio, 'codecs') : [])]);
-                $lines[] = '#EXT-X-STREAM-INF:BANDWIDTH='.$bandwidth.',AVERAGE-BANDWIDTH='.$average.',CODECS="'.implode(',', $codecs).'"'
-                    .($item['type'] === 'video' ? ',RESOLUTION='.$item['width'].'x'.$item['height'].($audio !== [] ? ',AUDIO="audio"' : '') : '');
-                $lines[] = $name.'/index.m3u8';
-            }
-
-            $local = dirname($paths[$master]).'/master.m3u8';
-            $this->write($local, implode("\n", $lines)."\n");
-            $destination = $outputs[$master]->destination();
-            $destination['path'] = (dirname($destination['path']) === '.' ? '' : dirname($destination['path']).'/').'master.m3u8';
-            $playlists[] = ['path' => $local, 'output' => $master, 'role' => 'hls-master', 'destination' => $destination];
+        if (count($clock) !== count($durations)) {
+            DashManifest::fail();
         }
 
-        $this->write($paths[$master], $document->saveXML());
-        $artifacts = [...$segments, ...$playlists, ['path' => $paths[$master], 'output' => $master,
-            'role' => 'dash-manifest', 'destination' => $outputs[$master]->destination()]];
-        $this->export->validateDestinations(array_map(fn (array $artifact): ExportOutput => new ExportOutput($artifact['destination']['path'], $this->export->filesystem()), $artifacts));
+        foreach ($durations as $i => $duration) {
+            if (abs($duration - $clock[$i]) > 0.000001) {
+                DashManifest::fail();
+            }
+        }
+    }
 
-        return $artifacts;
+    /**
+     * Import the parsed representation and point its segment template at the representation's files.
+     */
+    protected function importRepresentation(DOMDocument $document, DOMElement $parsed, int|string $name): DOMElement
+    {
+        $representation = $document->importNode($parsed, true);
+        if (! $representation instanceof DOMElement) {
+            DashManifest::fail();
+        }
+
+        $representation->setAttribute('id', $name);
+        $template = $representation->getElementsByTagNameNS(DashManifest::NS, 'SegmentTemplate')->item(0);
+        if (! $template instanceof DOMElement) {
+            DashManifest::fail();
+        }
+
+        $template->setAttribute('initialization', $name.'/init.mp4');
+        $template->setAttribute('media', $name.'/segment-$Number%08d$.m4s');
+
+        return $representation;
+    }
+
+    /**
+     * Validate the representation's files and return their artifacts, peak bitrate and media bytes.
+     *
+     * @return array{0: list<array<string, mixed>>, 1: int, 2: int}
+     */
+    protected function representationArtifacts(int $index, int|string $name, ExportOutput $output, string $path, array $parsed): array
+    {
+        $destination = $output->destination();
+        $prefix = dirname($destination['path']).'/';
+        $artifacts = [];
+        $peak = 0;
+        $bytes = 0;
+        foreach ($parsed['files'] as $fileIndex => $filename) {
+            $local = dirname($path).'/'.$filename;
+            if ($fileIndex > 0) {
+                $size = $this->export->validateArtifact($local, 'dash-segment');
+                $bytes += $size;
+                $peak = max($peak, (int) ceil(8 * $size / $parsed['durations'][$fileIndex - 1]));
+            }
+
+            $target = $destination;
+            $target['path'] = $prefix.$filename;
+            $this->representationFiles[$name][$target['path']] = true;
+            $artifact = ['path' => $local, 'output' => $index, 'role' => $fileIndex === 0 ? 'dash-init' : 'dash-segment', 'destination' => $target];
+            if ($fileIndex === 1) {
+                $directory = dirname($path);
+                $artifact += ['probe' => true, 'probePath' => PendingExport::fragmentProbe($directory.'/init.mp4', $local, $directory.'/probe.mp4')];
+            }
+
+            $artifacts[] = $artifact;
+        }
+
+        return [$artifacts, $peak, $bytes];
+    }
+
+    /**
+     * Write the clear HLS playlist that references the representation's DASH files.
+     *
+     * @param  list<float>  $durations
+     */
+    protected function writeRepresentationPlaylist(int $index, int|string $name, ExportOutput $output, string $path, array $durations): array
+    {
+        $lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-TARGETDURATION:'.max(1, (int) ceil(max($durations))),
+            '#EXT-X-MEDIA-SEQUENCE:1', '#EXT-X-PLAYLIST-TYPE:VOD', '#EXT-X-MAP:URI="init.mp4"'];
+        foreach ($durations as $i => $duration) {
+            $lines[] = '#EXTINF:'.sprintf('%.9f', $duration).',';
+            $lines[] = sprintf('segment-%08d.m4s', $i + 1);
+        }
+
+        $lines[] = '#EXT-X-ENDLIST';
+        $local = dirname($path).'/index.m3u8';
+        $this->write($local, implode("\n", $lines)."\n");
+        $destination = $output->destination();
+        $destination['path'] = dirname($destination['path']).'/index.m3u8';
+        $this->representationFiles[$name][$destination['path']] = true;
+
+        return ['path' => $local, 'output' => $index, 'role' => 'hls-playlist', 'destination' => $destination];
+    }
+
+    /**
+     * Write the clear HLS master playlist next to the DASH manifest.
+     *
+     * @param  array<int|string, array<string, mixed>>  $info
+     */
+    protected function writeSharedHlsMaster(array $info, int $master, ExportOutput $output, string $path): array
+    {
+        $lines = ['#EXTM3U', '#EXT-X-VERSION:7'];
+        $audio = array_filter($info, fn (array $item): bool => $item['type'] === 'audio');
+        foreach ($audio as $name => $item) {
+            $lines[] = '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="'.$name.'",DEFAULT='.(array_key_first($audio) === $name ? 'YES' : 'NO').',AUTOSELECT=YES,URI="'.$name.'/index.m3u8"';
+        }
+
+        foreach ($info as $name => $item) {
+            if ($item['type'] === 'audio' && count($info) !== count($audio)) {
+                continue;
+            }
+
+            $bandwidth = (int) $item['bandwidth'] + ($item['type'] === 'video' && $audio !== [] ? max(array_column($audio, 'bandwidth')) : 0);
+            $average = $item['average'] + ($item['type'] === 'video' && $audio !== [] ? max(array_column($audio, 'average')) : 0);
+            $codecs = array_unique([$item['codecs'], ...($item['type'] === 'video' ? array_column($audio, 'codecs') : [])]);
+            $lines[] = '#EXT-X-STREAM-INF:BANDWIDTH='.$bandwidth.',AVERAGE-BANDWIDTH='.$average.',CODECS="'.implode(',', $codecs).'"'
+                .($item['type'] === 'video' ? ',RESOLUTION='.$item['width'].'x'.$item['height'].($audio !== [] ? ',AUDIO="audio"' : '') : '');
+            $lines[] = $name.'/index.m3u8';
+        }
+
+        $local = dirname($path).'/master.m3u8';
+        $this->write($local, implode("\n", $lines)."\n");
+        $destination = $output->destination();
+        $destination['path'] = (dirname($destination['path']) === '.' ? '' : dirname($destination['path']).'/').'master.m3u8';
+
+        return ['path' => $local, 'output' => $master, 'role' => 'hls-master', 'destination' => $destination];
     }
 
     protected function write(string $path, string $bytes): void

@@ -687,6 +687,24 @@ trait ConfiguresOutput
 
     public function outputArguments(callable $compileFilter, array $maps): array
     {
+        $this->validateOutputSettings();
+
+        return [
+            ...$this->clipArguments(),
+            ...$this->mapArguments($maps),
+            ...$this->encoderArguments($compileFilter),
+            ...$this->trackEncoderArguments($compileFilter),
+            ...$this->metadataArguments(),
+            ...$this->defaultArguments(),
+            ...$this->outputOptions,
+        ];
+    }
+
+    /**
+     * Ensure the track selection, rate control and copied streams are consistent.
+     */
+    protected function validateOutputSettings(): void
+    {
         $this->ensureSingleRateControl($this->video);
 
         if ($this->maps !== [] && ($this->omitAudio || $this->omitVideo)) {
@@ -701,8 +719,6 @@ trait ConfiguresOutput
             $this->ensureCopyIsUnmodified($encoding, $filters);
         }
 
-        $options = [];
-
         foreach ($this->videoStreams as $overrides) {
             $encoding = array_replace($this->video, $overrides);
             $this->ensureSingleRateControl($encoding);
@@ -714,16 +730,36 @@ trait ConfiguresOutput
         }
 
         $this->validateCopyOptions();
+    }
 
-        if ($this->clip !== null) {
-            if ($this->clip['seek'] === 'accurate') {
-                $options[] = '-ss';
-                $options[] = CommandCompiler::timestamp($this->clip['start']);
-            }
-
-            $options[] = '-t';
-            $options[] = CommandCompiler::timestamp($this->clip['duration']);
+    /**
+     * Compile the output seek and duration of the clip.
+     */
+    protected function clipArguments(): array
+    {
+        if ($this->clip === null) {
+            return [];
         }
+
+        $options = [];
+
+        if ($this->clip['seek'] === 'accurate') {
+            $options[] = '-ss';
+            $options[] = CommandCompiler::timestamp($this->clip['start']);
+        }
+
+        $options[] = '-t';
+        $options[] = CommandCompiler::timestamp($this->clip['duration']);
+
+        return $options;
+    }
+
+    /**
+     * Compile the stream maps and the metadata and chapter sources.
+     */
+    protected function mapArguments(array $maps): array
+    {
+        $options = [];
 
         foreach ($maps as $map) {
             // FFmpeg 9's metadata selector otherwise consumes '?' as part of its value.
@@ -740,6 +776,16 @@ trait ConfiguresOutput
         $options[] = '-map_chapters';
         $options[] = (string) ($this->chapterSource ?? ($this->clip === null ? 0 : -1));
 
+        return $options;
+    }
+
+    /**
+     * Compile the encoder settings and filters shared by all video and audio tracks.
+     */
+    protected function encoderArguments(callable $compileFilter): array
+    {
+        $options = [];
+
         foreach ([['v', $this->video, $this->videoFilters], ['a', $this->audio, $this->audioFilters]] as [$type, $encoding, $filters]) {
             foreach ($encoding as $name => $value) {
                 $option = match ($name) {
@@ -754,6 +800,16 @@ trait ConfiguresOutput
                 $options[] = implode(',', array_map($compileFilter, $filters));
             }
         }
+
+        return $options;
+    }
+
+    /**
+     * Compile the encoder settings and filters of individual output tracks.
+     */
+    protected function trackEncoderArguments(callable $compileFilter): array
+    {
+        $options = [];
 
         foreach ([['v', $this->videoStreams, $this->videoFilters], ['a', $this->audioStreams, $this->audioFilters]] as [$type, $streams, $baseFilters]) {
             foreach ($streams as $track => $encoding) {
@@ -774,6 +830,16 @@ trait ConfiguresOutput
             }
         }
 
+        return $options;
+    }
+
+    /**
+     * Compile the container metadata, stream metadata and dispositions.
+     */
+    protected function metadataArguments(): array
+    {
+        $options = [];
+
         foreach ($this->metadata as $key => $value) {
             $options[] = '-metadata';
             $options[] = $key.'='.$value;
@@ -789,6 +855,16 @@ trait ConfiguresOutput
             $options[] = $flags;
         }
 
+        return $options;
+    }
+
+    /**
+     * Compile the frame rate mode and thread count the output options do not set.
+     */
+    protected function defaultArguments(): array
+    {
+        $options = [];
+
         if (! $this->omitVideo && ($this->video['codec'] ?? null) !== 'copy'
             && ! array_any($this->outputOptions, fn ($token): int|false => preg_match('/^-(?:r|fps_mode)(?::|$)/', $token))) {
             $options[] = '-fps_mode:v';
@@ -803,7 +879,7 @@ trait ConfiguresOutput
             $options[] = (string) $threads;
         }
 
-        return [...$options, ...$this->outputOptions];
+        return $options;
     }
 
     /**

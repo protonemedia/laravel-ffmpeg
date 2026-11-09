@@ -2,7 +2,6 @@
 
 use Rector\CodingStyle\Rector\Use_\SeparateMultiUseImportsRector;
 use Rector\Config\RectorConfig;
-use Rector\DeadCode\Rector\If_\RemoveAlwaysTrueIfConditionRector;
 use Rector\TypeDeclaration\Rector\StmtsAwareInterface\SafeDeclareStrictTypesRector;
 
 return RectorConfig::configure()
@@ -14,10 +13,6 @@ return RectorConfig::configure()
         SeparateMultiUseImportsRector::class,
         // Laravel packages do not declare strict types.
         SafeDeclareStrictTypesRector::class,
-        // Closures fill $entries by reference, which Rector cannot see.
-        RemoveAlwaysTrueIfConditionRector::class => [
-            __DIR__.'/src/PendingLiveHls.php',
-        ],
     ])
     ->withPreparedSets(
         deadCode: true,

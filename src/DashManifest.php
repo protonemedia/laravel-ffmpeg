@@ -16,6 +16,29 @@ class DashManifest
 
     public static function read(string $path, string $type): array
     {
+        $document = self::load($path);
+        $xpath = new DOMXPath($document);
+        $xpath->registerNamespace('d', self::NS);
+
+        self::ensureVocabularyIsAllowed($document);
+        [$representation, $template] = self::locateRepresentation($document, $xpath, $type);
+        $durations = self::durations($xpath, $template);
+
+        $files = ['init.mp4'];
+        foreach ($durations as $index => $duration) {
+            $files[] = sprintf('segment-%08d.m4s', $index + 1);
+        }
+
+        self::ensureInventoryMatches($path, $files);
+
+        return ['document' => $document, 'representation' => $representation, 'template' => $template, 'durations' => $durations, 'files' => $files];
+    }
+
+    /**
+     * Load the manifest without entities, doctypes or network access.
+     */
+    protected static function load(string $path): DOMDocument
+    {
         $bytes = @file_get_contents($path, length: 16777217);
         if ($bytes === false || strlen($bytes) > 16777216 || str_contains($bytes, "\0")
             || preg_match('/<!|<\?(?!xml\s)/i', $bytes) || ! class_exists(DOMDocument::class)) {
@@ -33,9 +56,14 @@ class DashManifest
             libxml_use_internal_errors($previous);
         }
 
-        $xpath = new DOMXPath($document);
-        $xpath->registerNamespace('d', self::NS);
+        return $document;
+    }
 
+    /**
+     * Ensure the manifest only uses the elements and attributes FFmpeg writes.
+     */
+    protected static function ensureVocabularyIsAllowed(DOMDocument $document): void
+    {
         $allowed = [
             'MPD' => ['schemaLocation', 'profiles', 'type', 'mediaPresentationDuration', 'maxSegmentDuration', 'minBufferTime'],
             'ProgramInformation' => [], 'ServiceDescription' => ['id'], 'Period' => ['id', 'start'],
@@ -58,7 +86,15 @@ class DashManifest
                 }
             }
         }
+    }
 
+    /**
+     * Locate the single representation and its segment template in the static manifest.
+     *
+     * @return array{0: DOMElement, 1: DOMElement}
+     */
+    protected static function locateRepresentation(DOMDocument $document, DOMXPath $xpath, string $type): array
+    {
         $root = $document->documentElement;
         $sets = $xpath->query('/d:MPD/d:Period/d:AdaptationSet');
         $representations = $xpath->query('//d:Representation');
@@ -86,6 +122,16 @@ class DashManifest
             self::fail();
         }
 
+        return [$representation, $template];
+    }
+
+    /**
+     * Expand the segment timeline into the duration of each segment in seconds.
+     *
+     * @return list<float|int>
+     */
+    protected static function durations(DOMXPath $xpath, DOMElement $template): array
+    {
         $scale = self::integer($template, 'timescale', 1);
         $durations = [];
         $time = 0;
@@ -114,11 +160,16 @@ class DashManifest
             self::fail();
         }
 
-        $files = ['init.mp4'];
-        foreach ($durations as $index => $duration) {
-            $files[] = sprintf('segment-%08d.m4s', $index + 1);
-        }
+        return $durations;
+    }
 
+    /**
+     * Ensure the manifest's directory holds exactly the manifest and the files it references.
+     *
+     * @param  list<string>  $files
+     */
+    protected static function ensureInventoryMatches(string $path, array $files): void
+    {
         $expected = ['index.mpd', ...$files];
         sort($expected);
         $actual = [];
@@ -138,8 +189,6 @@ class DashManifest
         if ($actual !== $expected) {
             self::fail();
         }
-
-        return ['document' => $document, 'representation' => $representation, 'template' => $template, 'durations' => $durations, 'files' => $files];
     }
 
     protected static function integer(DOMElement $element, string $name, int $minimum): int

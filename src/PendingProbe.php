@@ -161,84 +161,117 @@ class PendingProbe
 
     public function get(): ProbeResult
     {
-        return $this->media->withInput(function (string $path, Workspace $workspace): ProbeResult {
-            $runner = $workspace->runner;
-            $binary = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
-            // The runner's operation budget is this query's timeout.
-            $runner->version($binary, 'ffprobe', $workspace->path);
+        return $this->media->withInput(
+            fn (string $path, Workspace $workspace): ProbeResult => $this->query($path, $workspace),
+            new ProcessRunner($this->timeout),
+        );
+    }
 
-            // This is the same staged source and probe arguments used by Media::probe().
-            $protocols = $this->media->protocolWhitelist();
-            $workspace->requireProtocols($binary, $protocols);
-            $command = [$binary, '-v', 'error', '-print_format', 'json', '-protocol_whitelist', $protocols,
-                ...$this->media->probeOptions(), '-read_intervals', $this->interval(), '-show_streams'];
-            if ($this->selector !== null) {
-                $command[] = '-select_streams';
-                $command[] = $this->selector;
+    /**
+     * Run the query against the staged input.
+     */
+    protected function query(string $path, Workspace $workspace): ProbeResult
+    {
+        $runner = $workspace->runner;
+        $binary = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
+        // The runner's operation budget is this query's timeout.
+        $runner->version($binary, 'ffprobe', $workspace->path);
+
+        // This is the same staged source and probe arguments used by Media::probe().
+        $protocols = $this->media->protocolWhitelist();
+        $workspace->requireProtocols($binary, $protocols);
+        $command = $this->command($binary, $protocols, $path);
+        $redactions = [$path => '[input]'] + $this->media->redactions();
+        $result = $runner->run($command, $workspace->path, $redactions, $this->outputLimit, timeout: $this->timeout);
+        if ($result->exitCode !== 0) {
+            throw MediaException::probing('FFprobe query failed (exit '.$result->exitCode.').', 'exit', $result->diagnostics);
+        }
+
+        $data = Media::redactProbeData($this->decode($result->output), $redactions);
+
+        return new ProbeResult($data, [
+            'start' => $this->start, 'duration' => $this->packetLimit === null ? $this->duration : null,
+            'packets' => $this->packetLimit, 'interval' => $this->interval(),
+            'output_bytes' => $this->outputLimit, 'timeout' => $this->timeout,
+        ]);
+    }
+
+    /**
+     * Build the FFprobe command for the staged input.
+     */
+    protected function command(string $binary, string $protocols, string $path): array
+    {
+        $command = [$binary, '-v', 'error', '-print_format', 'json', '-protocol_whitelist', $protocols,
+            ...$this->media->probeOptions(), '-read_intervals', $this->interval(), '-show_streams'];
+        if ($this->selector !== null) {
+            $command[] = '-select_streams';
+            $command[] = $this->selector;
+        }
+
+        if ($this->mode !== 'streams') {
+            $command[] = '-show_'.$this->mode;
+        }
+
+        if ($this->onlyKeyframes) {
+            $command[] = '-skip_frame';
+            $command[] = 'nokey';
+        }
+
+        foreach (['frames' => $this->countFrames, 'packets' => $this->countPackets] as $kind => $enabled) {
+            if ($enabled) {
+                $command[] = '-count_'.$kind;
             }
+        }
 
-            if ($this->mode !== 'streams') {
-                $command[] = '-show_'.$this->mode;
+        return [...$command, ...$this->entryArguments(), $path];
+    }
+
+    /**
+     * Build the arguments that select the requested sections and fields.
+     */
+    protected function entryArguments(): array
+    {
+        if ($this->fields === []) {
+            return [];
+        }
+
+        $arguments = [];
+        $entries = [];
+        foreach ($this->fields as $section => $fields) {
+            $entries[] = $section.'='.implode(',', $fields);
+            if ($section === 'format' || $section === 'format_tags') {
+                $arguments[] = '-show_format';
+            } elseif ($section === 'chapter' || $section === 'chapter_tags') {
+                $arguments[] = '-show_chapters';
             }
+        }
 
-            if ($this->onlyKeyframes) {
-                $command[] = '-skip_frame';
-                $command[] = 'nokey';
-            }
+        return [...$arguments, '-show_entries', implode(':', $entries)];
+    }
 
-            foreach (['frames' => $this->countFrames, 'packets' => $this->countPackets] as $kind => $enabled) {
-                if ($enabled) {
-                    $command[] = '-count_'.$kind;
-                }
-            }
+    /**
+     * Decode the query output and ensure each section is a list of rows.
+     */
+    protected function decode(string $output): array
+    {
+        try {
+            $data = json_decode($output, true, 64, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            throw MediaException::probing('FFprobe query returned invalid JSON.', 'metadata');
+        }
 
-            if ($this->fields !== []) {
-                $entries = [];
-                foreach ($this->fields as $section => $fields) {
-                    $entries[] = $section.'='.implode(',', $fields);
-                    if ($section === 'format' || $section === 'format_tags') {
-                        $command[] = '-show_format';
-                    } elseif ($section === 'chapter' || $section === 'chapter_tags') {
-                        $command[] = '-show_chapters';
-                    }
-                }
+        if (! is_array($data) || ! str_starts_with(ltrim($output), '{')) {
+            throw MediaException::probing('FFprobe query returned invalid sections.', 'metadata');
+        }
 
-                $command[] = '-show_entries';
-                $command[] = implode(':', $entries);
-            }
-
-            $command[] = $path;
-            $redactions = [$path => '[input]'] + $this->media->redactions();
-            $result = $runner->run($command, $workspace->path, $redactions, $this->outputLimit, timeout: $this->timeout);
-            if ($result->exitCode !== 0) {
-                throw MediaException::probing('FFprobe query failed (exit '.$result->exitCode.').', 'exit', $result->diagnostics);
-            }
-
-            try {
-                $data = json_decode($result->output, true, 64, JSON_THROW_ON_ERROR);
-            } catch (JsonException) {
-                throw MediaException::probing('FFprobe query returned invalid JSON.', 'metadata');
-            }
-
-            if (! is_array($data) || ! str_starts_with(ltrim($result->output), '{')) {
+        foreach (['streams', 'packets', 'frames', 'chapters'] as $section) {
+            if (array_key_exists($section, $data) && (! is_array($data[$section]) || ! array_is_list($data[$section])
+                || array_any($data[$section], fn ($row): bool => ! is_array($row)))) {
                 throw MediaException::probing('FFprobe query returned invalid sections.', 'metadata');
             }
+        }
 
-            foreach (['streams', 'packets', 'frames', 'chapters'] as $section) {
-                if (array_key_exists($section, $data) && (! is_array($data[$section]) || ! array_is_list($data[$section])
-                    || array_any($data[$section], fn ($row): bool => ! is_array($row)))) {
-                    throw MediaException::probing('FFprobe query returned invalid sections.', 'metadata');
-                }
-            }
-
-            $data = Media::redactProbeData($data, $redactions);
-
-            return new ProbeResult($data, [
-                'start' => $this->start, 'duration' => $this->packetLimit === null ? $this->duration : null,
-                'packets' => $this->packetLimit, 'interval' => $this->interval(),
-                'output_bytes' => $this->outputLimit, 'timeout' => $this->timeout,
-            ]);
-        }, new ProcessRunner($this->timeout));
+        return $data;
     }
 
     protected function interval(): string

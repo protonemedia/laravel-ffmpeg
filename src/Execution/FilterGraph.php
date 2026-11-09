@@ -29,89 +29,128 @@ class FilterGraph
         $result = [];
 
         foreach (self::split($expression, ',;') as [$filter, $separator]) {
-            preg_match('/^(?:\[[^\]]+\])*\s*([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?=/', $filter, $name);
-            $quoted = false;
-            $escaped = false;
-            $compiled = '';
-
-            for ($i = 0; $i < strlen($filter); $i++) {
-                $character = $filter[$i];
-
-                if (! $escaped && substr($filter, $i, 2) === '{{') {
-                    if (! preg_match('/\A\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/', substr($filter, $i), $match)) {
-                        throw new InvalidArgumentException('Resource placeholders must be identifiers such as {{font}}.');
-                    }
-
-                    if ($quoted) {
-                        throw new InvalidArgumentException('Resource placeholders must not be quoted.');
-                    }
-
-                    if (! preg_match('/(?:^|[:=])([a-z]+)=$/', substr($filter, 0, $i), $key)
-                        || ! in_array($key[1], match ($name[1] ?? '') {
-                            'drawtext' => ['fontfile', 'textfile'], 'lut3d' => ['file'], 'subtitles' => ['filename'], default => [],
-                        }, true)) {
-                        throw new InvalidArgumentException('Resource placeholders must be the value of a supported filter file option.');
-                    }
-
-                    if (! isset($resources[$match[1]])) {
-                        throw new InvalidArgumentException('Resource placeholders must name a defined resource.');
-                    }
-
-                    $resource = $resources[$match[1]];
-
-                    if (($name[1] === 'subtitles') !== ($resource['type'] === 'subtitle')
-                        || ($resource['type'] === 'text' && ($name[1] !== 'drawtext' || $key[1] !== 'textfile'))) {
-                        throw new InvalidArgumentException('The resource type does not match the filter file option.');
-                    }
-
-                    if (in_array($name[1], ['drawtext', 'subtitles'], true)) {
-                        $options = self::resourceOptions($filter);
-
-                        if ($name[1] === 'subtitles' && isset($options['f'])) {
-                            throw new InvalidArgumentException('The subtitles filter must not combine filename and f.');
-                        }
-
-                        if ($name[1] === 'drawtext' && isset($options['textfile'], $options['text'])) {
-                            throw new InvalidArgumentException('The drawtext filter must not combine textfile and text.');
-                        }
-
-                        if ($resource['type'] === 'text' && (($options['expansion'] ?? null) !== 'none'
-                            || ($options['reload'] ?? '0') !== '0')) {
-                            throw new InvalidArgumentException('Text resources require expansion=none and reload=0.');
-                        }
-                    }
-
-                    $i += strlen($match[0]) - 1;
-
-                    if (isset($filter[$i + 1]) && ! str_contains(':[]', $filter[$i + 1])) {
-                        throw new InvalidArgumentException('A resource placeholder must occupy the entire option value.');
-                    }
-
-                    $used[$match[1]] = true;
-                    $compiled .= $resource['path'];
-
-                    continue;
-                }
-
-                $compiled .= $character;
-
-                if ($escaped) {
-                    $escaped = false;
-                } elseif ($character === '\\') {
-                    $escaped = true;
-                } elseif ($character === "'") {
-                    $quoted = ! $quoted;
-                }
-            }
-
-            if (str_contains($compiled, '{{') || str_contains($compiled, '}}')) {
-                throw new InvalidArgumentException('Invalid resource placeholder.');
-            }
-
-            $result[] = $compiled.$separator;
+            $result[] = self::compileFilterResources($filter, $resources, $used).$separator;
         }
 
         return implode('', $result);
+    }
+
+    /**
+     * Replace the resource placeholders of a single filter with their paths.
+     */
+    protected static function compileFilterResources(string $filter, array $resources, array &$used): string
+    {
+        preg_match('/^(?:\[[^\]]+\])*\s*([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?=/', $filter, $name);
+        $quoted = false;
+        $escaped = false;
+        $compiled = '';
+
+        for ($i = 0; $i < strlen($filter); $i++) {
+            $character = $filter[$i];
+
+            if (! $escaped && substr($filter, $i, 2) === '{{') {
+                [$placeholder, $resource] = self::resolvePlaceholder($filter, $i, $name[1] ?? '', $quoted, $resources);
+                $i += strlen($placeholder) - 1;
+
+                $used[$resource] = true;
+                $compiled .= $resources[$resource]['path'];
+
+                continue;
+            }
+
+            $compiled .= $character;
+
+            if ($escaped) {
+                $escaped = false;
+            } elseif ($character === '\\') {
+                $escaped = true;
+            } elseif ($character === "'") {
+                $quoted = ! $quoted;
+            }
+        }
+
+        if (str_contains($compiled, '{{') || str_contains($compiled, '}}')) {
+            throw new InvalidArgumentException('Invalid resource placeholder.');
+        }
+
+        return $compiled;
+    }
+
+    /**
+     * Validate the placeholder at the given offset and return its text and resource name.
+     *
+     * @return array{string, string}
+     */
+    protected static function resolvePlaceholder(string $filter, int $offset, string $filterName, bool $quoted, array $resources): array
+    {
+        if (! preg_match('/\A\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/', substr($filter, $offset), $match)) {
+            throw new InvalidArgumentException('Resource placeholders must be identifiers such as {{font}}.');
+        }
+
+        if ($quoted) {
+            throw new InvalidArgumentException('Resource placeholders must not be quoted.');
+        }
+
+        $option = self::placeholderOption($filter, $offset, $filterName);
+
+        if (! isset($resources[$match[1]])) {
+            throw new InvalidArgumentException('Resource placeholders must name a defined resource.');
+        }
+
+        $resource = $resources[$match[1]];
+
+        if (($filterName === 'subtitles') !== ($resource['type'] === 'subtitle')
+            || ($resource['type'] === 'text' && ($filterName !== 'drawtext' || $option !== 'textfile'))) {
+            throw new InvalidArgumentException('The resource type does not match the filter file option.');
+        }
+
+        if (in_array($filterName, ['drawtext', 'subtitles'], true)) {
+            self::ensureResourceOptionsAreCompatible($filter, $filterName, $resource);
+        }
+
+        $end = $offset + strlen($match[0]);
+
+        if (isset($filter[$end]) && ! str_contains(':[]', $filter[$end])) {
+            throw new InvalidArgumentException('A resource placeholder must occupy the entire option value.');
+        }
+
+        return [$match[0], $match[1]];
+    }
+
+    /**
+     * Ensure the placeholder at the given offset is the value of a supported file option.
+     */
+    protected static function placeholderOption(string $filter, int $offset, string $filterName): string
+    {
+        if (! preg_match('/(?:^|[:=])([a-z]+)=$/', substr($filter, 0, $offset), $key)
+            || ! in_array($key[1], match ($filterName) {
+                'drawtext' => ['fontfile', 'textfile'], 'lut3d' => ['file'], 'subtitles' => ['filename'], default => [],
+            }, true)) {
+            throw new InvalidArgumentException('Resource placeholders must be the value of a supported filter file option.');
+        }
+
+        return $key[1];
+    }
+
+    /**
+     * Ensure the filter's other options cannot override or expand the given resource.
+     */
+    protected static function ensureResourceOptionsAreCompatible(string $filter, string $filterName, array $resource): void
+    {
+        $options = self::resourceOptions($filter);
+
+        if ($filterName === 'subtitles' && isset($options['f'])) {
+            throw new InvalidArgumentException('The subtitles filter must not combine filename and f.');
+        }
+
+        if ($filterName === 'drawtext' && isset($options['textfile'], $options['text'])) {
+            throw new InvalidArgumentException('The drawtext filter must not combine textfile and text.');
+        }
+
+        if ($resource['type'] === 'text' && (($options['expansion'] ?? null) !== 'none'
+            || ($options['reload'] ?? '0') !== '0')) {
+            throw new InvalidArgumentException('Text resources require expansion=none and reload=0.');
+        }
     }
 
     /** Resource-bearing filters use named, nonduplicate options only. */

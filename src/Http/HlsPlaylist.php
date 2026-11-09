@@ -121,7 +121,6 @@ class HlsPlaylist implements Responsable
         $pending = [$this->path];
         $queued = [$this->path => true];
         $result = [];
-        $cache = [];
         $resolvers = $discover instanceof Closure ? [] : $this->resolvers;
         $inputBudget = 16777216;
         $outputBudget = 16777216;
@@ -129,102 +128,152 @@ class HlsPlaylist implements Responsable
             $path = $pending[$index];
             $content = $this->read($path, $inputBudget);
             $inputBudget -= strlen($content);
-            $lines = explode("\n", str_replace("\r\n", "\n", $content));
-            $type = null;
-            foreach ($lines as $lineIndex => &$line) {
-                $kind = null;
-                $offset = 0;
-                $length = strlen($line);
-                if (str_starts_with($line, '#EXT-X-STREAM-INF:') || str_starts_with($line, '#EXTINF:')) {
-                    if ($type !== null) {
-                        throw MediaException::response('An HLS resource declaration has no URI.', 'artifact');
-                    }
 
-                    $type = str_starts_with($line, '#EXTINF:') ? 'media' : 'playlist';
-                } elseif (str_starts_with($line, '#EXT-X-KEY:')) {
-                    $key = $this->keyUri($line);
-                    if ($key !== null) {
-                        [$offset, $length] = $key;
-                        $kind = 'key';
-                    }
-                } elseif (str_starts_with($line, '#EXT-X-MAP:') || str_starts_with($line, '#EXT-X-MEDIA:')) {
-                    $map = str_starts_with($line, '#EXT-X-MAP:');
-                    $resource = $this->resourceUri($line, $map);
-                    if ($resource !== null) {
-                        [$offset, $length] = $resource;
-                        $kind = $map ? 'media' : 'playlist';
-                    }
-                } elseif ($line !== '' && $line[0] !== '#') {
-                    if ($type === null) {
-                        throw MediaException::response('An HLS URI has no resource declaration.', 'artifact');
-                    }
+            [$result[$path], $discovered, $outputBudget] = $this->renderPlaylist(
+                $path, $content, $all, $queued, $resolvers, $discover, $outputBudget
+            );
 
-                    $kind = $type;
-                    $type = null;
-                } elseif (preg_match('/\A#EXT-X-(?:I-FRAME-STREAM-INF|SESSION-KEY|PART|PRELOAD-HINT|RENDITION-REPORT):/', $line)
-                    || (str_starts_with($line, '#EXT') && preg_match('/[:,]URI\s*=/', $line))) {
-                    throw MediaException::response('This response does not support this HLS resource tag.', 'artifact');
+            foreach ($discovered as $target) {
+                $queued[$target] = true;
+                $pending[] = $target;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Render one playlist and collect the local playlists it adds to the queue.
+     *
+     * @param  array<string, true>  $queued
+     * @param  array<string, Closure>  $resolvers
+     * @return array{string, list<string>, int}
+     */
+    protected function renderPlaylist(string $path, string $content, bool $all, array $queued, array $resolvers, ?Closure $discover, int $outputBudget): array
+    {
+        $lines = explode("\n", str_replace("\r\n", "\n", $content));
+        $discovered = [];
+        $cache = [];
+        $type = null;
+        foreach ($lines as $lineIndex => &$line) {
+            [$kind, $offset, $length, $type] = $this->classifyLine($line, $type);
+
+            if ($kind !== null) {
+                $uri = substr($line, $offset, $length);
+                $target = $this->referenceTarget($path, $uri);
+
+                if ($discover instanceof Closure) {
+                    $discover($target, $uri);
                 }
 
-                if ($kind !== null) {
-                    $uri = substr($line, $offset, $length);
-                    $this->validateUri($uri);
-                    $target = null;
-                    if (! str_starts_with($uri, '/') && parse_url($uri, PHP_URL_SCHEME) === null) {
-                        try {
-                            $decoded = rawurldecode(parse_url($uri, PHP_URL_PATH) ?? '');
-                            if ($decoded === '' || ! preg_match('//u', $decoded) || str_contains($decoded, '\\')) {
-                                throw new InvalidArgumentException;
-                            }
-
-                            $target = (new WhitespacePathNormalizer)->normalizePath((dirname($path) === '.' ? '' : dirname($path).'/').$decoded);
-                            if ($target === '') {
-                                throw new InvalidArgumentException;
-                            }
-                        } catch (Throwable) {
-                            throw MediaException::response('An HLS reference escapes the disk or has an invalid path.', 'artifact');
-                        }
+                if ($all && $kind === 'playlist' && $target !== null && ! isset($queued[$target])) {
+                    if (count($queued) >= 1024) {
+                        throw MediaException::response('An HLS response cannot read more than 1024 local playlists.', 'artifact');
                     }
 
-                    if ($discover instanceof Closure) {
-                        $discover($target, $uri);
-                    }
-
-                    if ($all && $kind === 'playlist' && $target !== null && ! isset($queued[$target])) {
-                        if (count($pending) >= 1024) {
-                            throw MediaException::response('An HLS response cannot read more than 1024 local playlists.', 'artifact');
-                        }
-
-                        $queued[$target] = true;
-                        $pending[] = $target;
-                    }
-
-                    if (isset($resolvers[$kind])) {
-                        if (! isset($cache[$kind][$path][$uri])) {
-                            $url = ($resolvers[$kind])($target, $path, $uri);
-                            $this->validateUri($url);
-                            $cache[$kind][$path][$uri] = $url;
-                        }
-
-                        $line = substr_replace($line, $cache[$kind][$path][$uri], $offset, $length);
-                    }
+                    $queued[$target] = true;
+                    $discovered[] = $target;
                 }
 
-                $outputBudget -= strlen($line) + ($lineIndex > 0 ? 1 : 0);
-                if ($outputBudget < 0) {
-                    throw MediaException::response('An HLS response exceeds its 16 MiB output limit.', 'artifact');
+                if (isset($resolvers[$kind])) {
+                    $cache[$kind][$uri] ??= $this->resolveUrl($resolvers[$kind], $target, $path, $uri);
+                    $line = substr_replace($line, $cache[$kind][$uri], $offset, $length);
                 }
             }
 
-            unset($line);
+            $outputBudget -= strlen($line) + ($lineIndex > 0 ? 1 : 0);
+            if ($outputBudget < 0) {
+                throw MediaException::response('An HLS response exceeds its 16 MiB output limit.', 'artifact');
+            }
+        }
+
+        unset($line);
+        if ($type !== null) {
+            throw MediaException::response('An HLS resource declaration has no URI.', 'artifact');
+        }
+
+        return [implode("\n", $lines), $discovered, $outputBudget];
+    }
+
+    /**
+     * Classify a playlist line and locate the URI it references, if any.
+     *
+     * @return array{string|null, int, int, string|null} The reference kind, URI offset, URI length and pending declaration type.
+     */
+    protected function classifyLine(string $line, ?string $type): array
+    {
+        $kind = null;
+        $offset = 0;
+        $length = strlen($line);
+        if (str_starts_with($line, '#EXT-X-STREAM-INF:') || str_starts_with($line, '#EXTINF:')) {
             if ($type !== null) {
                 throw MediaException::response('An HLS resource declaration has no URI.', 'artifact');
             }
 
-            $result[$path] = implode("\n", $lines);
+            $type = str_starts_with($line, '#EXTINF:') ? 'media' : 'playlist';
+        } elseif (str_starts_with($line, '#EXT-X-KEY:')) {
+            $key = $this->keyUri($line);
+            if ($key !== null) {
+                [$offset, $length] = $key;
+                $kind = 'key';
+            }
+        } elseif (str_starts_with($line, '#EXT-X-MAP:') || str_starts_with($line, '#EXT-X-MEDIA:')) {
+            $map = str_starts_with($line, '#EXT-X-MAP:');
+            $resource = $this->resourceUri($line, $map);
+            if ($resource !== null) {
+                [$offset, $length] = $resource;
+                $kind = $map ? 'media' : 'playlist';
+            }
+        } elseif ($line !== '' && $line[0] !== '#') {
+            if ($type === null) {
+                throw MediaException::response('An HLS URI has no resource declaration.', 'artifact');
+            }
+
+            $kind = $type;
+            $type = null;
+        } elseif (preg_match('/\A#EXT-X-(?:I-FRAME-STREAM-INF|SESSION-KEY|PART|PRELOAD-HINT|RENDITION-REPORT):/', $line)
+            || (str_starts_with($line, '#EXT') && preg_match('/[:,]URI\s*=/', $line))) {
+            throw MediaException::response('This response does not support this HLS resource tag.', 'artifact');
         }
 
-        return $result;
+        return [$kind, $offset, $length, $type];
+    }
+
+    /**
+     * Validate the given reference and resolve its disk path when it is relative.
+     */
+    protected function referenceTarget(string $path, string $uri): ?string
+    {
+        $this->validateUri($uri);
+        $target = null;
+        if (! str_starts_with($uri, '/') && parse_url($uri, PHP_URL_SCHEME) === null) {
+            try {
+                $decoded = rawurldecode(parse_url($uri, PHP_URL_PATH) ?? '');
+                if ($decoded === '' || ! preg_match('//u', $decoded) || str_contains($decoded, '\\')) {
+                    throw new InvalidArgumentException;
+                }
+
+                $target = (new WhitespacePathNormalizer)->normalizePath((dirname($path) === '.' ? '' : dirname($path).'/').$decoded);
+                if ($target === '') {
+                    throw new InvalidArgumentException;
+                }
+            } catch (Throwable) {
+                throw MediaException::response('An HLS reference escapes the disk or has an invalid path.', 'artifact');
+            }
+        }
+
+        return $target;
+    }
+
+    /**
+     * Resolve and validate the URL that replaces the given reference.
+     */
+    protected function resolveUrl(Closure $resolver, ?string $target, string $path, string $uri): string
+    {
+        $url = $resolver($target, $path, $uri);
+        $this->validateUri($url);
+
+        return $url;
     }
 
     protected function read(string $path, int $limit): string

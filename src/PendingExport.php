@@ -67,6 +67,21 @@ class PendingExport implements Exportable
 
     protected ?ProcessRunner $runner = null;
 
+    /**
+     * The phase of the running execution, reported when it fails.
+     */
+    protected ?string $phase = null;
+
+    /**
+     * The destinations the running execution has published so far.
+     */
+    protected array $published = [];
+
+    /**
+     * The process summaries the running execution has recorded so far.
+     */
+    protected array $summaries = [];
+
     protected readonly string $outputRole;
 
     /**
@@ -378,52 +393,8 @@ class PendingExport implements Exportable
         }
 
         $graph = $this->filterGraph();
-        $watermarking = $this->watermarks !== [];
-        $covering = $this->coverInput !== null;
-        if ($covering) {
-            if ($graph !== null) {
-                throw new InvalidArgumentException('Cover art does not support a complex filter graph.');
-            }
-
-            if ($watermarking) {
-                throw new InvalidArgumentException('Cover art cannot be combined with watermarks.');
-            }
-
-            if (count($this->inputs) !== 2) {
-                throw new InvalidArgumentException('Cover art requires exactly one source input.');
-            }
-
-            if (count($outputs) !== 1) {
-                throw new InvalidArgumentException('Cover art requires exactly one output.');
-            }
-
-            if ($this->outputRole !== 'media') {
-                throw new InvalidArgumentException("The output role [{$this->outputRole}] does not support cover art.");
-            }
-
-            if ($this->twoPass) {
-                throw new InvalidArgumentException('Cover art does not support two-pass encoding.');
-            }
-        }
-
-        if ($watermarking) {
-            if ($graph !== null) {
-                throw new InvalidArgumentException('Watermarks do not support filterComplex(); compose the overlay in the graph instead.');
-            }
-
-            if (count($this->inputs) !== count($this->watermarks) + 1) {
-                throw new InvalidArgumentException('Watermarks require exactly one source input besides their images.');
-            }
-
-            if (! in_array($this->outputRole, ['media', 'hls-playlist'], true)) {
-                throw new InvalidArgumentException("The output role [{$this->outputRole}] does not support watermarks.");
-            }
-        }
-
-        $composition = ! $covering && ! $watermarking && (count($this->inputs) > 1 || $graph !== null);
-        $mappedLabels = [];
-        $used = [];
-        $compiledOutputs = [];
+        $this->ensureCoverArtCanCompile($graph, $outputs);
+        $this->ensureWatermarksCanCompile($graph);
         $resources = $this->resourceNames($outputs);
 
         if (array_any($resources, fn ($resource): bool => $resource['type'] === 'subtitle')
@@ -431,120 +402,91 @@ class PendingExport implements Exportable
             throw new InvalidArgumentException('Subtitle resources require an unseeked input. Use an accurate output clip.');
         }
 
+        // Watermarks add their overlays to the graph one output at a time, so compiling
+        // the outputs also returns the final graph, the graph labels the outputs map,
+        // and the resources their filters use, which the global options then check.
+        [$compiledOutputs, $graph, $mappedLabels, $used] = $this->compileOutputs($outputs, $graph, $resources, $outputPaths);
+        $globals = $this->compileGlobals($graph, $mappedLabels, $resources, $used);
+        $command = CommandCompiler::compile(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $this->compileInputs($outputs, $paths), $compiledOutputs, $globals);
+
+        return $this->operation instanceof ShapesCommand ? $this->operation->command($command, $outputs, $paths, $outputPaths) : $command;
+    }
+
+    /**
+     * Ensure cover art is combined only with the inputs, outputs, and settings it supports.
+     */
+    protected function ensureCoverArtCanCompile(?string $graph, array $outputs): void
+    {
+        if ($this->coverInput === null) {
+            return;
+        }
+
+        if ($graph !== null) {
+            throw new InvalidArgumentException('Cover art does not support a complex filter graph.');
+        }
+
+        if ($this->watermarks !== []) {
+            throw new InvalidArgumentException('Cover art cannot be combined with watermarks.');
+        }
+
+        if (count($this->inputs) !== 2) {
+            throw new InvalidArgumentException('Cover art requires exactly one source input.');
+        }
+
+        if (count($outputs) !== 1) {
+            throw new InvalidArgumentException('Cover art requires exactly one output.');
+        }
+
+        if ($this->outputRole !== 'media') {
+            throw new InvalidArgumentException("The output role [{$this->outputRole}] does not support cover art.");
+        }
+
+        if ($this->twoPass) {
+            throw new InvalidArgumentException('Cover art does not support two-pass encoding.');
+        }
+    }
+
+    /**
+     * Ensure watermarks are combined only with the inputs and output roles they support.
+     */
+    protected function ensureWatermarksCanCompile(?string $graph): void
+    {
+        if ($this->watermarks === []) {
+            return;
+        }
+
+        if ($graph !== null) {
+            throw new InvalidArgumentException('Watermarks do not support filterComplex(); compose the overlay in the graph instead.');
+        }
+
+        if (count($this->inputs) !== count($this->watermarks) + 1) {
+            throw new InvalidArgumentException('Watermarks require exactly one source input besides their images.');
+        }
+
+        if (! in_array($this->outputRole, ['media', 'hls-playlist'], true)) {
+            throw new InvalidArgumentException("The output role [{$this->outputRole}] does not support watermarks.");
+        }
+    }
+
+    /**
+     * Compile the path and options of every output, adding watermark overlays to the graph.
+     *
+     * @return array{0: list<array{path: string, options: list<string>}>, 1: string|null, 2: list<string>, 3: array<string, true>}
+     */
+    protected function compileOutputs(array $outputs, ?string $graph, array $resources, ?array $outputPaths): array
+    {
+        $covering = $this->coverInput !== null;
+        $watermarking = $this->watermarks !== [];
+        $composition = ! $covering && ! $watermarking && (count($this->inputs) > 1 || $graph !== null);
+        $mappedLabels = [];
+        $used = [];
+        $compiledOutputs = [];
+
         foreach ($outputs as $index => $output) {
-            if ($this->twoPass && $output->outputConfiguration()['videoStreams'] !== []) {
-                throw new InvalidArgumentException('Per-track video settings do not support two-pass encoding.');
-            }
-
-            if ($covering) {
-                $settings = $output->outputConfiguration();
-                if (! in_array(strtolower(pathinfo($output->destination()['path'], PATHINFO_EXTENSION)), ['mp4', 'm4a', 'mp3'], true)) {
-                    throw new InvalidArgumentException('Cover art requires an MP4, M4A, or MP3 destination.');
-                }
-
-                if ($output->hasMaps()) {
-                    throw new InvalidArgumentException('Cover art outputs select their streams automatically and take no maps.');
-                }
-
-                if ($settings['omitVideo'] || $settings['omitAudio']) {
-                    throw new InvalidArgumentException('Cover art outputs must keep the source video and audio.');
-                }
-
-                if ($settings['videoFilters'] !== [] || $settings['audioFilters'] !== []) {
-                    throw new InvalidArgumentException('Cover art outputs do not support filters.');
-                }
-
-                if ($settings['videoStreams'] !== [] || $settings['audioStreams'] !== []) {
-                    throw new InvalidArgumentException('Cover art outputs do not support per-track settings.');
-                }
-
-                if ($settings['outputOptions'] !== []) {
-                    throw new InvalidArgumentException('Cover art outputs do not support output options.');
-                }
-
-                if ($settings['dispositions'] !== []) {
-                    throw new InvalidArgumentException('Cover art outputs do not support disposition overrides.');
-                }
-
-                if ($settings['clip'] !== null) {
-                    throw new InvalidArgumentException('Cover art outputs do not support clipping.');
-                }
-
-                if (! in_array($settings['video'], [[], ['codec' => 'copy']], true)
-                    || ! in_array($settings['audio'], [[], ['codec' => 'copy']], true)) {
-                    throw new InvalidArgumentException('Cover art outputs copy video and audio without encoding settings.');
-                }
-
-                $settings['video'] = $settings['audio'] = ['codec' => 'copy'];
-                $settings['metadataSource'] ??= 0;
-                $settings['chapterSource'] ??= 0;
-                $output = new ExportOutput($output->destination()['path'], $output->filesystem())->configure($settings);
-            }
-
-            if ($watermarking) {
-                $settings = $output->outputConfiguration();
-                if ($output->hasMaps()) {
-                    throw new InvalidArgumentException('Watermarked outputs select their video automatically and take no maps.');
-                }
-
-                if ($settings['omitVideo']) {
-                    throw new InvalidArgumentException('Watermarked outputs must keep their video.');
-                }
-
-                if (($settings['video']['codec'] ?? null) === 'copy') {
-                    throw new InvalidArgumentException('Watermarked outputs must transcode video, not copy it.');
-                }
-
-                $settings['metadataSource'] ??= 0;
-                $settings['chapterSource'] ??= $settings['clip'] === null ? 0 : -1;
-                $output = new ExportOutput($output->destination()['path'], $output->filesystem())->configure($settings);
-            }
-
-            if ($composition && ! $output->hasMaps()) {
-                throw new InvalidArgumentException('Every composition output requires explicit maps.');
-            }
-
-            if (count($this->inputs) > 1 && $output->metadataSource() === null) {
-                throw new InvalidArgumentException('Exports with multiple inputs require metadataFrom() or withoutMetadata().');
-            }
-
-            if (count($this->inputs) > 1 && $output->chapterSource() === null) {
-                throw new InvalidArgumentException('Exports with multiple inputs require chaptersFrom() or withoutMetadata(chapters: true).');
-            }
-
-            foreach ([$output->metadataSource(), $output->chapterSource()] as $source) {
-                if ($source !== null && $source >= count($this->inputs)) {
-                    throw new InvalidArgumentException("The metadata or chapter input [{$source}] does not exist.");
-                }
-            }
-
-            if ($output->inputSeekOptions() !== []) {
-                if (count($this->inputs) > 1) {
-                    throw new InvalidArgumentException('Keyframe clips require a single input.');
-                }
-
-                if (count($outputs) > 1) {
-                    throw new InvalidArgumentException('Keyframe clips require a single output.');
-                }
-
-                if ($graph !== null) {
-                    throw new InvalidArgumentException('Keyframe clips do not support a complex filter graph.');
-                }
-            }
-
+            $output = $this->prepareOutput($output);
+            $this->ensureOutputMatchesInputs($output, $outputs, $graph, $composition);
             $maps = $this->resolveMaps($output);
-
-            foreach ($maps as $map) {
-                if (str_starts_with($map, '[')) {
-                    if ($graph === null) {
-                        throw new InvalidArgumentException('A graph map requires filterComplex().');
-                    }
-
-                    $mappedLabels[] = substr($map, 1, -1);
-                } elseif ((int) ltrim($map, '-') >= count($this->inputs)) {
-                    throw new InvalidArgumentException('Map references an invalid input.');
-                }
-            }
+            array_push($mappedLabels, ...$this->graphLabels($maps, $graph));
 
             $options = $output->outputArguments(function (string|ResourceFilter $filter) use ($resources, &$used): string {
                 return $filter instanceof ResourceFilter
@@ -559,77 +501,271 @@ class PendingExport implements Exportable
             }
 
             if ($watermarking) {
-                $filter = 'null';
-                $processed = [];
-                for ($i = 0; $i < count($options); $i++) {
-                    // A per-track chain for the one mapped video stream already
-                    // includes the output filters, and comes after them.
-                    if ($options[$i] === '-filter:v' || $options[$i] === '-filter:v:0') {
-                        $filter = $options[++$i];
-                    } elseif ($options[$i] === '-map' && str_starts_with($options[$i + 1], '0:V:0')) {
-                        $processed[] = '-map';
-                        $processed[] = '[watermark_out'.$index.']';
-                        $i++;
-                    } else {
-                        $processed[] = $options[$i];
-                    }
-                }
-
-                $options = $processed;
-                $branches = ['[0:V:0]'.$filter.'[watermark_base'.$index.'_0]'];
-                foreach ($this->watermarks as $n => $mark) {
-                    ['input' => $input, 'horizontal' => [$left, $x], 'vertical' => [$top, $y], 'width' => $width, 'height' => $height, 'opacity' => $opacity, 'loop' => $loop] = $mark;
-                    $imageFilters = $width === null && $height === null ? '' : 'scale=w='.($width ?? -1).':h='.($height ?? -1).',';
-                    $label = 'watermark_image'.$index.'_'.$n;
-                    $branches[] = '['.$input.':v:0]'.$imageFilters.'format=rgba,colorchannelmixer=aa='.$opacity.'['.$label.']';
-                    $horizontal = match ($left) {
-                        'right' => 'main_w-overlay_w-'.$x, 'center' => '(main_w-overlay_w)/2', default => (string) $x,
-                    };
-                    $vertical = match ($top) {
-                        'bottom' => 'main_h-overlay_h-'.$y, 'center' => '(main_h-overlay_h)/2', default => (string) $y,
-                    };
-                    $out = $n === count($this->watermarks) - 1 ? 'watermark_out'.$index : 'watermark_base'.$index.'_'.($n + 1);
-                    // A looping mark never ends, so the main video bounds it; other streams keep their own length.
-                    $shortest = $loop ? 1 : 0;
-                    $branches[] = '[watermark_base'.$index.'_'.$n.']['.$label.']overlay=x='.$horizontal.':y='.$vertical.':eof_action=repeat:repeatlast=1:shortest='.$shortest.'['.$out.']';
-                }
-
+                [$options, $branches] = $this->compileWatermarks($options, $index);
                 $graph = ($graph === null ? '' : $graph.';').implode(';', $branches);
                 $mappedLabels[] = 'watermark_out'.$index;
             }
 
             if ($this->twoPass && in_array($index, $this->twoPassOutputIndexes($outputs), true)) {
-                $settings = $output->outputConfiguration();
-                $video = $settings['video'];
-                if ($settings['omitVideo']) {
-                    throw new InvalidArgumentException('Two-pass outputs must keep their video.');
-                }
-
-                if (! isset($video['codec'])) {
-                    throw new InvalidArgumentException('Two-pass outputs require an explicit video encoder.');
-                }
-
-                if (! isset($video['bitrate'])) {
-                    throw new InvalidArgumentException('Two-pass outputs require a target video bitrate.');
-                }
-
-                if ($video['codec'] === 'copy') {
-                    throw new InvalidArgumentException('Two-pass outputs must transcode video, not copy it.');
-                }
-
-                if (isset($video['crf'])) {
-                    throw new InvalidArgumentException('Two-pass outputs use a target bitrate, not CRF.');
-                }
-
-                $options[] = '-pass:v';
-                $options[] = '2';
-                $options[] = '-passlogfile:v';
-                $options[] = 'pass-'.$index;
+                array_push($options, ...$this->secondPassOptions($output, $index));
             }
 
             $compiledOutputs[] = ['path' => $outputPaths[$index] ?? '[output:'.$index.']', 'options' => $options];
         }
 
+        return [$compiledOutputs, $graph, $mappedLabels, $used];
+    }
+
+    /**
+     * Apply the settings that two-pass encoding, cover art, and watermarks require of the output.
+     */
+    protected function prepareOutput(ExportOutput $output): ExportOutput
+    {
+        if ($this->twoPass && $output->outputConfiguration()['videoStreams'] !== []) {
+            throw new InvalidArgumentException('Per-track video settings do not support two-pass encoding.');
+        }
+
+        if ($this->coverInput !== null) {
+            $output = $this->coverArtOutput($output);
+        }
+
+        if ($this->watermarks !== []) {
+            $output = $this->watermarkedOutput($output);
+        }
+
+        return $output;
+    }
+
+    /**
+     * Validate the cover art output and copy its source video, audio, metadata, and chapters.
+     */
+    protected function coverArtOutput(ExportOutput $output): ExportOutput
+    {
+        $settings = $output->outputConfiguration();
+        if (! in_array(strtolower(pathinfo($output->destination()['path'], PATHINFO_EXTENSION)), ['mp4', 'm4a', 'mp3'], true)) {
+            throw new InvalidArgumentException('Cover art requires an MP4, M4A, or MP3 destination.');
+        }
+
+        if ($output->hasMaps()) {
+            throw new InvalidArgumentException('Cover art outputs select their streams automatically and take no maps.');
+        }
+
+        if ($settings['omitVideo'] || $settings['omitAudio']) {
+            throw new InvalidArgumentException('Cover art outputs must keep the source video and audio.');
+        }
+
+        if ($settings['videoFilters'] !== [] || $settings['audioFilters'] !== []) {
+            throw new InvalidArgumentException('Cover art outputs do not support filters.');
+        }
+
+        if ($settings['videoStreams'] !== [] || $settings['audioStreams'] !== []) {
+            throw new InvalidArgumentException('Cover art outputs do not support per-track settings.');
+        }
+
+        if ($settings['outputOptions'] !== []) {
+            throw new InvalidArgumentException('Cover art outputs do not support output options.');
+        }
+
+        if ($settings['dispositions'] !== []) {
+            throw new InvalidArgumentException('Cover art outputs do not support disposition overrides.');
+        }
+
+        if ($settings['clip'] !== null) {
+            throw new InvalidArgumentException('Cover art outputs do not support clipping.');
+        }
+
+        if (! in_array($settings['video'], [[], ['codec' => 'copy']], true)
+            || ! in_array($settings['audio'], [[], ['codec' => 'copy']], true)) {
+            throw new InvalidArgumentException('Cover art outputs copy video and audio without encoding settings.');
+        }
+
+        $settings['video'] = $settings['audio'] = ['codec' => 'copy'];
+        $settings['metadataSource'] ??= 0;
+        $settings['chapterSource'] ??= 0;
+
+        return new ExportOutput($output->destination()['path'], $output->filesystem())->configure($settings);
+    }
+
+    /**
+     * Validate the watermarked output and take its metadata and chapters from the source.
+     */
+    protected function watermarkedOutput(ExportOutput $output): ExportOutput
+    {
+        $settings = $output->outputConfiguration();
+        if ($output->hasMaps()) {
+            throw new InvalidArgumentException('Watermarked outputs select their video automatically and take no maps.');
+        }
+
+        if ($settings['omitVideo']) {
+            throw new InvalidArgumentException('Watermarked outputs must keep their video.');
+        }
+
+        if (($settings['video']['codec'] ?? null) === 'copy') {
+            throw new InvalidArgumentException('Watermarked outputs must transcode video, not copy it.');
+        }
+
+        $settings['metadataSource'] ??= 0;
+        $settings['chapterSource'] ??= $settings['clip'] === null ? 0 : -1;
+
+        return new ExportOutput($output->destination()['path'], $output->filesystem())->configure($settings);
+    }
+
+    /**
+     * Ensure the output's maps, metadata sources, and keyframe clip fit the export's inputs.
+     */
+    protected function ensureOutputMatchesInputs(ExportOutput $output, array $outputs, ?string $graph, bool $composition): void
+    {
+        if ($composition && ! $output->hasMaps()) {
+            throw new InvalidArgumentException('Every composition output requires explicit maps.');
+        }
+
+        if (count($this->inputs) > 1 && $output->metadataSource() === null) {
+            throw new InvalidArgumentException('Exports with multiple inputs require metadataFrom() or withoutMetadata().');
+        }
+
+        if (count($this->inputs) > 1 && $output->chapterSource() === null) {
+            throw new InvalidArgumentException('Exports with multiple inputs require chaptersFrom() or withoutMetadata(chapters: true).');
+        }
+
+        foreach ([$output->metadataSource(), $output->chapterSource()] as $source) {
+            if ($source !== null && $source >= count($this->inputs)) {
+                throw new InvalidArgumentException("The metadata or chapter input [{$source}] does not exist.");
+            }
+        }
+
+        if ($output->inputSeekOptions() !== []) {
+            if (count($this->inputs) > 1) {
+                throw new InvalidArgumentException('Keyframe clips require a single input.');
+            }
+
+            if (count($outputs) > 1) {
+                throw new InvalidArgumentException('Keyframe clips require a single output.');
+            }
+
+            if ($graph !== null) {
+                throw new InvalidArgumentException('Keyframe clips do not support a complex filter graph.');
+            }
+        }
+    }
+
+    /**
+     * Validate the resolved maps and return the graph labels they select.
+     *
+     * @return list<string>
+     */
+    protected function graphLabels(array $maps, ?string $graph): array
+    {
+        $labels = [];
+
+        foreach ($maps as $map) {
+            if (str_starts_with($map, '[')) {
+                if ($graph === null) {
+                    throw new InvalidArgumentException('A graph map requires filterComplex().');
+                }
+
+                $labels[] = substr($map, 1, -1);
+            } elseif ((int) ltrim($map, '-') >= count($this->inputs)) {
+                throw new InvalidArgumentException('Map references an invalid input.');
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
+     * Route the output's main video through the watermark overlays instead of its own filter.
+     *
+     * @return array{0: list<string>, 1: list<string>} The rewritten output options and the graph branches to add.
+     */
+    protected function compileWatermarks(array $options, int|string $index): array
+    {
+        $filter = 'null';
+        $processed = [];
+        for ($i = 0; $i < count($options); $i++) {
+            // A per-track chain for the one mapped video stream already
+            // includes the output filters, and comes after them.
+            if ($options[$i] === '-filter:v' || $options[$i] === '-filter:v:0') {
+                $filter = $options[++$i];
+            } elseif ($options[$i] === '-map' && str_starts_with($options[$i + 1], '0:V:0')) {
+                $processed[] = '-map';
+                $processed[] = '[watermark_out'.$index.']';
+                $i++;
+            } else {
+                $processed[] = $options[$i];
+            }
+        }
+
+        return [$processed, $this->overlayWatermarks($filter, $index)];
+    }
+
+    /**
+     * Build the graph branches that filter the main video and overlay each watermark on it.
+     *
+     * @return list<string>
+     */
+    protected function overlayWatermarks(string $filter, int|string $index): array
+    {
+        $branches = ['[0:V:0]'.$filter.'[watermark_base'.$index.'_0]'];
+        foreach ($this->watermarks as $n => $mark) {
+            ['input' => $input, 'horizontal' => [$left, $x], 'vertical' => [$top, $y], 'width' => $width, 'height' => $height, 'opacity' => $opacity, 'loop' => $loop] = $mark;
+            $imageFilters = $width === null && $height === null ? '' : 'scale=w='.($width ?? -1).':h='.($height ?? -1).',';
+            $label = 'watermark_image'.$index.'_'.$n;
+            $branches[] = '['.$input.':v:0]'.$imageFilters.'format=rgba,colorchannelmixer=aa='.$opacity.'['.$label.']';
+            $horizontal = match ($left) {
+                'right' => 'main_w-overlay_w-'.$x, 'center' => '(main_w-overlay_w)/2', default => (string) $x,
+            };
+            $vertical = match ($top) {
+                'bottom' => 'main_h-overlay_h-'.$y, 'center' => '(main_h-overlay_h)/2', default => (string) $y,
+            };
+            $out = $n === count($this->watermarks) - 1 ? 'watermark_out'.$index : 'watermark_base'.$index.'_'.($n + 1);
+            // A looping mark never ends, so the main video bounds it; other streams keep their own length.
+            $shortest = $loop ? 1 : 0;
+            $branches[] = '[watermark_base'.$index.'_'.$n.']['.$label.']overlay=x='.$horizontal.':y='.$vertical.':eof_action=repeat:repeatlast=1:shortest='.$shortest.'['.$out.']';
+        }
+
+        return $branches;
+    }
+
+    /**
+     * Validate the two-pass output's video encoding and return its second-pass options.
+     *
+     * @return list<string>
+     */
+    protected function secondPassOptions(ExportOutput $output, int|string $index): array
+    {
+        $settings = $output->outputConfiguration();
+        $video = $settings['video'];
+        if ($settings['omitVideo']) {
+            throw new InvalidArgumentException('Two-pass outputs must keep their video.');
+        }
+
+        if (! isset($video['codec'])) {
+            throw new InvalidArgumentException('Two-pass outputs require an explicit video encoder.');
+        }
+
+        if (! isset($video['bitrate'])) {
+            throw new InvalidArgumentException('Two-pass outputs require a target video bitrate.');
+        }
+
+        if ($video['codec'] === 'copy') {
+            throw new InvalidArgumentException('Two-pass outputs must transcode video, not copy it.');
+        }
+
+        if (isset($video['crf'])) {
+            throw new InvalidArgumentException('Two-pass outputs use a target bitrate, not CRF.');
+        }
+
+        return ['-pass:v', '2', '-passlogfile:v', 'pass-'.$index];
+    }
+
+    /**
+     * Compile the global options, including the validated complex graph.
+     *
+     * @param  array<string, true>  $used
+     * @return list<string>
+     */
+    protected function compileGlobals(?string $graph, array $mappedLabels, array $resources, array $used): array
+    {
         $globals = $this->globalOptions;
 
         if ($graph !== null) {
@@ -642,6 +778,16 @@ class PendingExport implements Exportable
             throw new InvalidArgumentException('Every declared resource must be used by a filter.');
         }
 
+        return $globals;
+    }
+
+    /**
+     * Compile the path, protocols, and options of every input.
+     *
+     * @return list<array{path: string, protocols: mixed, options: list<string>}>
+     */
+    protected function compileInputs(array $outputs, array $paths): array
+    {
         $compiledInputs = [];
         // The demuxer repeats a looping mark, so a GIF loops for the whole video whatever loop count it embeds.
         $looping = array_column(array_filter($this->watermarks, fn (array $mark): bool => $mark['loop']), 'loop', 'input');
@@ -654,9 +800,7 @@ class PendingExport implements Exportable
             ];
         }
 
-        $command = CommandCompiler::compile(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $compiledInputs, $compiledOutputs, $globals);
-
-        return $this->operation instanceof ShapesCommand ? $this->operation->command($command, $outputs, $paths, $outputPaths) : $command;
+        return $compiledInputs;
     }
 
     public function save(?string $path = null): ExportResult
@@ -669,6 +813,49 @@ class PendingExport implements Exportable
     {
         $this->assertMutable();
 
+        $outputs = $this->freezeOutputs($path);
+        $this->running = true;
+        $operationId = bin2hex(random_bytes(16));
+        $destinations = $contents ? [] : array_map(fn ($output) => $output->destination(), $outputs);
+        $this->published = [];
+        $this->phase = Progress::STAGING;
+        $onProgress = fn (Progress $progress) => $this->notify($progress, $operationId, $destinations);
+
+        try {
+            $this->runner = new ProcessRunner($this->timeoutSeconds, $this->idleTimeoutSeconds);
+            if (config('laravel-ffmpeg.enable_events', true)) {
+                Event::dispatch(new Events\ExportStarting($operationId, $destinations));
+            }
+
+            $onProgress(new Progress($this->phase));
+            $result = $this->media->withInput(
+                fn (string $input, Workspace $workspace): string|ExportResult => $this->exportInWorkspace($workspace, $outputs, $contents, $onProgress),
+                $this->runner,
+            );
+        } catch (Throwable $throwable) {
+            // A failure reports the phase it stopped in and every destination already
+            // published, so listeners and callers can clean up a partial publication.
+            throw $this->reportFailure($throwable, $operationId, $destinations);
+        } finally {
+            $this->running = false;
+            $this->runner = null;
+            $this->phase = null;
+            $this->published = [];
+            $this->summaries = [];
+        }
+
+        if (config('laravel-ffmpeg.enable_events', true)) {
+            Event::dispatch(new Events\ExportCompleted($operationId, $result instanceof ExportResult ? $result->files()->map->toArray()->all() : []));
+        }
+
+        return $result;
+    }
+
+    /**
+     * Validate the configured outputs and their command, then freeze the outputs.
+     */
+    protected function freezeOutputs(?string $path): array
+    {
         if ($path === null && $this->outputs === []) {
             throw new InvalidArgumentException('Declare outputs or pass a destination to save().');
         }
@@ -681,266 +868,374 @@ class PendingExport implements Exportable
             $output->freeze();
         }
 
-        $this->running = true;
-        $operationId = bin2hex(random_bytes(16));
-        $destinations = $contents ? [] : array_map(fn ($output) => $output->destination(), $outputs);
-        $published = [];
-        $phase = Progress::STAGING;
-        $onProgress = fn (Progress $progress) => $this->notify($progress, $operationId, $destinations);
+        return $outputs;
+    }
 
-        try {
-            $this->runner = new ProcessRunner($this->timeoutSeconds, $this->idleTimeoutSeconds);
-            if (config('laravel-ffmpeg.enable_events', true)) {
-                Event::dispatch(new Events\ExportStarting($operationId, $destinations));
+    /**
+     * Stage, probe, encode, validate, and publish the export inside the workspace.
+     */
+    protected function exportInWorkspace(Workspace $workspace, array $outputs, bool $contents, Closure $onProgress): string|ExportResult
+    {
+        [$paths, $redactions] = $this->stageInputs($workspace);
+        $resources = $this->resourceNames($outputs);
+        $this->stageResources($workspace, $resources);
+
+        $this->phase = Progress::PROBING;
+        $onProgress(new Progress($this->phase));
+        $metadata = $this->probeInputs($workspace, $resources);
+        $expected = $this->expectedStreams($workspace, $outputs, $metadata);
+        $outputPaths = $this->outputPaths($outputs, $workspace);
+
+        foreach ($outputPaths as $index => $outputPath) {
+            $redactions[$outputPath] = '[output:'.$index.']';
+        }
+
+        $this->prepareOverlays($metadata);
+        $duration = $this->progressDuration($outputs, $this->prepareEncoding($metadata));
+        $this->phase = Progress::ENCODING;
+        $command = $this->command($outputs, $paths, $outputPaths);
+        $this->summaries = [];
+
+        // Next, operations may run analysis passes that replace command tokens. Each
+        // analysis reports its own phase and records its summary before the encoding
+        // passes, so we return to the encoding phase once the command is prepared.
+        $command = $this->prepareCommand($workspace, $command, $outputPaths,
+            fn (array $command, string $failure): ProcessResult => $this->runAnalysis($workspace, $command, $failure, $redactions, $onProgress));
+        $this->phase = Progress::ENCODING;
+        $this->runEncodingPasses($workspace, $command, $outputs, $outputPaths, $redactions, $duration, $onProgress);
+
+        $this->phase = Progress::VALIDATION;
+        $onProgress(new Progress($this->phase));
+        $artifacts = $this->artifacts($outputs, $outputPaths);
+        $sizes = $this->validateArtifacts($workspace, $artifacts, $outputs, $expected);
+
+        if ($contents) {
+            return $this->readGeneratedFile($artifacts[0]['path']);
+        }
+
+        $this->phase = Progress::PUBLICATION;
+        $onProgress(new Progress($this->phase));
+        $files = $this->publishArtifacts($workspace->runner, $artifacts, $outputs, $sizes);
+        $workspace->runner->check(Progress::PUBLICATION);
+
+        return new ExportResult($files, $this->summaries);
+    }
+
+    /**
+     * Stage every input in the workspace and redact the staged paths.
+     *
+     * @return array{0: array<int, string>, 1: array<string, string>} The staged input paths and the redactions.
+     */
+    protected function stageInputs(Workspace $workspace): array
+    {
+        $paths = array_map(fn ($media): string => $workspace->stage($media), $this->inputs);
+        $redactions = [];
+
+        foreach ($paths as $index => $path) {
+            $redactions[$path] ??= '[input:'.$index.']';
+            $redactions += $this->inputs[$index]->redactions();
+        }
+
+        return [$paths, $redactions];
+    }
+
+    /**
+     * Write every filter resource to its private path in the workspace.
+     */
+    protected function stageResources(Workspace $workspace, array $resources): void
+    {
+        $staged = [];
+
+        foreach ($resources as $resource) {
+            $source = $resource['source'];
+            $target = $workspace->path.'/'.$resource['path'];
+
+            if (isset($staged[$target])) {
+                continue;
             }
-
-            $onProgress(new Progress($phase));
-            $result = $this->media->withInput(function (string $input, Workspace $workspace) use ($outputs, $contents, $onProgress, &$phase, &$published): string|ExportResult {
-                $paths = array_map(fn ($media): string => $workspace->stage($media), $this->inputs);
-                $redactions = [];
-
-                foreach ($paths as $index => $path) {
-                    $redactions[$path] ??= '[input:'.$index.']';
-                    $redactions += $this->inputs[$index]->redactions();
-                }
-
-                $resources = $this->resourceNames($outputs);
-                $staged = [];
-
-                foreach ($resources as $resource) {
-                    $source = $resource['source'];
-                    $target = $workspace->path.'/'.$resource['path'];
-
-                    if (isset($staged[$target])) {
-                        continue;
-                    }
-
-                    try {
-                        $written = $resource['type'] === 'text'
-                            ? @file_put_contents($target, $source) === strlen($source)
-                            : @copy($workspace->stage($source, resource: true), $target);
-                    } catch (MediaException $exception) {
-                        throw MediaException::staging('Cannot stage '.$resource['context'].'.', $exception->category);
-                    }
-
-                    if (! $written || ! chmod($target, 0600)) {
-                        throw MediaException::staging('Cannot stage '.$resource['context'].'.', 'transfer');
-                    }
-
-                    $staged[$target] = true;
-                }
-
-                $runner = $workspace->runner;
-                $phase = Progress::PROBING;
-                $onProgress(new Progress($phase));
-                $runner->pairVersion(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), $workspace->path);
-
-                foreach ($this->inputs as $media) {
-                    $workspace->requireProtocols(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $media->protocolWhitelist());
-                }
-
-                $this->validateResources($workspace, $runner, $resources);
-                $metadata = array_map(fn ($media): Metadata => $workspace->probe($media), $this->inputs);
-                $expected = array_map(fn ($output): array => $this->selectedStreams($output, $workspace, $metadata), $outputs);
-                foreach ($outputs as $index => $output) {
-                    foreach (['video' => 'videoStreams', 'audio' => 'audioStreams'] as $type => $key) {
-                        $tracks = $output->outputConfiguration()[$key];
-                        if ($tracks !== [] && ! in_array(null, $expected[$index], true)
-                            && max(array_keys($tracks)) >= count(array_filter($expected[$index], fn ($selected): bool => $selected === $type))) {
-                            throw MediaException::probing(ucfirst($type).' track settings require existing output '.$type.' tracks.', 'mapping');
-                        }
-                    }
-                }
-
-                $this->validateStreamSelections($expected);
-
-                if ($this->twoPass && array_any($this->twoPassOutputIndexes($outputs), fn ($index): bool => ! in_array('video', $expected[$index], true) && ! in_array(null, $expected[$index], true))) {
-                    throw new MediaException('Every two-pass output must select video.', $phase, 'mapping');
-                }
-
-                $outputPaths = $this->outputPaths($outputs, $workspace);
-
-                foreach ($outputPaths as $index => $outputPath) {
-                    $redactions[$outputPath] = '[output:'.$index.']';
-                }
-
-                $this->prepareOverlays($metadata);
-                $duration = $this->prepareEncoding($metadata);
-                $durations = array_map(function ($output) use ($duration) {
-                    $clip = $output->clipSettings();
-
-                    return $duration === null ? null : ($clip === null ? $duration : max(0, min($clip['duration'], $duration - $clip['start'])));
-                }, $outputs);
-                $phase = Progress::ENCODING;
-                $command = $this->command($outputs, $paths, $outputPaths);
-                $summaries = [];
-                $analyze = function (array $command, string $failure) use ($runner, $workspace, $redactions, $onProgress, &$summaries, &$phase): ProcessResult {
-                    $phase = Progress::ANALYSIS;
-                    $onProgress(new Progress($phase));
-                    $process = $runner->run($command, $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
-
-                    if ($process->exitCode !== 0) {
-                        throw MediaException::analysis($failure, 'exit', $process->diagnostics);
-                    }
-
-                    $summaries[] = $process->summary();
-
-                    return $process;
-                };
-                $command = $this->prepareCommand($workspace, $command, $outputPaths, $analyze);
-                $phase = Progress::ENCODING;
-                $totalPasses = $this->twoPass ? 2 : 1;
-
-                for ($pass = 1; $pass <= $totalPasses; $pass++) {
-                    $onProgress(new Progress($phase, pass: $pass, totalPasses: $totalPasses));
-                    $passCommand = $command;
-
-                    if ($totalPasses === 2 && $pass === 1) {
-                        $passCommand = $this->firstPassCommand($command, $outputPaths, $workspace, $redactions);
-                    }
-
-                    $process = $runner->run(
-                        $passCommand, $workspace->path, $redactions,
-                        phase: $phase, progress: new ProgressParser($duration === null ? null : max($durations), $phase, $pass, $totalPasses, $onProgress),
-                    );
-
-                    if ($process->exitCode !== 0) {
-                        $category = str_contains($process->diagnostics, 'Streamcopy requested for output stream fed from a complex filtergraph')
-                            || str_contains($process->diagnostics, 'Simple and complex filtering cannot be used together')
-                            ? 'configuration' : 'exit';
-
-                        throw new MediaException('FFmpeg failed (exit '.$process->exitCode.').', $phase, $category, $process->diagnostics);
-                    }
-
-                    $summaries[] = $process->summary();
-
-                    if ($totalPasses === 2 && $pass === 1) {
-                        foreach ($this->twoPassOutputIndexes($outputs) as $index) {
-                            $logs = glob($workspace->path.'/pass-'.$index.'-*.log') ?: [];
-
-                            if (! array_any($logs, fn (string $log): bool => is_file($log) && filesize($log) > 0)) {
-                                throw new MediaException('The first encoding pass did not produce statistics for output '.$index.'.', $phase, 'artifact');
-                            }
-                        }
-                    }
-                }
-
-                $phase = Progress::VALIDATION;
-                $onProgress(new Progress($phase));
-                $artifacts = $this->artifacts($outputs, $outputPaths);
-                $sizes = [];
-
-                foreach ($artifacts as $artifact) {
-                    $runner->check(Progress::VALIDATION);
-                    $outputPath = $artifact['path'];
-                    $index = $artifact['output'];
-                    $role = $artifact['role'] ?? $this->outputRole;
-                    $size = $this->validateArtifact($outputPath, $role);
-                    $settings = $outputs[$index]->outputConfiguration();
-                    $configuredTracks = $settings['videoStreams'] !== [] || $settings['audioStreams'] !== [];
-
-                    if (($artifact['probe'] ?? false)
-                        || (in_array($role, ['media', 'image'], true) && ($configuredTracks || count($outputs) > 1 || count($this->inputs) > 1 || $this->filterGraph() !== null))) {
-                        try {
-                            $actual = $this->media->probeArtifact($artifact['probePath'] ?? $outputPath, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
-                        } catch (MediaException $exception) {
-                            if ($exception->category === 'timeout') {
-                                throw $exception;
-                            }
-
-                            throw new MediaException('Cannot validate the encoded media.', $phase, 'artifact', $exception->diagnostics);
-                        }
-
-                        if (count($actual) !== count($expected[$index]) || array_any(array_keys($actual), fn (int $i): bool => $expected[$index][$i] !== null && $actual[$i] !== $expected[$index][$i])) {
-                            throw new MediaException('Encoded streams do not match the explicit output maps.', $phase, 'mapping');
-                        }
-
-                        foreach (['video' => 'videoStreams', 'audio' => 'audioStreams'] as $type => $key) {
-                            if ($settings[$key] !== [] && max(array_keys($settings[$key])) >= count(array_filter($actual, fn ($selected): bool => $selected === $type))) {
-                                throw new MediaException(ucfirst($type).' track settings require existing encoded output '.$type.' tracks.', $phase, 'mapping');
-                            }
-                        }
-                    }
-
-                    $sizes[] = $size;
-                }
-
-                if ($contents) {
-                    $bytes = @file_get_contents($artifacts[0]['path']);
-
-                    if ($bytes === false) {
-                        throw new MediaException('Cannot read the generated image.', $phase, 'artifact');
-                    }
-
-                    return $bytes;
-                }
-
-                $phase = Progress::PUBLICATION;
-                $onProgress(new Progress($phase));
-                $files = [];
-
-                foreach ($artifacts as $index => $artifact) {
-                    $runner->check(Progress::PUBLICATION);
-                    $output = $artifact['target'] ?? $outputs[$artifact['output']];
-                    $destination = $artifact['destination'];
-                    $stream = null;
-
-                    try {
-                        $disk = $output->filesystem();
-                        $disk = is_string($disk) ? Storage::disk($disk) : $disk;
-                        $stream = fopen($artifact['path'], 'rb');
-
-                        if ($stream === false || ! $disk->put($destination['path'], $stream, $output->storageOptions())) {
-                            throw new \RuntimeException('Publication failed.');
-                        }
-
-                        $published[] = $destination;
-
-                        if ($disk->size($destination['path']) !== $sizes[$index]) {
-                            throw new \RuntimeException('Published size mismatch.');
-                        }
-                    } catch (Throwable) {
-                        throw new MediaException('Cannot publish the media output.', $phase, 'transfer', published: $published, destination: $destination);
-                    } finally {
-                        if (is_resource($stream)) {
-                            fclose($stream);
-                        }
-                    }
-
-                    $files[] = new GeneratedFile($disk, $destination['disk'], $destination['path'], $sizes[$index], role: $artifact['role'] ?? $this->outputRole);
-                }
-
-                $runner->check(Progress::PUBLICATION);
-
-                return new ExportResult($files, $summaries);
-            }, $this->runner);
-        } catch (Throwable $throwable) {
-            if ($throwable instanceof MediaException && $throwable->category === 'timeout' && $published !== []) {
-                $throwable = new MediaException($throwable->getMessage(), $throwable->phase, $throwable->category,
-                    $throwable->diagnostics, published: $published);
-            }
-
-            $event = $throwable instanceof ExportCancelled ? Events\ExportCancelled::class : Events\ExportFailed::class;
 
             try {
-                if (config('laravel-ffmpeg.enable_events', true)) {
-                    Event::dispatch(new $event($operationId, $throwable instanceof MediaException ? $throwable->phase : $phase, $destinations, $published));
-                }
-            } catch (Throwable) {
-                // Preserve the primary process or Storage failure.
+                $written = $resource['type'] === 'text'
+                    ? @file_put_contents($target, $source) === strlen($source)
+                    : @copy($workspace->stage($source, resource: true), $target);
+            } catch (MediaException $exception) {
+                throw MediaException::staging('Cannot stage '.$resource['context'].'.', $exception->category);
             }
 
-            throw $throwable;
-        } finally {
-            $this->running = false;
-            $this->runner = null;
+            if (! $written || ! chmod($target, 0600)) {
+                throw MediaException::staging('Cannot stage '.$resource['context'].'.', 'transfer');
+            }
+
+            $staged[$target] = true;
+        }
+    }
+
+    /**
+     * Check the binaries, input protocols, and resources, then probe every input.
+     *
+     * @return array<int, Metadata>
+     */
+    protected function probeInputs(Workspace $workspace, array $resources): array
+    {
+        $runner = $workspace->runner;
+        $runner->pairVersion(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), $workspace->path);
+
+        foreach ($this->inputs as $media) {
+            $workspace->requireProtocols(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $media->protocolWhitelist());
         }
 
-        if (config('laravel-ffmpeg.enable_events', true)) {
-            Event::dispatch(new Events\ExportCompleted($operationId, $result instanceof ExportResult ? $result->files()->map->toArray()->all() : []));
+        $this->validateResources($workspace, $runner, $resources);
+
+        return array_map(fn ($media): Metadata => $workspace->probe($media), $this->inputs);
+    }
+
+    /**
+     * Resolve the stream types each output selects and validate them before encoding.
+     */
+    protected function expectedStreams(Workspace $workspace, array $outputs, array $metadata): array
+    {
+        $expected = array_map(fn ($output): array => $this->selectedStreams($output, $workspace, $metadata), $outputs);
+        $this->ensureTrackSettingsExist($outputs, $expected);
+        $this->validateStreamSelections($expected);
+
+        if ($this->twoPass && array_any($this->twoPassOutputIndexes($outputs), fn ($index): bool => ! in_array('video', $expected[$index], true) && ! in_array(null, $expected[$index], true))) {
+            throw new MediaException('Every two-pass output must select video.', $this->phase, 'mapping');
         }
 
-        return $result;
+        return $expected;
+    }
+
+    /**
+     * Ensure every per-track setting targets a track the output selects.
+     */
+    protected function ensureTrackSettingsExist(array $outputs, array $expected): void
+    {
+        foreach ($outputs as $index => $output) {
+            foreach (['video' => 'videoStreams', 'audio' => 'audioStreams'] as $type => $key) {
+                $tracks = $output->outputConfiguration()[$key];
+                if ($tracks !== [] && ! in_array(null, $expected[$index], true)
+                    && max(array_keys($tracks)) >= count(array_filter($expected[$index], fn ($selected): bool => $selected === $type))) {
+                    throw MediaException::probing(ucfirst($type).' track settings require existing output '.$type.' tracks.', 'mapping');
+                }
+            }
+        }
+    }
+
+    /**
+     * Determine the longest expected output duration for encoding progress.
+     */
+    protected function progressDuration(array $outputs, ?float $duration): ?float
+    {
+        $durations = array_map(function ($output) use ($duration) {
+            $clip = $output->clipSettings();
+
+            return $duration === null ? null : ($clip === null ? $duration : max(0, min($clip['duration'], $duration - $clip['start'])));
+        }, $outputs);
+
+        return $duration === null ? null : max($durations);
+    }
+
+    /**
+     * Run one analysis pass, recording its summary ahead of the encoding passes.
+     */
+    protected function runAnalysis(Workspace $workspace, array $command, string $failure, array $redactions, Closure $onProgress): ProcessResult
+    {
+        $this->phase = Progress::ANALYSIS;
+        $onProgress(new Progress($this->phase));
+        $process = $workspace->runner->run($command, $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
+
+        if ($process->exitCode !== 0) {
+            throw MediaException::analysis($failure, 'exit', $process->diagnostics);
+        }
+
+        $this->summaries[] = $process->summary();
+
+        return $process;
+    }
+
+    /**
+     * Run each encoding pass, recording its summary.
+     */
+    protected function runEncodingPasses(Workspace $workspace, array $command, array $outputs, array $outputPaths, array $redactions, ?float $duration, Closure $onProgress): void
+    {
+        $totalPasses = $this->twoPass ? 2 : 1;
+
+        for ($pass = 1; $pass <= $totalPasses; $pass++) {
+            $onProgress(new Progress($this->phase, pass: $pass, totalPasses: $totalPasses));
+            $passCommand = $command;
+
+            if ($totalPasses === 2 && $pass === 1) {
+                $passCommand = $this->firstPassCommand($command, $outputPaths, $workspace, $redactions);
+            }
+
+            $process = $workspace->runner->run(
+                $passCommand, $workspace->path, $redactions,
+                phase: $this->phase, progress: new ProgressParser($duration, $this->phase, $pass, $totalPasses, $onProgress),
+            );
+
+            if ($process->exitCode !== 0) {
+                $category = str_contains($process->diagnostics, 'Streamcopy requested for output stream fed from a complex filtergraph')
+                    || str_contains($process->diagnostics, 'Simple and complex filtering cannot be used together')
+                    ? 'configuration' : 'exit';
+
+                throw new MediaException('FFmpeg failed (exit '.$process->exitCode.').', $this->phase, $category, $process->diagnostics);
+            }
+
+            $this->summaries[] = $process->summary();
+
+            if ($totalPasses === 2 && $pass === 1) {
+                $this->ensurePassStatisticsExist($workspace, $outputs);
+            }
+        }
+    }
+
+    /**
+     * Ensure the first encoding pass wrote statistics for every two-pass output.
+     */
+    protected function ensurePassStatisticsExist(Workspace $workspace, array $outputs): void
+    {
+        foreach ($this->twoPassOutputIndexes($outputs) as $index) {
+            $logs = glob($workspace->path.'/pass-'.$index.'-*.log') ?: [];
+
+            if (! array_any($logs, fn (string $log): bool => is_file($log) && filesize($log) > 0)) {
+                throw new MediaException('The first encoding pass did not produce statistics for output '.$index.'.', $this->phase, 'artifact');
+            }
+        }
+    }
+
+    /**
+     * Validate every artifact, probing its streams when the output needs it.
+     *
+     * @return list<int> The size in bytes of each artifact.
+     */
+    protected function validateArtifacts(Workspace $workspace, array $artifacts, array $outputs, array $expected): array
+    {
+        $sizes = [];
+
+        foreach ($artifacts as $artifact) {
+            $workspace->runner->check(Progress::VALIDATION);
+            $outputPath = $artifact['path'];
+            $index = $artifact['output'];
+            $role = $artifact['role'] ?? $this->outputRole;
+            $size = $this->validateArtifact($outputPath, $role);
+            $settings = $outputs[$index]->outputConfiguration();
+            $configuredTracks = $settings['videoStreams'] !== [] || $settings['audioStreams'] !== [];
+
+            if (($artifact['probe'] ?? false)
+                || (in_array($role, ['media', 'image'], true) && ($configuredTracks || count($outputs) > 1 || count($this->inputs) > 1 || $this->filterGraph() !== null))) {
+                $this->ensureArtifactStreamsMatch($workspace, $artifact['probePath'] ?? $outputPath, $expected[$index], $settings);
+            }
+
+            $sizes[] = $size;
+        }
+
+        return $sizes;
+    }
+
+    /**
+     * Ensure the encoded streams match the output's maps and per-track settings.
+     */
+    protected function ensureArtifactStreamsMatch(Workspace $workspace, string $path, array $expected, array $settings): void
+    {
+        try {
+            $actual = $this->media->probeArtifact($path, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
+        } catch (MediaException $mediaException) {
+            if ($mediaException->category === 'timeout') {
+                throw $mediaException;
+            }
+
+            throw new MediaException('Cannot validate the encoded media.', $this->phase, 'artifact', $mediaException->diagnostics);
+        }
+
+        if (count($actual) !== count($expected) || array_any(array_keys($actual), fn (int $i): bool => $expected[$i] !== null && $actual[$i] !== $expected[$i])) {
+            throw new MediaException('Encoded streams do not match the explicit output maps.', $this->phase, 'mapping');
+        }
+
+        foreach (['video' => 'videoStreams', 'audio' => 'audioStreams'] as $type => $key) {
+            if ($settings[$key] !== [] && max(array_keys($settings[$key])) >= count(array_filter($actual, fn ($selected): bool => $selected === $type))) {
+                throw new MediaException(ucfirst($type).' track settings require existing encoded output '.$type.' tracks.', $this->phase, 'mapping');
+            }
+        }
+    }
+
+    /**
+     * Read the bytes of the validated generated file.
+     */
+    protected function readGeneratedFile(string $path): string
+    {
+        $bytes = @file_get_contents($path);
+
+        if ($bytes === false) {
+            throw new MediaException('Cannot read the generated image.', $this->phase, 'artifact');
+        }
+
+        return $bytes;
+    }
+
+    /**
+     * Publish every artifact to its destination, tracking each published destination.
+     *
+     * @return list<GeneratedFile>
+     */
+    protected function publishArtifacts(ProcessRunner $runner, array $artifacts, array $outputs, array $sizes): array
+    {
+        $files = [];
+
+        foreach ($artifacts as $index => $artifact) {
+            $runner->check(Progress::PUBLICATION);
+            $output = $artifact['target'] ?? $outputs[$artifact['output']];
+            $destination = $artifact['destination'];
+            $stream = null;
+
+            try {
+                $disk = $output->filesystem();
+                $disk = is_string($disk) ? Storage::disk($disk) : $disk;
+                $stream = fopen($artifact['path'], 'rb');
+
+                if ($stream === false || ! $disk->put($destination['path'], $stream, $output->storageOptions())) {
+                    throw new \RuntimeException('Publication failed.');
+                }
+
+                $this->published[] = $destination;
+
+                if ($disk->size($destination['path']) !== $sizes[$index]) {
+                    throw new \RuntimeException('Published size mismatch.');
+                }
+            } catch (Throwable) {
+                throw new MediaException('Cannot publish the media output.', $this->phase, 'transfer', published: $this->published, destination: $destination);
+            } finally {
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+            }
+
+            $files[] = new GeneratedFile($disk, $destination['disk'], $destination['path'], $sizes[$index], role: $artifact['role'] ?? $this->outputRole);
+        }
+
+        return $files;
+    }
+
+    /**
+     * Dispatch the failed or cancelled event and return the exception to rethrow.
+     */
+    protected function reportFailure(Throwable $throwable, string $operationId, array $destinations): Throwable
+    {
+        if ($throwable instanceof MediaException && $throwable->category === 'timeout' && $this->published !== []) {
+            $throwable = new MediaException($throwable->getMessage(), $throwable->phase, $throwable->category,
+                $throwable->diagnostics, published: $this->published);
+        }
+
+        $event = $throwable instanceof ExportCancelled ? Events\ExportCancelled::class : Events\ExportFailed::class;
+
+        try {
+            if (config('laravel-ffmpeg.enable_events', true)) {
+                Event::dispatch(new $event($operationId, $throwable instanceof MediaException ? $throwable->phase : $this->phase, $destinations, $this->published));
+            }
+        } catch (Throwable) {
+            // Preserve the primary process or Storage failure.
+        }
+
+        return $throwable;
     }
 
     /**

@@ -18,23 +18,52 @@ class HlsPlaybackController
         $file = $presentation->file($request->route('hlsResource'));
         $headers = ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff'];
         if (in_array($file['role'], ['hls-master', 'hls-playlist'], true)) {
-            try {
-                $content = $presentation->render($file, function ($id) use ($request) {
-                    $parameters = array_replace($request->query(), $request->route()->parameters());
-                    unset($parameters['_hlsPlayback'], $parameters['signature'], $parameters['expires']);
-                    $parameters['hlsResource'] = $id;
-
-                    return URL::temporarySignedRoute($request->route()->getName(),
-                        CarbonImmutable::createFromTimestamp((int) $request->query('expires')), $parameters);
-                });
-
-                return response($content, 200, [...$headers, 'Content-Type' => 'application/vnd.apple.mpegurl']);
-            } catch (MediaException) {
-                abort(404);
-            }
+            return $this->playlistResponse($request, $presentation, $file, $headers);
         }
 
-        $stream = null;
+        [$stream, $size] = $this->openFile($file);
+
+        if ($file['role'] === 'hls-key') {
+            return $this->keyResponse($request, $stream, $headers);
+        }
+
+        return $this->fileResponse($request, $file, $stream, $size, $headers);
+    }
+
+    /**
+     * Render the playlist with signed URLs for each of its resources.
+     */
+    protected function playlistResponse(Request $request, HlsPresentation $presentation, array $file, array $headers): Response
+    {
+        try {
+            $content = $presentation->render($file, fn ($id): string => $this->resourceUrl($request, $id));
+
+            return response($content, 200, [...$headers, 'Content-Type' => 'application/vnd.apple.mpegurl']);
+        } catch (MediaException) {
+            abort(404);
+        }
+    }
+
+    /**
+     * Sign a URL for the given resource that expires with the current request's URL.
+     */
+    protected function resourceUrl(Request $request, string $id): string
+    {
+        $parameters = array_replace($request->query(), $request->route()->parameters());
+        unset($parameters['_hlsPlayback'], $parameters['signature'], $parameters['expires']);
+        $parameters['hlsResource'] = $id;
+
+        return URL::temporarySignedRoute($request->route()->getName(),
+            CarbonImmutable::createFromTimestamp((int) $request->query('expires')), $parameters);
+    }
+
+    /**
+     * Open a read stream for the given file and determine its size.
+     *
+     * @return array{resource, int}
+     */
+    protected function openFile(array $file): array
+    {
         try {
             $disk = Storage::disk($file['disk']);
             $size = $disk->size($file['path']);
@@ -42,22 +71,42 @@ class HlsPlaybackController
             if (! is_resource($stream)) {
                 abort(404);
             }
+        } catch (Throwable) {
+            abort(404);
+        }
 
-            if ($file['role'] === 'hls-key') {
-                $key = stream_get_contents($stream, 17);
-                abort_unless(is_string($key) && strlen($key) === 16, 404);
+        return [$stream, $size];
+    }
 
-                return response($request->isMethod('HEAD') ? '' : $key, 200, [...$headers,
-                    'Content-Type' => 'application/octet-stream', 'Content-Length' => '16']);
-            }
+    /**
+     * Respond with the 16-byte encryption key from the given stream.
+     *
+     * @param  resource  $stream
+     */
+    protected function keyResponse(Request $request, $stream, array $headers): Response
+    {
+        try {
+            $key = stream_get_contents($stream, 17);
+            abort_unless(is_string($key) && strlen($key) === 16, 404);
+
+            return response($request->isMethod('HEAD') ? '' : $key, 200, [...$headers,
+                'Content-Type' => 'application/octet-stream', 'Content-Length' => '16']);
         } catch (Throwable) {
             abort(404);
         } finally {
-            if (is_resource($stream) && ($file['role'] === 'hls-key')) {
+            if (is_resource($stream)) {
                 fclose($stream);
             }
         }
+    }
 
+    /**
+     * Respond with the requested byte range of a media segment or other file.
+     *
+     * @param  resource  $stream
+     */
+    protected function fileResponse(Request $request, array $file, $stream, int $size, array $headers): Response
+    {
         $start = 0;
         $end = $size - 1;
         $status = 200;
@@ -67,20 +116,14 @@ class HlsPlaybackController
             default => 'application/octet-stream',
         };
         if (($range = $request->header('Range')) !== null) {
-            if (! preg_match('/\Abytes=(\d*)-(\d*)\z/', $range, $match) || ($match[1] === '' && $match[2] === '')) {
+            $bounds = $this->byteRange($range, $size);
+            if ($bounds === null) {
                 fclose($stream);
 
                 return response('', 416, [...$headers, 'Content-Range' => 'bytes */'.$size]);
             }
 
-            $start = $match[1] === '' ? max(0, $size - (int) $match[2]) : (int) $match[1];
-            $end = $match[1] === '' || $match[2] === '' ? $size - 1 : min($size - 1, (int) $match[2]);
-            if ($start > $end || $start >= $size) {
-                fclose($stream);
-
-                return response('', 416, [...$headers, 'Content-Range' => 'bytes */'.$size]);
-            }
-
+            [$start, $end] = $bounds;
             $status = 206;
             $headers['Content-Range'] = 'bytes '.$start.'-'.$end.'/'.$size;
         }
@@ -92,35 +135,63 @@ class HlsPlaybackController
             return response('', $status, $headers);
         }
 
-        return response()->stream(function () use ($stream, $start, $end): void {
-            try {
-                // Some remote Storage streams are not seekable. Discard bounded
-                // chunks rather than loading the prefix or whole segment.
-                if ($start > 0 && @fseek($stream, $start) !== 0) {
-                    $remaining = $start;
-                    while ($remaining > 0 && ! feof($stream)) {
-                        $bytes = fread($stream, min(1048576, $remaining));
-                        if ($bytes === false || $bytes === '') {
-                            break;
-                        }
+        return response()->stream(fn () => $this->sendRange($stream, $start, $end), $status, $headers);
+    }
 
-                        $remaining -= strlen($bytes);
-                    }
-                }
+    /**
+     * Parse a single byte range, or return null when it cannot be satisfied.
+     *
+     * @return array{int, int}|null
+     */
+    protected function byteRange(string $range, int $size): ?array
+    {
+        if (! preg_match('/\Abytes=(\d*)-(\d*)\z/', $range, $match) || ($match[1] === '' && $match[2] === '')) {
+            return null;
+        }
 
-                $remaining = $end - $start + 1;
+        $start = $match[1] === '' ? max(0, $size - (int) $match[2]) : (int) $match[1];
+        $end = $match[1] === '' || $match[2] === '' ? $size - 1 : min($size - 1, (int) $match[2]);
+        if ($start > $end || $start >= $size) {
+            return null;
+        }
+
+        return [$start, $end];
+    }
+
+    /**
+     * Send the given byte range of the stream and close it.
+     *
+     * @param  resource  $stream
+     */
+    protected function sendRange($stream, int $start, int $end): void
+    {
+        try {
+            // Some remote Storage streams are not seekable. Discard bounded
+            // chunks rather than loading the prefix or whole segment.
+            if ($start > 0 && @fseek($stream, $start) !== 0) {
+                $remaining = $start;
                 while ($remaining > 0 && ! feof($stream)) {
                     $bytes = fread($stream, min(1048576, $remaining));
                     if ($bytes === false || $bytes === '') {
                         break;
                     }
 
-                    echo $bytes;
                     $remaining -= strlen($bytes);
                 }
-            } finally {
-                fclose($stream);
             }
-        }, $status, $headers);
+
+            $remaining = $end - $start + 1;
+            while ($remaining > 0 && ! feof($stream)) {
+                $bytes = fread($stream, min(1048576, $remaining));
+                if ($bytes === false || $bytes === '') {
+                    break;
+                }
+
+                echo $bytes;
+                $remaining -= strlen($bytes);
+            }
+        } finally {
+            fclose($stream);
+        }
     }
 }
