@@ -86,6 +86,21 @@ class NativeWaveformPeaksTest extends TestCase
     }
 
     #[Test]
+    public function separate_channels_keep_non_default_layouts_without_remixing(): void
+    {
+        // Quad and a custom layout differ from FFmpeg's default four-channel layout (4.0).
+        foreach (['quad', 'FL+FR+LFE+BC'] as $index => $layout) {
+            $name = 'layout-'.$index.'.wav';
+            $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-f', 'lavfi', '-i',
+                'aevalsrc=0.1|0.2|0.3|0.4:c='.$layout.':s=8000:d=0.1', '-c:a', 'pcm_s16le', Storage::disk('peaks-fixtures')->path($name)]);
+            $this->assertTrue($result->successful(), $result->errorOutput());
+            $peaks = $this->pending(new Media('peaks-fixtures', $name))->buckets(1)->get();
+            $this->assertSame([[[3277, 3277]], [[6554, 6554]], [[9830, 9830]], [[13107, 13107]]], $peaks->channels, $layout);
+        }
+        $this->clean();
+    }
+
+    #[Test]
     public function mono_is_an_equal_weight_mix_not_a_merge_of_channel_extrema(): void
     {
         $media = $this->wav('stereo.wav', [[1000, -1000, 10000, -10000, 2000], [-1000, 1000, -2000, 2000, -2000]]);

@@ -22,6 +22,8 @@ class PendingWaveformPeaks extends PendingExport
 
     private int $inputChannels = 0;
 
+    private ?string $inputLayout = null;
+
     private ?WaveformPeaks $peaks = null;
 
     // Limits aggregate cells, not decoded input length. PCM is spooled to the
@@ -84,6 +86,12 @@ class PendingWaveformPeaks extends PendingExport
         if ($this->rate < 1 || $this->inputChannels < 1 || $this->inputChannels > 64) {
             throw new MediaException('The selected audio track requires a sample rate and 1 to 64 channels.', 'probing', 'mapping');
         }
+        // FFprobe reports custom orders as "4 channels (FL+FR+LFE+BC)".
+        $layout = (string) ($stream->get('channel_layout') ?? '');
+        if (preg_match('/\A[0-9]+ channels \(([A-Za-z0-9+]+)\)\z/', $layout, $match)) {
+            $layout = $match[1];
+        }
+        $this->inputLayout = $layout !== 'unknown' && preg_match('/\A[A-Za-z0-9.+()]+\z/', $layout) ? $layout : null;
 
         return parent::prepareEncoding($metadata);
     }
@@ -102,8 +110,9 @@ class PendingWaveformPeaks extends PendingExport
         while (($index = array_search('-map', $command, true)) !== false) {
             array_splice($command, $index, 2);
         }
-        // Preserve the decoded track rate and channel count even if caller
+        // Preserve the decoded track rate and channel layout even if caller
         // preprocessing changes format. JSON timing describes these PCM frames.
+        // -ac alone would remix any layout that is not FFmpeg's default for its count.
         $channels = $this->mixMono ? 1 : ($this->inputChannels ?: 1);
         if ($this->mixMono && $this->inputChannels > 0) {
             $terms = array_map(fn ($i) => sprintf('%.17g', 1 / $this->inputChannels).'*c'.$i, range(0, $this->inputChannels - 1));
@@ -116,7 +125,9 @@ class PendingWaveformPeaks extends PendingExport
             }
         }
         array_splice($command, -1, 0, ['-map', '0:a:'.$this->track, '-vn', '-sn', '-dn', '-c:a', 'pcm_s16le',
-            '-ar', (string) ($this->rate ?: 48000), '-ac', (string) $channels, '-f', 's16le']);
+            '-ar', (string) ($this->rate ?: 48000),
+            ...($this->mixMono || $this->inputLayout === null ? ['-ac', (string) $channels] : ['-ch_layout', $this->inputLayout]),
+            '-f', 's16le']);
 
         return $command;
     }
