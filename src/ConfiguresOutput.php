@@ -737,11 +737,11 @@ trait ConfiguresOutput
         $this->assertOutputMutable();
 
         if (! is_finite($duration) || $duration <= 0) {
-            throw new InvalidArgumentException("The fade duration [{$duration}] must be finite and positive.");
+            throw new InvalidArgumentException('The fade duration must be finite and positive.');
         }
 
         if (! is_finite($start) || $start < 0) {
-            throw new InvalidArgumentException("The fade start [{$start}] must be finite and not negative.");
+            throw new InvalidArgumentException('The fade start must be finite and not negative.');
         }
 
         if (! $video && ! $audio) {
@@ -925,7 +925,7 @@ trait ConfiguresOutput
         $end = $end === null ? null : CommandCompiler::seconds($end);
 
         if (! is_finite($start) || $start < 0) {
-            throw new InvalidArgumentException("The clip start [{$start}] must be finite and not negative.");
+            throw new InvalidArgumentException('The clip start must be finite and not negative.');
         }
 
         if (($duration === null) === ($end === null)) {
@@ -933,11 +933,11 @@ trait ConfiguresOutput
         }
 
         if ($duration !== null && (! is_finite($duration) || $duration <= 0)) {
-            throw new InvalidArgumentException("The clip duration [{$duration}] must be finite and positive.");
+            throw new InvalidArgumentException('The clip duration must be finite and positive.');
         }
 
         if ($end !== null && (! is_finite($end) || $end <= $start)) {
-            throw new InvalidArgumentException("The clip end [{$end}] must be finite and after the start.");
+            throw new InvalidArgumentException('The clip end must be finite and after the start.');
         }
 
         if (! in_array($seek, ['accurate', 'keyframe'], true)) {

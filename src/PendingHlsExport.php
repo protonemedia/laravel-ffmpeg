@@ -118,7 +118,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     ) {
         if (! is_finite($segmentDuration) || $segmentDuration < 0.001 || $segmentDuration > 86400) {
             throw new InvalidArgumentException(
-                "The HLS segment duration [{$segmentDuration}] must be between 0.001 and 86400 seconds."
+                'The HLS segment duration must be between 0.001 and 86400 seconds.'
             );
         }
 

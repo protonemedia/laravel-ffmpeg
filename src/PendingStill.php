@@ -42,7 +42,7 @@ class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
         int $frameRate,
     ) {
         if (! is_finite($duration) || $duration <= 0) {
-            throw new InvalidArgumentException("The still duration [{$duration}] must be finite and positive.");
+            throw new InvalidArgumentException('The still duration must be finite and positive.');
         }
 
         if ($frameRate < 1 || $frameRate > 240) {

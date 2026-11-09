@@ -141,7 +141,7 @@ class PendingLiveHls
     ) {
         if (! is_finite($segmentDuration) || $segmentDuration < 0.1 || $segmentDuration > 3600) {
             throw new InvalidArgumentException(
-                "The live HLS segment duration [{$segmentDuration}] must be between 0.1 and 3600 seconds."
+                'The live HLS segment duration must be between 0.1 and 3600 seconds.'
             );
         }
 
@@ -202,7 +202,7 @@ class PendingLiveHls
     {
         $this->mutable();
         if (! is_finite($seconds) || $seconds <= 0) {
-            throw new InvalidArgumentException("The live timeout [{$seconds}] must be positive and finite.");
+            throw new InvalidArgumentException('The live timeout must be positive and finite.');
         }
 
         $this->deadline = $seconds;
@@ -226,7 +226,7 @@ class PendingLiveHls
 
         if (! is_finite($delay) || $delay < 0 || $delay > 3600) {
             throw new InvalidArgumentException(
-                "The live reconnect delay [{$delay}] must be between 0 and 3600 seconds."
+                'The live reconnect delay must be between 0 and 3600 seconds.'
             );
         }
 

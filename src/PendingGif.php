@@ -55,7 +55,7 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
         }
 
         if (! is_finite((float) $frameRate) || $frameRate <= 0) {
-            throw new InvalidArgumentException("The GIF frame rate [{$frameRate}] must be finite and positive.");
+            throw new InvalidArgumentException('The GIF frame rate must be finite and positive.');
         }
 
         if ($loops !== null && ! $loop) {

@@ -80,7 +80,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         if (! is_finite($every) || $every < 0.001 || $every > intdiv(PHP_INT_MAX, 1000000)
             || abs($every * 1000 - round($every * 1000)) > 0.000001) {
             throw new InvalidArgumentException(
-                "The storyboard interval [{$every}] must be a positive whole number of milliseconds."
+                'The storyboard interval must be a positive whole number of milliseconds.'
             );
         }
 

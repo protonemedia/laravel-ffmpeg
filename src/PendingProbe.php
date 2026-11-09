@@ -226,7 +226,7 @@ class PendingProbe
 
         if (! is_finite($timeout) || $timeout <= 0 || $timeout > 120) {
             throw new InvalidArgumentException(
-                "The probe timeout [{$timeout}] must be greater than 0 and at most 120 seconds."
+                'The probe timeout must be greater than 0 and at most 120 seconds.'
             );
         }
 

@@ -71,7 +71,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         if (! is_finite($segmentDuration) || $segmentDuration < 0.001 || $segmentDuration > 86400) {
             throw new InvalidArgumentException(
-                "The DASH segment duration [{$segmentDuration}] must be between 0.001 and 86400 seconds."
+                'The DASH segment duration must be between 0.001 and 86400 seconds.'
             );
         }
 

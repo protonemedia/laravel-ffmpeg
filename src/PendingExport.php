@@ -208,7 +208,7 @@ class PendingExport implements Exportable
     protected function ensureTimeoutIsPositive(string $kind, ?float $seconds): void
     {
         if ($seconds !== null && (! is_finite($seconds) || $seconds <= 0)) {
-            throw new InvalidArgumentException("The {$kind} timeout [{$seconds}] must be finite and positive.");
+            throw new InvalidArgumentException("The {$kind} timeout must be finite and positive.");
         }
     }
 

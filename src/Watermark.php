@@ -145,7 +145,7 @@ class Watermark
     public function opacity(float $opacity): self
     {
         if (! is_finite($opacity) || $opacity < 0 || $opacity > 1) {
-            throw new InvalidArgumentException("The watermark opacity [{$opacity}] must be between 0 and 1.");
+            throw new InvalidArgumentException('The watermark opacity must be between 0 and 1.');
         }
 
         $this->opacity = $opacity;

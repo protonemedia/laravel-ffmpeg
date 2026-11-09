@@ -57,7 +57,7 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
 
         if ($every !== null && (! is_finite($every) || $every < 0.000001)) {
             throw new InvalidArgumentException(
-                "The frame interval [{$every}] must be finite and at least one microsecond."
+                'The frame interval must be finite and at least one microsecond.'
             );
         }
 

@@ -41,7 +41,7 @@ readonly class RtspCamera implements InputSource
 
         if (! is_finite($timeout) || $timeout <= 0 || $timeout > 300) {
             throw new InvalidArgumentException(
-                "The RTSP timeout [{$timeout}] must be greater than 0 and at most 300 seconds."
+                'The RTSP timeout must be greater than 0 and at most 300 seconds.'
             );
         }
     }

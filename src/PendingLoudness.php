@@ -68,7 +68,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         ] as $target => [$value, $min, $max]) {
             if (! is_finite($value) || $value < $min || $value > $max) {
                 throw new InvalidArgumentException(
-                    "The {$target} target [{$value}] must be between {$min} and {$max}."
+                    "The {$target} target must be between {$min} and {$max}."
                 );
             }
         }
