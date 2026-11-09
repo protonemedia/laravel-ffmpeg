@@ -112,14 +112,13 @@ class PendingGif extends PendingExport
 
     private function analyze(ProcessRunner $runner, array $command, Workspace $workspace, array $redactions, ?callable $onProgress): void
     {
-        $notify = $onProgress === null ? null : static fn (Progress $progress) => $onProgress(new Progress(
-            'analysis', elapsedSeconds: $progress->elapsedSeconds, speed: $progress->speed,
-        ));
-        $notify?->__invoke(new Progress('analysis'));
-        $process = $runner->run($command, $workspace->path, $redactions, phase: 'analysis', progress: new ProgressParser(null), onProgress: $notify);
+        if ($onProgress !== null) {
+            $onProgress(new Progress(Progress::ANALYSIS));
+        }
+        $process = $runner->run($command, $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
 
         if ($process->exitCode !== 0) {
-            throw new MediaException('GIF palette preparation failed.', 'analysis', 'exit', $process->diagnostics);
+            throw new MediaException('GIF palette preparation failed.', Progress::ANALYSIS, 'exit', $process->diagnostics);
         }
 
         $this->analysisProcesses[] = $process->summary();

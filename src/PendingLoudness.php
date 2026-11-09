@@ -172,13 +172,12 @@ class PendingLoudness extends PendingExport
 
     private function runAnalysis(ProcessRunner $runner, array $command, Workspace $workspace, array $redactions, ?callable $onProgress): void
     {
-        $notify = $onProgress === null ? null : static fn (Progress $progress) => $onProgress(new Progress(
-            'analysis', elapsedSeconds: $progress->elapsedSeconds, speed: $progress->speed,
-        ));
-        $notify?->__invoke(new Progress('analysis'));
-        $result = $runner->run($command, $workspace->path, $redactions, phase: 'analysis', progress: new ProgressParser(null), onProgress: $notify);
+        if ($onProgress !== null) {
+            $onProgress(new Progress(Progress::ANALYSIS));
+        }
+        $result = $runner->run($command, $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
         if ($result->exitCode !== 0) {
-            throw new MediaException('Loudness analysis failed.', 'analysis', 'exit', $result->diagnostics);
+            throw new MediaException('Loudness analysis failed.', Progress::ANALYSIS, 'exit', $result->diagnostics);
         }
         $this->analysisProcesses[] = $result->summary();
     }

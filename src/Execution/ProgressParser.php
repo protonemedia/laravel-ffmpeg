@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
+use Closure;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 
@@ -14,7 +15,19 @@ class ProgressParser
 
     private ?Progress $pending = null;
 
-    public function __construct(private readonly ?float $duration, private readonly int $pass = 1, private readonly int $totalPasses = 1) {}
+    private int $notifiedAt = 0;
+
+    private readonly ?Closure $notify;
+
+    public function __construct(
+        private readonly ?float $duration,
+        private readonly string $phase = Progress::ENCODING,
+        private readonly int $pass = 1,
+        private readonly int $totalPasses = 1,
+        ?callable $notify = null,
+    ) {
+        $this->notify = $notify === null ? null : $notify(...);
+    }
 
     public function push(string $chunk): void
     {
@@ -26,7 +39,7 @@ class ProgressParser
             }
 
             if (strlen($this->buffer) + strlen($part) > 8192) {
-                throw new MediaException('Invalid FFmpeg progress record.', 'encoding', 'progress');
+                throw new MediaException('Invalid FFmpeg progress record.', $this->phase, 'progress');
             }
 
             $this->buffer .= $part;
@@ -47,7 +60,7 @@ class ProgressParser
             $known = $this->duration !== null && $this->duration > 0 && $seconds !== null;
 
             $this->pending = new Progress(
-                Progress::ENCODING, $seconds,
+                $this->phase, $seconds,
                 $known ? min(100, 100 * $seconds / $this->duration) : null,
                 $speed,
                 $known && $speed !== null ? max(0, ($this->duration - $seconds) / $speed) : null,
@@ -57,11 +70,18 @@ class ProgressParser
         }
     }
 
-    public function take(): ?Progress
+    /** Deliver the latest snapshot at most every 100 ms, and always once the process has ended. */
+    public function notify(bool $final): void
     {
+        $now = hrtime(true);
+
+        if ($this->notify === null || $this->pending === null || (! $final && $now - $this->notifiedAt < 100000000)) {
+            return;
+        }
+
         $progress = $this->pending;
         $this->pending = null;
-
-        return $progress;
+        ($this->notify)($progress);
+        $this->notifiedAt = $now;
     }
 }

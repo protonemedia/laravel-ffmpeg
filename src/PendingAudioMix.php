@@ -185,25 +185,24 @@ class PendingAudioMix extends PendingExport
             $options = array_slice($command, $protocols[1], $inputs[1] + 2 - $protocols[1]);
             array_splice($options, array_search('-stream_loop', $options, true), 2);
             $prepared = 'audio-mix-loop.wav';
-            $notify = $onProgress === null ? null : static fn (Progress $progress) => $onProgress(new Progress(
-                'analysis', elapsedSeconds: $progress->elapsedSeconds, speed: $progress->speed,
-            ));
-            $notify?->__invoke(new Progress('analysis'));
+            if ($onProgress !== null) {
+                $onProgress(new Progress(Progress::ANALYSIS));
+            }
             $process = $runner->run([
                 $command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1',
                 ...$options, '-map', '0:a:0', '-af', 'atrim=duration='.$this->clipTimestamp($workspace->probe($this->added)->duration()).',asetpts=PTS-STARTPTS',
                 '-c:a', 'pcm_f64le', '-f', 'wav', '-rf64', 'auto', $prepared,
-            ], $workspace->path, $redactions, phase: 'analysis', progress: new ProgressParser(null), onProgress: $notify);
+            ], $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
             if ($process->exitCode !== 0) {
-                throw new MediaException('Audio loop preparation failed.', 'analysis', 'exit', $process->diagnostics);
+                throw new MediaException('Audio loop preparation failed.', Progress::ANALYSIS, 'exit', $process->diagnostics);
             }
             $this->analysisProcesses[] = $process->summary();
             $probe = $runner->run([
                 config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error',
                 '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', $prepared,
-            ], $workspace->path, outputLimit: 65536, phase: 'analysis');
+            ], $workspace->path, outputLimit: 65536, phase: Progress::ANALYSIS);
             if ($probe->exitCode !== 0 || ! is_numeric(trim($probe->output)) || (float) $probe->output <= 0) {
-                throw new MediaException('Looped audio must decode to nonempty samples.', 'analysis', 'artifact', $probe->diagnostics);
+                throw new MediaException('Looped audio must decode to nonempty samples.', Progress::ANALYSIS, 'artifact', $probe->diagnostics);
             }
             array_splice($command, $protocols[1], $inputs[1] + 2 - $protocols[1], [
                 '-protocol_whitelist', 'file', '-stream_loop', '-1', '-i', $prepared,

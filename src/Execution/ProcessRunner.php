@@ -49,7 +49,6 @@ class ProcessRunner
         int $outputLimit = 16777216,
         string $phase = 'probing',
         ?ProgressParser $progress = null,
-        ?callable $onProgress = null,
         bool $redactOutput = false,
         ?float $timeout = null,
         ?callable $tick = null,
@@ -57,7 +56,6 @@ class ProcessRunner
         $output = $diagnostics = '';
         $overflow = false;
         $started = $lastOutput = hrtime(true);
-        $lastNotification = 0;
         $process = null;
         $failure = null;
         $applicationFailure = null;
@@ -129,18 +127,12 @@ class ProcessRunner
                     throw new MediaException('The media process timed out.', $phase, 'timeout');
                 }
 
-                if ($progress !== null && $onProgress !== null && (! $running || $now - $lastNotification >= 100000000)) {
-                    if ($snapshot = $progress->take()) {
-                        try {
-                            $onProgress($snapshot);
-                        } catch (Throwable $exception) {
-                            $applicationFailure = $exception;
+                try {
+                    $progress?->notify(! $running);
+                } catch (Throwable $exception) {
+                    $applicationFailure = $exception;
 
-                            throw $exception;
-                        }
-
-                        $lastNotification = $now;
-                    }
+                    throw $exception;
                 }
 
                 if ($running) {

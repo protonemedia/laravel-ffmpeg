@@ -8,6 +8,8 @@ readonly class Progress
 
     public const string PROBING = 'probing';
 
+    public const string ANALYSIS = 'analysis';
+
     public const string ENCODING = 'encoding';
 
     public const string VALIDATION = 'validation';

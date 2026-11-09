@@ -614,7 +614,7 @@ class PendingExport
 
                     $process = $runner->run(
                         $passCommand, $workspace->path, $redactions,
-                        phase: $phase, progress: new ProgressParser($duration === null ? null : max($durations), $pass, $totalPasses), onProgress: $onProgress,
+                        phase: $phase, progress: new ProgressParser($duration === null ? null : max($durations), $phase, $pass, $totalPasses, $onProgress),
                     );
 
                     if ($process->exitCode !== 0) {

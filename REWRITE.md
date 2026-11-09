@@ -506,7 +506,7 @@ $media->export()
     });
 ```
 
-`Progress` defines typed string constants `STAGING`, `PROBING`, `ENCODING`, `VALIDATION`, and `PUBLICATION`. Their values remain `staging`, `probing`, `encoding`, `validation`, and `publication`. The `phase` property remains a string, so existing callback comparisons continue to work. `isEncoding()` is true for the encoding-start notification and encoder updates, including updates without a known percentage. Other progress phases return false. `Events\ExportProgress` wraps these values for global listeners; completion remains a separate `Events\ExportCompleted` event after publication and cleanup, not a progress phase.
+`Progress` defines typed string constants `STAGING`, `PROBING`, `ANALYSIS`, `ENCODING`, `VALIDATION`, and `PUBLICATION`. Their values remain `staging`, `probing`, `analysis`, `encoding`, `validation`, and `publication`. GIF, loudness normalization, and looped audio mixes report their preparation passes as `analysis`, with an elapsed time and speed but no percentage. The `phase` property remains a string, so existing callback comparisons continue to work. `isEncoding()` is true for the encoding-start notification and encoder updates, including updates without a known percentage. Other progress phases return false. `Events\ExportProgress` wraps these values for global listeners; completion remains a separate `Events\ExportCompleted` event after publication and cleanup, not a progress phase.
 
 ### Generated-file lookup
 

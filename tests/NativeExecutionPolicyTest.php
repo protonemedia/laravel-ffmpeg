@@ -151,4 +151,21 @@ class NativeExecutionPolicyTest extends TestCase
         config(['laravel-ffmpeg.timeout' => null]);
         $this->assertSame(0, $export->timeout(null)->queued()->job('out.mp4')->timeout);
     }
+
+    #[Test]
+    public function invalid_progress_during_analysis_reports_the_analysis_phase(): void
+    {
+        $this->binaries('if (in_array("gif-prepared.nut", $argv, true)) { echo str_repeat("x", 9000); exit; }');
+        $phases = [];
+        try {
+            FFMpeg::disk('memory')->open('source.mp4')->gif()
+                ->onProgress(function ($progress) use (&$phases) { $phases[] = $progress->phase; })->save('out.gif');
+            $this->fail('An oversized progress record must fail the analysis pass.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['analysis', 'progress'], [$exception->phase, $exception->category]);
+            $this->assertContains('analysis', $phases);
+            $this->assertNotContains('encoding', $phases);
+            Event::assertDispatched(\ProtoneMedia\LaravelFFMpeg\Events\ExportFailed::class, fn ($event) => $event->phase === 'analysis');
+        }
+    }
 }

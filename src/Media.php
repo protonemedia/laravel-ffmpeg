@@ -243,7 +243,7 @@ readonly class Media
                 $binary, '-hide_banner', '-nostdin', '-nostats', '-xerror', '-loglevel', 'info',
                 '-protocol_whitelist', $this->protocolWhitelist(), ...$this->transportOptions(), ...$this->inputOptions(), '-i', $path,
                 '-map', '0:a:'.$audio, '-vn', '-sn', '-dn', '-af', $audioFilter, '-f', 'null', '-',
-            ], $workspace->path, [$path => '[input]'] + $this->redactions(), phase: 'analysis', redactOutput: true);
+            ], $workspace->path, [$path => '[input]'] + $this->redactions(), phase: Progress::ANALYSIS, redactOutput: true);
         });
     }
 
