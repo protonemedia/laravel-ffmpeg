@@ -7,6 +7,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ProtoneMedia\LaravelFFMpeg\PendingAudioMix;
 use ProtoneMedia\LaravelFFMpeg\PendingConcat;
+use ProtoneMedia\LaravelFFMpeg\PendingDashExport;
 use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\PendingFrame;
 use ProtoneMedia\LaravelFFMpeg\PendingGif;
@@ -50,6 +51,8 @@ class BuilderShapeTest extends TestCase
             'normalizeLoudness' => [PendingLoudness::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
                 'globalOptions', 'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo', 'audioStream', 'video', 'videoOptions',
                 'videoStream', 'videoFilter', 'resize', 'drawText', 'resource', 'textResource', 'subtitleResource']],
+            'dash' => [PendingDashExport::class, ['output', 'twoPass', 'coverArt', 'watermark', 'filterComplex', 'delayAudio',
+                'withoutAudio', 'withoutVideo', 'videoStream', 'audioStream']],
             'still' => [PendingStill::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
                 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'mapAudio', 'withoutAudio', 'withoutVideo']],
         ];

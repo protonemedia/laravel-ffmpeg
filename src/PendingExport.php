@@ -26,6 +26,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\SplitsTwoPass;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\WritesManifest;
 use Throwable;
 
 class PendingExport implements Exportable
@@ -342,6 +343,9 @@ class PendingExport implements Exportable
 
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
+        if ($this->operation instanceof WritesManifest) {
+            $outputs = array_slice($outputs, 0, -1);
+        }
         $graph = $this->filterGraph();
         $watermarking = $this->watermarks !== [];
         $covering = $this->coverInput !== null;
@@ -953,7 +957,8 @@ class PendingExport implements Exportable
             ? max(array_map(fn ($item) => $item->duration(), $metadata)) : null;
     }
 
-    protected function validateArtifact(string $path, string $role = 'media'): int
+    /** @internal Packaging operations validate the files they inventory. */
+    public function validateArtifact(string $path, string $role = 'media'): int
     {
         clearstatcache(true, $path);
 
@@ -1027,7 +1032,8 @@ class PendingExport implements Exportable
         }
     }
 
-    protected function validateDestinations(array $outputs): void
+    /** @internal */
+    public function validateDestinations(array $outputs): void
     {
         $seen = [];
 

@@ -411,7 +411,7 @@ $media->export()
 
 `videoOptions()` and `audioOptions()` accept curated option/value pairs. Supported controls include numeric x264/x265 parameters, selected VPx/AV1 and NVENC settings, and color signaling. Unknown parameters and file-producing encoder options are rejected. Availability depends on your FFmpeg build and hardware. The acceptance build has no AV1 encoder or GPU device.
 
-`color()` sets frame and codec metadata without converting pixel values. Use a color-conversion filter when changing the image's color space. The GIF, loudness, audio-mix, and concat builders have no per-track methods, and DASH rejects conflicting per-track overrides.
+`color()` sets frame and codec metadata without converting pixel values. Use a color-conversion filter when changing the image's color space. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
 
 `outputOptions()` also supports selected single-file muxer settings and argument-free bitstream filters, for example `['-bsf:v', 'h264_mp4toannexb']` during a copy remux. These options cannot choose sidecar paths. `globalOptions()` accepts named hardware initialization and derivation, for example `['-init_hw_device', 'vaapi=base:/dev/dri/renderD128', '-init_hw_device', 'qsv=derived@base', '-filter_hw_device', 'derived']`. Derived devices must reference an earlier declaration. No automatic hardware fallback is provided.
 

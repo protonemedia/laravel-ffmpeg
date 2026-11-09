@@ -4,15 +4,34 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use DOMDocument;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\PackagesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\WritesManifest;
 
 /** Finite, clear H.264/AAC fragmented-MP4 packaging; no live or DRM claims. */
-class PendingDashExport extends PendingExport
+final class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, ValidatesSelections, WritesManifest
 {
-    protected string $outputRole = 'dash-manifest';
+    use Concerns\Clips;
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\Metadata;
+    use Concerns\OutputOptions;
+    use Concerns\ResourceFilters;
+    use Concerns\Resources;
+    use Concerns\RunsExport;
+    use Concerns\VideoFilters;
+    use Conditionable;
+
+    private readonly PendingExport $export;
 
     private array $sets = [];
 
@@ -24,16 +43,94 @@ class PendingDashExport extends PendingExport
 
     public function __construct(Media $media, string|Filesystem $disk, private readonly float $segmentDuration)
     {
-        parent::__construct($media, $disk);
         if (! is_finite($segmentDuration) || $segmentDuration < 0.001 || $segmentDuration > 86400) {
             throw new InvalidArgumentException('DASH segment duration must be between 0.001 and 86400 seconds.');
         }
-        $this->video('libx264')->audio('aac');
+        $this->export = new PendingExport($media, $disk, $this, 'dash-manifest');
+        $this->export->video('libx264')->audio('aac');
+    }
+
+    /** Returns the stable FFmpeg input index for representation maps. */
+    public function addInput(Media $media): int
+    {
+        return $this->export->addInput($media);
+    }
+
+    public function video(?string $codec = null, mixed $bitrate = null, ?float $crf = null, ?string $preset = null): self
+    {
+        $this->export->video($codec, $bitrate, $crf, $preset);
+
+        return $this;
+    }
+
+    public function videoOptions(array $tokens): self
+    {
+        $this->export->videoOptions($tokens);
+
+        return $this;
+    }
+
+    /** Signal color characteristics; this does not transform pixel values. */
+    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): self
+    {
+        $this->export->color($primaries, $transfer, $space, $range);
+
+        return $this;
+    }
+
+    public function audio(?string $codec = null, mixed $bitrate = null): self
+    {
+        $this->export->audio($codec, $bitrate);
+
+        return $this;
+    }
+
+    public function audioOptions(array $tokens): self
+    {
+        $this->export->audioOptions($tokens);
+
+        return $this;
+    }
+
+    public function audioFilter(string $expression): self
+    {
+        $this->export->audioFilter($expression);
+
+        return $this;
+    }
+
+    /** Linear amplitude multiplier; zero mutes the audio. */
+    public function volume(float $multiplier): self
+    {
+        $this->export->volume($multiplier);
+
+        return $this;
+    }
+
+    public function map(string $specifier): self
+    {
+        $this->export->map($specifier);
+
+        return $this;
+    }
+
+    public function mapVideo(Stream|int|null $stream = null, ?int $input = null, ?int $track = null, bool $optional = false): self
+    {
+        $this->export->mapVideo($stream, $input, $track, $optional);
+
+        return $this;
+    }
+
+    public function mapAudio(Stream|int|null $stream = null, ?int $input = null, ?int $track = null, ?string $language = null, bool $optional = false): self
+    {
+        $this->export->mapAudio($stream, $input, $track, $language, $optional);
+
+        return $this;
     }
 
     public function adaptationSet(string $name, string $type): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         $this->identifier($name);
         if (isset($this->sets[$name]) || ! in_array($type, ['video', 'audio'], true)) {
             throw new InvalidArgumentException('DASH adaptation sets require unique names and video or audio type.');
@@ -45,7 +142,7 @@ class PendingDashExport extends PendingExport
 
     public function representation(string $name, string $adaptationSet, callable $configure): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         $this->identifier($name);
         if (isset($this->representations[$name]) || ! isset($this->sets[$adaptationSet]) || count($this->representations) >= 64) {
             throw new InvalidArgumentException('DASH requires unique representation names, a declared adaptation set, and at most 64 representations.');
@@ -61,15 +158,10 @@ class PendingDashExport extends PendingExport
     /** Opt in to clear HLS VOD playlists referencing the very same init/media files. */
     public function sharedHls(bool $enabled = true): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         $this->sharedHls = $enabled;
 
         return $this;
-    }
-
-    public function output(string $path, callable $configure): self
-    {
-        throw new InvalidArgumentException('Configure DASH outputs with adaptationSet() and representation().');
     }
 
     private function identifier(string $name): void
@@ -89,7 +181,8 @@ class PendingDashExport extends PendingExport
         throw new InvalidArgumentException('Undefined DASH representation.');
     }
 
-    protected function configuredOutputs(?string $path = null): array
+    /** @internal */
+    public function outputs(array $default, ?string $path): array
     {
         if ($this->representations === [] || array_any($this->sets, fn ($set) => $set['representations'] === [])) {
             throw new InvalidArgumentException('DASH requires populated adaptation sets.');
@@ -97,7 +190,7 @@ class PendingDashExport extends PendingExport
         if (! class_exists(DOMDocument::class)) {
             throw new InvalidArgumentException('DASH requires the PHP DOM XML extension.');
         }
-        $manifest = new ExportOutput($path ?? 'manifest.mpd', $this->filesystem());
+        $manifest = new ExportOutput($path ?? 'manifest.mpd', $this->export->filesystem());
         $destination = $manifest->destination()['path'];
         if (strtolower(pathinfo($destination, PATHINFO_EXTENSION)) !== 'mpd') {
             throw new InvalidArgumentException('A DASH manifest destination must have an mpd extension.');
@@ -106,7 +199,7 @@ class PendingDashExport extends PendingExport
         $outputs = [];
         $clip = null;
         foreach ($this->representations as $name => $representation) {
-            $settings = $representation->inherit($this->outputConfiguration());
+            $settings = $representation->inherit($this->export->outputConfiguration());
             $type = $this->type($name);
             if ($settings['maps'] === [] || $settings['omitAudio'] || $settings['omitVideo'] || $settings['videoStreams'] !== []
                 || ($settings['audioStreams'] ?? []) !== []
@@ -127,20 +220,19 @@ class PendingDashExport extends PendingExport
             $settings[$type === 'video' ? 'audio' : 'video'] = [];
             $settings[$type === 'video' ? 'audioStreams' : 'videoStreams'] = [];
             $settings[$type === 'video' ? 'audioFilters' : 'videoFilters'] = [];
-            $outputs[] = (new ExportOutput($prefix.$name.'/index.mpd', $this->filesystem()))->configure($settings);
+            $outputs[] = (new ExportOutput($prefix.$name.'/index.mpd', $this->export->filesystem()))->configure($settings);
         }
-        $outputs[] = $manifest->configure($this->outputConfiguration());
+        $outputs[] = $manifest->configure($this->export->outputConfiguration());
 
         return $outputs;
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    /** @internal */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
-        $encoding = array_slice($outputs, 0, -1);
-        $command = parent::command($encoding, $paths, $outputPaths);
         $result = [];
-        $targets = $outputPaths ?? array_map(fn ($i) => '[output:'.$i.']', array_keys($encoding));
-        foreach ($command as $token) {
+        $targets = $outputPaths ?? array_map(fn ($i) => '[output:'.$i.']', array_keys($outputs));
+        foreach ($default as $token) {
             $index = array_search($token, $targets, true);
             if ($index !== false) {
                 if ($this->type(array_keys($this->representations)[$index]) === 'video') {
@@ -157,7 +249,8 @@ class PendingDashExport extends PendingExport
         return $result;
     }
 
-    protected function validateStreamSelections(array $expected): void
+    /** @internal */
+    public function selections(array $expected): void
     {
         foreach (array_keys($this->representations) as $index => $name) {
             if ($expected[$index] !== [$this->type($name)]) {
@@ -166,17 +259,18 @@ class PendingDashExport extends PendingExport
         }
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** @internal */
+    public function duration(array $metadata, ?float $default): ?float
     {
-        $duration = parent::prepareEncoding($metadata);
-        if ($duration === null || $duration <= 0 || ceil($duration / $this->segmentDuration) * count($this->representations) > DashManifest::LIMIT) {
+        if ($default === null || $default <= 0 || ceil($default / $this->segmentDuration) * count($this->representations) > DashManifest::LIMIT) {
             throw new InvalidArgumentException('DASH requires a known finite duration within its 100000 segment inventory limit.');
         }
 
-        return $duration;
+        return $default;
     }
 
-    protected function outputPaths(array $outputs, Workspace $workspace): array
+    /** @internal */
+    public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
         $paths = [];
         foreach (array_keys($this->representations) as $name) {
@@ -193,22 +287,23 @@ class PendingDashExport extends PendingExport
 
     public function save(?string $path = null): DashExportResult
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         if ($path === null) {
             throw new InvalidArgumentException('DASH requires a manifest destination.');
         }
-        $this->configuredOutputs($path);
-        $this->inspect();
+        $this->outputs([], $path);
+        $this->export->inspect();
         foreach ($this->representations as $representation) {
             $representation->freeze();
         }
         $this->representationFiles = [];
-        $result = parent::save($path);
+        $result = $this->export->save($path);
 
         return new DashExportResult($result->files()->all(), $result->processes()->all(), $this->representationFiles, $this->sets);
     }
 
-    protected function artifacts(array $outputs, array $paths): array
+    /** @internal */
+    public function artifacts(array $default, array $outputs, array $paths): array
     {
         $document = new DOMDocument('1.0', 'UTF-8');
         $root = $document->createElementNS(DashManifest::NS, 'MPD');
@@ -262,7 +357,7 @@ class PendingDashExport extends PendingExport
             foreach ($parsed['files'] as $fileIndex => $filename) {
                 $local = dirname($paths[$index]).'/'.$filename;
                 if ($fileIndex > 0) {
-                    $size = $this->validateArtifact($local, 'dash-segment');
+                    $size = $this->export->validateArtifact($local, 'dash-segment');
                     $bytes += $size;
                     $peak = max($peak, (int) ceil(8 * $size / $parsed['durations'][$fileIndex - 1]));
                 }
@@ -322,7 +417,7 @@ class PendingDashExport extends PendingExport
         $this->write($paths[$master], $document->saveXML());
         $artifacts = [...$segments, ...$playlists, ['path' => $paths[$master], 'output' => $master,
             'role' => 'dash-manifest', 'destination' => $outputs[$master]->destination()]];
-        $this->validateDestinations(array_map(fn ($artifact) => new ExportOutput($artifact['destination']['path'], $this->filesystem()), $artifacts));
+        $this->export->validateDestinations(array_map(fn ($artifact) => new ExportOutput($artifact['destination']['path'], $this->export->filesystem()), $artifacts));
 
         return $artifacts;
     }

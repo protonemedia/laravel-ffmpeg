@@ -296,16 +296,14 @@ class NativeDashTest extends TestCase
     #[Test]
     public function corrupt_encoder_inventory_fails_validation_before_any_publication(): void
     {
-        $export = new class($this->source(), 'local', 0.7) extends PendingDashExport
-        {
-            protected function artifacts(array $outputs, array $paths): array
-            {
-                file_put_contents(dirname($paths[0]).'/unowned.m4s', 'not-owned');
-
-                return parent::artifacts($outputs, $paths);
-            }
-        };
-        $export->adaptationSet('video', 'video')->representation('stream', 'video', fn ($r) => $r->map('0:v:0'));
+        $source = $this->source();
+        // The encoder succeeds, then a stray file appears beside its segments.
+        $wrapper = dirname($this->root).'/ffmpeg-plants-unowned-segment';
+        file_put_contents($wrapper, "#!/bin/sh\n".escapeshellarg(config('laravel-ffmpeg.ffmpeg.binaries')).' "$@" || exit $?'."\n"
+            .'for last; do :; done'."\n".'case "$last" in */index.mpd) printf not-owned > "$(dirname "$last")/unowned.m4s";; esac'."\n");
+        chmod($wrapper, 0700);
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $wrapper]);
+        $export = (new PendingDashExport($source, 'local', 0.7))->adaptationSet('video', 'video')->representation('stream', 'video', fn ($r) => $r->map('0:v:0'));
         try {
             $export->save('corrupt/manifest.mpd');
             $this->fail('Expected inventory rejection.');
@@ -320,7 +318,7 @@ class NativeDashTest extends TestCase
 
     public static function invalidConfigurations(): array
     {
-        return [['muxer'], ['copy'], ['clip'], ['path'], ['missing-set'], ['two-pass'], ['video-gop'], ['video-params'], ['audio-track']];
+        return [['muxer'], ['copy'], ['clip'], ['path'], ['missing-set'], ['video-gop'], ['video-params']];
     }
 
     #[Test, DataProvider('invalidConfigurations')]
@@ -335,10 +333,8 @@ class NativeDashTest extends TestCase
             'clip' => $export->representation('different', 'picture', fn ($r) => $r->map('0:v:0')->clip(1, 1))->inspect(),
             'path' => $export->representation('../escape', 'picture', fn () => null),
             'missing-set' => $export->representation('unknown', 'undefined', fn () => null),
-            'two-pass' => $export->twoPass(),
             'video-gop' => $export->videoOptions(['-g', '120'])->inspect(),
             'video-params' => $export->videoOptions(['-x264-params', 'open-gop=1'])->inspect(),
-            'audio-track' => $export->audioStream(0, fn ($track) => $track->bitrate('64k'))->inspect(),
         };
     }
 
