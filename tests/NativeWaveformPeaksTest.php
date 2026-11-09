@@ -196,6 +196,19 @@ class NativeWaveformPeaksTest extends TestCase
     }
 
     #[Test]
+    public function per_track_audio_settings_are_rejected_before_io(): void
+    {
+        foreach ([fn ($a) => $a->filter('volume=2'), fn ($a) => $a->sampleRate(16000)] as $configure) {
+            try {
+                (new Media('peaks-fixtures', 'missing.wav'))->waveformPeaks()->mono()->audioStream(0, $configure)->inspect();
+                $this->fail('Per-track audio settings accepted.');
+            } catch (\InvalidArgumentException $exception) {
+                $this->assertStringContainsString('audioFilter()', $exception->getMessage());
+            }
+        }
+    }
+
+    #[Test]
     public function aggregate_memory_is_bounded_and_filter_failures_clean_up(): void
     {
         $media = $this->wav('long.wav', [array_fill(0, 100001, 1)]);

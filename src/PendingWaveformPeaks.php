@@ -101,6 +101,10 @@ class PendingWaveformPeaks extends PendingExport
         if (count($outputs) !== 1 || count($paths) !== 1 || $outputs[0]->hasMaps() || $outputs[0]->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Peaks require one input/output, audioTrack() selection, and accurate clips.');
         }
+        // A per-track filter would be lost by mono() and a per-track rate overridden by the PCM -ar below.
+        if ($outputs[0]->outputConfiguration()['audioStreams'] !== []) {
+            throw new InvalidArgumentException('Peaks accept audioFilter(), not per-track audio settings.');
+        }
         $command = parent::command($outputs, $paths, $outputPaths);
         if (in_array('-filter_complex', $command, true)) {
             throw new InvalidArgumentException('Peaks accept audioFilter(), not a complex graph.');
