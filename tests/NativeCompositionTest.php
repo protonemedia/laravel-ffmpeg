@@ -256,15 +256,16 @@ class NativeCompositionTest extends TestCase
     public function literal_text_is_written_unchanged_and_missing_filter_support_is_typed(): void
     {
         $text = "100%: café ' [x],; \\ %{not_a_function}\n";
-        $this->fakePipeline(function (PendingProcess $process) use ($text) {
-            $this->assertSame($text, file_get_contents($process->path.'/resource-0.txt'));
-            $this->assertSame(0600, fileperms($process->path.'/resource-0.txt') & 0777);
+        $resource = null;
+        $this->fakePipeline(function (PendingProcess $process) use (&$resource) {
+            $resource = [file_get_contents($process->path.'/resource-0.txt'), fileperms($process->path.'/resource-0.txt') & 0777];
             file_put_contents($process->path.'/output-0.mkv', 'encoded');
 
             return Process::result();
         });
         FFMpeg::disk('memory')->open('source.mkv')->export()->textResource('title', $text)
             ->videoFilter('drawtext=textfile={{title}}:expansion=none')->toDisk('memory')->save('text.mkv');
+        $this->assertSame([$text, 0600], $resource);
         $this->assertSame('encoded', Storage::disk('memory')->get('text.mkv'));
 
         Process::fake(function (PendingProcess $process) {
@@ -381,14 +382,13 @@ class NativeCompositionTest extends TestCase
         Storage::disk('memory')->put('font.ttf', 'font bytes');
         $texts = ["100% {{font}}: café \\ ' [x],; %{not_a_function}", 'different output'];
         $retained = null;
-        $this->fakePipeline(function (PendingProcess $process) use ($texts) {
-            $this->assertCount(1, glob($process->path.'/resource-*.ttf'));
-            $files = glob($process->path.'/resource-*.txt');
-            $this->assertCount(2, $files);
-            $this->assertEqualsCanonicalizing($texts, array_map('file_get_contents', $files));
-            foreach (glob($process->path.'/resource-*') as $resource) {
-                $this->assertSame(0600, fileperms($resource) & 0777);
-            }
+        $resources = null;
+        $this->fakePipeline(function (PendingProcess $process) use (&$resources) {
+            $resources = [
+                'fonts' => count(glob($process->path.'/resource-*.ttf')),
+                'texts' => array_map('file_get_contents', glob($process->path.'/resource-*.txt')),
+                'modes' => array_unique(array_map(fn ($resource) => fileperms($resource) & 0777, glob($process->path.'/resource-*'))),
+            ];
             file_put_contents($process->path.'/output-0.mkv', 'encoded');
             file_put_contents($process->path.'/output-1.mkv', 'encoded');
 
@@ -398,6 +398,9 @@ class NativeCompositionTest extends TestCase
             $retained = $out;
             $out->drawText($texts[0], $font)->mapVideo()->toDisk('memory');
         })->output('two.mkv', fn ($out) => $out->drawText($texts[1], $font)->mapVideo()->toDisk('memory'))->save();
+        $this->assertSame(1, $resources['fonts']);
+        $this->assertEqualsCanonicalizing($texts, $resources['texts']);
+        $this->assertSame([0600], array_values($resources['modes']));
         $this->assertSame('encoded', Storage::disk('memory')->get('one.mkv'));
         $this->assertSame('encoded', Storage::disk('memory')->get('two.mkv'));
 
@@ -628,16 +631,14 @@ class NativeCompositionTest extends TestCase
         foreach (['local', 'memory'] as $disk) {
             Storage::disk($disk)->put($key, $bytes);
             foreach ([false, true] as $preprocess) {
-                $paths = [];
+                $paths = $prepared = [];
                 $logo = FFMpeg::disk($disk)->open($key);
                 if ($preprocess) {
-                    $logo = $logo->prepareImage(function (string $path) use (&$paths, $local) {
+                    $logo = $logo->prepareImage(function (string $path) use (&$paths, &$prepared) {
                         $paths[] = $path;
-                        $this->assertStringStartsWith($this->root.'/workspaces/', $path);
-                        $this->assertSame(0600, fileperms($path) & 0777);
-                        $this->assertNotSame($local->path("logos/blue 'é.png"), $path);
+                        $mode = fileperms($path) & 0777;
                         Image::load($path)->width(24)->save();
-                        $this->assertSame([24, 12], array_slice(getimagesize($path), 0, 2));
+                        $prepared[] = [$mode, array_slice(getimagesize($path), 0, 2)];
                     });
                 }
                 $export = FFMpeg::disk('local')->open('source.mkv')->export();
@@ -646,7 +647,10 @@ class NativeCompositionTest extends TestCase
                     ->video('ffv1')->audio('copy')->withoutMetadata(chapters: true)
                     ->toDisk('memory')->save('watermarked.mkv');
                 $this->assertCount($preprocess ? 1 : 0, $paths);
+                $this->assertSame(array_fill(0, count($paths), [0600, [24, 12]]), $prepared);
                 foreach ($paths as $path) {
+                    $this->assertStringStartsWith($this->root.'/workspaces/', $path);
+                    $this->assertNotSame($local->path($key), $path);
                     $this->assertFileDoesNotExist($path);
                 }
                 $output = FFMpeg::disk('memory')->open('watermarked.mkv');

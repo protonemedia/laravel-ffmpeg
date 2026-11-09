@@ -95,11 +95,11 @@ class NativeDashTest extends TestCase
         $media = $this->source();
         $storage = Storage::disk('memory');
         $storage->put('source.mkv', Storage::disk('local')->get('source.mkv'));
-        $writes = [];
+        $writes = $writeOptions = [];
         $disk = Mockery::mock(Filesystem::class);
-        $disk->shouldReceive('put')->andReturnUsing(function ($path, $stream, $options) use ($storage, &$writes) {
+        $disk->shouldReceive('put')->andReturnUsing(function ($path, $stream, $options) use ($storage, &$writes, &$writeOptions) {
             $writes[] = $path;
-            $this->assertEquals(['visibility' => 'private', 'CacheControl' => 'max-age=60'], $options);
+            $writeOptions[serialize($options)] = $options;
 
             return $storage->put($path, $stream, $options);
         });
@@ -109,6 +109,7 @@ class NativeDashTest extends TestCase
         $this->assertSame('nested/é #?/manifest.mpd', $result->manifest()->path);
         $this->assertSame('nested/é #?/master.m3u8', $result->hlsPlaylist()->path);
         $this->assertSame($result->manifest()->path, end($writes));
+        $this->assertEquals([['visibility' => 'private', 'CacheControl' => 'max-age=60']], array_values($writeOptions));
         $this->assertSame(1, $result->processes()->count());
         $this->assertSame(['dash-init' => 4, 'dash-segment' => 16, 'hls-playlist' => 4, 'hls-master' => 1, 'dash-manifest' => 1],
             $result->files()->countBy('role')->all());

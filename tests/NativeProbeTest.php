@@ -120,12 +120,9 @@ class NativeProbeTest extends TestCase
         $disk = Storage::disk('local');
         $key = 'nested/lecture ; $HOME.mp4';
         $disk->put($key, 'source bytes');
-        $this->fakeProbe(inspect: function (PendingProcess $process) use ($disk, $key) {
-            $this->assertSame([
-                'ffprobe', '-v', 'error', '-print_format', 'json',
-                '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', 'file', $disk->path($key),
-            ], $process->command);
-            $this->assertSame([], glob($process->path.'/*'));
+        $seen = null;
+        $this->fakeProbe(inspect: function (PendingProcess $process) use (&$seen) {
+            $seen = [$process->command, glob($process->path.'/*')];
         });
 
         $media = FFMpeg::disk('local')->open($key);
@@ -133,6 +130,10 @@ class NativeProbeTest extends TestCase
         $this->assertSame([], glob($this->root.'/workspaces/*'));
 
         $metadata = $media->probe();
+        $this->assertSame([[
+            'ffprobe', '-v', 'error', '-print_format', 'json',
+            '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', 'file', $disk->path($key),
+        ], []], $seen);
 
         $this->assertSame(12.375, $metadata->duration());
         $this->assertCount(6, $metadata->streams());
@@ -180,15 +181,15 @@ class NativeProbeTest extends TestCase
     {
         $disk = Storage::disk('memory');
         $disk->put('private/video.mp4', 'private media');
-        $this->fakeProbe(inspect: function (PendingProcess $process) {
+        $staged = [];
+        $this->fakeProbe(inspect: function (PendingProcess $process) use (&$staged) {
             $path = end($process->command);
-            $this->assertSame('private media', file_get_contents($path));
-            $this->assertSame(0700, fileperms(dirname($path)) & 0777);
-            $this->assertSame(0600, fileperms($path) & 0777);
+            $staged[] = [file_get_contents($path), fileperms(dirname($path)) & 0777, fileperms($path) & 0777];
         });
 
         $this->assertSame(12.375, FFMpeg::disk('memory')->open('private/video.mp4')->probe()->duration());
         $this->assertSame(12.375, FFMpeg::disk($disk)->open('private/video.mp4')->probe()->duration());
+        $this->assertSame(array_fill(0, 2, ['private media', 0700, 0600]), $staged);
         $this->assertSame([], glob($this->root.'/workspaces/*'));
         $this->assertSame('private media', $disk->get('private/video.mp4'));
     }
