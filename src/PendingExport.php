@@ -552,12 +552,7 @@ class PendingExport
                 $runner = $workspace->runner;
                 $phase = Progress::PROBING;
                 $onProgress(new Progress($phase));
-                $ffmpeg = $runner->version(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), 'ffmpeg', $workspace->path);
-                $ffprobe = $runner->version(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), 'ffprobe', $workspace->path);
-
-                if ($ffmpeg !== $ffprobe) {
-                    throw new MediaException('FFmpeg and FFprobe must have matching release versions.', 'probing', 'version');
-                }
+                $runner->pairVersion(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), $workspace->path);
 
                 foreach ($this->inputs as $media) {
                     $workspace->requireProtocols(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $media->protocolWhitelist());

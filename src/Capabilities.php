@@ -20,18 +20,8 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         try {
             $ffmpeg = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
             $ffprobe = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
-            $versions = [];
-            foreach (['ffmpeg' => $ffmpeg, 'ffprobe' => $ffprobe] as $tool => $binary) {
-                $output = $this->capture($workspace, $binary, '-version');
-                if (! preg_match('/^'.$tool.' version (?:n)?(9\.0\.\d+)(?:\s|-|$)/', $output, $match)) {
-                    throw new MediaException('Matching FFmpeg and FFprobe 9.0.x binaries are required.', 'probing', 'version');
-                }
-                $versions[$tool] = $match[1];
-            }
-            if ($versions['ffmpeg'] !== $versions['ffprobe']) {
-                throw new MediaException('FFmpeg and FFprobe versions must match.', 'probing', 'version');
-            }
-            $data = ['versions' => $versions];
+            $version = $workspace->runner->pairVersion($ffmpeg, $ffprobe, $workspace->path);
+            $data = ['versions' => ['ffmpeg' => $version, 'ffprobe' => $version]];
             foreach (['encoders', 'muxers', 'filters', 'bsfs', 'hwaccels'] as $kind) {
                 $output = $this->capture($workspace, $ffmpeg, '-'.$kind);
                 $data[match ($kind) {

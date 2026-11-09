@@ -42,6 +42,18 @@ class ProcessRunner
         return $matches[1];
     }
 
+    /** The shared release of a matching FFmpeg and FFprobe 9.0.x pair. */
+    public function pairVersion(string $ffmpeg, string $ffprobe, string $directory): string
+    {
+        $version = $this->version($ffmpeg, 'ffmpeg', $directory);
+
+        if ($this->version($ffprobe, 'ffprobe', $directory) !== $version) {
+            throw new MediaException('FFmpeg and FFprobe must have matching release versions.', 'probing', 'version');
+        }
+
+        return $version;
+    }
+
     public function run(
         array $command,
         string $directory,
