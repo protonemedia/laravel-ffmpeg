@@ -25,7 +25,7 @@ use Throwable;
 /**
  * A media input on a disk, in a local file, or behind another input source.
  */
-readonly class Media
+class Media
 {
     /**
      * The manifest formats whose dependencies cannot be staged as a single file.
@@ -44,18 +44,18 @@ readonly class Media
     /**
      * The disk key, local file, or input source the media reads from.
      */
-    protected string|File|UploadedFile|InputSource $source;
+    protected readonly string|File|UploadedFile|InputSource $source;
 
     /**
      * The validated FFmpeg input options.
      */
-    protected array $options;
+    protected readonly array $options;
 
     /**
      * Create a new media instance.
      */
     public function __construct(
-        protected string|Filesystem $disk,
+        protected readonly string|Filesystem $disk,
         string|File|UploadedFile|InputSource $source,
         array $inputOptions = [],
     ) {

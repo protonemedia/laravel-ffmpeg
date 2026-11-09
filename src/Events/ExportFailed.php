@@ -5,15 +5,15 @@ namespace ProtoneMedia\LaravelFFMpeg\Events;
 /**
  * The event dispatched when an export fails.
  */
-readonly class ExportFailed
+class ExportFailed
 {
     /**
      * Create a new event instance.
      */
     public function __construct(
-        public string $operationId,
-        public string $phase,
-        public array $outputs,
-        public array $published,
+        public readonly string $operationId,
+        public readonly string $phase,
+        public readonly array $outputs,
+        public readonly array $published,
     ) {}
 }

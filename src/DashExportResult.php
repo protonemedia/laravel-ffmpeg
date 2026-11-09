@@ -9,14 +9,14 @@ use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 /**
  * The files and processes of a completed DASH export.
  */
-readonly class DashExportResult implements Result
+class DashExportResult implements Result
 {
     use Concerns\ExportResultFiles;
 
     /**
      * The underlying export result.
      */
-    protected ExportResult $export;
+    protected readonly ExportResult $export;
 
     /**
      * Create a new DASH export result instance.
@@ -24,8 +24,8 @@ readonly class DashExportResult implements Result
     public function __construct(
         array $files,
         array $summaries,
-        protected array $representations = [],
-        protected array $sets = [],
+        protected readonly array $representations = [],
+        protected readonly array $sets = [],
     ) {
         $this->export = new ExportResult($files, $summaries);
     }

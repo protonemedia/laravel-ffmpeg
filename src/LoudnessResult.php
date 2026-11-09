@@ -5,7 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 /**
  * The normalized audio file and the loudness statistics FFmpeg reported for it.
  */
-readonly class LoudnessResult implements Result
+class LoudnessResult implements Result
 {
     use Concerns\ExportResultFiles;
 
@@ -13,11 +13,11 @@ readonly class LoudnessResult implements Result
      * Create a new loudness result instance.
      */
     public function __construct(
-        protected ExportResult $export,
-        public LoudnessStats $measurement,
-        public LoudnessStats $normalization,
-        public string $requestedMode,
-        public int $sampleRate,
+        protected readonly ExportResult $export,
+        public readonly LoudnessStats $measurement,
+        public readonly LoudnessStats $normalization,
+        public readonly string $requestedMode,
+        public readonly int $sampleRate,
     ) {}
 
     /**

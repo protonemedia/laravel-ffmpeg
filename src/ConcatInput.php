@@ -12,12 +12,12 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
  *
  * @internal
  */
-readonly class ConcatInput implements InputSource
+class ConcatInput implements InputSource
 {
     /**
      * Create a new concat input instance.
      */
-    public function __construct(protected array $inputs)
+    public function __construct(protected readonly array $inputs)
     {
         if (count($inputs) < 2) {
             throw new InvalidArgumentException('Concatenation requires at least two inputs.');

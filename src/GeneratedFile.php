@@ -9,18 +9,18 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 /**
  * A file that an export published to a disk.
  */
-readonly class GeneratedFile
+class GeneratedFile
 {
     /**
      * Create a new generated file instance.
      */
     public function __construct(
-        protected Filesystem $filesystem,
-        public ?string $disk,
-        public string $path,
-        public int $size,
-        public string $role = 'media',
-        public bool $owned = true,
+        protected readonly Filesystem $filesystem,
+        public readonly ?string $disk,
+        public readonly string $path,
+        public readonly int $size,
+        public readonly string $role = 'media',
+        public readonly bool $owned = true,
     ) {}
 
     /**

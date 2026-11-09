@@ -5,10 +5,10 @@ namespace ProtoneMedia\LaravelFFMpeg\Events;
 /**
  * The event dispatched when a queued export completes.
  */
-readonly class QueuedExportCompleted
+class QueuedExportCompleted
 {
     /**
      * Create a new event instance.
      */
-    public function __construct(public string $exportId, public array $files, public ?array $playback = null) {}
+    public function __construct(public readonly string $exportId, public readonly array $files, public readonly ?array $playback = null) {}
 }

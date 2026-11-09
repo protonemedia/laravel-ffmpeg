@@ -7,18 +7,18 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 /**
  * The outcome of a finished FFmpeg or FFprobe process.
  */
-readonly class ProcessResult
+class ProcessResult
 {
     /**
      * Create a new process result instance.
      */
     public function __construct(
-        public int $exitCode,
-        public string $output,
-        public string $diagnostics,
-        public float $elapsedSeconds = 0,
-        public array $command = [],
-        public string $phase = 'probing',
+        public readonly int $exitCode,
+        public readonly string $output,
+        public readonly string $diagnostics,
+        public readonly float $elapsedSeconds = 0,
+        public readonly array $command = [],
+        public readonly string $phase = 'probing',
     ) {}
 
     /**

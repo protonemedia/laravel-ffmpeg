@@ -7,10 +7,10 @@ use ProtoneMedia\LaravelFFMpeg\Progress;
 /**
  * The event dispatched when a running export reports progress.
  */
-readonly class ExportProgress
+class ExportProgress
 {
     /**
      * Create a new event instance.
      */
-    public function __construct(public string $operationId, public Progress $progress, public array $outputs) {}
+    public function __construct(public readonly string $operationId, public readonly Progress $progress, public readonly array $outputs) {}
 }

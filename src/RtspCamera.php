@@ -12,15 +12,15 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
  *
  * Camera URLs are trusted application configuration.
  */
-readonly class RtspCamera implements InputSource
+class RtspCamera implements InputSource
 {
     /**
      * Create a new RTSP camera instance.
      */
     public function __construct(
-        protected string $url,
-        protected string $transport = 'tcp',
-        protected float $timeout = 15,
+        protected readonly string $url,
+        protected readonly string $transport = 'tcp',
+        protected readonly float $timeout = 15,
     ) {
         $parts = parse_url($url);
         if ($parts === false || ($parts['scheme'] ?? null) !== 'rtsp' || empty($parts['host'])) {

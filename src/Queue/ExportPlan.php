@@ -22,12 +22,12 @@ use Throwable;
  *
  * @template T of Exportable
  */
-readonly class ExportPlan
+class ExportPlan
 {
     /**
      * The encoded builder state.
      */
-    protected array $state;
+    protected readonly array $state;
 
     /**
      * Create a new export plan instance.

@@ -7,12 +7,12 @@ use Illuminate\Support\Arr;
 /**
  * A media stream as reported by FFprobe.
  */
-readonly class Stream
+class Stream
 {
     /**
      * Create a new stream instance.
      */
-    public function __construct(protected array $data, protected ?string $sourceIdentity = null) {}
+    public function __construct(protected readonly array $data, protected readonly ?string $sourceIdentity = null) {}
 
     /**
      * Get the global index of the stream.

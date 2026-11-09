@@ -8,12 +8,12 @@ use Illuminate\Support\Collection;
 /**
  * The metadata of a media source as reported by FFprobe.
  */
-readonly class Metadata
+class Metadata
 {
     /**
      * Create a new metadata instance.
      */
-    public function __construct(protected array $data, protected ?string $sourceIdentity = null) {}
+    public function __construct(protected readonly array $data, protected readonly ?string $sourceIdentity = null) {}
 
     /**
      * Get a value from the raw probe data using "dot" notation.

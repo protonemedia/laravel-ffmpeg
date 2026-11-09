@@ -14,12 +14,12 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
  *
  * Hardware and device usability is not tested.
  */
-readonly class Capabilities implements Arrayable, JsonSerializable
+class Capabilities implements Arrayable, JsonSerializable
 {
     /**
      * The capability report.
      */
-    protected array $data;
+    protected readonly array $data;
 
     /**
      * Create a new capabilities instance by inspecting the configured binaries.

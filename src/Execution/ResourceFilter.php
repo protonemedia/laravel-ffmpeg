@@ -10,12 +10,12 @@ use ProtoneMedia\LaravelFFMpeg\Media;
  *
  * @internal
  */
-readonly class ResourceFilter
+class ResourceFilter
 {
     /**
      * Create a new resource filter instance.
      */
-    protected function __construct(public string $name, public array $resources, protected string $template) {}
+    protected function __construct(public readonly string $name, public readonly array $resources, protected readonly string $template) {}
 
     /**
      * Create a filter that draws the given text with a font file.

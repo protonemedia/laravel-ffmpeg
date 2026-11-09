@@ -11,12 +11,12 @@ use SensitiveParameter;
  * The URL must be controlled by the application because this class is not an SSRF boundary. HTTP redirects
  * remain subject to the protocol allowlist, and manifest and dependency demuxers are excluded.
  */
-readonly class LiveHlsSource
+class LiveHlsSource
 {
     /**
      * Create a new live HLS source instance.
      */
-    public function __construct(#[SensitiveParameter] protected string $url)
+    public function __construct(#[SensitiveParameter] protected readonly string $url)
     {
         $parts = parse_url($url);
         if ($parts === false

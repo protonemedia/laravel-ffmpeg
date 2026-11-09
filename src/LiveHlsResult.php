@@ -7,18 +7,18 @@ namespace ProtoneMedia\LaravelFFMpeg;
  *
  * The segment paths are the current playlist's references, not the full history.
  */
-readonly class LiveHlsResult
+class LiveHlsResult
 {
     /**
      * Create a new live HLS result instance.
      */
     public function __construct(
-        public string $playlist,
-        public array $segments,
-        public string $status,
-        public int $attempts,
-        public int $publishedSegments,
-        public ?int $firstSequence,
-        public ?int $lastSequence,
+        public readonly string $playlist,
+        public readonly array $segments,
+        public readonly string $status,
+        public readonly int $attempts,
+        public readonly int $publishedSegments,
+        public readonly ?int $firstSequence,
+        public readonly ?int $lastSequence,
     ) {}
 }

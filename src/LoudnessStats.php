@@ -8,22 +8,22 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
  * The validated statistics of FFmpeg's loudnorm filter.
  * Non-finite readings are null, never zero.
  */
-readonly class LoudnessStats
+class LoudnessStats
 {
     /**
      * Create a new loudness statistics instance.
      */
     protected function __construct(
-        public ?float $inputIntegrated,
-        public ?float $inputTruePeak,
-        public ?float $inputRange,
-        public ?float $inputThreshold,
-        public ?float $outputIntegrated,
-        public ?float $outputTruePeak,
-        public ?float $outputRange,
-        public ?float $outputThreshold,
-        public ?float $targetOffset,
-        public string $mode,
+        public readonly ?float $inputIntegrated,
+        public readonly ?float $inputTruePeak,
+        public readonly ?float $inputRange,
+        public readonly ?float $inputThreshold,
+        public readonly ?float $outputIntegrated,
+        public readonly ?float $outputTruePeak,
+        public readonly ?float $outputRange,
+        public readonly ?float $outputThreshold,
+        public readonly ?float $targetOffset,
+        public readonly string $mode,
     ) {}
 
     /**

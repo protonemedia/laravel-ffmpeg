@@ -11,20 +11,20 @@ use JsonSerializable;
  * in the preprocessed or clipped output. The sample rate is the selected input track's rate,
  * which decoding explicitly retains.
  */
-readonly class WaveformPeaks implements JsonSerializable
+class WaveformPeaks implements JsonSerializable
 {
     /**
      * Create a new waveform peaks instance.
      */
     public function __construct(
-        public int $sampleRate,
-        public int $inputChannels,
-        public int $audioTrack,
-        public string $channelMode,
-        public int $frames,
-        public ?int $samplesPerBucket,
-        public array $bucketFrames,
-        public array $channels,
+        public readonly int $sampleRate,
+        public readonly int $inputChannels,
+        public readonly int $audioTrack,
+        public readonly string $channelMode,
+        public readonly int $frames,
+        public readonly ?int $samplesPerBucket,
+        public readonly array $bucketFrames,
+        public readonly array $channels,
     ) {}
 
     /**

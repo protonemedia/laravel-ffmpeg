@@ -14,22 +14,22 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
  *
  * @internal
  */
-readonly class SequenceInput implements InputSource
+class SequenceInput implements InputSource
 {
     /**
      * The media of each image in the sequence.
      */
-    protected array $images;
+    protected readonly array $images;
 
     /**
      * The input frame rate, as a decimal or rational string.
      */
-    protected string $rate;
+    protected readonly string $rate;
 
     /**
      * The lowercase image extension of the sequence.
      */
-    protected string $suffix;
+    protected readonly string $suffix;
 
     /**
      * Create a new image sequence input instance.

@@ -7,12 +7,12 @@ use Illuminate\Support\Collection;
 /**
  * The result of a completed export.
  */
-readonly class ExportResult implements Result
+class ExportResult implements Result
 {
     /**
      * Create a new export result instance.
      */
-    public function __construct(protected array $generatedFiles, protected array $summaries) {}
+    public function __construct(protected readonly array $generatedFiles, protected readonly array $summaries) {}
 
     /**
      * Get the published files.

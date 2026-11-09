@@ -11,12 +11,12 @@ use JsonSerializable;
  * The raw sections returned by a bounded FFprobe query.
  * Counts and timestamps describe the bounded interval, not the whole asset.
  */
-readonly class ProbeResult implements Arrayable, JsonSerializable
+class ProbeResult implements Arrayable, JsonSerializable
 {
     /**
      * Create a new probe result instance.
      */
-    public function __construct(protected array $data, protected array $bounds) {}
+    public function __construct(protected readonly array $data, protected readonly array $bounds) {}
 
     /**
      * Get a value from the raw sections using "dot" notation.

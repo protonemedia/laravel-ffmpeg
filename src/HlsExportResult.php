@@ -8,14 +8,14 @@ use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 /**
  * The files and processes of a completed HLS export.
  */
-readonly class HlsExportResult implements Result
+class HlsExportResult implements Result
 {
     use Concerns\ExportResultFiles;
 
     /**
      * The underlying export result.
      */
-    protected ExportResult $export;
+    protected readonly ExportResult $export;
 
     /**
      * Create a new HLS export result instance.
@@ -23,13 +23,13 @@ readonly class HlsExportResult implements Result
     public function __construct(
         array $files,
         array $summaries,
-        protected array $variants = [],
-        protected array $renditions = [],
-        protected array $keyReferences = [],
-        protected array $playbackKeys = [],
-        protected array $variantGroups = [],
-        protected array $provenance = [],
-        protected ?HlsPresentation $presentation = null,
+        protected readonly array $variants = [],
+        protected readonly array $renditions = [],
+        protected readonly array $keyReferences = [],
+        protected readonly array $playbackKeys = [],
+        protected readonly array $variantGroups = [],
+        protected readonly array $provenance = [],
+        protected readonly ?HlsPresentation $presentation = null,
     ) {
         $this->export = new ExportResult($files, $summaries);
     }

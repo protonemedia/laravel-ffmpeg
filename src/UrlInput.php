@@ -14,7 +14,7 @@ use Throwable;
  *
  * @internal
  */
-readonly class UrlInput implements InputSource
+class UrlInput implements InputSource
 {
     /**
      * The network read timeout in microseconds.
@@ -26,7 +26,7 @@ readonly class UrlInput implements InputSource
     /**
      * Create a new URL input instance.
      */
-    public function __construct(protected string $url, protected array $headers, public bool $download)
+    public function __construct(protected readonly string $url, protected readonly array $headers, public readonly bool $download)
     {
         $parts = parse_url($url);
 

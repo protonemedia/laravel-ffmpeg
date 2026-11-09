@@ -16,14 +16,14 @@ use Throwable;
  *
  * @internal
  */
-readonly class PreparedImageInput implements InputSource
+class PreparedImageInput implements InputSource
 {
     /**
      * Create a new prepared image input instance.
      *
      * @param  list<Transformation>  $edits
      */
-    public function __construct(protected Media $image, protected array $edits)
+    public function __construct(protected readonly Media $image, protected readonly array $edits)
     {
         if ($image->inputOptions() !== []
             || ($image->protocolWhitelist() === 'file' && $image->transportOptions() !== [])) {

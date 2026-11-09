@@ -12,12 +12,12 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
  *
  * @internal
  */
-readonly class StillInput implements InputSource
+class StillInput implements InputSource
 {
     /**
      * Create a new still image input instance.
      */
-    public function __construct(protected Media $image, protected int $frameRate)
+    public function __construct(protected readonly Media $image, protected readonly int $frameRate)
     {
         if ($image->inputOptions() !== [] || $image->transportOptions() !== []) {
             throw new InvalidArgumentException('The still video image must not have input options.');
