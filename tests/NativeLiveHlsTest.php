@@ -195,11 +195,16 @@ class NativeLiveHlsTest extends TestCase
         $this->source(1.2);
         $disk = Storage::disk('local');
         $disk->put('recover.mkv', 'initial source failure');
-        $started = hrtime(true);
+        $calls = 0;
+        $started = null;
         $restored = false;
         $live = (new PendingLiveHls(new Media('local', 'recover.mkv'), $disk, 0.4, 2))->retry(2, 0.3);
-        $live->cancelWhen(function () use ($disk, $started, &$restored): bool {
-            if (! $restored && (hrtime(true) - $started) / 1e9 > 0.15) {
+        $live->cancelWhen(function () use ($disk, &$calls, &$started, &$restored): bool {
+            // The second check runs just before attempt 1, after the version check and staging.
+            if (++$calls === 2) {
+                $started = hrtime(true);
+            }
+            if (! $restored && $started !== null && (hrtime(true) - $started) / 1e9 > 0.15) {
                 $disk->put('recover.mkv', $disk->get('source.mkv'));
                 $restored = true;
             }
@@ -212,12 +217,20 @@ class NativeLiveHlsTest extends TestCase
         $this->assertGreaterThan(0, $result->publishedSegments);
 
         $disk->put('broken.ts', 'source failure');
-        $started = hrtime(true);
+        $began = hrtime(true);
+        $calls = 0;
+        $started = null;
         $result = (new PendingLiveHls(new Media('local', 'broken.ts'), $disk, 0.4, 2))
-            ->retry(2, 10)->cancelWhen(fn () => (hrtime(true) - $started) / 1e9 > 0.2)->run('backoff');
+            ->retry(2, 10)->cancelWhen(function () use (&$calls, &$started): bool {
+                if (++$calls === 2) {
+                    $started = hrtime(true);
+                }
+
+                return $started !== null && (hrtime(true) - $started) / 1e9 > 0.2;
+            })->run('backoff');
         $this->assertSame('cancelled', $result->status);
         $this->assertSame(1, $result->attempts);
-        $this->assertLessThan(2, (hrtime(true) - $started) / 1e9);
+        $this->assertLessThan(2, (hrtime(true) - $began) / 1e9);
         $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
     }
 
