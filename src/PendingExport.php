@@ -600,8 +600,20 @@ class PendingExport
                 }, $outputs);
                 $phase = Progress::ENCODING;
                 $command = $this->command($outputs, $paths, $outputPaths);
-                $command = $this->prepareCommand($workspace, $runner, $command, $outputPaths, $redactions, $onProgress);
                 $summaries = [];
+                $analyze = function (array $command, string $failure) use ($runner, $workspace, $redactions, $onProgress, &$summaries): ProcessResult {
+                    $onProgress(new Progress(Progress::ANALYSIS));
+                    $process = $runner->run($command, $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
+
+                    if ($process->exitCode !== 0) {
+                        throw new MediaException($failure, Progress::ANALYSIS, 'exit', $process->diagnostics);
+                    }
+
+                    $summaries[] = $process->summary();
+
+                    return $process;
+                };
+                $command = $this->prepareCommand($workspace, $command, $outputPaths, $analyze);
                 $totalPasses = $this->twoPass ? 2 : 1;
 
                 for ($pass = 1; $pass <= $totalPasses; $pass++) {
@@ -753,8 +765,13 @@ class PendingExport
         return $result;
     }
 
-    /** @internal Execution-only analyses may replace compiled command tokens. */
-    protected function prepareCommand(Workspace $workspace, ProcessRunner $runner, array $command, array $outputPaths, array $redactions, ?callable $onProgress = null): array
+    /**
+     * @internal Execution-only analyses may replace compiled command tokens.
+     *
+     * @param  Closure(list<string>, string): ProcessResult  $analyze  Runs one analysis pass with progress, records
+     *                                                               its summary before the encoding passes, and throws the given message on failure.
+     */
+    protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         return $command;
     }

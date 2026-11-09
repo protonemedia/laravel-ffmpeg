@@ -2,12 +2,11 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
-use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
-use ProtoneMedia\LaravelFFMpeg\Execution\ProgressParser;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
 /** Mix the first audio tracks, retaining the primary media's presentation length. */
@@ -16,8 +15,6 @@ class PendingAudioMix extends PendingExport
     private bool $loop = false;
 
     private float $offset = 0;
-
-    private array $analysisProcesses = [];
 
     public function __construct(
         private readonly Media $source,
@@ -174,9 +171,8 @@ class PendingAudioMix extends PendingExport
         return $this->outputConfiguration()['audioFilters'] === [] ? $duration : null;
     }
 
-    protected function prepareCommand(Workspace $workspace, ProcessRunner $runner, array $command, array $outputPaths, array $redactions, ?callable $onProgress = null): array
+    protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
-        $this->analysisProcesses = [];
         if ($this->loop) {
             // Loop decoded samples, not compressed packets: encoder delay and
             // end padding would otherwise introduce gaps on each repetition.
@@ -185,19 +181,12 @@ class PendingAudioMix extends PendingExport
             $options = array_slice($command, $protocols[1], $inputs[1] + 2 - $protocols[1]);
             array_splice($options, array_search('-stream_loop', $options, true), 2);
             $prepared = 'audio-mix-loop.wav';
-            if ($onProgress !== null) {
-                $onProgress(new Progress(Progress::ANALYSIS));
-            }
-            $process = $runner->run([
+            $analyze([
                 $command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1',
                 ...$options, '-map', '0:a:0', '-af', 'atrim=duration='.$this->clipTimestamp($workspace->probe($this->added)->duration()).',asetpts=PTS-STARTPTS',
                 '-c:a', 'pcm_f64le', '-f', 'wav', '-rf64', 'auto', $prepared,
-            ], $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
-            if ($process->exitCode !== 0) {
-                throw new MediaException('Audio loop preparation failed.', Progress::ANALYSIS, 'exit', $process->diagnostics);
-            }
-            $this->analysisProcesses[] = $process->summary();
-            $probe = $runner->run([
+            ], 'Audio loop preparation failed.');
+            $probe = $workspace->runner->run([
                 config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error',
                 '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', $prepared,
             ], $workspace->path, outputLimit: 65536, phase: Progress::ANALYSIS);
@@ -215,12 +204,5 @@ class PendingAudioMix extends PendingExport
         $command[array_search('-t', $command, true) + 1] = $this->clipTimestamp($source->duration());
 
         return $command;
-    }
-
-    public function save(?string $path = null): ExportResult
-    {
-        $result = parent::save($path);
-
-        return new ExportResult($result->files()->all(), [...$this->analysisProcesses, ...$result->processes()->all()]);
     }
 }

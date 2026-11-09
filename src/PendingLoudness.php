@@ -2,11 +2,10 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
-use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
-use ProtoneMedia\LaravelFFMpeg\Execution\ProgressParser;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
 /** Audio-only normalization. The normal export owns staging, events, encoding and publication. */
@@ -17,8 +16,6 @@ class PendingLoudness extends PendingExport
     private ?LoudnessStats $normalization = null;
 
     private ?string $statisticsPath = null;
-
-    private array $analysisProcesses = [];
 
     public function __construct(
         Media $media,
@@ -109,10 +106,9 @@ class PendingLoudness extends PendingExport
     }
 
     /** Called by PendingExport after staging/probing and before its final encoding loop. */
-    protected function prepareCommand(Workspace $workspace, ProcessRunner $runner, array $command, array $outputPaths, array $redactions, ?callable $onProgress = null): array
+    protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         $this->measurement = $this->normalization = null;
-        $this->analysisProcesses = [];
         $this->statisticsPath = $workspace->path.'/loudness-final.json';
         $inputEnd = array_search('-i', $command, true) + 2;
         $prefix = array_slice($command, 0, $inputEnd);
@@ -123,11 +119,11 @@ class PendingLoudness extends PendingExport
 
         // Decode selected, trimmed, channel-processed samples only once. Both passes
         // reopen this private lossless file, never a mutable remote or local source.
-        $this->runAnalysis($runner, [...$prefix, '-map', $command[$mapIndex + 1], '-vn', '-af', $preprocessing,
-            '-map_metadata', '0', '-c:a', 'pcm_f64le', '-f', 'nut', $prepared], $workspace, $redactions, $onProgress);
+        $analyze([...$prefix, '-map', $command[$mapIndex + 1], '-vn', '-af', $preprocessing,
+            '-map_metadata', '0', '-c:a', 'pcm_f64le', '-f', 'nut', $prepared], 'Loudness analysis failed.');
         $measure = [$command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1', '-i', $prepared, '-af',
             $this->loudnorm('loudness-measure.json'), '-f', 'null', '-'];
-        $this->runAnalysis($runner, $measure, $workspace, $redactions, $onProgress);
+        $analyze($measure, 'Loudness analysis failed.');
         $this->measurement = $this->readStats($workspace->path.'/loudness-measure.json');
         $normalizer = $this->loudnorm('loudness-final.json');
 
@@ -170,18 +166,6 @@ class PendingLoudness extends PendingExport
         return json_encode($number, JSON_THROW_ON_ERROR);
     }
 
-    private function runAnalysis(ProcessRunner $runner, array $command, Workspace $workspace, array $redactions, ?callable $onProgress): void
-    {
-        if ($onProgress !== null) {
-            $onProgress(new Progress(Progress::ANALYSIS));
-        }
-        $result = $runner->run($command, $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
-        if ($result->exitCode !== 0) {
-            throw new MediaException('Loudness analysis failed.', Progress::ANALYSIS, 'exit', $result->diagnostics);
-        }
-        $this->analysisProcesses[] = $result->summary();
-    }
-
     private function readStats(string $path): LoudnessStats
     {
         if (! is_file($path) || filesize($path) > 65536 || ($json = file_get_contents($path)) === false) {
@@ -210,9 +194,6 @@ class PendingLoudness extends PendingExport
 
     public function save(?string $path = null): LoudnessResult
     {
-        $export = parent::save($path);
-        $export = new ExportResult($export->files()->all(), [...$this->analysisProcesses, ...$export->processes()->all()]);
-
-        return new LoudnessResult($export, $this->measurement, $this->normalization, $this->linear ? 'linear' : 'dynamic', $this->sampleRate);
+        return new LoudnessResult(parent::save($path), $this->measurement, $this->normalization, $this->linear ? 'linear' : 'dynamic', $this->sampleRate);
     }
 }

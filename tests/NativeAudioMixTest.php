@@ -136,8 +136,11 @@ class NativeAudioMixTest extends TestCase
         $this->fixture();
         foreach ([false, true] as $loop) {
             $name = $loop ? 'delayed-loop.mkv' : 'delayed-once.mkv';
-            $this->media()->mixAudio($this->media('music.wav'), volume: 0.25, originalVolume: 0.5)
+            $result = $this->media()->mixAudio($this->media('music.wav'), volume: 0.25, originalVolume: 0.5)
                 ->at(0.625)->loopAudio($loop)->video('copy')->audio('pcm_f64le')->save($name);
+            $commands = $result->processes()->pluck('command')->all();
+            $this->assertCount($loop ? 2 : 1, $commands);
+            $this->assertSame($loop ? 'audio-mix-loop.wav' : '[output:0]', end($commands[0]));
             $samples = $this->samples($name);
             $this->assertCount(3 * 48000 * 2, $samples);
             $this->assertSame(3.0, $this->media($name)->probe()->duration());

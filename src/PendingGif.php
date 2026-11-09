@@ -2,17 +2,13 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
-use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
-use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
-use ProtoneMedia\LaravelFFMpeg\Execution\ProgressParser;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
 class PendingGif extends PendingExport
 {
-    private array $analysisProcesses = [];
-
     public function __construct(Media $media, string|Filesystem $disk, int $width = 480, int|float $frameRate = 12, private readonly int $loop = 0)
     {
         if ($width <= 0 || $width > 65535 || ! is_finite((float) $frameRate) || $frameRate <= 0 || $loop < -1 || $loop > 65535) {
@@ -86,9 +82,8 @@ class PendingGif extends PendingExport
         return implode(',', [...$filters, ...$settings['videoFilters']]);
     }
 
-    protected function prepareCommand(Workspace $workspace, ProcessRunner $runner, array $command, array $outputPaths, array $redactions, ?callable $onProgress = null): array
+    protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
-        $this->analysisProcesses = [];
         $graphIndex = array_search('-filter_complex', $command, true);
         $inputEnd = array_search('-i', $command, true) + 2;
         $prefix = array_slice($command, 0, $inputEnd);
@@ -98,36 +93,15 @@ class PendingGif extends PendingExport
 
         // A lossless disk spool avoids buffering every decoded frame behind
         // palettegen, and applies caller filters only once to a stable source.
-        $this->analyze($runner, [...$prefix, '-map', '[gif_prepared]', '-c:v', 'ffv1', '-level', '3',
-            '-pix_fmt', 'bgr0', '-fps_mode:v', 'passthrough', '-threads', '1', '-f', 'nut', $prepared], $workspace, $redactions, $onProgress);
-        $this->analyze($runner, [$command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1',
-            '-i', $prepared, '-vf', 'palettegen', '-frames:v', '1', '-threads', '1', '-update', '1', $palette], $workspace, $redactions, $onProgress);
+        $analyze([...$prefix, '-map', '[gif_prepared]', '-c:v', 'ffv1', '-level', '3',
+            '-pix_fmt', 'bgr0', '-fps_mode:v', 'passthrough', '-threads', '1', '-f', 'nut', $prepared], 'GIF palette preparation failed.');
+        $analyze([$command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1',
+            '-i', $prepared, '-vf', 'palettegen', '-frames:v', '1', '-threads', '1', '-update', '1', $palette], 'GIF palette preparation failed.');
         $this->validateArtifact($workspace->path.'/'.$palette, 'image');
 
         $prefix = array_slice($prefix, 0, array_search('-protocol_whitelist', $prefix, true));
         $prefix[$graphIndex + 1] = '[0:v:0][1:v:0]paletteuse[gif_out]';
 
         return [...$prefix, '-protocol_whitelist', 'file', '-i', $prepared, '-protocol_whitelist', 'file', '-i', $palette, ...array_slice($command, $inputEnd)];
-    }
-
-    private function analyze(ProcessRunner $runner, array $command, Workspace $workspace, array $redactions, ?callable $onProgress): void
-    {
-        if ($onProgress !== null) {
-            $onProgress(new Progress(Progress::ANALYSIS));
-        }
-        $process = $runner->run($command, $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
-
-        if ($process->exitCode !== 0) {
-            throw new MediaException('GIF palette preparation failed.', Progress::ANALYSIS, 'exit', $process->diagnostics);
-        }
-
-        $this->analysisProcesses[] = $process->summary();
-    }
-
-    public function save(?string $path = null): ExportResult
-    {
-        $result = parent::save($path);
-
-        return new ExportResult($result->files()->all(), [...$this->analysisProcesses, ...$result->processes()->all()]);
     }
 }
