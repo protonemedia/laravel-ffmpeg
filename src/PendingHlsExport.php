@@ -976,10 +976,13 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             'role' => 'hls-master',
             'destination' => $outputs[$master]->destination(),
         ]];
-        $this->export->validateDestinations(array_map(fn (array $artifact): ExportOutput => new ExportOutput(
-            $artifact['destination']['path'],
-            ($artifact['target'] ?? $outputs[$artifact['output']])->filesystem(),
-        ), $artifacts));
+        $this->export->validateDestinations(array_map(
+            fn (array $artifact): ExportOutput => new ExportOutput(
+                $artifact['destination']['path'],
+                ($artifact['target'] ?? $outputs[$artifact['output']])->filesystem(),
+            ),
+            $artifacts,
+        ));
 
         return $artifacts;
     }

@@ -1780,8 +1780,11 @@ class PendingExport implements Exportable
             throw MediaException::probing("{$operation} requires a zero presentation origin.", 'metadata');
         }
 
-        if ($item->videoStreams()->contains(fn (Stream $stream): bool => ! is_numeric($stream->get('start_time'))
-            || abs((float) $stream->get('start_time')) > 0.000001)) {
+        if ($item->videoStreams()->contains(function (Stream $stream): bool {
+            $start = $stream->get('start_time');
+
+            return ! is_numeric($start) || abs((float) $start) > 0.000001;
+        })) {
             throw MediaException::probing("{$operation} requires zero origins on every video stream.", 'metadata');
         }
     }

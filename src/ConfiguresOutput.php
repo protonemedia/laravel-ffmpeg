@@ -629,10 +629,13 @@ trait ConfiguresOutput
         $parts = explode('/', (string) $rate);
 
         if (count($parts) > 2
-            || array_any($parts, fn ($part): bool => ! preg_match(
-                '/\A(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\z/',
-                $part,
-            ) || ! is_finite((float) $part) || (float) $part <= 0)
+            || array_any($parts, function ($part): bool {
+                if (! preg_match('/\A(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\z/', $part)) {
+                    return true;
+                }
+
+                return ! is_finite((float) $part) || (float) $part <= 0;
+            })
             || ! is_finite((float) $parts[0] / (float) ($parts[1] ?? 1))
             || (float) $parts[0] / (float) ($parts[1] ?? 1) <= 0) {
             throw new InvalidArgumentException('Frame rate requires a finite positive number or positive rational.');
@@ -854,12 +857,16 @@ trait ConfiguresOutput
             $flags = $flags === '0' ? [] : explode('+', $flags);
         }
 
-        if (! array_is_list($flags) || array_any($flags, fn ($flag): bool => ! is_string($flag) || ! in_array($flag, [
-            'default', 'dub', 'original', 'comment', 'lyrics', 'karaoke', 'forced',
-            'hearing_impaired', 'visual_impaired', 'clean_effects', 'attached_pic',
-            'timed_thumbnails', 'non_diegetic', 'captions', 'descriptions', 'metadata',
-            'dependent', 'still_image', 'multilayer',
-        ], true))) {
+        if (! array_is_list($flags) || array_any($flags, function ($flag): bool {
+            $supported = [
+                'default', 'dub', 'original', 'comment', 'lyrics', 'karaoke', 'forced',
+                'hearing_impaired', 'visual_impaired', 'clean_effects', 'attached_pic',
+                'timed_thumbnails', 'non_diegetic', 'captions', 'descriptions', 'metadata',
+                'dependent', 'still_image', 'multilayer',
+            ];
+
+            return ! is_string($flag) || ! in_array($flag, $supported, true);
+        })) {
             throw new InvalidArgumentException(
                 'Dispositions require supported flag names, or an empty list to clear them.',
             );

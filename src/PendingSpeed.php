@@ -166,8 +166,9 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         }
 
         if ($item->videoStreams()->count() > 1 || $item->audioStreams()->count() > 1
-            || $item->streams()->contains(fn ($stream): bool => ! in_array($stream->type(), ['audio', 'video'], true)
-                || $stream->isCoverArt())) {
+            || $item->streams()->contains(
+                fn ($stream): bool => ! in_array($stream->type(), ['audio', 'video'], true) || $stream->isCoverArt(),
+            )) {
             return null;
         }
 

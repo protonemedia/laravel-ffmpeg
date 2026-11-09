@@ -80,8 +80,9 @@ class Metadata
      */
     public function videoStreams(): Collection
     {
-        return $this->streams()->filter(fn (Stream $stream): bool => $stream->type() === 'video'
-            && ! $stream->isCoverArt())->values();
+        return $this->streams()
+            ->filter(fn (Stream $stream): bool => $stream->type() === 'video' && ! $stream->isCoverArt())
+            ->values();
     }
 
     /**
@@ -111,8 +112,9 @@ class Metadata
      */
     public function coverArt(): Collection
     {
-        return $this->streams()->filter(fn (Stream $stream): bool => $stream->type() === 'video'
-            && $stream->isCoverArt())->values();
+        return $this->streams()
+            ->filter(fn (Stream $stream): bool => $stream->type() === 'video' && $stream->isCoverArt())
+            ->values();
     }
 
     /**
