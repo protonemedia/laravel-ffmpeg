@@ -433,7 +433,7 @@ $media->export()
     ->audio('copy')
     ->crop(1280, 720, x: 40, y: 20)
     ->rotate(90)
-    ->pad(800, 1280, color: 'black')
+    ->pad(800, 1280, background: 'black')
     ->save('portrait.mp4');
 
 $media->export()

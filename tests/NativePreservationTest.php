@@ -74,7 +74,7 @@ class NativePreservationTest extends TestCase
             }
         }
         foreach ([fn () => $media->export()->rotate(45), fn () => $media->export()->crop(31, 24),
-            fn () => $media->export()->pad(40, 48, color: 'red;movie=/secret'),
+            fn () => $media->export()->pad(40, 48, background: 'red;movie=/secret'),
             fn () => $media->export()->crop(32, 24)->video('copy')->inspect()] as $invalid) {
             try {
                 $invalid();

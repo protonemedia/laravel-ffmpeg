@@ -43,9 +43,9 @@ trait VideoFilters
         return $this;
     }
 
-    public function pad(int $width, int $height, ?int $x = null, ?int $y = null, string $color = 'black'): self
+    public function pad(int $width, int $height, ?int $x = null, ?int $y = null, string $background = 'black'): self
     {
-        $this->export->pad($width, $height, $x, $y, $color);
+        $this->export->pad($width, $height, $x, $y, $background);
 
         return $this;
     }

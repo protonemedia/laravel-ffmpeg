@@ -728,7 +728,7 @@ Both helpers produce square pixels and allow upscaling. A one-dimension resize u
 $media->export()
     ->crop(1280, 720, x: 40, y: 20)
     ->rotate(90)
-    ->pad(800, 1280, color: 'black');
+    ->pad(800, 1280, background: 'black');
 ```
 
 `rotate()` accepts clockwise 90, 180, or 270 degrees and negative equivalents, after input autorotation. `crop()` and `pad()` require positive even dimensions and nonnegative optional offsets, centered by default. All three append filters in call order and retain the ordinary copy/filter restrictions. Real decoded pixels verify crop, rotation direction, padding, and order in `NativePreservationTest`.
