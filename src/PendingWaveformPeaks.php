@@ -258,8 +258,11 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         }
 
         $frames = intdiv($size, $frameBytes);
-        $count = $frames === 0 ? 0 : ($this->targetBuckets === null
-            ? intdiv($frames - 1, $this->samplesPerBucket) + 1 : min($frames, $this->targetBuckets));
+        $count = match (true) {
+            $frames === 0 => 0,
+            $this->targetBuckets === null => intdiv($frames - 1, $this->samplesPerBucket) + 1,
+            default => min($frames, $this->targetBuckets),
+        };
         if ($count > intdiv(self::MAX_CELLS, $channels)) {
             throw MediaException::validation(
                 'Peaks exceed 100000 channel buckets; request fewer buckets.',
@@ -277,9 +280,12 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         try {
             for ($bucket = 0; $bucket < $count; $bucket++) {
                 // A quotient and remainder split avoids overflowing frames * bucket.
-                $length = $this->targetBuckets === null
-                    ? min($this->samplesPerBucket, $frames - $bucket * $this->samplesPerBucket)
-                    : intdiv($frames, $count) + ($bucket < $frames % $count ? 1 : 0);
+                if ($this->targetBuckets === null) {
+                    $length = min($this->samplesPerBucket, $frames - $bucket * $this->samplesPerBucket);
+                } else {
+                    $length = intdiv($frames, $count) + ($bucket < $frames % $count ? 1 : 0);
+                }
+
                 $lengths[] = $length;
                 $min = array_fill(0, $channels, 32767);
                 $max = array_fill(0, $channels, -32768);

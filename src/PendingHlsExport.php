@@ -525,7 +525,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     protected function ensureVariantPathsMatchPackaging(int|string $name, bool $subtitle): void
     {
         $segments = $this->variantPaths[$name]['segments'];
-        $extension = $subtitle ? 'vtt' : ($this->segmentType === 'fmp4' ? 'm4s' : 'ts');
+        $extension = $this->segmentExtension($subtitle);
         if ($segments !== null && strtolower(pathinfo($segments, PATHINFO_EXTENSION)) !== $extension) {
             throw new InvalidArgumentException(
                 "The HLS segment path must have the [{$extension}] extension of the selected packaging."
@@ -1068,12 +1068,15 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             $lines,
             fn (string $line): bool => str_starts_with($line, '#EXT-X-PLAYLIST-TYPE:'),
         ));
+        $expectedTypes = [];
+        if ($this->playlistType !== 'live') {
+            $expectedTypes = ['#EXT-X-PLAYLIST-TYPE:'.strtoupper($this->playlistType)];
+        }
+
         if ($lines[0] !== '#EXTM3U' || end($lines) !== '#EXT-X-ENDLIST'
             || count($targets) !== 1 || count(array_keys($lines, '#EXTM3U', true)) !== 1
             || count(array_keys($lines, '#EXT-X-ENDLIST', true)) !== 1
-            || $types !== ($this->playlistType === 'live'
-                ? []
-                : ['#EXT-X-PLAYLIST-TYPE:'.strtoupper($this->playlistType)])) {
+            || $types !== $expectedTypes) {
             throw MediaException::validation(
                 "FFmpeg did not produce a complete {$this->playlistType} playlist.",
                 'artifact',
@@ -1201,7 +1204,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         ?HlsEncryption $encryption,
     ): array {
         $name = array_keys($this->variants)[$index];
-        $extension = $this->segmentExtension($index);
+        $extension = $this->segmentExtension($this->isSubtitle($index));
         $filename = "segment-{$index}-".sprintf('%08d', $media['count']).".{$extension}";
         if ($media['duration'] === null || $media['lines'][$lineIndex] !== $filename
             || ($this->segmentType === 'fmp4' && ! $this->isSubtitle($index) && $media['init'] === null)) {
@@ -1261,11 +1264,15 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     }
 
     /**
-     * Get the segment file extension of the output at the given index.
+     * Get the segment file extension of a subtitle or media output.
      */
-    protected function segmentExtension(int $index): string
+    protected function segmentExtension(bool $subtitle): string
     {
-        return $this->isSubtitle($index) ? 'vtt' : ($this->segmentType === 'fmp4' ? 'm4s' : 'ts');
+        return match (true) {
+            $subtitle => 'vtt',
+            $this->segmentType === 'fmp4' => 'm4s',
+            default => 'ts',
+        };
     }
 
     /**
@@ -1288,7 +1295,8 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
      */
     protected function ensureSegmentInventoryIsComplete(int $index, string $path, array $media): void
     {
-        $actual = glob(dirname($path)."/segment-{$index}-*.{$this->segmentExtension($index)}") ?: [];
+        $extension = $this->segmentExtension($this->isSubtitle($index));
+        $actual = glob(dirname($path)."/segment-{$index}-*.{$extension}") ?: [];
         sort($actual);
         $initializations = array_values(array_filter(
             glob(dirname($path).'/init-*.mp4') ?: [],

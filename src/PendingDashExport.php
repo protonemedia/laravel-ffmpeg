@@ -776,11 +776,13 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
                 $item['codecs'],
                 ...($item['type'] === 'video' ? array_column($audio, 'codecs') : []),
             ]);
+            $video = '';
+            if ($item['type'] === 'video') {
+                $video = ",RESOLUTION={$item['width']}x{$item['height']}".($audio !== [] ? ',AUDIO="audio"' : '');
+            }
+
             $lines[] = "#EXT-X-STREAM-INF:BANDWIDTH={$bandwidth},AVERAGE-BANDWIDTH={$average}"
-                .',CODECS="'.implode(',', $codecs).'"'
-                .($item['type'] === 'video'
-                    ? ",RESOLUTION={$item['width']}x{$item['height']}".($audio !== [] ? ',AUDIO="audio"' : '')
-                    : '');
+                .',CODECS="'.implode(',', $codecs).'"'.$video;
             $lines[] = "{$name}/index.m3u8";
         }
 

@@ -203,9 +203,11 @@ class HlsPresentation
     public function reference(array $source, ?string $target, string $uri, string $kind): string
     {
         $key = $kind === 'key' ? ($this->keys[$source['path']][$uri] ?? null) : null;
-        $id = $key === null
-            ? ($target === null ? null : self::id($source['disk'], $target))
-            : self::id($key['disk'], $key['path']);
+        $id = match (true) {
+            $key !== null => self::id($key['disk'], $key['path']),
+            $target !== null => self::id($source['disk'], $target),
+            default => null,
+        };
         $file = $id === null ? null : ($this->files[$id] ?? null);
         $roles = match ($kind) {
             'playlist' => ['hls-master', 'hls-playlist'],

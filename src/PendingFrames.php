@@ -118,8 +118,11 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
-        $rate = $this->every !== null ? '1/'.CommandCompiler::timestamp($this->every)
-            : "{$this->count}/".($this->duration === null ? '[duration]' : CommandCompiler::timestamp($this->duration));
+        $rate = match (true) {
+            $this->every !== null => '1/'.CommandCompiler::timestamp($this->every),
+            $this->duration === null => "{$this->count}/[duration]",
+            default => "{$this->count}/".CommandCompiler::timestamp($this->duration),
+        };
         $start = $this->export->inputSeekOptions() === [] ? ($this->export->clipSettings()['start'] ?? 0) : 0;
         $filter = "fps=fps={$rate}:start_time=".CommandCompiler::timestamp($start).':round=near:eof_action=pass';
 

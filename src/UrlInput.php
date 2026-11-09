@@ -110,7 +110,11 @@ class UrlInput implements InputSource
      */
     public function protocols(): string
     {
-        return $this->download ? 'file' : (str_starts_with($this->url, 'https:') ? 'https,tls,tcp' : 'http,tcp');
+        if ($this->download) {
+            return 'file';
+        }
+
+        return str_starts_with($this->url, 'https:') ? 'https,tls,tcp' : 'http,tcp';
     }
 
     /**

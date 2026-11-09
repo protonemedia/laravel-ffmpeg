@@ -249,9 +249,11 @@ class Watermark
      */
     public function settings(): array
     {
-        $default = fn (array $pinned, string $edge): array => $pinned !== []
-            ? [array_key_first($pinned), reset($pinned)]
-            : ($this->centered ? ['center', 0] : [$edge, 0]);
+        $default = fn (array $pinned, string $edge): array => match (true) {
+            $pinned !== [] => [array_key_first($pinned), reset($pinned)],
+            $this->centered => ['center', 0],
+            default => [$edge, 0],
+        };
 
         return [
             'horizontal' => $default($this->horizontal, 'right'),

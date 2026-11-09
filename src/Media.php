@@ -273,10 +273,14 @@ class Media
     {
         // A concat descriptor is created on its first input's output disk, so its own
         // disk is already the right default for its outputs.
-        return is_string($this->source)
+        if (is_string($this->source)
             || $this->source instanceof SequenceInput
             || $this->source instanceof PreparedImageInput
-            || $this->source instanceof ConcatInput ? $this->disk : config('filesystems.default');
+            || $this->source instanceof ConcatInput) {
+            return $this->disk;
+        }
+
+        return config('filesystems.default');
     }
 
     /**
@@ -288,8 +292,11 @@ class Media
     {
         return hash('sha256', serialize([
             is_string($this->disk) ? ['name', $this->disk] : ['object', spl_object_id($this->disk)],
-            $this->source instanceof InputSource ? ['source', $this->source->identity()]
-                : (is_string($this->source) ? ['key', $this->source] : ['file', $this->source->getPathname()]),
+            match (true) {
+                $this->source instanceof InputSource => ['source', $this->source->identity()],
+                is_string($this->source) => ['key', $this->source],
+                default => ['file', $this->source->getPathname()],
+            },
             $this->options,
         ]));
     }
@@ -301,8 +308,11 @@ class Media
      */
     public function extension(): string
     {
-        $extension = $this->source instanceof InputSource ? $this->source->extension()
-            : pathinfo(is_string($this->source) ? $this->source : $this->source->getPathname(), PATHINFO_EXTENSION);
+        $extension = match (true) {
+            $this->source instanceof InputSource => $this->source->extension(),
+            is_string($this->source) => pathinfo($this->source, PATHINFO_EXTENSION),
+            default => pathinfo($this->source->getPathname(), PATHINFO_EXTENSION),
+        };
 
         return preg_match('/\A[a-z0-9]{1,32}\z/i', $extension) ? strtolower($extension) : '';
     }
@@ -484,8 +494,11 @@ class Media
 
         // We replace the probed filename so the metadata never exposes temporary paths
         // or credential-bearing URLs.
-        $data['format']['filename'] = $this->source instanceof InputSource ? $this->source->label()
-            : (is_string($this->source) ? $this->source : $this->source->getPathname());
+        $data['format']['filename'] = match (true) {
+            $this->source instanceof InputSource => $this->source->label(),
+            is_string($this->source) => $this->source,
+            default => $this->source->getPathname(),
+        };
 
         return new Metadata($data, $this->identity());
     }

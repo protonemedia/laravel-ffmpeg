@@ -370,8 +370,9 @@ class PendingProbe
         // FFprobe's duration parser does not accept scientific notation.
         $seconds = static fn (float $value): string => rtrim(rtrim(sprintf('%.6F', $value), '0'), '.');
 
-        return $seconds($this->start).'%+'.($this->packetLimit === null
-            ? $seconds($this->duration) : "#{$this->packetLimit}");
+        $end = $this->packetLimit === null ? $seconds($this->duration) : "#{$this->packetLimit}";
+
+        return $seconds($this->start).'%+'.$end;
     }
 
     /**

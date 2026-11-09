@@ -310,8 +310,11 @@ trait ConfiguresOutput
             throw new InvalidArgumentException('A probed stream cannot be combined with a track index.');
         }
 
-        return $stream instanceof Stream ? $this->mapProbedStream($stream, 'video', $input, $optional)
-            : $this->map(($input ?? 0).':v:'.($track ?? 0).($optional ? '?' : ''));
+        if ($stream instanceof Stream) {
+            return $this->mapProbedStream($stream, 'video', $input, $optional);
+        }
+
+        return $this->map(($input ?? 0).':v:'.($track ?? 0).($optional ? '?' : ''));
     }
 
     /**
@@ -354,8 +357,11 @@ trait ConfiguresOutput
 
         $selector = $language === null ? (string) ($track ?? 0) : "m:language:{$language}";
 
-        return $stream instanceof Stream ? $this->mapProbedStream($stream, 'audio', $input, $optional)
-            : $this->map(($input ?? 0).':a:'.$selector.($optional ? '?' : ''));
+        if ($stream instanceof Stream) {
+            return $this->mapProbedStream($stream, 'audio', $input, $optional);
+        }
+
+        return $this->map(($input ?? 0).':a:'.$selector.($optional ? '?' : ''));
     }
 
     /**
@@ -1244,8 +1250,14 @@ trait ConfiguresOutput
                     continue;
                 }
 
-                $encodings = isset($parts[2]) ? [array_replace($base, $streams[(int) $parts[2]] ?? [])]
-                    : [$base, ...array_map(fn ($override): array => array_replace($base, $override), $streams)];
+                if (isset($parts[2])) {
+                    $encodings = [array_replace($base, $streams[(int) $parts[2]] ?? [])];
+                } else {
+                    $encodings = [
+                        $base, ...array_map(fn ($override): array => array_replace($base, $override), $streams),
+                    ];
+                }
+
                 if (array_any($encodings, fn ($encoding): bool => ($encoding['codec'] ?? null) === 'copy')) {
                     throw new InvalidArgumentException('Copied streams cannot have encoder output options.');
                 }
@@ -1268,7 +1280,11 @@ trait ConfiguresOutput
      */
     public function maps(): array
     {
-        return $this->maps !== [] ? $this->maps : array_values(array_filter([
+        if ($this->maps !== []) {
+            return $this->maps;
+        }
+
+        return array_values(array_filter([
             $this->omitVideo ? null : '0:V:0?', $this->omitAudio ? null : '0:a:0?',
         ]));
     }

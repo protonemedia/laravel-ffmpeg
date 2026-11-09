@@ -654,11 +654,13 @@ class PendingExport implements Exportable
 
             $options = $output->outputArguments(
                 function (string|ResourceFilter $filter) use ($resources, &$used): string {
-                    return $filter instanceof ResourceFilter
-                        ? $filter->toFilter(
+                    if ($filter instanceof ResourceFilter) {
+                        return $filter->toFilter(
                             fn ($role) => $resources['helper:'.spl_object_id($filter).':'.$role]['path'],
-                        )
-                        : FilterGraph::resources($filter, $resources, $used);
+                        );
+                    }
+
+                    return FilterGraph::resources($filter, $resources, $used);
                 },
                 $maps,
             );
@@ -1281,15 +1283,17 @@ class PendingExport implements Exportable
      */
     protected function progressDuration(array $outputs, ?float $duration): ?float
     {
+        if ($duration === null) {
+            return null;
+        }
+
         $durations = array_map(function ($output) use ($duration) {
             $clip = $output->clipSettings();
 
-            return $duration === null
-                ? null
-                : ($clip === null ? $duration : max(0, min($clip['duration'], $duration - $clip['start'])));
+            return $clip === null ? $duration : max(0, min($clip['duration'], $duration - $clip['start']));
         }, $outputs);
 
-        return $duration === null ? null : max($durations);
+        return max($durations);
     }
 
     /**
@@ -1820,8 +1824,11 @@ class PendingExport implements Exportable
 
         // A complex graph can change timing arbitrarily, so we will report no duration
         // rather than invent a progress percentage.
-        return $this->filterGraph() === null && ! array_any($metadata, fn ($item): bool => $item->duration() === null)
-            ? max(array_map(fn ($item) => $item->duration(), $metadata)) : null;
+        if ($this->filterGraph() !== null || array_any($metadata, fn ($item): bool => $item->duration() === null)) {
+            return null;
+        }
+
+        return max(array_map(fn ($item) => $item->duration(), $metadata));
     }
 
     /**
