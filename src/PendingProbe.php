@@ -154,7 +154,7 @@ class PendingProbe
 
     public function get(): ProbeResult
     {
-        return $this->media->withInput(function (string $path, Workspace $workspace): \ProtoneMedia\LaravelFFMpeg\ProbeResult {
+        return $this->media->withInput(function (string $path, Workspace $workspace): ProbeResult {
             $runner = $workspace->runner;
             $binary = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
             // The runner's operation budget is this query's timeout.

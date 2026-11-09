@@ -3,11 +3,16 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Auth\GenericUser;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\ItemNotFoundException;
 use InvalidArgumentException;
+use League\Flysystem\ReadOnly\ReadOnlyFilesystemAdapter;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -35,7 +40,7 @@ class NativeHlsSelectionTest extends TestCase
 
     protected function tearDown(): void
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 
@@ -226,12 +231,12 @@ class NativeHlsSelectionTest extends TestCase
         foreach ($disk->allFiles() as $path) {
             $before[$path] = hash('sha256', $disk->get($path));
         }
-        $adapter = new \League\Flysystem\ReadOnly\ReadOnlyFilesystemAdapter($disk->getAdapter());
-        Storage::set('selection', new \Illuminate\Filesystem\FilesystemAdapter(new \League\Flysystem\Filesystem($adapter), $adapter));
+        $adapter = new ReadOnlyFilesystemAdapter($disk->getAdapter());
+        Storage::set('selection', new FilesystemAdapter(new \League\Flysystem\Filesystem($adapter), $adapter));
         try {
             FFMpeg::mergeHls(['one' => $first, 'two' => $second])->save('catalog/master.m3u8');
             $this->fail('Read-only storage accepted a composed master.');
-        } catch (\ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException $exception) {
+        } catch (MediaException $exception) {
             $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
             $this->assertSame('selection', $exception->destination['disk']);
             $this->assertMatchesRegularExpression('~^catalog/master\.[a-f0-9]{32}\.m3u8$~', $exception->destination['path']);
@@ -251,11 +256,11 @@ class NativeHlsSelectionTest extends TestCase
             try {
                 $presentation->playbackForVariants($names);
                 $this->fail('Invalid selection was accepted.');
-            } catch (InvalidArgumentException|\Illuminate\Support\ItemNotFoundException $exception) {
+            } catch (InvalidArgumentException|ItemNotFoundException $exception) {
                 $this->assertNotEmpty($exception->getMessage());
             }
         }
-        $this->expectException(\Illuminate\Support\ItemNotFoundException::class);
+        $this->expectException(ItemNotFoundException::class);
         $presentation->playbackForVariants(['small'])->playbackForVariants(['large']);
     }
 
@@ -299,14 +304,14 @@ class NativeHlsSelectionTest extends TestCase
             (new PendingHlsMerge(['one' => $first, 'two' => $second]))->save('catalog/master.m3u8');
             $this->fail('A master with an unowned reference was accepted.');
         } catch (InvalidArgumentException $exception) {
-            $this->assertInstanceOf(\Illuminate\Support\ItemNotFoundException::class, $exception->getPrevious());
+            $this->assertInstanceOf(ItemNotFoundException::class, $exception->getPrevious());
         }
         $disk->put($master, $original);
         $this->assertSame($before, $disk->allFiles());
         try {
             HlsPresentation::fromArray($first)->file('unknown');
             $this->fail('An unknown resource was returned.');
-        } catch (\Illuminate\Support\ItemNotFoundException) {
+        } catch (ItemNotFoundException) {
             $this->addToAssertionCount(1);
         }
         $disk->delete('second/small/segment-00000000.ts');

@@ -23,7 +23,7 @@ class VideoStreamSettings
 
     public function bitrate(int|string $bitrate): self
     {
-        if ((!is_int($bitrate) || $bitrate <= 0)
+        if ((! is_int($bitrate) || $bitrate <= 0)
             && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
             throw new InvalidArgumentException('Bitrates require positive bits per second or an explicit unit string.');
         }
@@ -87,9 +87,15 @@ class VideoStreamSettings
     public static function colorFilter(string $primaries, string $transfer, string $space, string $range): string
     {
         $primaries = $primaries === 'unspecified' ? 'unknown' : $primaries;
-        $transfer = match ($transfer) { 'gamma22' => 'bt470m', 'gamma28' => 'bt470bg', 'unspecified' => 'unknown', default => $transfer };
-        $space = match ($space) { 'rgb' => 'gbr', 'unspecified' => 'unknown', default => $space };
-        $range = match ($range) { 'tv' => 'limited', 'pc' => 'full', 'unspecified' => 'unknown', default => $range };
+        $transfer = match ($transfer) {
+            'gamma22' => 'bt470m', 'gamma28' => 'bt470bg', 'unspecified' => 'unknown', default => $transfer
+        };
+        $space = match ($space) {
+            'rgb' => 'gbr', 'unspecified' => 'unknown', default => $space
+        };
+        $range = match ($range) {
+            'tv' => 'limited', 'pc' => 'full', 'unspecified' => 'unknown', default => $range
+        };
 
         return 'setparams=color_primaries='.$primaries.':color_trc='.$transfer.':colorspace='.$space.':range='.$range;
     }

@@ -63,6 +63,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
 
     /** Categories: encoders, muxers, filters, bitstream_filters, hardware_accelerators,
      * input_protocols, output_protocols, ffprobe_input_protocols, ffprobe_output_protocols.
+     *
      * @return list<string>
      */
     public function available(string $category): array

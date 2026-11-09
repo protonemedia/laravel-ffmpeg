@@ -46,7 +46,6 @@ final class PendingExport implements Exportable
 
     private array $watermarks = [];
 
-
     private ?int $coverInput = null;
 
     private ?int $coverVideoTrack = null;
@@ -569,7 +568,7 @@ final class PendingExport implements Exportable
             }
 
             $onProgress(new Progress($phase));
-            $result = $this->media->withInput(function (string $input, Workspace $workspace) use ($outputs, $contents, $onProgress, &$phase, &$published): string|\ProtoneMedia\LaravelFFMpeg\ExportResult {
+            $result = $this->media->withInput(function (string $input, Workspace $workspace) use ($outputs, $contents, $onProgress, &$phase, &$published): string|ExportResult {
                 $paths = array_map(fn ($media): string => $workspace->stage($media), $this->inputs);
                 $redactions = [];
 
@@ -614,7 +613,7 @@ final class PendingExport implements Exportable
                 }
 
                 $this->validateResources($workspace, $runner, $resources);
-                $metadata = array_map(fn ($media): \ProtoneMedia\LaravelFFMpeg\Metadata => $workspace->probe($media), $this->inputs);
+                $metadata = array_map(fn ($media): Metadata => $workspace->probe($media), $this->inputs);
                 $expected = array_map(fn ($output): array => $this->selectedStreams($output, $workspace, $metadata), $outputs);
                 foreach ($outputs as $index => $output) {
                     foreach (['video' => 'videoStreams', 'audio' => 'audioStreams'] as $type => $key) {
@@ -821,7 +820,7 @@ final class PendingExport implements Exportable
      * Execution-only analyses may replace compiled command tokens.
      *
      * @param  Closure(list<string>, string): ProcessResult  $analyze  Runs one analysis pass with progress, records
-     *                                                               its summary before the encoding passes, and throws the given message on failure.
+     *                                                                 its summary before the encoding passes, and throws the given message on failure.
      */
     private function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
@@ -958,7 +957,7 @@ final class PendingExport implements Exportable
     public static function assertZeroOrigins(Metadata $item, string $operation, bool $audioOnlyOffset = false): void
     {
         $origin = $item->get('format.start_time');
-        if (((!$audioOnlyOffset || $item->hasVideo())
+        if (((! $audioOnlyOffset || $item->hasVideo())
                 && (! is_numeric($origin) || ! is_finite((float) $origin) || abs((float) $origin) > 0.000001))
             || $item->videoStreams()->contains(fn (Stream $stream): bool => ! is_numeric($stream->get('start_time'))
                 || abs((float) $stream->get('start_time')) > 0.000001)) {
@@ -1177,11 +1176,11 @@ final class PendingExport implements Exportable
 
     private function notify(Progress $progress, string $operationId, array $outputs): void
     {
-        if ($this->cancellation instanceof \Closure && ($this->cancellation)()) {
+        if ($this->cancellation instanceof Closure && ($this->cancellation)()) {
             throw new ExportCancelled;
         }
 
-        if ($this->progress instanceof \Closure) {
+        if ($this->progress instanceof Closure) {
             ($this->progress)($progress);
         }
 

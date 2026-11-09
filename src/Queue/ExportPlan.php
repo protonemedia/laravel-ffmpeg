@@ -7,6 +7,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use InvalidArgumentException;
 use Laravel\SerializableClosure\SerializableClosure;
+use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
 use ReflectionClass;
 use ReflectionFunction;
@@ -69,7 +70,7 @@ final readonly class ExportPlan
             return $value;
         }
 
-        if (! str_starts_with($value::class, 'ProtoneMedia\\LaravelFFMpeg\\') || $value instanceof \ProtoneMedia\LaravelFFMpeg\Execution\Workspace) {
+        if (! str_starts_with($value::class, 'ProtoneMedia\\LaravelFFMpeg\\') || $value instanceof Workspace) {
             throw new InvalidArgumentException('Queued export plans accept fresh native builders and serializable callbacks, not runtime services.');
         }
 

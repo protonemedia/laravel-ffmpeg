@@ -98,11 +98,13 @@ final class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, 
 
             if ($token === '-filter:a') {
                 $filter = $command[++$i];
+
                 continue;
             }
 
             if (in_array($token, ['-ss', '-t'], true)) {
                 $i++;
+
                 continue;
             }
 

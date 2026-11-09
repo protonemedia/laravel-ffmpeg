@@ -18,7 +18,7 @@ use ProtoneMedia\LaravelFFMpeg\HlsExportResult;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
 use RuntimeException;
 
-class ExportJob implements ShouldQueue, ShouldBeEncrypted
+class ExportJob implements ShouldBeEncrypted, ShouldQueue
 {
     use Batchable;
     use InteractsWithQueue;
@@ -56,7 +56,7 @@ class ExportJob implements ShouldQueue, ShouldBeEncrypted
             return;
         }
 
-        if ($this->plan instanceof \ProtoneMedia\LaravelFFMpeg\Queue\ExportPlan) {
+        if ($this->plan instanceof ExportPlan) {
             $export = $this->plan->restore();
             $export->cancelWhen(fn () => $this->batch()?->cancelled() ?? false);
             $result = $export->save($this->path);

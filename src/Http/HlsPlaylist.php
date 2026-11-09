@@ -73,7 +73,7 @@ class HlsPlaylist implements Responsable
      * partially deleted set. The application must protect shared files and prevent
      * concurrent changes to the playlists or their storage during this operation.
      *
-     * @param callable(string): bool $approve
+     * @param  callable(string): bool  $approve
      */
     public function deleteAllFiles(callable $approve): self
     {
@@ -122,7 +122,7 @@ class HlsPlaylist implements Responsable
         $queued = [$this->path => true];
         $result = [];
         $cache = [];
-        $resolvers = $discover instanceof \Closure ? [] : $this->resolvers;
+        $resolvers = $discover instanceof Closure ? [] : $this->resolvers;
         $inputBudget = 16777216;
         $outputBudget = 16777216;
         for ($index = 0; $index < count($pending); $index++) {
@@ -186,7 +186,7 @@ class HlsPlaylist implements Responsable
                         }
                     }
 
-                    if ($discover instanceof \Closure) {
+                    if ($discover instanceof Closure) {
                         $discover($target, $uri);
                     }
 

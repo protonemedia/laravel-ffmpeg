@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -29,7 +30,7 @@ class NativeProbeQueryTest extends TestCase
 
     protected function tearDown(): void
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 

@@ -19,6 +19,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\SplitsTwoPass;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\WritesManifest;
+use ProtoneMedia\LaravelFFMpeg\Queue\ExportPlan;
 use SensitiveParameter;
 
 final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, SplitsTwoPass, ValidatesSelections, WritesManifest
@@ -125,7 +126,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
     public function fmp4(): self
     {
         $this->export->assertOutputMutable();
-        if ($this->encryption instanceof \ProtoneMedia\LaravelFFMpeg\Execution\HlsEncryption) {
+        if ($this->encryption instanceof HlsEncryption) {
             throw new InvalidArgumentException('AES-128 encryption is supported only for MPEG-TS HLS.');
         }
 
@@ -268,7 +269,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
             throw new InvalidArgumentException('An HLS export requires at least one variant.');
         }
 
-        if ($this->encryption instanceof \ProtoneMedia\LaravelFFMpeg\Execution\HlsEncryption && array_any($this->renditions, fn ($item): bool => $item['type'] === 'SUBTITLES')) {
+        if ($this->encryption instanceof HlsEncryption && array_any($this->renditions, fn ($item): bool => $item['type'] === 'SUBTITLES')) {
             throw new InvalidArgumentException('Encrypted alternate subtitle renditions are not supported.');
         }
 
@@ -351,7 +352,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
             throw new InvalidArgumentException('Parallel HLS composition requires VOD playlists. Use a single queued export for event or live playlist types.');
         }
 
-        if ($this->playlistCallback instanceof \Closure || in_array('-filter_complex', $this->export->inspect(), true)) {
+        if ($this->playlistCallback instanceof Closure || in_array('-filter_complex', $this->export->inspect(), true)) {
             throw new InvalidArgumentException('Parallel HLS does not accept custom playlist callbacks or complex graphs. Use a single queued export.');
         }
 
@@ -393,7 +394,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
                 }
             }
 
-            $part = new \ProtoneMedia\LaravelFFMpeg\Queue\ExportPlan($this)->restore();
+            $part = new ExportPlan($this)->restore();
             $part->variants = array_intersect_key($part->variants, array_flip($members));
             $part->renditions = array_intersect_key($part->renditions, array_flip($members));
             $directory = $prefix.'/parts/'.count($parts);
@@ -459,6 +460,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
                     $result[] = '-f';
                     $result[] = 'webvtt';
                     $result[] = $token;
+
                     continue;
                 }
 
@@ -569,7 +571,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
     {
         $segments = [];
         $playlists = [];
-        $encryption = $this->encryption instanceof \ProtoneMedia\LaravelFFMpeg\Execution\HlsEncryption ? clone $this->encryption : null;
+        $encryption = $this->encryption instanceof HlsEncryption ? clone $this->encryption : null;
         $masterLines = ['#EXTM3U', '#EXT-X-VERSION:'.($this->segmentType === 'fmp4' ? '7' : '3')];
         $streamInfo = [];
         foreach (array_slice($outputs, 0, -1) as $index => $output) {
@@ -792,7 +794,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
         $artifacts = [...($encryption?->artifacts() ?? []), ...$segments, ...$playlists, [
             'path' => $paths[$master], 'output' => $master, 'role' => 'hls-master', 'destination' => $outputs[$master]->destination(),
         ]];
-        $this->export->validateDestinations(array_map(fn (array $artifact): \ProtoneMedia\LaravelFFMpeg\ExportOutput => new ExportOutput(
+        $this->export->validateDestinations(array_map(fn (array $artifact): ExportOutput => new ExportOutput(
             $artifact['destination']['path'], ($artifact['target'] ?? $outputs[$artifact['output']])->filesystem(),
         ), $artifacts));
 
@@ -849,7 +851,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
             throw new MediaException('Finalized HLS playlists must fit within the 16 MiB limit.', Progress::VALIDATION, 'artifact');
         }
 
-        if ($hook && $this->playlistCallback instanceof \Closure) {
+        if ($hook && $this->playlistCallback instanceof Closure) {
             $modified = ($this->playlistCallback)($bytes, $destination, $variant);
             if (! is_string($modified) || strlen($modified) > 16777216) {
                 throw new MediaException('Playlist hooks must return text within the 16 MiB limit.', Progress::VALIDATION, 'artifact');

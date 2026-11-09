@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -26,7 +27,7 @@ class NativeGifTest extends TestCase
 
     protected function tearDown(): void
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 

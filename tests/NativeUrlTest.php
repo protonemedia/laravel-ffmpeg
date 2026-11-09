@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -32,7 +33,7 @@ class NativeUrlTest extends TestCase
             $server->stop(0);
         }
 
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 

@@ -158,7 +158,7 @@ class PendingHlsMerge
             $keys += $inventory['keys'];
             $provenance += $inventory['provenance'];
             // The response parser validates every master reference before anything is published.
-            $masterText = $this->owned(fn (): string => $presentation->render($master, fn($id): string => HlsPresentation::relativeUrl($presentation->file($id)['path'], $path)));
+            $masterText = $this->owned(fn (): string => $presentation->render($master, fn ($id): string => HlsPresentation::relativeUrl($presentation->file($id)['path'], $path)));
             foreach (explode("\n", $masterText) as $line) {
                 if (str_starts_with($line, '#EXT-X-VERSION:')) {
                     $version = max($version, (int) substr($line, 15));
@@ -211,7 +211,7 @@ class PendingHlsMerge
         $files[] = $master;
         $presentation = new HlsPresentation(array_values($files), HlsPresentation::id($diskName, $destination), $keys, $variants, provenance: $provenance);
         $sizes[HlsPresentation::id($diskName, $destination)] = strlen($text);
-        $generated = array_map(fn (array $file): \ProtoneMedia\LaravelFFMpeg\GeneratedFile => new GeneratedFile(Storage::disk($file['disk']), $file['disk'], $file['path'],
+        $generated = array_map(fn (array $file): GeneratedFile => new GeneratedFile(Storage::disk($file['disk']), $file['disk'], $file['path'],
             $sizes[HlsPresentation::id($file['disk'], $file['path'])], $file['role'], $file === $master), array_values($files));
         $published = [];
         try {

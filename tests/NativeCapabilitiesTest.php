@@ -2,6 +2,8 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Process;
@@ -22,12 +24,12 @@ class NativeCapabilitiesTest extends TestCase
         mkdir($this->root, 0700);
         config(['laravel-ffmpeg.temporary_files_root' => $this->root,
             'laravel-ffmpeg.ffmpeg.binaries' => 'ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => 'ffprobe']);
-        $this->app->make(\Illuminate\Contracts\Console\Kernel::class)->registerCommand(new DoctorCommand);
+        $this->app->make(Kernel::class)->registerCommand(new DoctorCommand);
     }
 
     protected function tearDown(): void
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 

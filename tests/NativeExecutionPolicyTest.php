@@ -2,11 +2,14 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
+use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
@@ -28,7 +31,7 @@ class NativeExecutionPolicyTest extends TestCase
 
     protected function tearDown(): void
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 
@@ -159,11 +162,11 @@ class NativeExecutionPolicyTest extends TestCase
         try {
             FFMpeg::disk('memory')->open('source.mp4')->gif()->onProgress(function ($progress) {
                 if ($progress->phase === 'analysis') {
-                    throw new \ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
+                    throw new ExportCancelled;
                 }
             })->save('out.gif');
             $this->fail('The analysis callback must cancel the export.');
-        } catch (\ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled) {
+        } catch (ExportCancelled) {
             Event::assertDispatched(\ProtoneMedia\LaravelFFMpeg\Events\ExportCancelled::class, fn ($event) => $event->phase === 'analysis');
         }
     }
@@ -175,13 +178,15 @@ class NativeExecutionPolicyTest extends TestCase
         $phases = [];
         try {
             FFMpeg::disk('memory')->open('source.mp4')->gif()
-                ->onProgress(function ($progress) use (&$phases) { $phases[] = $progress->phase; })->save('out.gif');
+                ->onProgress(function ($progress) use (&$phases) {
+                    $phases[] = $progress->phase;
+                })->save('out.gif');
             $this->fail('An oversized progress record must fail the analysis pass.');
         } catch (MediaException $exception) {
             $this->assertSame(['analysis', 'progress'], [$exception->phase, $exception->category]);
             $this->assertContains('analysis', $phases);
             $this->assertNotContains('encoding', $phases);
-            Event::assertDispatched(\ProtoneMedia\LaravelFFMpeg\Events\ExportFailed::class, fn ($event) => $event->phase === 'analysis');
+            Event::assertDispatched(ExportFailed::class, fn ($event) => $event->phase === 'analysis');
         }
     }
 }

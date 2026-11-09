@@ -185,8 +185,7 @@ class NativeStoryboardTest extends TestCase
         $media = $this->colors();
         $storage = Storage::disk('memory');
         $disk = Mockery::mock(Filesystem::class);
-        $disk->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) =>
-            $path === 'preview.vtt' ? false : $storage->put($path, $stream, $options));
+        $disk->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $path === 'preview.vtt' ? false : $storage->put($path, $stream, $options));
         $disk->shouldReceive('size')->andReturnUsing(fn ($path) => $storage->size($path));
 
         try {

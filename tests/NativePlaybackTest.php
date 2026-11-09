@@ -3,15 +3,18 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Auth\GenericUser;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\File;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
-use ProtoneMedia\LaravelFFMpeg\Support\Hls;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Support\Hls;
 
 class NativePlaybackTest extends TestCase
 {
@@ -198,7 +201,7 @@ class NativePlaybackTest extends TestCase
         }
         config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe,
             'filesystems.disks.playback-keys' => ['driver' => 'memory']]);
-        $result = FFMpeg::open(new \Illuminate\Http\File(__DIR__.'/src/video.mp4'))
+        $result = FFMpeg::open(new File(__DIR__.'/src/video.mp4'))
             ->hls(segmentDuration: 0.7)->video('libx264', bitrate: 80_000)->audio('aac', bitrate: 48_000)
             ->variant('small', fn ($variant) => $variant->resize(width: 64))
             ->encrypt('playback-keys', fn ($path) => 'https://keys.example/'.rawurlencode($path), rotateEvery: 2)
@@ -233,7 +236,7 @@ class NativePlaybackTest extends TestCase
         $path = tempnam(sys_get_temp_dir(), 'playback-decode-');
         try {
             file_put_contents($path, $decoded);
-            $process = \Illuminate\Support\Facades\Process::run([dirname($probe).'/ffmpeg', '-v', 'error', '-i', $path, '-f', 'null', '-']);
+            $process = Process::run([dirname($probe).'/ffmpeg', '-v', 'error', '-i', $path, '-f', 'null', '-']);
             $this->assertTrue($process->successful(), $process->errorOutput());
         } finally {
             unlink($path);
@@ -241,7 +244,7 @@ class NativePlaybackTest extends TestCase
     }
 }
 
-class PlaybackLesson extends \Illuminate\Database\Eloquent\Model
+class PlaybackLesson extends Model
 {
     protected $guarded = [];
 }

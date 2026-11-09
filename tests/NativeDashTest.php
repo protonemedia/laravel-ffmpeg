@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use DOMDocument;
+use Illuminate\Auth\GenericUser;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Process;
@@ -180,7 +181,7 @@ class NativeDashTest extends TestCase
         config(['app.key' => 'base64:'.base64_encode(random_bytes(32))]);
         Hls::define('dash', resolve: fn () => $result->playback(), authorize: fn () => true);
         Hls::routes('/dash/hls', name: 'dash.hls', playback: 'dash');
-        $this->actingAs(new \Illuminate\Auth\GenericUser(['id' => 1]));
+        $this->actingAs(new GenericUser(['id' => 1]));
         $links = fn (string $text) => preg_match_all('~https?://[^\s"]+~', $text, $matches) ? $matches[0] : [];
 
         $master = $this->get(Hls::url('dash.hls', [], expires: now()->addMinutes(5)))->assertOk()->getContent();

@@ -2,13 +2,16 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\AudioStreamSettings;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
+use ProtoneMedia\LaravelFFMpeg\HlsVariant;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\VideoStreamSettings;
 
@@ -19,7 +22,7 @@ class NativeEncodingOptionsTest extends TestCase
     protected function tearDown(): void
     {
         if ($this->root !== null) {
-            (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+            (new Filesystem)->deleteDirectory($this->root);
         }
         parent::tearDown();
     }
@@ -67,7 +70,7 @@ class NativeEncodingOptionsTest extends TestCase
         $this->assertSame($arguments, $this->arguments(unserialize(serialize($output))));
         $this->assertSame($arguments, $this->arguments($this->destination()->configure($output->outputConfiguration())));
         $this->assertSame(['0:a:1', '0:a:0'], $output->maps());
-        $inherited = (new \ProtoneMedia\LaravelFFMpeg\HlsVariant)->inherit($output->outputConfiguration());
+        $inherited = (new HlsVariant)->inherit($output->outputConfiguration());
         $this->assertSame($arguments, $this->arguments($this->destination()->configure($inherited)));
     }
 
@@ -250,7 +253,7 @@ class NativeEncodingOptionsTest extends TestCase
             $this->media('source.mkv')->export()->globalOptions(['-init_hw_device', 'cuda=gpu:0', '-filter_hw_device', 'gpu'])
                 ->video('h264_nvenc')->save('hardware.mp4');
             $this->fail('This acceptance environment has no CUDA/NVENC hardware.');
-        } catch (\ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException $exception) {
+        } catch (MediaException $exception) {
             $this->assertNotEmpty($exception->getMessage());
             $this->assertFalse(Storage::disk('encoding-options')->exists('hardware.mp4'));
         }

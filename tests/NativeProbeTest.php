@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\PathTraversalDetected;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -373,8 +374,8 @@ class NativeProbeTest extends TestCase
         return [
             ['', \InvalidArgumentException::class],
             ['/etc/passwd', \InvalidArgumentException::class],
-            ['../outside.mp4', \League\Flysystem\PathTraversalDetected::class],
-            ['nested/../../outside.mp4', \League\Flysystem\PathTraversalDetected::class],
+            ['../outside.mp4', PathTraversalDetected::class],
+            ['nested/../../outside.mp4', PathTraversalDetected::class],
             ['https://example.com/video.mp4', \InvalidArgumentException::class],
             ['C:\\video.mp4', \InvalidArgumentException::class],
             ['\\\\server\\video.mp4', \InvalidArgumentException::class],

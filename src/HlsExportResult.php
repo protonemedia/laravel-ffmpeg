@@ -24,7 +24,7 @@ final readonly class HlsExportResult implements Result
 
     public function playback(): HlsPresentation
     {
-        if ($this->presentation instanceof \ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation) {
+        if ($this->presentation instanceof HlsPresentation) {
             return $this->presentation;
         }
 

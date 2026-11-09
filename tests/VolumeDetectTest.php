@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -25,7 +26,7 @@ class VolumeDetectTest extends TestCase
 
     protected function tearDown(): void
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 
@@ -146,8 +147,7 @@ class VolumeDetectTest extends TestCase
             return match (true) {
                 in_array('-version', $process->command, true) => Process::result(output: 'ffmpeg version 9.0.2'),
                 in_array('-protocols', $process->command, true) => Process::result(output: "Input:\nhttps\ntls\ntcp\nOutput:\nhttps\n"),
-                in_array('rtsp', $process->command, true) || str_contains(implode(' ', $process->command), 'rtsp://')
-                    => Process::result(errorOutput: 'user admin rejected with password 1234', exitCode: 1),
+                in_array('rtsp', $process->command, true) || str_contains(implode(' ', $process->command), 'rtsp://') => Process::result(errorOutput: 'user admin rejected with password 1234', exitCode: 1),
                 default => Process::result(errorOutput: "mean_volume: -21.5 dB\nmax_volume: -2.0 dB\nabc 0123456789abcdef dl=1&v=2&token=abc&id=0123456789abcdef"),
             };
         });

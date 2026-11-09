@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -30,7 +31,7 @@ class NativeLoudnessTest extends TestCase
 
     protected function tearDown(): void
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 
@@ -198,7 +199,9 @@ class NativeLoudnessTest extends TestCase
         $this->fixture();
         $events = [];
         $result = $this->operation()->audio('pcm_s24le')->clip(3, duration: 4)
-            ->onProgress(function ($progress) use (&$events) { $events[] = $progress->phase; })
+            ->onProgress(function ($progress) use (&$events) {
+                $events[] = $progress->phase;
+            })
             ->save('normalized.wav');
         $this->assertSame('linear', $result->requestedMode);
         $this->assertSame('dynamic', $result->actualMode());

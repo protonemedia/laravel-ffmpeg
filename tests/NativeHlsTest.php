@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use League\Flysystem\PathTraversalDetected;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -456,8 +457,7 @@ class NativeHlsTest extends TestCase
         $storage = Storage::disk('memory');
         $storage->put('out/master.m3u8', 'old master');
         $disk = Mockery::mock(Filesystem::class);
-        $disk->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) =>
-            $path === 'out/high/index.m3u8' ? false : $storage->put($path, $stream, $options));
+        $disk->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $path === 'out/high/index.m3u8' ? false : $storage->put($path, $stream, $options));
         $disk->shouldReceive('size')->andReturnUsing(fn ($path) => $storage->size($path));
         try {
             FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('low', fn () => null)->variant('high', fn () => null)
@@ -910,7 +910,7 @@ class NativeHlsTest extends TestCase
             try {
                 $invalid();
                 $this->fail('Invalid HLS settings were accepted.');
-            } catch (InvalidArgumentException|\League\Flysystem\PathTraversalDetected) {
+            } catch (InvalidArgumentException|PathTraversalDetected) {
                 $this->assertSame([], glob($this->root.'/*'));
             }
         }

@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -219,7 +220,7 @@ class NativePlaylistTest extends TestCase
     public function deletion_deduplicates_reads_and_deletes_and_stops_on_adapter_failure(): void
     {
         foreach ([false, new \RuntimeException('secret adapter details')] as $failure) {
-            $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+            $disk = \Mockery::mock(Filesystem::class);
             foreach (['master.m3u8' => 'child.m3u8', 'child.m3u8' => 'master.m3u8'] as $path => $child) {
                 $stream = fopen('php://temp', 'w+');
                 fwrite($stream, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n{$child}\n#EXTINF:1,\npart.ts\n#EXTINF:1,\npart.ts\n");
@@ -254,7 +255,7 @@ class NativePlaylistTest extends TestCase
     #[Test]
     public function an_unreadable_child_prevents_all_approval_and_deletion(): void
     {
-        $disk = \Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $disk = \Mockery::mock(Filesystem::class);
         $stream = fopen('php://temp', 'w+');
         fwrite($stream, "#EXTM3U\n#EXTINF:1,\nsafe.ts\n#EXT-X-STREAM-INF:BANDWIDTH=1\nmissing.m3u8\n");
         rewind($stream);

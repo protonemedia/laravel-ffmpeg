@@ -5,6 +5,8 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\WorkerOptions;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +16,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use RuntimeException;
@@ -63,8 +66,12 @@ class NativeQueueTest extends TestCase
             $table->integer('created_at');
             $table->integer('finished_at')->nullable();
         });
-        Event::listen(QueuedExportCompleted::class, function ($event) { $this->completed[] = $event; });
-        Event::listen(\Illuminate\Queue\Events\JobExceptionOccurred::class, function ($event) { $this->errors[] = $event->exception; });
+        Event::listen(QueuedExportCompleted::class, function ($event) {
+            $this->completed[] = $event;
+        });
+        Event::listen(JobExceptionOccurred::class, function ($event) {
+            $this->errors[] = $event->exception;
+        });
         $disk = Storage::disk('queued');
         $disk->makeDirectory('');
         $result = Process::run([dirname($probe).'/ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=96x64:rate=10:duration=1.6',
@@ -76,7 +83,7 @@ class NativeQueueTest extends TestCase
     protected function tearDown(): void
     {
         if (isset($this->root)) {
-            (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+            (new Filesystem)->deleteDirectory($this->root);
         }
         parent::tearDown();
     }
@@ -95,7 +102,9 @@ class NativeQueueTest extends TestCase
     public function fluent_dispatch_serializes_a_snapshot_and_runs_callbacks_middleware_retries_and_chains(): void
     {
         $export = $this->source()->export()->video('libx264', preset: 'ultrafast')->resize(width: 48)
-            ->onProgress(static function ($progress) { Storage::disk('queued')->put('progress', $progress->phase); });
+            ->onProgress(static function ($progress) {
+                Storage::disk('queued')->put('progress', $progress->phase);
+            });
         $queued = $export->queued(connection: 'database', queue: 'media', delay: 120)->configureJob(function ($job) {
             $job->tries = 2;
             $job->through([new QueueFailOnce]);
@@ -252,7 +261,7 @@ class NativeQueueTest extends TestCase
         $this->assertFalse(Storage::disk('queued')->exists('cancelled.mp4'));
         $this->assertFalse(Storage::disk('queued')->exists('progress-after-cancellation'));
         $this->assertCount(1, $this->errors);
-        $this->assertInstanceOf(\ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled::class, $this->errors[0]);
+        $this->assertInstanceOf(ExportCancelled::class, $this->errors[0]);
 
         $queued = $this->source()->hls(segmentDuration: 0.5)->video(bitrate: '100k', preset: 'ultrafast')
             ->variant('small', fn ($v) => $v->resize(width: 48))
@@ -269,7 +278,7 @@ class NativeQueueTest extends TestCase
         $this->assertFalse(Storage::disk('queued')->exists('follow-up'));
         $this->assertCount(0, $this->completed);
         $this->assertCount(2, $this->errors);
-        $this->assertInstanceOf(\ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled::class, $this->errors[1]);
+        $this->assertInstanceOf(ExportCancelled::class, $this->errors[1]);
         $this->assertSame([], glob($this->root.'/work/*'));
     }
 

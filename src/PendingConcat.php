@@ -155,7 +155,7 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
             throw new InvalidArgumentException('Transcoded concat requires transcoded video and audio, and either normalizeAudio() or withoutAudio(), not both.');
         }
 
-        if (array_any($this->sources, fn (\ProtoneMedia\LaravelFFMpeg\Media $source): bool => $source->inputOptions() !== [])) {
+        if (array_any($this->sources, fn (Media $source): bool => $source->inputOptions() !== [])) {
             throw new InvalidArgumentException('Transcoded concat does not support input options that can change source timing.');
         }
 

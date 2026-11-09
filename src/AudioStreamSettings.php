@@ -24,7 +24,7 @@ class AudioStreamSettings
 
     public function bitrate(int|string $bitrate): self
     {
-        if ((!is_int($bitrate) || $bitrate <= 0)
+        if ((! is_int($bitrate) || $bitrate <= 0)
             && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
             throw new InvalidArgumentException('Bitrates require positive bits per second or an explicit unit string.');
         }

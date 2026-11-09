@@ -162,7 +162,7 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
             if ($this->vttPath !== null) {
                 $key = $artifact['destination']['path'];
                 try {
-                    $url = $this->imageUrl instanceof \Closure ? ($this->imageUrl)($key, $index + 1) : $this->relativeUrl($key);
+                    $url = $this->imageUrl instanceof Closure ? ($this->imageUrl)($key, $index + 1) : $this->relativeUrl($key);
                 } catch (Throwable) {
                     throw new MediaException('Cannot resolve storyboard image URLs.', Progress::VALIDATION, 'artifact');
                 }

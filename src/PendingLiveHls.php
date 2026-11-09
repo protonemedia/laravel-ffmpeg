@@ -146,7 +146,7 @@ final class PendingLiveHls
         };
         $check = function () use (&$status, &$applicationFailure, $started, $interrupt): void {
             try {
-                $cancelled = $this->stopped || ($this->cancellation instanceof \Closure && ($this->cancellation)());
+                $cancelled = $this->stopped || ($this->cancellation instanceof Closure && ($this->cancellation)());
             } catch (Throwable $throwable) {
                 $applicationFailure = $throwable;
                 throw $throwable;
@@ -293,7 +293,7 @@ final class PendingLiveHls
                         }
                     }
 
-                    if ($changed && $this->publication instanceof \Closure) {
+                    if ($changed && $this->publication instanceof Closure) {
                         try {
                             ($this->publication)($snapshot());
                         } catch (Throwable $exception) {

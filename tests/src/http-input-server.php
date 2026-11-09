@@ -18,6 +18,7 @@ while ($client = stream_socket_accept($server, 15)) {
 
     if (isset($argv[3]) && ! @stream_socket_enable_crypto($client, true, STREAM_CRYPTO_METHOD_TLS_SERVER)) {
         fclose($client);
+
         continue;
     }
 
@@ -34,7 +35,9 @@ while ($client = stream_socket_accept($server, 15)) {
         'Bearer first-secret' => 'first', 'Bearer second-secret' => 'second', default => null,
     };
     file_put_contents($argv[2], json_encode(['path' => $path, 'source' => $source])."\n", FILE_APPEND);
-    $expected = match ($path) { '/first' => 'Bearer first-secret', '/second' => 'Bearer second-secret', default => null };
+    $expected = match ($path) {
+        '/first' => 'Bearer first-secret', '/second' => 'Bearer second-secret', default => null
+    };
 
     if (($expected !== null && ($headers['authorization'] ?? null) !== $expected) || ($path === '/private' && $source === null)) {
         fwrite($client, "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");

@@ -143,7 +143,7 @@ trait ConfiguresOutput
 
     private function bitrate(mixed $bitrate): void
     {
-        if ($bitrate !== null && (!is_int($bitrate) || $bitrate <= 0)
+        if ($bitrate !== null && (! is_int($bitrate) || $bitrate <= 0)
             && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
             throw new InvalidArgumentException('Bitrates require a positive integer in bits per second or an explicit unit string, such as 2500k.');
         }
@@ -176,11 +176,11 @@ trait ConfiguresOutput
             $stream = null;
         }
 
-        if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($stream instanceof \ProtoneMedia\LaravelFFMpeg\Stream && $track !== null)) {
+        if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($stream instanceof Stream && $track !== null)) {
             throw new InvalidArgumentException('Stream input and track indexes must be nonnegative.');
         }
 
-        return $stream instanceof \ProtoneMedia\LaravelFFMpeg\Stream ? $this->mapProbedStream($stream, 'video', $input, $optional)
+        return $stream instanceof Stream ? $this->mapProbedStream($stream, 'video', $input, $optional)
             : $this->map(($input ?? 0).':v:'.($track ?? 0).($optional ? '?' : ''));
     }
 
@@ -198,14 +198,14 @@ trait ConfiguresOutput
         }
 
         if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($track !== null && $language !== null)
-            || ($stream instanceof \ProtoneMedia\LaravelFFMpeg\Stream && ($track !== null || $language !== null))
+            || ($stream instanceof Stream && ($track !== null || $language !== null))
             || ($language !== null && ! preg_match('/^[a-zA-Z][a-zA-Z0-9_-]*$/D', $language))) {
             throw new InvalidArgumentException('Choose a nonnegative audio track or a language tag, not both.');
         }
 
         $selector = $language === null ? (string) ($track ?? 0) : 'm:language:'.$language;
 
-        return $stream instanceof \ProtoneMedia\LaravelFFMpeg\Stream ? $this->mapProbedStream($stream, 'audio', $input, $optional)
+        return $stream instanceof Stream ? $this->mapProbedStream($stream, 'audio', $input, $optional)
             : $this->map(($input ?? 0).':a:'.$selector.($optional ? '?' : ''));
     }
 
@@ -661,7 +661,9 @@ trait ConfiguresOutput
 
         foreach ([['v', $this->video, $this->videoFilters], ['a', $this->audio, $this->audioFilters]] as [$type, $encoding, $filters]) {
             foreach ($encoding as $name => $value) {
-                $option = match ($name) { 'codec' => 'c', 'bitrate' => 'b', default => $name };
+                $option = match ($name) {
+                    'codec' => 'c', 'bitrate' => 'b', default => $name
+                };
                 $options[] = '-'.$option.':'.$type;
                 $options[] = (string) $value;
             }
@@ -678,10 +680,13 @@ trait ConfiguresOutput
                     if ($name === 'filters') {
                         $options[] = '-filter:'.$type.':'.$track;
                         $options[] = implode(',', array_map($compileFilter, [...$baseFilters, ...$value]));
+
                         continue;
                     }
 
-                    $option = match ($name) { 'codec' => 'c', 'bitrate' => 'b', default => $name };
+                    $option = match ($name) {
+                        'codec' => 'c', 'bitrate' => 'b', default => $name
+                    };
                     $options[] = '-'.$option.':'.$type.':'.$track;
                     $options[] = (string) $value;
                 }
@@ -837,7 +842,7 @@ trait ConfiguresOutput
                 }
 
                 array_push($shared[$key], ...$value);
-            } elseif (!in_array($value, [[], null, false], true)) {
+            } elseif (! in_array($value, [[], null, false], true)) {
                 $shared[$key] = $value;
             }
         }

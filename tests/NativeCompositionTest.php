@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\File;
+use Illuminate\Process\Factory;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Process;
@@ -292,7 +293,7 @@ class NativeCompositionTest extends TestCase
         $video = $metadata->videoStreams()->first();
         $audio = $metadata->audioStreams()->last();
         $this->assertSame(7, $video->index());
-        Process::swap(new \Illuminate\Process\Factory);
+        Process::swap(new Factory);
         Process::fake();
         $command = $media->export()->mapAudio($audio)->mapVideo($video)->inspect();
         $positions = array_keys($command, '-map');
@@ -772,7 +773,7 @@ class NativeCompositionTest extends TestCase
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:size=16x12:rate=10:duration=2',
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $local->path('blue.mkv')]);
         $this->assertTrue($generation->successful(), $generation->errorOutput());
-        Storage::disk('memory')->put("nested/red 日本語.mkv", file_get_contents($source));
+        Storage::disk('memory')->put('nested/red 日本語.mkv', file_get_contents($source));
         // Invert RGB, with the red coordinate varying fastest as required by .cube.
         $lut = "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
         $lutKey = "looks/a 'quoted', 日本語: invert.cube";

@@ -578,8 +578,7 @@ class NativeExportTest extends TestCase
         });
         $storage = Storage::disk('memory');
         $destination = Mockery::mock(Filesystem::class);
-        $destination->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) =>
-            $path === 'partial/02.png' ? false : $storage->put($path, $stream, $options));
+        $destination->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $path === 'partial/02.png' ? false : $storage->put($path, $stream, $options));
         $destination->shouldReceive('size')->andReturnUsing(fn ($path) => $storage->size($path));
 
         try {

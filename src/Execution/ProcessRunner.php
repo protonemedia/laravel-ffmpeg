@@ -90,7 +90,7 @@ class ProcessRunner
 
                     if ($type === 'err') {
                         $diagnostics = substr($diagnostics.substr($buffer, -65536), -65536);
-                    } elseif ($progress instanceof \ProtoneMedia\LaravelFFMpeg\Execution\ProgressParser) {
+                    } elseif ($progress instanceof ProgressParser) {
                         try {
                             $progress->push($buffer);
                         } catch (Throwable $exception) {
@@ -108,7 +108,7 @@ class ProcessRunner
             do {
                 $running = $process->running();
 
-                if ($captureFailure instanceof \Throwable) {
+                if ($captureFailure instanceof Throwable) {
                     throw $captureFailure;
                 }
 
@@ -188,7 +188,7 @@ class ProcessRunner
                         $process->wait();
                     }
                 } catch (Throwable) {
-                    if (!$failure instanceof \Throwable) {
+                    if (! $failure instanceof Throwable) {
                         throw new MediaException('Cannot stop the media process.', 'cleanup', 'process');
                     }
                 }

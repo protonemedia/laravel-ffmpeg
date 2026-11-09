@@ -2,7 +2,9 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -67,7 +69,7 @@ class NativeIntegrationRecipeTest extends TestCase
 
     protected function tearDown(): void
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 
@@ -156,7 +158,7 @@ class NativeIntegrationRecipeTest extends TestCase
         try {
             $job->handle();
             $this->fail('Persistence failure must propagate.');
-        } catch (\Illuminate\Database\QueryException $exception) {
+        } catch (QueryException $exception) {
             $this->assertStringContainsString('persistence unavailable', $exception->getMessage());
         }
         $this->assertSame('pending', DB::table('recipe_conversions')->sole()->status);

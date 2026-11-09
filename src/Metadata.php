@@ -43,7 +43,7 @@ readonly class Metadata
     /** @return Collection<int, Stream> */
     public function streams(): Collection
     {
-        return collect($this->data['streams'])->map(fn (array $stream): \ProtoneMedia\LaravelFFMpeg\Stream => new Stream($stream, $this->sourceIdentity));
+        return collect($this->data['streams'])->map(fn (array $stream): Stream => new Stream($stream, $this->sourceIdentity));
     }
 
     /** @return Collection<int, Stream> */
@@ -74,12 +74,12 @@ readonly class Metadata
 
     public function hasVideo(): bool
     {
-        return $this->video() instanceof \ProtoneMedia\LaravelFFMpeg\Stream;
+        return $this->video() instanceof Stream;
     }
 
     public function hasAudio(): bool
     {
-        return $this->audio() instanceof \ProtoneMedia\LaravelFFMpeg\Stream;
+        return $this->audio() instanceof Stream;
     }
 
     public function video(): ?Stream

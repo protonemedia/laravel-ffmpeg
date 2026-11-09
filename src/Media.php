@@ -204,7 +204,7 @@ readonly class Media
 
     public function probe(): Metadata
     {
-        return $this->withInput(fn(string $path, Workspace $workspace): \ProtoneMedia\LaravelFFMpeg\Metadata => $workspace->probe($this));
+        return $this->withInput(fn (string $path, Workspace $workspace): Metadata => $workspace->probe($this));
     }
 
     /** The caller's key must change whenever the source bytes or object version change. */
@@ -233,7 +233,7 @@ readonly class Media
             throw new InvalidArgumentException('Audio analysis requires a nonnegative audio track index.');
         }
 
-        return $this->withInput(function (string $path, Workspace $workspace) use ($audioFilter, $audio): \ProtoneMedia\LaravelFFMpeg\ProcessResult {
+        return $this->withInput(function (string $path, Workspace $workspace) use ($audioFilter, $audio): ProcessResult {
             $runner = $workspace->runner;
             $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
             $runner->version($binary, 'ffmpeg', $workspace->path, Progress::ANALYSIS);
@@ -265,7 +265,7 @@ readonly class Media
             try {
                 $workspace->delete();
             } catch (Throwable $exception) {
-                if (!$failure instanceof \Throwable) {
+                if (! $failure instanceof Throwable) {
                     throw $exception;
                 }
             }

@@ -37,6 +37,7 @@ while (! feof($client)) {
     $headers = 'CSeq: '.($sequence[1] ?? 1)."\r\n";
     if ($mode === 'denied') {
         fwrite($client, "RTSP/1.0 401 Unauthorized\r\n".$headers."WWW-Authenticate: Basic realm=\"test\"\r\n\r\n");
+
         continue;
     }
     if (str_starts_with($request, 'DESCRIBE')) {
@@ -57,7 +58,8 @@ while (! feof($client)) {
         fwrite($client, "RTSP/1.0 200 OK\r\n".$headers."Session: snapshot\r\n\r\n");
         if ($mode === 'stall') {
             // Keep the connection open until the client's bounded operation stops it.
-            while (! feof($client) && fgets($client) !== false) {}
+            while (! feof($client) && fgets($client) !== false) {
+            }
             break;
         }
         $index = $timestamp = 0;

@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -54,7 +55,7 @@ class NativeQueueValidationTest extends TestCase
 
     protected function tearDown(): void
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
+        (new Filesystem)->deleteDirectory($this->root);
         parent::tearDown();
     }
 
@@ -104,7 +105,9 @@ class NativeQueueValidationTest extends TestCase
             }
         }
         $capture = new \stdClass;
-        foreach ([fn ($progress) => null, static function ($progress) use ($capture) {}] as $callback) {
+        foreach ([fn ($progress) => null, static function ($progress) use ($capture) {
+            $capture->progress = $progress;
+        }] as $callback) {
             try {
                 $this->source()->export()->onProgress($callback)->queued();
                 $this->fail('Nonportable callbacks must not be queued.');

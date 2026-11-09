@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use PHPUnit\Framework\Attributes\Test;
@@ -80,7 +81,7 @@ class NativeAnimatedWatermarkTest extends TestCase
             $this->assertEqualsWithDelta(1.6, $durations($root.'/output/raw.mp4')['video'], 0.1);
             $this->assertSame([], glob($root.'/work/*'));
         } finally {
-            (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($root);
+            (new Filesystem)->deleteDirectory($root);
         }
     }
 }

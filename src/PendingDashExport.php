@@ -480,7 +480,7 @@ final class PendingDashExport implements Exportable, MeasuresDuration, PackagesA
         $this->write($paths[$master], $document->saveXML());
         $artifacts = [...$segments, ...$playlists, ['path' => $paths[$master], 'output' => $master,
             'role' => 'dash-manifest', 'destination' => $outputs[$master]->destination()]];
-        $this->export->validateDestinations(array_map(fn (array $artifact): \ProtoneMedia\LaravelFFMpeg\ExportOutput => new ExportOutput($artifact['destination']['path'], $this->export->filesystem()), $artifacts));
+        $this->export->validateDestinations(array_map(fn (array $artifact): ExportOutput => new ExportOutput($artifact['destination']['path'], $this->export->filesystem()), $artifacts));
 
         return $artifacts;
     }

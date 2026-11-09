@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 use League\Flysystem\PathPrefixing\PathPrefixedAdapter;
+use League\Flysystem\PathTraversalDetected;
 use League\Flysystem\ReadOnly\ReadOnlyFilesystemAdapter;
 use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -110,7 +111,7 @@ class NativePreservationTest extends TestCase
         try {
             $media->export()->toDisk($writable)->save('../outside.flac');
             $this->fail('A destination escaped the disk root.');
-        } catch (\League\Flysystem\PathTraversalDetected) {
+        } catch (PathTraversalDetected) {
             $this->assertFileDoesNotExist($this->root.'/storage/outside.flac');
         }
         $this->assertSame(file_get_contents($this->root.'/source.wav'), $source->get('input.wav'));

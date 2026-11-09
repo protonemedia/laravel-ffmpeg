@@ -20,8 +20,7 @@ final readonly class ExportResult implements Result
             return $this->generatedFiles[0];
         }
 
-        return $this->files()->sole(fn (GeneratedFile $file): bool =>
-            ($path === null || $file->path === $path) && ($disk === null || $file->disk === $disk));
+        return $this->files()->sole(fn (GeneratedFile $file): bool => ($path === null || $file->path === $path) && ($disk === null || $file->disk === $disk));
     }
 
     public function processes(): Collection

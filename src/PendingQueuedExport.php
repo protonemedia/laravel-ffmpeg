@@ -105,7 +105,7 @@ class PendingQueuedExport
         $job->timeout = config('laravel-ffmpeg.queue.timeout') ?? ($timeout === null ? 0 : (int) ceil($timeout) + 30);
         $job->tries = config('laravel-ffmpeg.queue.tries', 1);
         $job->backoff = config('laravel-ffmpeg.queue.backoff', 0);
-        if ($this->configure instanceof \Closure) {
+        if ($this->configure instanceof Closure) {
             ($this->configure)($job);
         }
 
