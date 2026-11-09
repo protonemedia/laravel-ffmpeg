@@ -28,7 +28,7 @@ class Workspace
         $this->path = rtrim($root, '/\\').DIRECTORY_SEPARATOR.'laravel-ffmpeg-'.bin2hex(random_bytes(16));
 
         if (! @mkdir($this->path, 0700)) {
-            throw new MediaException('Cannot create the media workspace.', 'staging', 'filesystem');
+            throw MediaException::staging('Cannot create the media workspace.', 'filesystem');
         }
     }
 
@@ -94,7 +94,7 @@ class Workspace
     public function delete(): void
     {
         if (! (new Filesystem)->deleteDirectory($this->path)) {
-            throw new MediaException('Cannot remove the media workspace.', 'cleanup', 'filesystem');
+            throw MediaException::cleanup('Cannot remove the media workspace.', 'filesystem');
         }
     }
 }

@@ -83,7 +83,7 @@ readonly class SequenceInput implements InputSource
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         if ($resource) {
-            throw new MediaException('An image sequence cannot be a filter resource.', 'staging', 'resource');
+            throw MediaException::staging('An image sequence cannot be a filter resource.', 'resource');
         }
 
         $dimensions = null;
@@ -92,13 +92,13 @@ readonly class SequenceInput implements InputSource
             $source = $workspace->stage($image);
             $size = @getimagesize($source);
             if ($size === false || $size[2] !== $type || ($dimensions !== null && $dimensions !== [$size[0], $size[1]])) {
-                throw new MediaException('Sequence image '.$index.' requires the declared format and matching dimensions.', 'staging', 'sequence');
+                throw MediaException::staging('Sequence image '.$index.' requires the declared format and matching dimensions.', 'sequence');
             }
 
             $dimensions = [$size[0], $size[1]];
             $target = $workspace->path.'/'.$name.'-'.sprintf('%08d', $index).'.'.$this->suffix;
             if (! @symlink($source, $target) && (! @copy($source, $target) || ! chmod($target, 0600))) {
-                throw new MediaException('Cannot prepare sequence image '.$index.'.', 'staging', 'filesystem');
+                throw MediaException::staging('Cannot prepare sequence image '.$index.'.', 'filesystem');
             }
         }
 

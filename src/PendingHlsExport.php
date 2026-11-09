@@ -516,10 +516,10 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             if (isset($this->renditions[$name])) {
                 $type = $this->renditions[$name]['type'] === 'AUDIO' ? 'audio' : 'subtitle';
                 if ($expected[$index] !== [$type]) {
-                    throw new MediaException('An HLS rendition must map exactly one stream of its declared type.', Progress::PROBING, 'mapping');
+                    throw MediaException::probing('An HLS rendition must map exactly one stream of its declared type.', 'mapping');
                 }
             } elseif ($this->variants[$name]->groups()['AUDIO'] !== null && in_array('audio', $expected[$index], true)) {
-                throw new MediaException('Variants with an alternate audio group must not map muxed audio.', Progress::PROBING, 'mapping');
+                throw MediaException::probing('Variants with an alternate audio group must not map muxed audio.', 'mapping');
             }
         }
     }
@@ -584,7 +584,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                 $clip = $output->clipSettings();
                 $duration = $clip === null ? $this->presentationDuration : min($clip['duration'], $this->presentationDuration - $clip['start']);
                 if ($duration <= 0) {
-                    throw new MediaException('An HLS subtitle rendition has no presentation duration.', Progress::VALIDATION, 'artifact');
+                    throw MediaException::validation('An HLS subtitle rendition has no presentation duration.', 'artifact');
                 }
 
                 $paths[$index] = dirname($paths[$index]).'/playlist-'.$index.'.m3u8';
@@ -600,7 +600,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                 || count($targets) !== 1 || count(array_keys($lines, '#EXTM3U', true)) !== 1
                 || count(array_keys($lines, '#EXT-X-ENDLIST', true)) !== 1
                 || $types !== ($this->playlistType === 'live' ? [] : ['#EXT-X-PLAYLIST-TYPE:'.strtoupper($this->playlistType)])) {
-                throw new MediaException('FFmpeg did not produce a complete '.$this->playlistType.' playlist.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('FFmpeg did not produce a complete '.$this->playlistType.' playlist.', 'artifact');
             }
 
             $duration = null;
@@ -623,12 +623,12 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                 if (str_starts_with($line, '#EXTINF:')) {
                     if ($duration !== null || ! preg_match('/\A#EXTINF:([0-9]+(?:\.[0-9]+)?),\z/', $line, $match)
                         || ! is_finite($duration = (float) $match[1]) || $duration <= 0) {
-                        throw new MediaException('Invalid HLS segment duration.', Progress::VALIDATION, 'artifact');
+                        throw MediaException::validation('Invalid HLS segment duration.', 'artifact');
                     }
                 } elseif (str_starts_with($line, '#EXT-X-MAP:')) {
                     if ($this->segmentType !== 'fmp4' || $init !== null || $count !== 0
                         || $line !== '#EXT-X-MAP:URI="init-'.$index.'.mp4"') {
-                        throw new MediaException('An HLS playlist references an unexpected initialization file.', Progress::VALIDATION, 'artifact');
+                        throw MediaException::validation('An HLS playlist references an unexpected initialization file.', 'artifact');
                     }
 
                     $init = dirname($paths[$index]).'/init-'.$index.'.mp4';
@@ -640,12 +640,12 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                     $segments[] = ['path' => $init, 'output' => $index, 'role' => 'hls-init', 'destination' => $destination];
                 } elseif (str_starts_with($line, '#')) {
                     if (! preg_match('/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+|#EXT-X-MEDIA-SEQUENCE:0|#EXT-X-PLAYLIST-TYPE:(?:VOD|EVENT)|#EXT-X-ENDLIST)\z/', $line)) {
-                        throw new MediaException('Unexpected HLS playlist directive.', Progress::VALIDATION, 'artifact');
+                        throw MediaException::validation('Unexpected HLS playlist directive.', 'artifact');
                     }
                 } else {
                     $filename = 'segment-'.$index.'-'.sprintf('%08d', $count).'.'.$extension;
                     if ($duration === null || $line !== $filename || ($this->segmentType === 'fmp4' && ! $this->isSubtitle($index) && $init === null)) {
-                        throw new MediaException('An HLS playlist references an unowned or unordered segment.', Progress::VALIDATION, 'artifact');
+                        throw MediaException::validation('An HLS playlist references an unowned or unordered segment.', 'artifact');
                     }
 
                     $local = dirname($paths[$index]).'/'.$filename;
@@ -687,7 +687,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             $initializations = array_values(array_filter(glob(dirname($paths[$index]).'/init-*.mp4') ?: [],
                 fn (string $file): bool => (bool) preg_match('/\Ainit-'.$index.'(?:-|\.)/', basename($file))));
             if ($count === 0 || $duration !== null || $actual !== $owned || $initializations !== ($init === null ? [] : [$init])) {
-                throw new MediaException('The HLS segment inventory is incomplete.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('The HLS segment inventory is incomplete.', 'artifact');
             }
 
             $info = $this->isSubtitle($index) ? [] : $this->playlistLines(dirname($paths[$index]).'/master-'.$index.'.m3u8');
@@ -726,7 +726,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                     if (! isset($this->renditions[$variantName]) && $variant->groups()['SUBTITLES'] === $rendition['group']) {
                         $start = $streamInfo[$variantName]['start'];
                         if (! is_numeric($start) || ! is_finite((float) $start)) {
-                            throw new MediaException('Cannot establish the HLS subtitle presentation clock.', Progress::VALIDATION, 'artifact');
+                            throw MediaException::validation('Cannot establish the HLS subtitle presentation clock.', 'artifact');
                         }
 
                         $starts[] = (int) round((float) $start * 90000);
@@ -734,7 +734,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                 }
 
                 if ($starts !== [] && max($starts) - min($starts) > 1) {
-                    throw new MediaException('A shared subtitle group requires aligned variant presentation clocks.', Progress::VALIDATION, 'artifact');
+                    throw MediaException::validation('A shared subtitle group requires aligned variant presentation clocks.', 'artifact');
                 }
 
                 $added = $this->timestampWebVtt($streamInfo[$name]['subtitle'], $starts[0] ?? 0);
@@ -812,7 +812,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         $output = @fopen($path.'.timed', 'wb');
         try {
             if ($input === false || $output === false || fgets($input) !== "WEBVTT\n") {
-                throw new MediaException('Invalid generated WebVTT header.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('Invalid generated WebVTT header.', 'artifact');
             }
 
             // HLS clocks are unsigned 33-bit MPEG timestamps, including with fragmented MP4.
@@ -820,7 +820,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             $header = 'X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:'.$ticks."\n";
             if (fwrite($output, "WEBVTT\n".$header) !== 7 + strlen($header)
                 || stream_copy_to_stream($input, $output) !== filesize($path) - 7) {
-                throw new MediaException('Cannot prepare timestamped WebVTT.', Progress::VALIDATION, 'filesystem');
+                throw MediaException::validation('Cannot prepare timestamped WebVTT.', 'filesystem');
             }
         } finally {
             if (is_resource($input)) {
@@ -833,7 +833,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         }
 
         if (! chmod($path.'.timed', 0600) || ! rename($path.'.timed', $path)) {
-            throw new MediaException('Cannot finalize timestamped WebVTT.', Progress::VALIDATION, 'filesystem');
+            throw MediaException::validation('Cannot finalize timestamped WebVTT.', 'filesystem');
         }
 
         return strlen($header);
@@ -843,7 +843,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     {
         $bytes = @file_get_contents($path, length: 16777217);
         if ($bytes === false || trim($bytes) === '' || strlen($bytes) > 16777216 || str_contains($bytes, "\0")) {
-            throw new MediaException('Cannot read the generated HLS playlist within its 16 MiB limit.', Progress::VALIDATION, 'artifact');
+            throw MediaException::validation('Cannot read the generated HLS playlist within its 16 MiB limit.', 'artifact');
         }
 
         return array_values(array_filter(explode("\n", str_replace("\r\n", "\n", rtrim($bytes, "\r\n"))), fn ($line): bool => $line !== ''));
@@ -853,19 +853,19 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     {
         $bytes = implode("\n", $lines)."\n";
         if (strlen($bytes) > 16777216) {
-            throw new MediaException('Finalized HLS playlists must fit within the 16 MiB limit.', Progress::VALIDATION, 'artifact');
+            throw MediaException::validation('Finalized HLS playlists must fit within the 16 MiB limit.', 'artifact');
         }
 
         if ($hook && $this->playlistCallback instanceof Closure) {
             $modified = ($this->playlistCallback)($bytes, $destination, $variant);
             if (! is_string($modified) || strlen($modified) > 16777216) {
-                throw new MediaException('Playlist hooks must return text within the 16 MiB limit.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('Playlist hooks must return text within the 16 MiB limit.', 'artifact');
             }
 
             $bytes = str_replace("\r\n", "\n", $modified);
             $modified = array_values(array_filter(explode("\n", rtrim($bytes, "\n")), fn ($line): bool => $line !== ''));
             if (! str_starts_with($bytes, "#EXTM3U\n") || preg_match('/[\x00-\x09\x0B-\x1F\x7F]/', $bytes) || ! preg_match('//u', $bytes)) {
-                throw new MediaException('Playlist hooks must return a UTF-8 playlist without control characters.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('Playlist hooks must return a UTF-8 playlist without control characters.', 'artifact');
             }
 
             $position = 0;
@@ -874,17 +874,17 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                     $position++;
                 } elseif (! str_starts_with($line, '#') || (str_starts_with($line, '#EXT')
                     && (! preg_match('/\A#EXT-X-(?:START|SESSION-DATA|DATERANGE|PROGRAM-DATE-TIME):/', $line) || preg_match('/\bURI\s*=/i', $line)))) {
-                    throw new MediaException('Playlist hooks may only add comments and non-resource START, SESSION-DATA, DATERANGE, or PROGRAM-DATE-TIME tags.', Progress::VALIDATION, 'artifact');
+                    throw MediaException::validation('Playlist hooks may only add comments and non-resource START, SESSION-DATA, DATERANGE, or PROGRAM-DATE-TIME tags.', 'artifact');
                 }
             }
 
             if ($position !== count($lines)) {
-                throw new MediaException('Playlist hooks must preserve generated lines in order.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('Playlist hooks must preserve generated lines in order.', 'artifact');
             }
         }
 
         if (@file_put_contents($path, $bytes) !== strlen($bytes) || ! chmod($path, 0600)) {
-            throw new MediaException('Cannot finalize the generated HLS playlist.', Progress::VALIDATION, 'filesystem');
+            throw MediaException::validation('Cannot finalize the generated HLS playlist.', 'filesystem');
         }
     }
 }

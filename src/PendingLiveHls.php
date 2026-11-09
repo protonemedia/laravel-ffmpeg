@@ -168,7 +168,7 @@ class PendingLiveHls
 
         try {
             if ($disk->allFiles($directory) !== []) {
-                throw new MediaException('Live HLS requires an empty, exclusively owned destination namespace.', 'publication', 'ownership');
+                throw MediaException::publication('Live HLS requires an empty, exclusively owned destination namespace.', 'ownership');
             }
 
             $check();
@@ -198,12 +198,12 @@ class PendingLiveHls
                     $bytes = file_get_contents($local, length: 1048577);
                     if ($bytes === false || strlen($bytes) > 1048576
                         || ! preg_match('/^#EXT-X-MEDIA-SEQUENCE:([0-9]+)$/m', $bytes, $sequence)) {
-                        throw new MediaException('Invalid live encoder playlist.', 'publication', 'artifact');
+                        throw MediaException::publication('Invalid live encoder playlist.', 'artifact');
                     }
 
                     $number = (int) $sequence[1];
                     if ($number < $start || $number > $last + 1) {
-                        throw new MediaException('The live publisher missed an encoder window.', 'publication', 'window');
+                        throw MediaException::publication('The live publisher missed an encoder window.', 'window');
                     }
 
                     $duration = null;
@@ -213,26 +213,26 @@ class PendingLiveHls
                             if ($duration !== null || ! preg_match('/\A#EXTINF:([0-9]+(?:\.[0-9]+)?),\z/', $line, $match)
                                 || ! is_finite($duration = (float) $match[1]) || $duration <= 0
                                 || $duration > ceil($this->segmentDuration) + 1) {
-                                throw new MediaException('Invalid live segment duration.', 'publication', 'artifact');
+                                throw MediaException::publication('Invalid live segment duration.', 'artifact');
                             }
                         } elseif ($line !== '' && $line[0] !== '#') {
                             // Ownership derives from our generated prefix and contiguous counter,
                             // never from arbitrary changing playlist references or destination scans.
                             $name = $prefix.sprintf('%012d', $number).'.ts';
                             if ($duration === null || $line !== $name) {
-                                throw new MediaException('Unowned live segment reference.', 'publication', 'ownership');
+                                throw MediaException::publication('Unowned live segment reference.', 'ownership');
                             }
 
                             if ($number > $last) {
                                 $input = @fopen($workspace->path.'/'.$name, 'rb');
                                 if ($input === false) {
-                                    throw new MediaException('Cannot read a completed live segment.', 'publication', 'artifact');
+                                    throw MediaException::publication('Cannot read a completed live segment.', 'artifact');
                                 }
 
                                 $key = $directory.'/'.$name;
                                 try {
                                     if (fstat($input)['size'] === 0 || ! $disk->put($key, $input)) {
-                                        throw new MediaException('Cannot publish a live segment.', 'publication', 'transfer');
+                                        throw MediaException::publication('Cannot publish a live segment.', 'transfer');
                                     }
                                 } finally {
                                     fclose($input);
@@ -250,12 +250,12 @@ class PendingLiveHls
                             $number++;
                             $duration = null;
                         } elseif (! preg_match('/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+|#EXT-X-MEDIA-SEQUENCE:[0-9]+|#EXT-X-ENDLIST)\z/', $line)) {
-                            throw new MediaException('Unexpected live playlist directive.', 'publication', 'artifact');
+                            throw MediaException::publication('Unexpected live playlist directive.', 'artifact');
                         }
                     }
 
                     if ($duration !== null) {
-                        throw new MediaException('Incomplete live segment reference.', 'publication', 'artifact');
+                        throw MediaException::publication('Incomplete live segment reference.', 'artifact');
                     }
 
                     if ($entries === [] || (! $changed && ! $finished)) {
@@ -281,7 +281,7 @@ class PendingLiveHls
                     }
 
                     if (! $disk->put($playlist, $text)) {
-                        throw new MediaException('Cannot replace the live playlist.', 'publication', 'transfer');
+                        throw MediaException::publication('Cannot replace the live playlist.', 'transfer');
                     }
 
                     $playlistPublished = true;
@@ -289,7 +289,7 @@ class PendingLiveHls
                     foreach ($owned as $key => $sequence) {
                         if ($sequence < $entries[0]['number'] - $this->window) {
                             if (! $disk->delete($key)) {
-                                throw new MediaException('Cannot prune live destination retention.', 'publication', 'retention');
+                                throw MediaException::publication('Cannot prune live destination retention.', 'retention');
                             }
 
                             unset($owned[$key]);
@@ -323,7 +323,7 @@ class PendingLiveHls
                 $publish($result->exitCode === 0 && ! $this->reconnectOnEof);
                 if ($result->exitCode === 0 && ! $this->reconnectOnEof) {
                     if ($entries === []) {
-                        throw new MediaException('Live encoder produced no segments.', 'live', 'artifact');
+                        throw MediaException::live('Live encoder produced no segments.', 'artifact');
                     }
 
                     $status = 'completed';
@@ -331,13 +331,13 @@ class PendingLiveHls
                 }
 
                 if ($attempts > $this->retries) {
-                    throw new MediaException('Live source exhausted its reconnect policy after '.$attempts.' attempts.', 'live', 'source');
+                    throw MediaException::live('Live source exhausted its reconnect policy after '.$attempts.' attempts.', 'source');
                 }
 
                 // Only local generated files are removed. Destination history is owned above.
                 foreach (glob($workspace->path.'/'.$prefix.'*') ?: [] as $file) {
                     if (! @unlink($file)) {
-                        throw new MediaException('Cannot prune local live segments.', 'cleanup', 'filesystem');
+                        throw MediaException::cleanup('Cannot prune local live segments.', 'filesystem');
                     }
                 }
 

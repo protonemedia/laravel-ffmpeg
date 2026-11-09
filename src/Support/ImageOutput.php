@@ -5,7 +5,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Support;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
-use ProtoneMedia\LaravelFFMpeg\Progress;
 
 /** @internal Stateless image-output rules shared by frame, frames, storyboard and waveform builders. */
 class ImageOutput
@@ -31,7 +30,7 @@ class ImageOutput
         $type = strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'png' ? IMAGETYPE_PNG : IMAGETYPE_JPEG;
 
         if ($image === false || $image[0] <= 0 || $image[1] <= 0 || $image[2] !== $type) {
-            throw new MediaException('FFmpeg did not produce the requested image format.', Progress::VALIDATION, 'artifact');
+            throw MediaException::validation('FFmpeg did not produce the requested image format.', 'artifact');
         }
     }
 
@@ -71,7 +70,7 @@ class ImageOutput
         sort($files, SORT_NATURAL);
 
         if ($files === [] || ($expected !== null && count($files) !== $expected)) {
-            throw new MediaException('FFmpeg did not produce the expected image sequence.', Progress::VALIDATION, 'artifact');
+            throw MediaException::validation('FFmpeg did not produce the expected image sequence.', 'artifact');
         }
 
         $destination = $output->destination();
@@ -79,7 +78,7 @@ class ImageOutput
 
         foreach ($files as $index => $file) {
             if ($file !== sprintf($path, $index + 1)) {
-                throw new MediaException('The generated image sequence is not contiguous.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('The generated image sequence is not contiguous.', 'artifact');
             }
 
             $artifacts[] = ['path' => $file, 'output' => 0, 'destination' => [

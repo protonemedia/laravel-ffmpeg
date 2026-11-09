@@ -608,11 +608,11 @@ class PendingExport implements Exportable
                             ? @file_put_contents($target, $source) === strlen($source)
                             : @copy($workspace->stage($source, resource: true), $target);
                     } catch (MediaException $exception) {
-                        throw new MediaException('Cannot stage '.$resource['context'].'.', 'staging', $exception->category);
+                        throw MediaException::staging('Cannot stage '.$resource['context'].'.', $exception->category);
                     }
 
                     if (! $written || ! chmod($target, 0600)) {
-                        throw new MediaException('Cannot stage '.$resource['context'].'.', 'staging', 'transfer');
+                        throw MediaException::staging('Cannot stage '.$resource['context'].'.', 'transfer');
                     }
 
                     $staged[$target] = true;
@@ -635,7 +635,7 @@ class PendingExport implements Exportable
                         $tracks = $output->outputConfiguration()[$key];
                         if ($tracks !== [] && ! in_array(null, $expected[$index], true)
                             && max(array_keys($tracks)) >= count(array_filter($expected[$index], fn ($selected): bool => $selected === $type))) {
-                            throw new MediaException(ucfirst($type).' track settings require existing output '.$type.' tracks.', 'probing', 'mapping');
+                            throw MediaException::probing(ucfirst($type).' track settings require existing output '.$type.' tracks.', 'mapping');
                         }
                     }
                 }
@@ -668,7 +668,7 @@ class PendingExport implements Exportable
                     $process = $runner->run($command, $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
 
                     if ($process->exitCode !== 0) {
-                        throw new MediaException($failure, Progress::ANALYSIS, 'exit', $process->diagnostics);
+                        throw MediaException::analysis($failure, 'exit', $process->diagnostics);
                     }
 
                     $summaries[] = $process->summary();
@@ -907,15 +907,15 @@ class PendingExport implements Exportable
             $image = $metadata[$this->coverInput];
             if (! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true)
                 || $image->streams()->count() !== 1) {
-                throw new MediaException('Cover art requires a standalone PNG or JPEG image.', 'probing', 'cover-art');
+                throw MediaException::probing('Cover art requires a standalone PNG or JPEG image.', 'cover-art');
             }
 
             if ($metadata[0]->streams()->contains(fn ($stream): bool => (int) $stream->get('disposition.attached_pic') === 1)) {
-                throw new MediaException('Cover art does not replace existing attached pictures.', 'probing', 'cover-art');
+                throw MediaException::probing('Cover art does not replace existing attached pictures.', 'cover-art');
             }
 
             if ($metadata[0]->streams()->contains(fn ($stream): bool => ! in_array($stream->get('codec_type'), ['video', 'audio'], true))) {
-                throw new MediaException('Cover art accepts sources containing only motion video and audio.', 'probing', 'cover-art');
+                throw MediaException::probing('Cover art accepts sources containing only motion video and audio.', 'cover-art');
             }
 
             $this->coverVideoTrack = $metadata[0]->streams()->filter(fn ($stream): bool => $stream->get('codec_type') === 'video')->count();
@@ -926,7 +926,7 @@ class PendingExport implements Exportable
             $gif = $image->get('format.format_name') === 'gif' && $image->video()?->get('codec_name') === 'gif';
             if ((! $gif && ! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true))
                 || $image->streams()->count() !== 1 || (! $gif && $mark['loop'])) {
-                throw new MediaException('Watermarks require a standalone PNG, JPEG, or GIF image; loop() requires a GIF.', 'probing', 'watermark');
+                throw MediaException::probing('Watermarks require a standalone PNG, JPEG, or GIF image; loop() requires a GIF.', 'watermark');
             }
         }
     }
@@ -936,19 +936,19 @@ class PendingExport implements Exportable
     {
         $stream = @fopen($target, 'wb');
         if ($stream === false) {
-            throw new MediaException('Cannot prepare fragment validation.', Progress::VALIDATION, 'filesystem');
+            throw MediaException::validation('Cannot prepare fragment validation.', 'filesystem');
         }
 
         try {
             foreach ([$init, $segment] as $source) {
                 $input = @fopen($source, 'rb');
                 if ($input === false) {
-                    throw new MediaException('Cannot read fragment validation input.', Progress::VALIDATION, 'filesystem');
+                    throw MediaException::validation('Cannot read fragment validation input.', 'filesystem');
                 }
 
                 try {
                     if (stream_copy_to_stream($input, $stream) !== filesize($source)) {
-                        throw new MediaException('Cannot prepare fragment validation.', Progress::VALIDATION, 'filesystem');
+                        throw MediaException::validation('Cannot prepare fragment validation.', 'filesystem');
                     }
                 } finally {
                     fclose($input);
@@ -959,7 +959,7 @@ class PendingExport implements Exportable
         }
 
         if (! chmod($target, 0600)) {
-            throw new MediaException('Cannot secure fragment validation.', Progress::VALIDATION, 'filesystem');
+            throw MediaException::validation('Cannot secure fragment validation.', 'filesystem');
         }
 
         return $target;
@@ -976,7 +976,7 @@ class PendingExport implements Exportable
                 && (! is_numeric($origin) || ! is_finite((float) $origin) || abs((float) $origin) > 0.000001))
             || $item->videoStreams()->contains(fn (Stream $stream): bool => ! is_numeric($stream->get('start_time'))
                 || abs((float) $stream->get('start_time')) > 0.000001)) {
-            throw new MediaException($operation.' requires a zero presentation origin and zero video origins.', 'probing', 'metadata');
+            throw MediaException::probing($operation.' requires a zero presentation origin and zero video origins.', 'metadata');
         }
     }
 
@@ -1015,11 +1015,11 @@ class PendingExport implements Exportable
         clearstatcache(true, $path);
 
         if (! is_file($path) || ($size = filesize($path)) === false || $size === 0) {
-            throw new MediaException('FFmpeg did not produce a nonempty media file.', Progress::VALIDATION, 'artifact');
+            throw MediaException::validation('FFmpeg did not produce a nonempty media file.', 'artifact');
         }
 
         if ($role === 'hls-key' && $size !== 16) {
-            throw new MediaException('An AES-128 HLS key must contain exactly 16 bytes.', Progress::VALIDATION, 'artifact');
+            throw MediaException::validation('An AES-128 HLS key must contain exactly 16 bytes.', 'artifact');
         }
 
         if ($this->operation instanceof ValidatesArtifacts) {
@@ -1044,7 +1044,7 @@ class PendingExport implements Exportable
 
             foreach (array_unique($required) as $filter) {
                 if ($filters->exitCode !== 0 || ! preg_match('/^\s*\S+\s+'.preg_quote($filter, '/').'\s/m', $filters->output)) {
-                    throw new MediaException('The FFmpeg build requires the '.$filter.' filter.', 'probing', 'capability');
+                    throw MediaException::probing('The FFmpeg build requires the '.$filter.' filter.', 'capability');
                 }
             }
         }
@@ -1055,7 +1055,7 @@ class PendingExport implements Exportable
             }
 
             if (! mb_check_encoding(file_get_contents($workspace->path.'/'.$resource['path']), 'UTF-8')) {
-                throw new MediaException('Subtitle resources require UTF-8 for '.$resource['context'].'.', 'probing', 'resource');
+                throw MediaException::probing('Subtitle resources require UTF-8 for '.$resource['context'].'.', 'resource');
             }
 
             // Probe the exact filename and bytes the subtitles filter reopens.
@@ -1069,7 +1069,7 @@ class PendingExport implements Exportable
 
             if ($probe->exitCode !== 0 || ! in_array($data['format']['format_name'] ?? null, ['srt', 'ass', 'webvtt'], true)
                 || ($data['streams'] ?? null) !== [['codec_type' => 'subtitle']]) {
-                throw new MediaException('A subtitle resource must be a standalone SRT, ASS, or WebVTT file for '.$resource['context'].'.', 'probing', 'resource');
+                throw MediaException::probing('A subtitle resource must be a standalone SRT, ASS, or WebVTT file for '.$resource['context'].'.', 'resource');
             }
 
             // The encoding binary must also accept and decode these unchanged
@@ -1081,7 +1081,7 @@ class PendingExport implements Exportable
             ], $workspace->path);
 
             if ($decode->exitCode !== 0) {
-                throw new MediaException('Cannot decode '.$resource['context'].'.', 'probing', 'resource');
+                throw MediaException::probing('Cannot decode '.$resource['context'].'.', 'resource');
             }
         }
     }
@@ -1168,7 +1168,7 @@ class PendingExport implements Exportable
             $streams = $selector === '' ? $metadata[$input]->streams() : $workspace->probe($this->inputs[$input], $selector)->streams();
 
             if ($streams->isEmpty() && ! $exclude && ! str_ends_with($map, '?')) {
-                throw new MediaException('A required stream map matched no streams.', 'probing', 'mapping');
+                throw MediaException::probing('A required stream map matched no streams.', 'mapping');
             }
 
             foreach ($streams as $stream) {
@@ -1183,7 +1183,7 @@ class PendingExport implements Exportable
         }
 
         if ($output->hasMaps() && $selected === []) {
-            throw new MediaException('Explicit stream maps selected no output streams.', 'probing', 'mapping');
+            throw MediaException::probing('Explicit stream maps selected no output streams.', 'mapping');
         }
 
         return array_column($selected, 'type');

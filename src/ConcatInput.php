@@ -62,7 +62,7 @@ readonly class ConcatInput implements InputSource
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         if ($resource) {
-            throw new MediaException('Concatenated media cannot be a filter resource.', 'staging', 'resource');
+            throw MediaException::staging('Concatenated media cannot be a filter resource.', 'resource');
         }
 
         $manifest = "ffconcat version 1.0\n";
@@ -78,17 +78,17 @@ readonly class ConcatInput implements InputSource
 
             if ($duration === null || $duration <= 0 || $streams === []
                 || in_array($metadata->get('format.format_name'), ['concat', 'hls', 'dash'], true)) {
-                throw new MediaException('Concat input '.$index.' requires finite standalone media with streams.', 'probing', 'metadata');
+                throw MediaException::probing('Concat input '.$index.' requires finite standalone media with streams.', 'metadata');
             }
 
             $start = $metadata->get('format.start_time', '0');
 
             if (! is_numeric($start) || (float) $start !== 0.0) {
-                throw new MediaException('Concat input '.$index.' requires a zero presentation origin. Use an explicit normalization graph.', 'probing', 'metadata');
+                throw MediaException::probing('Concat input '.$index.' requires a zero presentation origin. Use an explicit normalization graph.', 'metadata');
             }
 
             if ($layout !== null && $layout !== $streams) {
-                throw new MediaException('Concat input '.$index.' has a different stream layout or codec parameters. Use an explicit normalization graph.', 'probing', 'concat');
+                throw MediaException::probing('Concat input '.$index.' has a different stream layout or codec parameters. Use an explicit normalization graph.', 'concat');
             }
 
             $layout = $streams;
@@ -99,7 +99,7 @@ readonly class ConcatInput implements InputSource
             // Safe relative manifest names avoid FFconcat's quoting rules for
             // caller filenames. Cleanup deletes links, never their source files.
             if (! @symlink($source, $target) && (! @copy($source, $target) || ! chmod($target, 0600))) {
-                throw new MediaException('Cannot prepare concat input '.$index.'.', 'staging', 'filesystem');
+                throw MediaException::staging('Cannot prepare concat input '.$index.'.', 'filesystem');
             }
 
             $manifest .= "file '$alias'\nduration ".sprintf('%.6F', $duration)."\n";
@@ -108,7 +108,7 @@ readonly class ConcatInput implements InputSource
         $path = $workspace->path.'/'.$name;
 
         if (@file_put_contents($path, $manifest) !== strlen($manifest) || ! chmod($path, 0600)) {
-            throw new MediaException('Cannot write the concat manifest.', 'staging', 'filesystem');
+            throw MediaException::staging('Cannot write the concat manifest.', 'filesystem');
         }
 
         return $path;

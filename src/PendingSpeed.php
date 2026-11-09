@@ -98,7 +98,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
     public function selections(array $expected): void
     {
         if ($expected[0] === [] || array_any($expected[0], fn ($type): bool => ! in_array($type, ['audio', 'video'], true))) {
-            throw new MediaException('Speed requires selected audio or video streams only.', 'probing', 'mapping');
+            throw MediaException::probing('Speed requires selected audio or video streams only.', 'mapping');
         }
     }
 
@@ -114,7 +114,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         foreach ($item->audioStreams() as $stream) {
             $start = $stream->get('start_time');
             if (! is_numeric($start) || ! is_finite((float) $start) || (float) $start < 0) {
-                throw new MediaException('Speed requires nonnegative audio origins on all source tracks.', 'probing', 'metadata');
+                throw MediaException::probing('Speed requires nonnegative audio origins on all source tracks.', 'metadata');
             }
         }
 

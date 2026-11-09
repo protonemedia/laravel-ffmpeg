@@ -181,26 +181,26 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         $duration = $source->duration();
         // Categories name the condition: metadata for durations and origins, mapping for missing tracks.
         if (! $source->hasVideo() && ! $source->hasAudio()) {
-            throw new MediaException('Audio mixing requires primary media with video or audio.', 'probing', 'mapping');
+            throw MediaException::probing('Audio mixing requires primary media with video or audio.', 'mapping');
         }
 
         if ($duration === null || $duration <= 0) {
-            throw new MediaException('Audio mixing requires finite primary media.', 'probing', 'metadata');
+            throw MediaException::probing('Audio mixing requires finite primary media.', 'metadata');
         }
 
         PendingExport::assertZeroOrigins($source, 'Audio mixing', audioOnlyOffset: true);
         $audio = $source->audio();
         if ($source->hasVideo() && $audio !== null
             && (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0)) {
-            throw new MediaException('Original audio requires a known nonnegative timestamp origin relative to video.', 'probing', 'metadata');
+            throw MediaException::probing('Original audio requires a known nonnegative timestamp origin relative to video.', 'metadata');
         }
 
         if ($added->audio() === null) {
-            throw new MediaException('Added audio requires an audio track.', 'probing', 'mapping');
+            throw MediaException::probing('Added audio requires an audio track.', 'mapping');
         }
 
         if ($added->duration() === null || $added->duration() <= 0) {
-            throw new MediaException('Added audio requires a finite duration.', 'probing', 'metadata');
+            throw MediaException::probing('Added audio requires a finite duration.', 'metadata');
         }
 
         return $this->export->outputConfiguration()['audioFilters'] === [] ? $duration : null;
@@ -229,11 +229,11 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
                     throw $exception;
                 }
 
-                throw new MediaException('Looped audio must decode to nonempty samples.', Progress::ANALYSIS, 'artifact', $exception->diagnostics);
+                throw MediaException::analysis('Looped audio must decode to nonempty samples.', 'artifact', $exception->diagnostics);
             }
 
             if (! $duration) {
-                throw new MediaException('Looped audio must decode to nonempty samples.', Progress::ANALYSIS, 'artifact');
+                throw MediaException::analysis('Looped audio must decode to nonempty samples.', 'artifact');
             }
 
             array_splice($command, $protocols[1], $inputs[1] + 2 - $protocols[1], [

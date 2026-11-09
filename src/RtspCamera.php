@@ -71,7 +71,7 @@ readonly class RtspCamera implements InputSource
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         if ($resource) {
-            throw new MediaException('Capture an RTSP snapshot before using it as a resource.', 'staging', 'resource');
+            throw MediaException::staging('Capture an RTSP snapshot before using it as a resource.', 'resource');
         }
 
         $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
@@ -86,7 +86,7 @@ readonly class RtspCamera implements InputSource
             '-i', $this->url, '-map', '0:v:0', '-frames:v', '1', '-an', '-c:v', 'png', '-f', 'image2', '-update', '1', $path,
         ], $workspace->path, $this->redactions(), phase: 'staging', timeout: $this->timeout);
         if ($result->failed() || ! is_file($path) || @getimagesize($path) === false || ! chmod($path, 0600)) {
-            throw new MediaException('Cannot capture the RTSP snapshot.', 'staging', 'capture', $result->errorOutput());
+            throw MediaException::staging('Cannot capture the RTSP snapshot.', 'capture', $result->errorOutput());
         }
 
         return $path;

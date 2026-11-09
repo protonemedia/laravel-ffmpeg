@@ -21,4 +21,76 @@ class MediaException extends RuntimeException
         // Native process and adapter exceptions may contain credentials or full commands.
         parent::__construct($message);
     }
+
+    /**
+     * Create a new exception for a failure while staging inputs and resources.
+     */
+    public static function staging(string $message, string $category, string $diagnostics = '', array $published = [], array $destination = []): self
+    {
+        return new self($message, 'staging', $category, $diagnostics, $published, $destination);
+    }
+
+    /**
+     * Create a new exception for a failure while probing inputs.
+     */
+    public static function probing(string $message, string $category, string $diagnostics = '', array $published = [], array $destination = []): self
+    {
+        return new self($message, 'probing', $category, $diagnostics, $published, $destination);
+    }
+
+    /**
+     * Create a new exception for a failure during an analysis pass.
+     */
+    public static function analysis(string $message, string $category, string $diagnostics = '', array $published = [], array $destination = []): self
+    {
+        return new self($message, 'analysis', $category, $diagnostics, $published, $destination);
+    }
+
+    /**
+     * Create a new exception for a failure while encoding.
+     */
+    public static function encoding(string $message, string $category, string $diagnostics = '', array $published = [], array $destination = []): self
+    {
+        return new self($message, 'encoding', $category, $diagnostics, $published, $destination);
+    }
+
+    /**
+     * Create a new exception for a failure while validating generated files.
+     */
+    public static function validation(string $message, string $category, string $diagnostics = '', array $published = [], array $destination = []): self
+    {
+        return new self($message, 'validation', $category, $diagnostics, $published, $destination);
+    }
+
+    /**
+     * Create a new exception for a failure while publishing generated files.
+     */
+    public static function publication(string $message, string $category, string $diagnostics = '', array $published = [], array $destination = []): self
+    {
+        return new self($message, 'publication', $category, $diagnostics, $published, $destination);
+    }
+
+    /**
+     * Create a new exception for a failure while serving an HLS response.
+     */
+    public static function response(string $message, string $category, string $diagnostics = '', array $published = [], array $destination = []): self
+    {
+        return new self($message, 'response', $category, $diagnostics, $published, $destination);
+    }
+
+    /**
+     * Create a new exception for a failure while deleting generated files.
+     */
+    public static function cleanup(string $message, string $category, string $diagnostics = '', array $published = [], array $destination = []): self
+    {
+        return new self($message, 'cleanup', $category, $diagnostics, $published, $destination);
+    }
+
+    /**
+     * Create a new exception for a failure while publishing continuous HLS.
+     */
+    public static function live(string $message, string $category, string $diagnostics = '', array $published = [], array $destination = []): self
+    {
+        return new self($message, 'live', $category, $diagnostics, $published, $destination);
+    }
 }

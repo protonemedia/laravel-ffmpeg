@@ -214,7 +214,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         }
 
         if ($streams->count() !== 1 || $streams->first()->get('codec_type') !== 'audio' || $streams->first()->sampleRate() !== $this->sampleRate) {
-            throw new MediaException('Normalized output must contain one audio stream at the requested sample rate.', 'validation', 'artifact');
+            throw MediaException::validation('Normalized output must contain one audio stream at the requested sample rate.', 'artifact');
         }
     }
 }

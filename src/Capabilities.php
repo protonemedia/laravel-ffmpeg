@@ -34,7 +34,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
             // Verify an actual write, not just a permission-bit prediction.
             $file = $workspace->path.'/write-check';
             if (@file_put_contents($file, 'ok') !== 2 || ! @unlink($file)) {
-                throw new MediaException('The temporary media root is not writable.', 'staging', 'filesystem');
+                throw MediaException::staging('The temporary media root is not writable.', 'filesystem');
             }
 
             $data['temporary_root'] = ['writable' => true];
@@ -106,7 +106,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
     public function require(array $requirements): self
     {
         if ($this->missing($requirements) !== []) {
-            throw new MediaException('Required compiled-in media capabilities are missing.', 'probing', 'capability');
+            throw MediaException::probing('Required compiled-in media capabilities are missing.', 'capability');
         }
 
         return $this;
@@ -118,7 +118,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
             outputLimit: 2097152, timeout: 15);
         if ($result->exitCode !== 0) {
             // Binary output can contain paths, environment details or credentials.
-            throw new MediaException('Cannot inspect media binary capabilities.', 'probing', 'capability');
+            throw MediaException::probing('Cannot inspect media binary capabilities.', 'capability');
         }
 
         return $result->output;
@@ -132,7 +132,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
             'bsfs' => 'Bitstream filters:', 'hwaccels' => 'Hardware acceleration methods:',
         };
         if (! str_starts_with(ltrim($output), $header)) {
-            throw new MediaException('Invalid media capability listing.', 'probing', 'capability');
+            throw MediaException::probing('Invalid media capability listing.', 'capability');
         }
 
         $pattern = match ($kind) {
@@ -150,7 +150,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         $names = array_values(array_unique($names));
         sort($names);
         if ($names === [] && $kind !== 'hwaccels') {
-            throw new MediaException('Empty media capability listing.', 'probing', 'capability');
+            throw MediaException::probing('Empty media capability listing.', 'capability');
         }
 
         return $names;
@@ -159,14 +159,14 @@ readonly class Capabilities implements Arrayable, JsonSerializable
     protected function parseProtocols(string $output): array
     {
         if (! preg_match('/Input:\s*(.*?)\s*Output:\s*(.*)\z/s', $output, $matches)) {
-            throw new MediaException('Invalid media protocol listing.', 'probing', 'capability');
+            throw MediaException::probing('Invalid media protocol listing.', 'capability');
         }
 
         $protocols = [];
         foreach (['input' => 1, 'output' => 2] as $direction => $index) {
             $names = preg_split('/\s+/', trim($matches[$index]), flags: PREG_SPLIT_NO_EMPTY);
             if ($names === [] || array_any($names, fn ($name): bool => ! preg_match('/\A[a-zA-Z0-9_]+\z/', $name))) {
-                throw new MediaException('Invalid media protocol listing.', 'probing', 'capability');
+                throw MediaException::probing('Invalid media protocol listing.', 'capability');
             }
 
             sort($names);

@@ -154,6 +154,6 @@ class DashManifest
 
     public static function fail(): never
     {
-        throw new MediaException('Invalid or incomplete finite DASH manifest/inventory.', Progress::VALIDATION, 'artifact');
+        throw MediaException::validation('Invalid or incomplete finite DASH manifest/inventory.', 'artifact');
     }
 }

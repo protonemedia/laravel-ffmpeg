@@ -227,7 +227,7 @@ class PendingHlsMerge
                 throw new RuntimeException('Published size mismatch.');
             }
         } catch (Throwable) {
-            throw new MediaException('Cannot publish the composed HLS master.', 'publication', 'transfer',
+            throw MediaException::publication('Cannot publish the composed HLS master.', 'transfer',
                 published: $published, destination: ['disk' => $diskName, 'path' => $destination]);
         }
 

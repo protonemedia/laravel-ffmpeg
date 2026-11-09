@@ -69,7 +69,7 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
         }
 
         if ($this->count !== null && ($this->duration === null || CommandCompiler::timestamp($this->duration) === '0')) {
-            throw new MediaException('Count-based frame extraction requires a known, positive media duration.', Progress::PROBING, 'metadata');
+            throw MediaException::probing('Count-based frame extraction requires a known, positive media duration.', 'metadata');
         }
 
         return $metadata[0]->duration();

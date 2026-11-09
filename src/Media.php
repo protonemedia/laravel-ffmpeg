@@ -342,17 +342,17 @@ readonly class Media
         ], $workspace->path, $redactions);
 
         if ($result->exitCode !== 0) {
-            throw new MediaException('FFprobe failed (exit '.$result->exitCode.').', 'probing', 'exit', $result->diagnostics);
+            throw MediaException::probing('FFprobe failed (exit '.$result->exitCode.').', 'exit', $result->diagnostics);
         }
 
         try {
             $data = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
         } catch (JsonException) {
-            throw new MediaException('FFprobe returned invalid JSON.', 'probing', 'metadata');
+            throw MediaException::probing('FFprobe returned invalid JSON.', 'metadata');
         }
 
         if (! $this->isProbeData($data)) {
-            throw new MediaException('FFprobe returned invalid metadata.', 'probing', 'metadata');
+            throw MediaException::probing('FFprobe returned invalid metadata.', 'metadata');
         }
 
         return self::redactProbeData($data, $redactions);
@@ -391,27 +391,27 @@ readonly class Media
             }
 
             if (! $resource && in_array($this->extension(), self::MANIFEST_EXTENSIONS, true)) {
-                throw new MediaException('Remote manifest dependencies cannot be staged as a single file.', 'staging', 'manifest');
+                throw MediaException::staging('Remote manifest dependencies cannot be staged as a single file.', 'manifest');
             }
 
             $path = $workspace->path.DIRECTORY_SEPARATOR.$name;
             $output = @fopen($path, 'xb');
 
             if ($output === false || ! chmod($path, 0600)) {
-                throw new MediaException('Cannot create the staged media file.', 'staging', 'filesystem');
+                throw MediaException::staging('Cannot create the staged media file.', 'filesystem');
             }
 
             $expectedBytes = $disk->size($this->source);
             $input = $disk->readStream($this->source);
 
             if (! is_resource($input)) {
-                throw new MediaException('Cannot read the media input.', 'staging', 'transfer');
+                throw MediaException::staging('Cannot read the media input.', 'transfer');
             }
 
             $bytes = stream_copy_to_stream($input, $output);
 
             if ($bytes === false || $bytes !== $expectedBytes || ! feof($input) || ! fflush($output) || fstat($output)['size'] !== $bytes) {
-                throw new MediaException('The media input transfer did not complete.', 'staging', 'transfer');
+                throw MediaException::staging('The media input transfer did not complete.', 'transfer');
             }
 
             if (! $resource) {
@@ -424,7 +424,7 @@ readonly class Media
                 throw $throwable;
             }
 
-            throw new MediaException('Cannot stage the media input.', 'staging', 'transfer');
+            throw MediaException::staging('Cannot stage the media input.', 'transfer');
         } finally {
             if (is_resource($input)) {
                 fclose($input);
@@ -442,7 +442,7 @@ readonly class Media
         $prefix = file_get_contents($path, false, null, 0, 4096);
 
         if (preg_match('/^(?:\xEF\xBB\xBF)?\s*(?:#EXTM3U|ffconcat\s)|<(?:\w+:)?MPD(?:\s|>)/i', $prefix)) {
-            throw new MediaException('Remote manifest dependencies cannot be staged as a single file.', 'staging', 'manifest');
+            throw MediaException::staging('Remote manifest dependencies cannot be staged as a single file.', 'manifest');
         }
     }
 
@@ -451,7 +451,7 @@ readonly class Media
         $absolute = realpath($path);
 
         if ($absolute === false || ! is_file($absolute) || ! is_readable($absolute)) {
-            throw new MediaException('Cannot read the local media input.', 'staging', 'filesystem');
+            throw MediaException::staging('Cannot read the local media input.', 'filesystem');
         }
 
         return $absolute;

@@ -115,7 +115,7 @@ readonly class UrlInput implements InputSource
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         if (! $resource && in_array(strtolower($this->extension()), Media::MANIFEST_EXTENSIONS, true)) {
-            throw new MediaException('URL manifest inputs require an explicit dependency policy.', 'staging', 'manifest');
+            throw MediaException::staging('URL manifest inputs require an explicit dependency policy.', 'manifest');
         }
 
         if (! $this->download && ! $resource) {
@@ -126,12 +126,12 @@ readonly class UrlInput implements InputSource
         $output = @fopen($path, 'xb');
 
         if ($output === false) {
-            throw new MediaException('Cannot create the downloaded media file.', 'staging', 'filesystem');
+            throw MediaException::staging('Cannot create the downloaded media file.', 'filesystem');
         }
 
         try {
             if (! chmod($path, 0600)) {
-                throw new MediaException('Cannot protect the downloaded media file.', 'staging', 'filesystem');
+                throw MediaException::staging('Cannot protect the downloaded media file.', 'filesystem');
             }
 
             // Do not follow redirects with reusable credentials, decompress bytes,
@@ -142,14 +142,14 @@ readonly class UrlInput implements InputSource
             $length = $response->header('Content-Length');
 
             if (! fflush($output)) {
-                throw new MediaException('Cannot flush the downloaded media file.', 'staging', 'filesystem');
+                throw MediaException::staging('Cannot flush the downloaded media file.', 'filesystem');
             }
 
             $size = fstat($output)['size'];
 
             if ($response->status() !== 200 || $size === 0
                 || ($length !== '' && (! ctype_digit($length) || $size !== (int) $length))) {
-                throw new MediaException('The HTTP media download did not complete.', 'staging', 'transfer');
+                throw MediaException::staging('The HTTP media download did not complete.', 'transfer');
             }
 
             if (! $resource) {
@@ -163,7 +163,7 @@ readonly class UrlInput implements InputSource
             }
 
             // HTTP exceptions can contain signed URLs, headers and response bodies.
-            throw new MediaException('Cannot download the HTTP media input.', 'staging', 'transfer');
+            throw MediaException::staging('Cannot download the HTTP media input.', 'transfer');
         } finally {
             fclose($output);
         }

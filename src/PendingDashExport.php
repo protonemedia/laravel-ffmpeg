@@ -286,7 +286,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         foreach (array_keys($this->representations) as $index => $name) {
             if ($expected[$index] !== [$this->type($name)]) {
-                throw new MediaException('A DASH representation must map exactly one stream of its declared type.', Progress::PROBING, 'mapping');
+                throw MediaException::probing('A DASH representation must map exactly one stream of its declared type.', 'mapping');
             }
         }
     }
@@ -308,7 +308,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         foreach (array_keys($this->representations) as $name) {
             $directory = $workspace->path.'/dash-'.$name;
             if (! mkdir($directory, 0700)) {
-                throw new MediaException('Cannot create the private DASH workspace.', Progress::ENCODING, 'filesystem');
+                throw MediaException::encoding('Cannot create the private DASH workspace.', 'filesystem');
             }
 
             $paths[] = $directory.'/index.mpd';
@@ -489,7 +489,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     protected function write(string $path, string $bytes): void
     {
         if (strlen($bytes) > 16777216 || @file_put_contents($path, $bytes) !== strlen($bytes) || ! chmod($path, 0600)) {
-            throw new MediaException('Cannot finalize a DASH presentation within the 16 MiB manifest limit.', Progress::VALIDATION, 'artifact');
+            throw MediaException::validation('Cannot finalize a DASH presentation within the 16 MiB manifest limit.', 'artifact');
         }
     }
 }

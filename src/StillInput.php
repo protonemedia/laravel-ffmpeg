@@ -50,14 +50,14 @@ readonly class StillInput implements InputSource
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         if ($resource) {
-            throw new MediaException('Still video cannot be used as a filter resource.', 'staging', 'resource');
+            throw MediaException::staging('Still video cannot be used as a filter resource.', 'resource');
         }
 
         $path = $workspace->stage($this->image, resource: true);
         $size = @getimagesize($path);
         if ($size === false || ! in_array($size[2], [IMAGETYPE_PNG, IMAGETYPE_JPEG], true)
             || $size[0] < 2 || $size[1] < 2 || $size[0] % 2 || $size[1] % 2) {
-            throw new MediaException('Still video requires a PNG/JPEG image with positive even dimensions.', 'staging', 'image');
+            throw MediaException::staging('Still video requires a PNG/JPEG image with positive even dimensions.', 'image');
         }
 
         return $path;

@@ -107,7 +107,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $this->rate = (int) ($stream?->get('sample_rate') ?? 0);
         $this->inputChannels = (int) ($stream?->get('channels') ?? 0);
         if ($this->rate < 1 || $this->inputChannels < 1 || $this->inputChannels > 64) {
-            throw new MediaException('The selected audio track requires a sample rate and 1 to 64 channels.', 'probing', 'mapping');
+            throw MediaException::probing('The selected audio track requires a sample rate and 1 to 64 channels.', 'mapping');
         }
 
         // FFprobe reports custom orders as "4 channels (FL+FR+LFE+BC)".
@@ -173,21 +173,21 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $channels = $this->mixMono ? 1 : $this->inputChannels;
         $frameBytes = $channels * 2;
         if ($size === false || $size % $frameBytes !== 0) {
-            throw new MediaException('The decoded PCM has an incomplete frame.', 'validation', 'artifact');
+            throw MediaException::validation('The decoded PCM has an incomplete frame.', 'artifact');
         }
 
         $frames = intdiv($size, $frameBytes);
         $count = $frames === 0 ? 0 : ($this->targetBuckets === null
             ? intdiv($frames - 1, $this->samplesPerBucket) + 1 : min($frames, $this->targetBuckets));
         if ($count > intdiv(self::MAX_CELLS, $channels)) {
-            throw new MediaException('Peaks exceed 100000 channel buckets; request fewer buckets.', 'validation', 'output_limit');
+            throw MediaException::validation('Peaks exceed 100000 channel buckets; request fewer buckets.', 'output_limit');
         }
 
         $data = array_fill(0, $channels, []);
         $lengths = [];
         $file = @fopen($path, 'rb');
         if ($file === false) {
-            throw new MediaException('Cannot read decoded PCM.', 'validation', 'filesystem');
+            throw MediaException::validation('Cannot read decoded PCM.', 'filesystem');
         }
 
         try {
@@ -203,7 +203,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
                     $take = min($remaining, 2048);
                     $bytes = fread($file, $take * $frameBytes);
                     if ($bytes === false || strlen($bytes) !== $take * $frameBytes) {
-                        throw new MediaException('Cannot read complete PCM frames.', 'validation', 'filesystem');
+                        throw MediaException::validation('Cannot read complete PCM frames.', 'filesystem');
                     }
 
                     // v is literally unsigned little-endian 16-bit, independent
@@ -231,7 +231,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $json = json_encode($this->peaks, JSON_THROW_ON_ERROR);
         $target = dirname($path).'/peaks.json';
         if (@file_put_contents($target, $json) !== strlen($json) || ! chmod($target, 0600)) {
-            throw new MediaException('Cannot write waveform peaks.', 'validation', 'filesystem');
+            throw MediaException::validation('Cannot write waveform peaks.', 'filesystem');
         }
 
         return [['path' => $target, 'output' => 0, 'destination' => $outputs[0]->destination()]];

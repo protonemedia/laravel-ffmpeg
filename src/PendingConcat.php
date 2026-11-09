@@ -203,11 +203,11 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     {
         foreach ($metadata as $item) {
             if ($item->video() === null) {
-                throw new MediaException('Transcoded concat requires a video stream in every source.', 'probing', 'mapping');
+                throw MediaException::probing('Transcoded concat requires a video stream in every source.', 'mapping');
             }
 
             if ($item->duration() === null || $item->duration() <= 0) {
-                throw new MediaException('Transcoded concat requires finite sources.', 'probing', 'metadata');
+                throw MediaException::probing('Transcoded concat requires finite sources.', 'metadata');
             }
 
             PendingExport::assertZeroOrigins($item, 'Transcoded concat');
@@ -217,11 +217,11 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
                 $channel = $this->audioConformance['channel'];
 
                 if ($audio === null || ($channel !== null && ($audio->channels() === null || $channel >= $audio->channels()))) {
-                    throw new MediaException('Every concat source requires audio with the requested channel.', 'probing', 'mapping');
+                    throw MediaException::probing('Every concat source requires audio with the requested channel.', 'mapping');
                 }
 
                 if (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0) {
-                    throw new MediaException('Every concat source requires audio with a nonnegative origin.', 'probing', 'metadata');
+                    throw MediaException::probing('Every concat source requires audio with a nonnegative origin.', 'metadata');
                 }
             }
         }

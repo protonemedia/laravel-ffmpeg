@@ -60,7 +60,7 @@ readonly class PreparedImageInput implements InputSource
         $this->validate($source);
         $target = $workspace->path.'/'.$name;
         if (! @copy($source, $target) || ! chmod($target, 0600)) {
-            throw new MediaException('Cannot prepare a private image copy.', 'staging', 'filesystem');
+            throw MediaException::staging('Cannot prepare a private image copy.', 'filesystem');
         }
 
         try {
@@ -69,17 +69,17 @@ readonly class PreparedImageInput implements InputSource
         } catch (Throwable) {
             // Image drivers can include private paths and URL credentials in
             // their errors. Do not retain their exception chain.
-            throw new MediaException('Cannot edit the watermark image.', 'staging', 'resource');
+            throw MediaException::staging('Cannot edit the watermark image.', 'resource');
         }
 
         if (@file_put_contents($target, $bytes) !== strlen($bytes)) {
-            throw new MediaException('Cannot write the prepared image.', 'staging', 'filesystem');
+            throw MediaException::staging('Cannot write the prepared image.', 'filesystem');
         }
 
         clearstatcache(true, $target);
         $this->validate($target);
         if (! chmod($target, 0600)) {
-            throw new MediaException('Cannot protect the prepared image.', 'staging', 'filesystem');
+            throw MediaException::staging('Cannot protect the prepared image.', 'filesystem');
         }
 
         return $target;
@@ -89,7 +89,7 @@ readonly class PreparedImageInput implements InputSource
     {
         $size = @getimagesize($path);
         if ($size === false || $size[0] < 1 || $size[1] < 1) {
-            throw new MediaException('Image preparation requires readable raster image data.', 'staging', 'resource');
+            throw MediaException::staging('Image preparation requires readable raster image data.', 'resource');
         }
     }
 }

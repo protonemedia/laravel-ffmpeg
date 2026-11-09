@@ -7,7 +7,6 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
-use ProtoneMedia\LaravelFFMpeg\Progress;
 use SensitiveParameter;
 
 /** @internal One execution's private keys and bounded-memory segment encryption. */
@@ -50,7 +49,7 @@ class HlsEncryption
             $filename = bin2hex(random_bytes(16)).'.key';
             $local = dirname($path).'/'.$filename;
             if (@file_put_contents($local, $bytes) !== 16 || ! chmod($local, 0600)) {
-                throw new MediaException('Cannot prepare the private HLS key.', Progress::VALIDATION, 'filesystem');
+                throw MediaException::validation('Cannot prepare the private HLS key.', 'filesystem');
             }
 
             $target = new ExportOutput($this->directory.$filename, $this->keysDisk)->visibility('private');
@@ -66,11 +65,11 @@ class HlsEncryption
                 || str_starts_with($url, '//') || parse_url($url) === false
                 || (($scheme = parse_url($url, PHP_URL_SCHEME)) !== null
                     && (! in_array(strtolower($scheme), ['http', 'https'], true) || ! filter_var($url, FILTER_VALIDATE_URL)))) {
-                throw new MediaException('HLS key URLs require an HTTP(S) URL or a relative URI without quotes, backslashes, whitespace, or fragments.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('HLS key URLs require an HTTP(S) URL or a relative URI without quotes, backslashes, whitespace, or fragments.', 'artifact');
             }
 
             if (in_array($url, $this->urls[$playlist] ?? [], true)) {
-                throw new MediaException('Rotated HLS keys must have distinct URLs within each playlist.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('Rotated HLS keys must have distinct URLs within each playlist.', 'artifact');
             }
 
             $this->urls[$playlist][$index] = $url;
@@ -84,7 +83,7 @@ class HlsEncryption
             $source = @fopen($path, 'rb');
             $destination = @fopen($encrypted, 'xb');
             if ($source === false || $destination === false || ! chmod($encrypted, 0600)) {
-                throw new MediaException('Cannot prepare the encrypted HLS segment.', Progress::VALIDATION, 'filesystem');
+                throw MediaException::validation('Cannot prepare the encrypted HLS segment.', 'filesystem');
             }
 
             $chain = $iv;
@@ -92,7 +91,7 @@ class HlsEncryption
             do {
                 $chunk = fread($source, 1048576);
                 if ($chunk === false || ($chunk === '' && ! feof($source))) {
-                    throw new MediaException('Cannot read the HLS segment.', Progress::VALIDATION, 'filesystem');
+                    throw MediaException::validation('Cannot read the HLS segment.', 'filesystem');
                 }
 
                 $buffer .= $chunk;
@@ -106,7 +105,7 @@ class HlsEncryption
                 if ($length > 0) {
                     $ciphertext = openssl_encrypt(substr($buffer, 0, $length), 'aes-128-cbc', $key['bytes'], OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $chain);
                     if ($ciphertext === false || fwrite($destination, $ciphertext) !== strlen($ciphertext)) {
-                        throw new MediaException('Cannot encrypt the HLS segment.', Progress::VALIDATION, 'filesystem');
+                        throw MediaException::validation('Cannot encrypt the HLS segment.', 'filesystem');
                     }
 
                     $chain = substr($ciphertext, -16);

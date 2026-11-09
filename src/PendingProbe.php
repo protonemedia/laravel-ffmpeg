@@ -204,23 +204,23 @@ class PendingProbe
             $redactions = [$path => '[input]'] + $this->media->redactions();
             $result = $runner->run($command, $workspace->path, $redactions, $this->outputLimit, timeout: $this->timeout);
             if ($result->exitCode !== 0) {
-                throw new MediaException('FFprobe query failed (exit '.$result->exitCode.').', 'probing', 'exit', $result->diagnostics);
+                throw MediaException::probing('FFprobe query failed (exit '.$result->exitCode.').', 'exit', $result->diagnostics);
             }
 
             try {
                 $data = json_decode($result->output, true, 64, JSON_THROW_ON_ERROR);
             } catch (JsonException) {
-                throw new MediaException('FFprobe query returned invalid JSON.', 'probing', 'metadata');
+                throw MediaException::probing('FFprobe query returned invalid JSON.', 'metadata');
             }
 
             if (! is_array($data) || ! str_starts_with(ltrim($result->output), '{')) {
-                throw new MediaException('FFprobe query returned invalid sections.', 'probing', 'metadata');
+                throw MediaException::probing('FFprobe query returned invalid sections.', 'metadata');
             }
 
             foreach (['streams', 'packets', 'frames', 'chapters'] as $section) {
                 if (array_key_exists($section, $data) && (! is_array($data[$section]) || ! array_is_list($data[$section])
                     || array_any($data[$section], fn ($row): bool => ! is_array($row)))) {
-                    throw new MediaException('FFprobe query returned invalid sections.', 'probing', 'metadata');
+                    throw MediaException::probing('FFprobe query returned invalid sections.', 'metadata');
                 }
             }
 

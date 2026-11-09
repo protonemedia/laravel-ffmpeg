@@ -49,7 +49,7 @@ class ProcessRunner
         $version = $this->version($ffmpeg, 'ffmpeg', $directory);
 
         if ($this->version($ffprobe, 'ffprobe', $directory) !== $version) {
-            throw new MediaException('FFmpeg and FFprobe must have matching release versions.', 'probing', 'version');
+            throw MediaException::probing('FFmpeg and FFprobe must have matching release versions.', 'version');
         }
 
         return $version;
@@ -189,7 +189,7 @@ class ProcessRunner
                     }
                 } catch (Throwable) {
                     if (! $failure instanceof Throwable) {
-                        throw new MediaException('Cannot stop the media process.', 'cleanup', 'process');
+                        throw MediaException::cleanup('Cannot stop the media process.', 'process');
                     }
                 }
             }

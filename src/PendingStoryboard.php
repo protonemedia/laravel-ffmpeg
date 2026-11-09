@@ -95,7 +95,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
 
         if ($duration === null || $duration <= 0 || $duration > intdiv(PHP_INT_MAX, 1000000)
             || ($this->duration = (int) round($duration * 1000000)) < 1) {
-            throw new MediaException('Storyboards require a known, positive media duration.', Progress::PROBING, 'metadata');
+            throw MediaException::probing('Storyboards require a known, positive media duration.', 'metadata');
         }
 
         $this->frames = intdiv($this->duration - 1, $this->interval * 1000) + 1;
@@ -156,7 +156,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
             $height -= 2 * $this->margin + ($this->rows - 1) * $this->padding;
             if ($width <= 0 || $height <= 0 || $width % $this->columns !== 0 || $height % $this->rows !== 0
                 || ($dimensions !== null && $dimensions !== [intdiv($width, $this->columns), intdiv($height, $this->rows)])) {
-                throw new MediaException('The storyboard sheets have inconsistent grid dimensions.', Progress::VALIDATION, 'artifact');
+                throw MediaException::validation('The storyboard sheets have inconsistent grid dimensions.', 'artifact');
             }
 
             $dimensions = [intdiv($width, $this->columns), intdiv($height, $this->rows)];
@@ -165,11 +165,11 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
                 try {
                     $url = $this->imageUrl instanceof Closure ? ($this->imageUrl)($key, $index + 1) : $this->relativeUrl($key);
                 } catch (Throwable) {
-                    throw new MediaException('Cannot resolve storyboard image URLs.', Progress::VALIDATION, 'artifact');
+                    throw MediaException::validation('Cannot resolve storyboard image URLs.', 'artifact');
                 }
 
                 if (! is_string($url) || $url === '' || preg_match('/[\x00-\x20\x7f#]/', $url)) {
-                    throw new MediaException('Storyboard image URLs require a nonempty URI without whitespace or a fragment.', Progress::VALIDATION, 'artifact');
+                    throw MediaException::validation('Storyboard image URLs require a nonempty URI without whitespace or a fragment.', 'artifact');
                 }
 
                 $urls[] = $url;
@@ -183,12 +183,12 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         $path = dirname($paths[0]).'/thumbnails.vtt';
         $file = @fopen($path, 'xb');
         if ($file === false) {
-            throw new MediaException('Cannot create storyboard cues.', Progress::VALIDATION, 'filesystem');
+            throw MediaException::validation('Cannot create storyboard cues.', 'filesystem');
         }
 
         try {
             if (! chmod($path, 0600) || fwrite($file, "WEBVTT\n\n") !== 8) {
-                throw new MediaException('Cannot write storyboard cues.', Progress::VALIDATION, 'filesystem');
+                throw MediaException::validation('Cannot write storyboard cues.', 'filesystem');
             }
 
             [$width, $height] = $dimensions;
@@ -202,12 +202,12 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
                 $cue = $this->timestamp($start).' --> '.$this->timestamp(min($start + $this->interval, $end))."\n"
                     .$urls[intdiv($index, $cells)]."#xywh=$x,$y,$width,$height\n\n";
                 if (fwrite($file, $cue) !== strlen($cue)) {
-                    throw new MediaException('Cannot write storyboard cues.', Progress::VALIDATION, 'filesystem');
+                    throw MediaException::validation('Cannot write storyboard cues.', 'filesystem');
                 }
             }
 
             if (! fflush($file)) {
-                throw new MediaException('Cannot flush storyboard cues.', Progress::VALIDATION, 'filesystem');
+                throw MediaException::validation('Cannot flush storyboard cues.', 'filesystem');
             }
         } finally {
             fclose($file);
