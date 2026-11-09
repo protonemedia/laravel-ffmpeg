@@ -676,15 +676,17 @@ $media->export()
 
 `watermark()` adds the image input and maps for you. It accepts PNG, JPEG, and GIF images from local or non-local Storage. Marks render after all output video filters, regardless of where you call `watermark()`. Offsets are inward margins from the chosen corner. Anchors also include `top-left`, `top-right`, `bottom-left`, and `center`. Call the helper again to add another mark.
 
-Watermarks work with ordinary single or multiple media outputs, HLS variants, and copied audio, but require video encoding. Custom maps, custom graphs, and additional media inputs require an explicit overlay graph instead. For image preprocessing, call `prepareImage()` with your own image-library callback; it receives a private writable copy:
+Watermarks work with ordinary single or multiple media outputs, HLS variants, and copied audio, but require video encoding. Custom maps, custom graphs, and additional media inputs require an explicit overlay graph instead. For image preprocessing, call `prepareImage()` with a callback that rewrites the private writable copy it receives. On Laravel 13.20 or later, Laravel's [image manipulation](https://laravel.com/docs/13.x/images) can do this:
 
 ```php
+use Illuminate\Support\Facades\Image;
+
 $logo = FFMpeg::disk('assets')
     ->open('logo.png')
     ->prepareImage(function (string $privatePath) {
-        \Spatie\Image\Image::load($privatePath)
-            ->width(160)
-            ->save();
+        file_put_contents($privatePath, Image::fromPath($privatePath)
+            ->scale(width: 160)
+            ->toBytes());
     });
 ```
 

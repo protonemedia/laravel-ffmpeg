@@ -1017,15 +1017,17 @@ $export->filterComplex(
 
 Local and non-local Storage images use the same API. A downloaded URL image uses `openUrl($url, headers: $headers, download: true)`. No filename is embedded in the filter graph.
 
-`Media::prepareImage(callable $prepare)` optionally preprocesses an image before FFmpeg reads it. The callback receives the path of a private writable copy, not the original. It must write the prepared image to that same path. The package does not depend on an image library or forward unknown methods to one. For example, an application with Spatie Image installed can supply:
+`Media::prepareImage(callable $prepare)` optionally preprocesses an image before FFmpeg reads it. The callback receives the path of a private writable copy, not the original. It must write the prepared image to that same path. The package does not depend on an image library or forward unknown methods to one. For example, on Laravel 13.20 or later with `intervention/image` installed, Laravel's `Image` facade can supply:
 
 ```php
+use Illuminate\Support\Facades\Image;
+
 $logo = FFMpeg::disk('assets')
     ->open('brand/logo.png')
     ->prepareImage(function (string $path) {
-        \Spatie\Image\Image::load($path)
-            ->width(320)
-            ->save();
+        file_put_contents($path, Image::fromPath($path)
+            ->scale(width: 320)
+            ->toBytes());
     });
 // Pass $logo to watermark(), or addInput() for a custom overlay graph.
 ```

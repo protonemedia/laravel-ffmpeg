@@ -128,6 +128,35 @@ $media->concat($second)
 
 `watermark()` adds inputs and maps automatically for PNG, JPEG, or GIF images. The default anchor is bottom-right; offsets are inward margins. Marks run after all output video filters, regardless of call order. Repeated marks, multiple ordinary outputs, and HLS variants are supported. Custom maps, graphs, additional media inputs, and video copy require another composition policy. Use `addInput()` and `filterComplex()` for custom graphs.
 
+Version 8 forwarded unknown `WatermarkFactory` methods, such as `width()` or `greyscale()`, to Spatie Image. Version 9 has no image-library integration. Size and position the mark with `watermark()` arguments, and edit the image itself in a `prepareImage()` callback. The callback receives a private copy of the image and must rewrite that file. On Laravel 13.20 or later, Laravel's [image manipulation](https://laravel.com/docs/13.x/images) can do this:
+
+```php
+use Illuminate\Support\Facades\Image;
+
+// Before:
+$media->addWatermark(function (WatermarkFactory $watermark) {
+    $watermark->open('logo.png')
+        ->right(25)
+        ->bottom(25)
+        ->greyscale();
+});
+
+// After:
+$logo = FFMpeg::disk('assets')
+    ->open('logo.png')
+    ->prepareImage(function (string $path) {
+        file_put_contents($path, Image::fromPath($path)
+            ->grayscale()
+            ->toBytes());
+    });
+$media->export()
+    ->watermark($logo, position: 'bottom-right', x: 25, y: 25)
+    ->video('libx264')
+    ->save('branded.mp4');
+```
+
+On Laravel 12, call any image library from the callback.
+
 `concat()` joins compatible streams without silently transcoding. `concatTranscoded()` returns an export builder with one output. Choose `normalizeVideo()` and either `normalizeAudio()` or `withoutAudio()` before saving. Normalization selects each input's first motion-video and audio streams, preserves audio delays, and requires finite sources with zero container/video origins. It rejects root filters, custom graphs, and stream copy. Sources without audio require `withoutAudio()` or a custom graph; the helper does not create missing audio tracks. Source chapters are not combined.
 
 ## Replace audio mixing graphs

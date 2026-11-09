@@ -35,8 +35,7 @@
         "nesbot/carbon": "^2.66|^3.0",
         "orchestra/testbench": "^10.8|^11.0",
         "phpunit/phpunit": "^11.5.3|^12.5.12",
-        "rector/rector": "^2.3",
-        "spatie/image": "^2.2|^3.3"
+        "rector/rector": "^2.3"
     },
     "autoload": {
         "psr-4": {

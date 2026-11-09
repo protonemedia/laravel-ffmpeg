@@ -20,7 +20,6 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
-use Spatie\Image\Image;
 
 class NativeCompositionTest extends TestCase
 {
@@ -638,7 +637,11 @@ class NativeCompositionTest extends TestCase
                     $logo = $logo->prepareImage(function (string $path) use (&$paths, &$prepared) {
                         $paths[] = $path;
                         $mode = fileperms($path) & 0777;
-                        Image::load($path)->width(24)->save();
+                        $source = imagecreatefrompng($path);
+                        $scaled = imagescale($source, 24);
+                        imagealphablending($scaled, false);
+                        imagesavealpha($scaled, true);
+                        imagepng($scaled, $path);
                         $prepared[] = [$mode, array_slice(getimagesize($path), 0, 2)];
                     });
                 }
