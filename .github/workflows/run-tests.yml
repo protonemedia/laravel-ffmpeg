@@ -45,16 +45,20 @@ jobs:
             - name: Install native FFmpeg 9.0.2
               run: .agents/install-ffmpeg "${{ runner.temp }}/ffmpeg-9.0.2"
 
-            - name: Install dependencies
-              run: |
-                  composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
-                  composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-suggest
+            - name: Get Composer cache directory
+              id: composer-cache
+              run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
             - name: Cache dependencies
               uses: actions/cache@v4
               with:
-                  path: ~/.composer/cache/files
+                  path: ${{ steps.composer-cache.outputs.dir }}
                   key: dependencies-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}-dep-${{ matrix.dependency-version }}
+
+            - name: Install dependencies
+              run: |
+                  composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+                  composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-suggest
 
             - name: Execute tests
               run: vendor/bin/phpunit --order-by random --display-deprecations --display-phpunit-deprecations --fail-on-deprecation --fail-on-phpunit-deprecation
