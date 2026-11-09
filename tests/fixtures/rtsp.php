@@ -3,7 +3,9 @@
 // Minimal finite RTSP/RTP fixture for snapshot acceptance, not a production server.
 [$script, $source, $ready, $mode] = $argv;
 $server = stream_socket_server('tcp://127.0.0.1:0');
-file_put_contents($ready, stream_socket_get_name($server, false));
+// Publish the address atomically: the test reads the file as soon as it exists.
+file_put_contents($ready.'.tmp', stream_socket_get_name($server, false));
+rename($ready.'.tmp', $ready);
 $client = stream_socket_accept($server, 10);
 if ($client === false) {
     exit(1);
