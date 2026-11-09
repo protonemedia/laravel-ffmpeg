@@ -70,7 +70,7 @@ final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, 
     }
 
     /** Repeat the added track from its offset, without repeating the initial delay. */
-    public function loopAudio(bool $loop = true): self
+    public function loop(bool $loop = true): self
     {
         $this->export->assertOutputMutable();
         $this->loop = $loop;

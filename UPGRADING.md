@@ -181,7 +181,7 @@ $media->mixAudio($music, volume: 0.4, originalVolume: 0.8, normalize: true)
     ->save('mixed.mp4');
 ```
 
-`backgroundMusic()` loops by default. Use `loop: false` for one playback, or `mixAudio()` for one-shot mixing with explicit gains. Call `loopAudio()` on the returned builder to repeat the added track. The primary container's duration sets output length. Short nonlooping audio ends in silence, and longer audio is trimmed. Silent video and audio-only primaries are supported.
+`backgroundMusic()` loops by default. Use `loop: false` for one playback, or `mixAudio()` for one-shot mixing with explicit gains. Call `loop()` on the returned builder to repeat the added track. The primary container's duration sets output length. Short nonlooping audio ends in silence, and longer audio is trimmed. Silent video and audio-only primaries are supported.
 
 Use `at(float $seconds)` to start only the added audio later. It accepts finite nonnegative offsets, rounded to the nearest 48 kHz sample. Later calls replace the offset; `at(0)` restores the default. Original timing and gains do not change. A loop repeats the added samples after the initial delay without repeating that delay. Offsets at or beyond the primary duration add no audio and do not extend output.
 
@@ -198,7 +198,7 @@ $media->speed(2)
     ->video('libx264')
     ->audio('aac')
     ->save('faster.mp4');
-$media->gif(width: 480, frameRate: 12, loop: 0)
+$media->gif(width: 480, frameRate: 12, loop: true)
     ->clip(4, duration: 3)
     ->save('preview.gif');
 ```

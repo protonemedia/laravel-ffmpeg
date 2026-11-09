@@ -774,7 +774,7 @@ $primary->backgroundMusic($music, volume: 0.2, loop: true)
     ->save('background.mp4');
 
 $primary->mixAudio($music, volume: 0.5, originalVolume: 1, normalize: false)
-    ->loopAudio(false)
+    ->loop(false)
     ->volume(0.8)
     ->fadeIn(1, video: false)
     ->video('copy')
@@ -825,13 +825,13 @@ Sources require zero origins on every video track and nonnegative origins on eve
 ### Animated GIF previews
 
 ```php
-$media->gif(width: 480, frameRate: 12, loop: 0)
+$media->gif(width: 480, frameRate: 12, loop: true)
     ->clip(4, duration: 3)
     ->toDisk('images')
     ->save('preview.gif');
 ```
 
-`Media::gif(int $width = 480, int|float $frameRate = 12, int $loop = 0)` selects the first motion-video stream and omits audio. Width must be between 1 and 65535; frame rate must be finite and positive. The inferred height preserves display aspect ratio. Loop count accepts -1 through 65535; zero loops forever and -1 disables looping.
+`Media::gif(int $width = 480, int|float $frameRate = 12, bool $loop = true, ?int $loops = null)` selects the first motion-video stream and omits audio. Width must be between 1 and 65535; frame rate must be finite and positive. The inferred height preserves display aspect ratio. The GIF loops forever by default. `loop: false` omits the loop extension so it plays once. `loops` writes a loop count from 1 through 65535, the number of repeats after the first play, and requires looping.
 
 GIF stores frame delays in centiseconds, so requested frame rates can require rounded or alternating frame delays.
 

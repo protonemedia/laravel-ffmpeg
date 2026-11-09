@@ -95,7 +95,7 @@ class NativeAudioMixTest extends TestCase
         $this->assertContains('-stream_loop', $operation->inspect());
         $this->assertContains('[source-duration]', $operation->inspect());
         $this->assertNotContains('-stream_loop', $source->mixAudio($music)->inspect());
-        $this->assertNotContains('-stream_loop', $operation->loopAudio(false)->inspect());
+        $this->assertNotContains('-stream_loop', $operation->loop(false)->inspect());
         $delayed = $source->mixAudio($music);
         $this->assertSame($delayed, $delayed->at(0.625));
         $this->assertSame($delayed->inspect(), $delayed->inspect());
@@ -129,7 +129,7 @@ class NativeAudioMixTest extends TestCase
         foreach ([false, true] as $loop) {
             $name = $loop ? 'delayed-loop.mkv' : 'delayed-once.mkv';
             $result = $this->media()->mixAudio($this->media('music.wav'), volume: 0.25, originalVolume: 0.5)
-                ->at(0.625)->loopAudio($loop)->video('copy')->audio('pcm_f64le')->save($name);
+                ->at(0.625)->loop($loop)->video('copy')->audio('pcm_f64le')->save($name);
             $commands = $result->processes()->pluck('command')->all();
             $this->assertCount($loop ? 2 : 1, $commands);
             $this->assertSame($loop ? 'audio-mix-loop.wav' : '[output:0]', end($commands[0]));
@@ -242,7 +242,7 @@ class NativeAudioMixTest extends TestCase
         $this->assertSame('ffv1', $this->media('silent-with-music.mkv')->probe()->video()->codec());
 
         $this->ffmpeg(['-f', 'lavfi', '-i', 'aevalsrc=0.1|-0.2:s=48000:d=1.5', '-c:a', 'pcm_f64le', $this->path('speech.wav')]);
-        $this->media('speech.wav')->mixAudio($music, volume: 0.25)->loopAudio()->audio('pcm_f64le')->save('audio-only.wav');
+        $this->media('speech.wav')->mixAudio($music, volume: 0.25)->loop()->audio('pcm_f64le')->save('audio-only.wav');
         $samples = $this->samples('audio-only.wav');
         $this->assertCount(1.5 * 48000 * 2, $samples);
         $this->assertSample($samples, 0.1, 0.15, -0.1);

@@ -27,11 +27,17 @@ final readonly class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, 
 
     private PendingExport $export;
 
-    public function __construct(Media $media, string|Filesystem $disk, int $width = 480, int|float $frameRate = 12, private int $loop = 0)
+    /** FFmpeg's GIF loop count: -1 plays once, 0 loops forever. */
+    private int $loopCount;
+
+    public function __construct(Media $media, string|Filesystem $disk, int $width = 480, int|float $frameRate = 12, bool $loop = true, ?int $loops = null)
     {
-        if ($width <= 0 || $width > 65535 || ! is_finite((float) $frameRate) || $frameRate <= 0 || $loop < -1 || $loop > 65535) {
-            throw new InvalidArgumentException('GIF requires a width between 1 and 65535, a finite positive frame rate, and a loop count between -1 and 65535.');
+        if ($width <= 0 || $width > 65535 || ! is_finite((float) $frameRate) || $frameRate <= 0
+            || ($loops !== null && (! $loop || $loops < 1 || $loops > 65535))) {
+            throw new InvalidArgumentException('GIF requires a width between 1 and 65535, a finite positive frame rate, and, when looping, a loop count between 1 and 65535.');
         }
+
+        $this->loopCount = $loop ? $loops ?? 0 : -1;
 
         $this->export = new PendingExport($media, $disk, $this);
         $this->export->resize($width)->frameRate($frameRate);
@@ -56,7 +62,7 @@ final readonly class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, 
         $settings['videoFilters'] = [];
         $settings['chapterSource'] ??= $settings['clip'] === null ? 0 : -1;
         $settings['clip'] = null; // Trim before palette generation, not after it.
-        $settings['outputOptions'] = ['-f', 'gif', '-loop', (string) $this->loop];
+        $settings['outputOptions'] = ['-f', 'gif', '-loop', (string) $this->loopCount];
 
         return [new ExportOutput($path ?? 'inspection.gif', $settings['disk'])->configure($settings)];
     }

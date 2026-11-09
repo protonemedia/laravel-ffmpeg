@@ -79,9 +79,10 @@ readonly class Media
         return new PendingSpeed($this, $this->defaultOutputDisk(), $factor);
     }
 
-    public function gif(int $width = 480, int|float $frameRate = 12, int $loop = 0): PendingGif
+    /** Loops forever by default; pass loop: false to play once, or loops: n to repeat n times after the first play. */
+    public function gif(int $width = 480, int|float $frameRate = 12, bool $loop = true, ?int $loops = null): PendingGif
     {
-        return new PendingGif($this, $this->defaultOutputDisk(), $width, $frameRate, $loop);
+        return new PendingGif($this, $this->defaultOutputDisk(), $width, $frameRate, $loop, $loops);
     }
 
     public function still(float $duration, int $frameRate = 25): PendingStill
@@ -96,7 +97,7 @@ readonly class Media
 
     public function backgroundMusic(Media $music, float $volume = 0.2, bool $loop = true): PendingAudioMix
     {
-        return $this->mixAudio($music, $volume)->loopAudio($loop);
+        return $this->mixAudio($music, $volume)->loop($loop);
     }
 
     public function concat(Media ...$following): self

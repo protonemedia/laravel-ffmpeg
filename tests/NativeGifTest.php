@@ -71,7 +71,7 @@ class NativeGifTest extends TestCase
         foreach ([
             fn () => $media->gif(0), fn () => $media->gif(65536),
             fn () => $media->gif(frameRate: 0), fn () => $media->gif(frameRate: INF), fn () => $media->gif(frameRate: NAN),
-            fn () => $media->gif(loop: -2), fn () => $media->gif(loop: 65536),
+            fn () => $media->gif(loops: 0), fn () => $media->gif(loops: 65536), fn () => $media->gif(loop: false, loops: 2),
             fn () => $media->gif()->clip(1.0, duration: 1.0, seek: 'keyframe')->inspect(),
         ] as $invalid) {
             try {
@@ -97,9 +97,10 @@ class NativeGifTest extends TestCase
         $hash = hash_file('sha256', $source);
         $media = FFMpeg::disk()->open(new File($source));
 
-        foreach ([0, -1, 3] as $loop) {
+        // FFmpeg's loop count: 0 loops forever and -1 plays once without a loop extension.
+        foreach ([0 => [true, null], -1 => [false, null], 3 => [true, 3]] as $loop => [$looping, $loops]) {
             $spoolBytes = 0;
-            $result = $media->gif(64, 10, $loop)->clip(0.5, duration: 1.0)->toDisk('memory')
+            $result = $media->gif(64, 10, $looping, $loops)->clip(0.5, duration: 1.0)->toDisk('memory')
                 ->onProgress(function ($progress) use (&$spoolBytes) {
                     if ($progress->phase === 'encoding') {
                         foreach (glob($this->root.'/workspaces/*/gif-prepared.nut') as $spool) {

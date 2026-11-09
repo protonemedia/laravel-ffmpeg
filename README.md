@@ -553,7 +553,7 @@ $media->speed(0.5)
 To create an animated preview, use the `gif` method. The following example converts a three-second clip into a looping GIF:
 
 ```php
-$media->gif(width: 480, frameRate: 12, loop: 0)
+$media->gif(width: 480, frameRate: 12, loop: true)
     ->clip(4, duration: 3)
     ->toDisk('images')
     ->save('preview.gif');
@@ -561,7 +561,7 @@ $media->gif(width: 480, frameRate: 12, loop: 0)
 
 `speed()` changes video timing and audio tempo without changing audio pitch. It requires a finite positive factor, zero video origins, nonnegative audio origins, and a zero container origin when the source has video. An audio-only source that starts later is retimed from its first sample without its leading offset. It scales an existing audio delay with playback speed. Stream copy, clipping, input options, custom graphs, watermark inputs, and multiple outputs are not supported. Encode a clip first if you need to retime only part of a source.
 
-`gif()` selects the first motion-video stream and omits audio. Width defaults to 480 and frame rate to 12. `loop: 0` loops forever; `-1` disables looping. Accurate `clip()` runs before palette generation. The helper writes a private lossless intermediate, generates a palette, then encodes the GIF. This avoids buffering the entire clip in memory, but adds disk use and processing passes. Keep previews short and small. The GIF builder offers video filters, resources, metadata, clipping, and publication; it has no map, graph, extra input or output, audio, encoder, or raw output option methods.
+`gif()` selects the first motion-video stream and omits audio. Width defaults to 480 and frame rate to 12. The GIF loops forever by default. Pass `loop: false` to play it once, or `loops: 3` to repeat it three times after the first play. Accurate `clip()` runs before palette generation. The helper writes a private lossless intermediate, generates a palette, then encodes the GIF. This avoids buffering the entire clip in memory, but adds disk use and processing passes. Keep previews short and small. The GIF builder offers video filters, resources, metadata, clipping, and publication; it has no map, graph, extra input or output, audio, encoder, or raw output option methods.
 
 ### Mix audio and add background music
 
@@ -594,7 +594,7 @@ $video->mixAudio($music, volume: 0.4, originalVolume: 0.8, normalize: true)
     ->save('mixed.mp4');
 ```
 
-`mixAudio()` combines the first audio stream of each input and plays the added track once by default. Call `loopAudio()` to repeat that track. `backgroundMusic($music, volume: 0.2, loop: true)` is shorthand with quieter, looping music and unchanged original volume.
+`mixAudio()` combines the first audio stream of each input and plays the added track once by default. Call `loop()` to repeat that track. `backgroundMusic($music, volume: 0.2, loop: true)` is shorthand with quieter, looping music and unchanged original volume.
 
 #### Timing and duration
 
