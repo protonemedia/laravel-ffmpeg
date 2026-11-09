@@ -1,5 +1,6 @@
 build
 composer.lock
+phpstan.neon
 docs
 !docs/
 docs/*

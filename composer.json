@@ -26,6 +26,8 @@
         "laravel/serializable-closure": "^2.0"
     },
     "require-dev": {
+        "larastan/larastan": "^3.9",
+        "laravel/pint": "^1.14",
         "league/flysystem-memory": "^3.10",
         "league/flysystem-path-prefixing": "^3.0",
         "league/flysystem-read-only": "^3.0",
@@ -33,6 +35,7 @@
         "nesbot/carbon": "^2.66|^3.0",
         "orchestra/testbench": "^10.8|^11.0",
         "phpunit/phpunit": "^11.5.3|^12.5.12",
+        "rector/rector": "^2.3",
         "spatie/image": "^2.2|^3.3"
     },
     "autoload": {
@@ -46,6 +49,9 @@
         }
     },
     "scripts": {
+        "analyse": "vendor/bin/phpstan analyse --memory-limit=512M",
+        "format": "vendor/bin/pint",
+        "refactor": "vendor/bin/rector",
         "test": "vendor/bin/phpunit",
         "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
     },

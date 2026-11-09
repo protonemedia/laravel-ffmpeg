@@ -1,0 +1,64 @@
+name: PHP Quality and Style
+
+on:
+    pull_request:
+        branches: [main]
+    push:
+        paths:
+            - '.github/workflows/php-quality-style.yml'
+            - '**.php'
+            - 'phpstan.neon.dist'
+            - 'pint.json'
+            - 'rector.php'
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+    cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+    php-quality-style:
+        name: PHP Quality and Style
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        permissions:
+            contents: write
+
+        steps:
+            - name: Harden runner
+              uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+              with:
+                  egress-policy: audit
+
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Setup PHP
+              uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+              with:
+                  php-version: '8.4'
+                  extensions: json, dom, curl, libxml, mbstring, zip
+                  tools: composer:v2
+                  coverage: none
+
+            - name: Install dependencies
+              run: composer install --no-progress --prefer-dist --optimize-autoloader
+
+            - name: Run Rector
+              run: composer refactor
+
+            - name: Commit changes
+              uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
+              with:
+                  commit_message: Refactor code with Rector
+
+            - name: Run Pint
+              run: composer format
+
+            - name: Commit changes
+              uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
+              with:
+                  commit_message: Format code with Pint
+
+            - name: Run PHPStan
+              run: composer analyse

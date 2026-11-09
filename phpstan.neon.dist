@@ -1,0 +1,23 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    reportUnmatchedIgnoredErrors: false
+
+    # Public methods validate untrusted input against their documented types at runtime.
+    treatPhpDocTypesAsCertain: false
+
+    level: 5
+
+    paths:
+        - src
+
+    ignoreErrors:
+        # Closures update $entries, $status and $applicationFailure by reference, which PHPStan cannot follow.
+        -
+            path: src/PendingLiveHls.php
+            identifiers:
+                - deadCode.unreachable
+                - identical.alwaysFalse
+                - identical.alwaysTrue
+                - ternary.alwaysFalse

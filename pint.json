@@ -1,0 +1,6 @@
+{
+    "preset": "laravel",
+    "rules": {
+        "single_class_element_per_statement": false
+    }
+}
