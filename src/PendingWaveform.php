@@ -3,15 +3,37 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
-class PendingWaveform extends PendingImages
+/** A JPEG or PNG picture of the first audio track's waveform. */
+final class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOutputs, ValidatesArtifacts
 {
+    use Concerns\AudioFilters;
+    use Concerns\Clips;
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\OutputOptions;
+    use Concerns\ResourceFilters;
+    use Concerns\Resources;
+    use Concerns\RunsExport;
+    use Concerns\VideoCodec;
+    use Concerns\VideoFilters;
+    use Conditionable;
+
+    private readonly PendingExport $export;
+
+    private readonly string $graph;
+
     public function __construct(Media $media, string|Filesystem $disk, int $width, int $height, string|array $colors)
     {
-        parent::__construct($media, $disk, '[waveform]');
-
         $colors = is_string($colors) ? [$colors] : $colors;
 
         if ($width < 1 || $height < 1 || $colors === [] || ! array_is_list($colors)
@@ -20,23 +42,39 @@ class PendingWaveform extends PendingImages
             throw new InvalidArgumentException('A waveform requires positive dimensions and a list of color names or RGB/RGBA hexadecimal colors.');
         }
 
-        $this->filterComplex('[0:a:0]showwavespic=s='.$width.'x'.$height.':colors='.implode('|', $colors).'[waveform]');
+        $this->graph = '[0:a:0]showwavespic=s='.$width.'x'.$height.':colors='.implode('|', $colors).'[waveform]';
+        $this->export = new PendingExport($media, $disk, $this, 'image');
+        $this->export->map('[waveform]')->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
-    protected function configuredOutputs(?string $path = null): array
+    public function save(?string $path = null): ExportResult
     {
-        // The clip trims audio samples before the picture is drawn.
-        return $this->unclippedOutputs($path);
+        $this->export->video(ImageOutput::codec($path));
+
+        return $this->export->save($path);
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    /** @internal */
+    public function graph(): string
     {
-        $this->assertNoTrackVideoFilters($outputs[0]);
-        if ($this->inputSeekOptions() !== []) {
+        return $this->graph;
+    }
+
+    /** @internal The clip trims audio samples before the picture is drawn. */
+    public function outputs(array $default, ?string $path): array
+    {
+        return ImageOutput::unclipped($this->export->outputConfiguration(), $path);
+    }
+
+    /** @internal */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
+    {
+        ImageOutput::assertNoTrackVideoFilters($outputs[0]);
+        if ($this->export->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Waveform clips require accurate audio trimming.');
         }
 
-        $command = parent::command($outputs, $paths, $outputPaths);
+        $command = $default;
         $filters = [];
 
         // Audio filters run before the picture; geometry and other video filters
@@ -51,7 +89,7 @@ class PendingWaveform extends PendingImages
         }
 
         $audio = $filters['-filter:a'] ?? '';
-        $clip = $this->clipSettings();
+        $clip = $this->export->clipSettings();
 
         if ($clip !== null) {
             $audio .= ($audio === '' ? '' : ',').'atrim=start='.CommandCompiler::timestamp($clip['start'])
@@ -68,5 +106,11 @@ class PendingWaveform extends PendingImages
         array_splice($command, -1, 0, ['-frames:v', '1', '-update', '1', '-f', 'image2']);
 
         return $command;
+    }
+
+    /** @internal */
+    public function artifact(string $path, string $role, int $size): void
+    {
+        ImageOutput::validate($path, $role);
     }
 }

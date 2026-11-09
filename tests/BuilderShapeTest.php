@@ -9,6 +9,7 @@ use ProtoneMedia\LaravelFFMpeg\PendingFrame;
 use ProtoneMedia\LaravelFFMpeg\PendingFrames;
 use ProtoneMedia\LaravelFFMpeg\PendingStill;
 use ProtoneMedia\LaravelFFMpeg\PendingStoryboard;
+use ProtoneMedia\LaravelFFMpeg\PendingWaveform;
 use ReflectionClass;
 
 class BuilderShapeTest extends TestCase
@@ -24,6 +25,7 @@ class BuilderShapeTest extends TestCase
             'frame' => [PendingFrame::class, [...$images, 'clip']],
             'frames' => [PendingFrames::class, $images],
             'storyboard' => [PendingStoryboard::class, $images],
+            'waveform' => [PendingWaveform::class, [...array_diff($images, ['audioFilter', 'volume', 'delayAudio'])]],
             'still' => [PendingStill::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
                 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'mapAudio', 'withoutAudio', 'withoutVideo']],
         ];
