@@ -2,9 +2,16 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
-/** @internal Allowed raw output options. Forwards to the PendingExport the builder holds in $export. */
+/**
+ * Forward the allowed raw output options to the pending export the builder holds in $export.
+ *
+ * @internal
+ */
 trait OutputOptions
 {
+    /**
+     * Add allowed raw FFmpeg options to the output.
+     */
     public function outputOptions(array $tokens): self
     {
         $this->export->outputOptions($tokens);

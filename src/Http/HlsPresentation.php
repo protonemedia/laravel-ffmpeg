@@ -8,18 +8,40 @@ use League\Flysystem\WhitespacePathNormalizer;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\HlsResourceNotFoundException;
 use Throwable;
 
-/** A trusted, persistable inventory. Never construct this from request input. */
+/**
+ * A trusted, persistable inventory of the files an HLS presentation may serve.
+ *
+ * Never construct a presentation from request input.
+ */
 class HlsPresentation
 {
+    /**
+     * The inventory files, keyed by resource ID.
+     */
     protected array $files = [];
 
-    public function __construct(array $files, protected readonly string $playlist, protected readonly array $keys = [], protected readonly array $variants = [], protected readonly bool $selected = false, protected readonly array $provenance = [])
-    {
+    /**
+     * Create a new HLS presentation instance.
+     */
+    public function __construct(
+        array $files,
+        protected readonly string $playlist,
+        protected readonly array $keys = [],
+        protected readonly array $variants = [],
+        protected readonly bool $selected = false,
+        protected readonly array $provenance = [],
+    ) {
         foreach ($files as $file) {
             try {
-                $canonical = is_string($file['path'] ?? null) ? (new WhitespacePathNormalizer)->normalizePath($file['path']) : null;
+                $canonical = is_string($file['path'] ?? null)
+                    ? (new WhitespacePathNormalizer)->normalizePath($file['path'])
+                    : null;
             } catch (Throwable $exception) {
-                throw new InvalidArgumentException('HLS playback requires canonical inventory paths.', $exception->getCode(), previous: $exception);
+                throw new InvalidArgumentException(
+                    'HLS playback requires canonical inventory paths.',
+                    $exception->getCode(),
+                    previous: $exception,
+                );
             }
 
             if (! is_string($file['disk'] ?? null) || $file['disk'] === '') {
@@ -29,10 +51,14 @@ class HlsPresentation
             if (! is_string($file['path'] ?? null) || $file['path'] === ''
                 || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $file['path'])
                 || $canonical !== $file['path']) {
-                throw new InvalidArgumentException('Each HLS playback inventory path must be canonical and disk-relative.');
+                throw new InvalidArgumentException(
+                    'Each HLS playback inventory path must be canonical and disk-relative.'
+                );
             }
 
-            if (! in_array($file['role'] ?? null, ['hls-master', 'hls-playlist', 'hls-segment', 'hls-init', 'hls-key', 'dash-init', 'dash-segment'], true)) {
+            if (! in_array($file['role'] ?? null, [
+                'hls-master', 'hls-playlist', 'hls-segment', 'hls-init', 'hls-key', 'dash-init', 'dash-segment',
+            ], true)) {
                 throw new InvalidArgumentException('Each HLS playback inventory file requires a known HLS role.');
             }
 
@@ -44,27 +70,47 @@ class HlsPresentation
             $this->files[$id] = array_intersect_key($file, array_flip(['disk', 'path', 'role']));
         }
 
-        if (! isset($this->files[$playlist]) || ! in_array($this->files[$playlist]['role'], ['hls-master', 'hls-playlist'], true)) {
+        if (! isset($this->files[$playlist])
+            || ! in_array($this->files[$playlist]['role'], ['hls-master', 'hls-playlist'], true)) {
             throw new InvalidArgumentException('HLS playback requires an inventory-owned entry playlist.');
         }
     }
 
+    /**
+     * Get the resource ID of the given disk and path.
+     */
     public static function id(string $disk, string $path): string
     {
         return hash('sha256', $disk."\0".$path);
     }
 
+    /**
+     * Create a presentation from its persisted array form.
+     */
     public static function fromArray(array $inventory): self
     {
-        return new self($inventory['files'], $inventory['playlist'], $inventory['keys'] ?? [], $inventory['variants'] ?? [], $inventory['selected'] ?? false, $inventory['provenance'] ?? []);
+        return new self(
+            $inventory['files'],
+            $inventory['playlist'],
+            $inventory['keys'] ?? [],
+            $inventory['variants'] ?? [],
+            $inventory['selected'] ?? false,
+            $inventory['provenance'] ?? [],
+        );
     }
 
+    /**
+     * Get the presentation as an array that can be persisted.
+     */
     public function toArray(): array
     {
         return ['files' => array_values($this->files), 'playlist' => $this->playlist, 'keys' => $this->keys,
             'variants' => $this->variants, 'selected' => $this->selected, 'provenance' => $this->provenance];
     }
 
+    /**
+     * Get a presentation limited to the given variants.
+     */
     public function playbackForVariants(array $names): self
     {
         if ($names === []) {
@@ -101,7 +147,11 @@ class HlsPresentation
             array_intersect_key($this->provenance, array_flip(array_column($files, 'path'))));
     }
 
-    /** Render only inventory-owned references; selection removes whole master declarations. */
+    /**
+     * Render the given playlist with URLs for inventory-owned references only.
+     *
+     * A variant selection removes whole master declarations.
+     */
     public function render(array $file, callable $url): string
     {
         $playlist = new HlsPlaylist($file['disk'], $file['path']);
@@ -135,17 +185,27 @@ class HlsPresentation
         return implode("\n", $lines);
     }
 
-    /** @throws HlsResourceNotFoundException when the inventory does not own the resource */
+    /**
+     * Get the inventory file with the given ID, or the entry playlist.
+     *
+     * @throws HlsResourceNotFoundException when the inventory does not own the resource
+     */
     public function file(?string $id = null): array
     {
         return $this->files[$id ?? $this->playlist] ?? throw new HlsResourceNotFoundException('Unknown HLS resource.');
     }
 
-    /** @throws HlsResourceNotFoundException when the reference is not an owned resource of this kind */
+    /**
+     * Get the resource ID that a playlist reference of the given kind points to.
+     *
+     * @throws HlsResourceNotFoundException when the reference is not an owned resource of this kind
+     */
     public function reference(array $source, ?string $target, string $uri, string $kind): string
     {
         $key = $kind === 'key' ? ($this->keys[$source['path']][$uri] ?? null) : null;
-        $id = $key === null ? ($target === null ? null : self::id($source['disk'], $target)) : self::id($key['disk'], $key['path']);
+        $id = $key === null
+            ? ($target === null ? null : self::id($source['disk'], $target))
+            : self::id($key['disk'], $key['path']);
         $file = $id === null ? null : ($this->files[$id] ?? null);
         $roles = match ($kind) {
             'playlist' => ['hls-master', 'hls-playlist'],
@@ -160,7 +220,11 @@ class HlsPresentation
         return $id;
     }
 
-    /** @internal The URL-encoded path from a playlist's directory to a target key on the same disk. */
+    /**
+     * Get the URL-encoded path from a playlist's directory to a target key on the same disk.
+     *
+     * @internal
+     */
     public static function relativeUrl(string $target, string $playlist): string
     {
         $from = dirname($playlist) === '.' ? [] : explode('/', dirname($playlist));

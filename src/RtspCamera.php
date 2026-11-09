@@ -7,11 +7,21 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\InputSource;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
-/** Capture one bounded snapshot. Camera URLs are trusted application configuration. */
+/**
+ * An RTSP camera that captures one bounded snapshot.
+ *
+ * Camera URLs are trusted application configuration.
+ */
 readonly class RtspCamera implements InputSource
 {
-    public function __construct(protected string $url, protected string $transport = 'tcp', protected float $timeout = 15)
-    {
+    /**
+     * Create a new RTSP camera instance.
+     */
+    public function __construct(
+        protected string $url,
+        protected string $transport = 'tcp',
+        protected float $timeout = 15,
+    ) {
         $parts = parse_url($url);
         if ($parts === false || ($parts['scheme'] ?? null) !== 'rtsp' || empty($parts['host'])) {
             throw new InvalidArgumentException('The camera URL must be an absolute rtsp URL.');
@@ -30,40 +40,63 @@ readonly class RtspCamera implements InputSource
         }
 
         if (! is_finite($timeout) || $timeout <= 0 || $timeout > 300) {
-            throw new InvalidArgumentException("The RTSP timeout [{$timeout}] must be greater than 0 and at most 300 seconds.");
+            throw new InvalidArgumentException(
+                "The RTSP timeout [{$timeout}] must be greater than 0 and at most 300 seconds."
+            );
         }
     }
 
+    /**
+     * Begin exporting a snapshot frame from the camera.
+     */
     public function frame(): PendingFrame
     {
         return new PendingFrame(new Media(config('filesystems.default'), $this), config('filesystems.default'), 0);
     }
 
+    /**
+     * Get a stable hash that identifies the camera and its settings.
+     */
     public function identity(): string
     {
         return hash('sha256', serialize([$this->url, $this->transport, $this->timeout]));
     }
 
+    /**
+     * Get the file extension of the captured snapshot.
+     */
     public function extension(): string
     {
         return 'png';
     }
 
+    /**
+     * Get the redacted label that stands in for the camera URL in metadata.
+     */
     public function label(): string
     {
         return '[RTSP snapshot]';
     }
 
+    /**
+     * Get the FFmpeg protocol whitelist for the staged snapshot.
+     */
     public function protocols(): string
     {
         return 'file';
     }
 
+    /**
+     * Get the FFmpeg transport options for the staged snapshot.
+     */
     public function options(): array
     {
         return [];
     }
 
+    /**
+     * Get the camera URL and its credentials to replace in commands and diagnostics.
+     */
     public function redactions(): array
     {
         if (! config('laravel-ffmpeg.redact_credentials')) {
@@ -72,7 +105,7 @@ readonly class RtspCamera implements InputSource
 
         $redactions = [$this->url => '[rtsp]'];
         $parts = parse_url($this->url);
-        // A password is a credential at any length; a username on its own is not.
+        // A password is a credential at any length, but a username on its own is not.
         if (($parts['pass'] ?? '') !== '') {
             foreach ([($parts['user'] ?? '').':'.$parts['pass'], $parts['pass']] as $secret) {
                 $redactions[$secret] = $redactions[rawurldecode($secret)] = '[redacted]';
@@ -82,6 +115,9 @@ readonly class RtspCamera implements InputSource
         return $redactions + UrlInput::queryRedactions($parts['query'] ?? null);
     }
 
+    /**
+     * Capture a single PNG snapshot from the camera into the workspace.
+     */
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         if ($resource) {
@@ -97,7 +133,8 @@ readonly class RtspCamera implements InputSource
             $binary, '-hide_banner', '-nostdin', '-y', '-xerror', '-loglevel', 'error',
             '-protocol_whitelist', $this->transport === 'tcp' ? 'tcp' : 'tcp,udp,rtp',
             '-rtsp_transport', $this->transport, '-timeout', (string) (int) ceil($this->timeout * 1000000),
-            '-i', $this->url, '-map', '0:v:0', '-frames:v', '1', '-an', '-c:v', 'png', '-f', 'image2', '-update', '1', $path,
+            '-i', $this->url, '-map', '0:v:0', '-frames:v', '1', '-an', '-c:v', 'png', '-f', 'image2',
+            '-update', '1', $path,
         ], $workspace->path, $this->redactions(), phase: 'staging', timeout: $this->timeout);
         if ($result->failed() || ! is_file($path) || @getimagesize($path) === false || ! chmod($path, 0600)) {
             throw MediaException::staging('Cannot capture the RTSP snapshot.', 'capture', $result->errorOutput());

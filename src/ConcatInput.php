@@ -7,9 +7,16 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\InputSource;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
-/** @internal */
+/**
+ * Media files joined without re-encoding through an FFconcat manifest.
+ *
+ * @internal
+ */
 readonly class ConcatInput implements InputSource
 {
+    /**
+     * Create a new concat input instance.
+     */
     public function __construct(protected array $inputs)
     {
         if (count($inputs) < 2) {
@@ -18,7 +25,9 @@ readonly class ConcatInput implements InputSource
 
         foreach ($inputs as $input) {
             if ($input->protocolWhitelist() !== 'file') {
-                throw new InvalidArgumentException('Concat inputs must be local or downloaded files; use download: true for URLs.');
+                throw new InvalidArgumentException(
+                    'Concat inputs must be local or downloaded files; use download: true for URLs.'
+                );
             }
 
             if ($input->inputOptions() !== [] || $input->transportOptions() !== []) {
@@ -27,31 +36,49 @@ readonly class ConcatInput implements InputSource
         }
     }
 
+    /**
+     * Get a stable hash that identifies every input in order.
+     */
     public function identity(): string
     {
         return hash('sha256', serialize(array_map(fn ($media) => $media->identity(), $this->inputs)));
     }
 
+    /**
+     * Get the file extension of the staged manifest.
+     */
     public function extension(): string
     {
         return 'ffconcat';
     }
 
+    /**
+     * Get the label that stands in for the manifest in metadata.
+     */
     public function label(): string
     {
         return '[concat]';
     }
 
+    /**
+     * Get the FFmpeg protocol whitelist for the staged manifest.
+     */
     public function protocols(): string
     {
         return 'file';
     }
 
+    /**
+     * Get the FFmpeg concat demuxer options.
+     */
     public function options(): array
     {
         return ['-f', 'concat', '-safe', '1'];
     }
 
+    /**
+     * Get the combined redactions of every input.
+     */
     public function redactions(): array
     {
         $redactions = [];
@@ -63,6 +90,9 @@ readonly class ConcatInput implements InputSource
         return $redactions;
     }
 
+    /**
+     * Stage every input and write the FFconcat manifest that lists them.
+     */
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         if ($resource) {
@@ -78,10 +108,15 @@ readonly class ConcatInput implements InputSource
         foreach ($this->inputs as $index => $input) {
             $metadata = $workspace->probe($input);
             $duration = $metadata->duration();
-            $streams = $metadata->streams()->map(fn ($stream): array => array_map(fn (string $field) => $stream->get($field), $fields))->all();
+            $streams = $metadata->streams()
+                ->map(fn ($stream): array => array_map(fn (string $field) => $stream->get($field), $fields))
+                ->all();
 
             if ($duration === null || $duration <= 0) {
-                throw MediaException::probing("Concat input [{$index}] must have a finite positive duration.", 'metadata');
+                throw MediaException::probing(
+                    "Concat input [{$index}] must have a finite positive duration.",
+                    'metadata',
+                );
             }
 
             if ($streams === []) {
@@ -89,17 +124,26 @@ readonly class ConcatInput implements InputSource
             }
 
             if (in_array($metadata->get('format.format_name'), ['concat', 'hls', 'dash'], true)) {
-                throw MediaException::probing("Concat input [{$index}] must be standalone media, not a playlist or manifest.", 'metadata');
+                throw MediaException::probing(
+                    "Concat input [{$index}] must be standalone media, not a playlist or manifest.",
+                    'metadata',
+                );
             }
 
             $start = $metadata->get('format.start_time', '0');
 
             if (! is_numeric($start) || (float) $start !== 0.0) {
-                throw MediaException::probing("Concat input [{$index}] must start at zero; use an explicit normalization graph.", 'metadata');
+                throw MediaException::probing(
+                    "Concat input [{$index}] must start at zero; use an explicit normalization graph.",
+                    'metadata',
+                );
             }
 
             if ($layout !== null && $layout !== $streams) {
-                throw MediaException::probing("Concat input [{$index}] stream layout or codec parameters differ from the first input; use an explicit normalization graph.", 'concat');
+                throw MediaException::probing(
+                    "Concat input [{$index}] stream layout or codec parameters differ from the first input; use an explicit normalization graph.",
+                    'concat',
+                );
             }
 
             $layout = $streams;
@@ -107,8 +151,8 @@ readonly class ConcatInput implements InputSource
             $alias = $name.'-part-'.$index.($input->extension() === '' ? '' : '.'.$input->extension());
             $target = $workspace->path.'/'.$alias;
 
-            // Safe relative manifest names avoid FFconcat's quoting rules for
-            // caller filenames. Cleanup deletes links, never their source files.
+            // We link each input under a safe relative name, which avoids FFconcat's quoting
+            // rules for caller filenames. Cleanup deletes the links, never their source files.
             if (! @symlink($source, $target) && (! @copy($source, $target) || ! chmod($target, 0600))) {
                 throw MediaException::staging('Cannot prepare concat input '.$index.'.', 'filesystem');
             }

@@ -13,7 +13,9 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\PackagesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 
-/** Audio data, not the separate waveform image operation. */
+/**
+ * The audio peaks of a waveform as data, separate from the waveform image operation.
+ */
 class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand
 {
     use Concerns\AudioFilters;
@@ -24,28 +26,62 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     use Concerns\RunsExport;
     use Conditionable, Macroable;
 
+    /**
+     * The export pipeline this builder configures.
+     */
     protected readonly PendingExport $export;
 
+    /**
+     * The zero-based ordinal of the audio track to read.
+     */
     protected int $track = 0;
 
+    /**
+     * Indicates if the channels are downmixed to mono.
+     */
     protected bool $mixMono = false;
 
+    /**
+     * The requested number of buckets, instead of a fixed bucket size.
+     */
     protected ?int $targetBuckets = null;
 
+    /**
+     * The sample rate of the selected track, once the source has been probed.
+     */
     protected int $rate = 0;
 
+    /**
+     * The channel count of the selected track, once the source has been probed.
+     */
     protected int $inputChannels = 0;
 
+    /**
+     * The channel layout of the selected track, when FFmpeg can name it.
+     */
     protected ?string $inputLayout = null;
 
+    /**
+     * The peaks reduced from the decoded audio.
+     */
     protected ?WaveformPeaks $peaks = null;
 
-    // Limits aggregate cells, not decoded input length. PCM is spooled to the
-    // private operation workspace and read in bounded chunks, never stdout.
+    /**
+     * The maximum number of channel buckets in the peaks.
+     *
+     * This limits aggregate cells, not the decoded input length. The PCM is spooled to the
+     * private operation workspace and read in bounded chunks, never from stdout.
+     */
     protected const int MAX_CELLS = 100000;
 
-    public function __construct(Media $media, string|Filesystem $disk, protected readonly int $samplesPerBucket = 256)
-    {
+    /**
+     * Create a new pending waveform peaks instance.
+     */
+    public function __construct(
+        Media $media,
+        string|Filesystem $disk,
+        protected readonly int $samplesPerBucket = 256,
+    ) {
         if ($samplesPerBucket < 1) {
             throw new InvalidArgumentException('Samples per bucket must be positive.');
         }
@@ -53,7 +89,9 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $this->export = new PendingExport($media, $disk, $this, 'waveform-peaks');
     }
 
-    /** Zero-based audio stream ordinal, not the global stream index. */
+    /**
+     * Read the audio track at the given zero-based ordinal, not the global stream index.
+     */
     public function audioTrack(int $track): self
     {
         $this->export->assertOutputMutable();
@@ -66,7 +104,9 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         return $this;
     }
 
-    /** Equal-weight arithmetic downmix before reduction; otherwise retain channels. */
+    /**
+     * Downmix the channels with equal weight before reduction, instead of keeping them separate.
+     */
     public function mono(bool $enabled = true): self
     {
         $this->export->assertOutputMutable();
@@ -75,7 +115,9 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         return $this;
     }
 
-    /** Request at most this many nonempty, evenly partitioned buckets. */
+    /**
+     * Request at most the given number of nonempty, evenly partitioned buckets.
+     */
     public function buckets(int $count): self
     {
         $this->export->assertOutputMutable();
@@ -88,6 +130,9 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         return $this;
     }
 
+    /**
+     * Get the peaks without publishing a file.
+     */
     public function get(): WaveformPeaks
     {
         $this->export->execute('peaks.json', contents: true);
@@ -95,12 +140,20 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         return $this->peaks;
     }
 
+    /**
+     * Save the peaks as JSON to the given path.
+     */
     public function save(?string $path = null): WaveformPeaksResult
     {
         return new WaveformPeaksResult($this->export->save($path), $this->peaks);
     }
 
-    /** @internal Records the selected track's rate and layout for the PCM decode; progress keeps the default duration. */
+    /**
+     * Record the selected track's rate and layout for the PCM decode.
+     * Progress keeps the default duration.
+     *
+     * @internal
+     */
     public function duration(array $metadata, ?float $default): ?float
     {
         $stream = $metadata[0]->audioStreams()->get($this->track);
@@ -115,7 +168,10 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         }
 
         if ($this->inputChannels < 1 || $this->inputChannels > 64) {
-            throw MediaException::probing("The audio track channel count [{$this->inputChannels}] must be between 1 and 64.", 'mapping');
+            throw MediaException::probing(
+                "The audio track channel count [{$this->inputChannels}] must be between 1 and 64.",
+                'mapping',
+            );
         }
 
         // FFprobe reports custom orders as "4 channels (FL+FR+LFE+BC)".
@@ -129,7 +185,11 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         return $default;
     }
 
-    /** @internal */
+    /**
+     * Decode exactly one audio track to raw PCM.
+     *
+     * @internal
+     */
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         if ($outputs[0]->inputSeekOptions() !== []) {
@@ -137,18 +197,21 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         }
 
         $command = $default;
-        // Replace the export pipeline's default optional video/audio maps with
-        // exactly one required audio track (raw PCM supports one stream).
+        // Raw PCM holds a single stream, so we will replace the pipeline's default optional
+        // video and audio maps with exactly one required audio track.
         while (($index = array_search('-map', $command, true)) !== false) {
             array_splice($command, $index, 2);
         }
 
-        // Preserve the decoded track rate and channel layout even if caller
-        // preprocessing changes format. JSON timing describes these PCM frames.
-        // -ac alone would remix any layout that is not FFmpeg's default for its count.
+        // We preserve the decoded track's rate and channel layout even when the caller's
+        // preprocessing changes the format, because the JSON timing describes these PCM
+        // frames. Using -ac alone would remix any layout that is not FFmpeg's default.
         $channels = $this->mixMono ? 1 : ($this->inputChannels ?: 1);
         if ($this->mixMono && $this->inputChannels > 0) {
-            $terms = array_map(fn ($i): string => sprintf('%.17g', 1 / $this->inputChannels).'*c'.$i, range(0, $this->inputChannels - 1));
+            $terms = array_map(
+                fn ($i): string => sprintf('%.17g', 1 / $this->inputChannels).'*c'.$i,
+                range(0, $this->inputChannels - 1),
+            );
             $pan = 'pan=mono|c0='.implode('+', $terms);
             $index = array_search('-filter:a', $command, true);
             if ($index === false) {
@@ -160,19 +223,29 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
 
         array_splice($command, -1, 0, ['-map', '0:a:'.$this->track, '-vn', '-sn', '-dn', '-c:a', 'pcm_s16le',
             '-ar', (string) ($this->rate ?: 48000),
-            ...($this->mixMono || $this->inputLayout === null ? ['-ac', (string) $channels] : ['-ch_layout', $this->inputLayout]),
+            ...($this->mixMono || $this->inputLayout === null
+                ? ['-ac', (string) $channels]
+                : ['-ch_layout', $this->inputLayout]),
             '-f', 's16le']);
 
         return $command;
     }
 
-    /** @internal */
+    /**
+     * Get the private path that FFmpeg decodes the PCM to.
+     *
+     * @internal
+     */
     public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
         return [$workspace->path.'/decoded.s16le'];
     }
 
-    /** @internal Reduces the decoded PCM to bounded extrema and publishes them as version-1 JSON. */
+    /**
+     * Reduce the decoded PCM to bounded extrema and publish them as version 1 JSON.
+     *
+     * @internal
+     */
     public function artifacts(array $default, array $outputs, array $paths): array
     {
         $path = $paths[0];
@@ -188,7 +261,10 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $count = $frames === 0 ? 0 : ($this->targetBuckets === null
             ? intdiv($frames - 1, $this->samplesPerBucket) + 1 : min($frames, $this->targetBuckets));
         if ($count > intdiv(self::MAX_CELLS, $channels)) {
-            throw MediaException::validation('Peaks exceed 100000 channel buckets; request fewer buckets.', 'output_limit');
+            throw MediaException::validation(
+                'Peaks exceed 100000 channel buckets; request fewer buckets.',
+                'output_limit',
+            );
         }
 
         $data = array_fill(0, $channels, []);
@@ -200,8 +276,9 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
 
         try {
             for ($bucket = 0; $bucket < $count; $bucket++) {
-                // Quotient/remainder avoids overflowing frames * bucket.
-                $length = $this->targetBuckets === null ? min($this->samplesPerBucket, $frames - $bucket * $this->samplesPerBucket)
+                // A quotient and remainder split avoids overflowing frames * bucket.
+                $length = $this->targetBuckets === null
+                    ? min($this->samplesPerBucket, $frames - $bucket * $this->samplesPerBucket)
                     : intdiv($frames, $count) + ($bucket < $frames % $count ? 1 : 0);
                 $lengths[] = $length;
                 $min = array_fill(0, $channels, 32767);
@@ -214,8 +291,8 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
                         throw MediaException::validation('Cannot read complete PCM frames.', 'filesystem');
                     }
 
-                    // v is literally unsigned little-endian 16-bit, independent
-                    // of host byte order. Convert two's complement explicitly.
+                    // The v format is unsigned little-endian 16-bit, independent of the host
+                    // byte order, so we will convert from two's complement explicitly.
                     foreach (unpack('v*', $bytes) as $index => $unsigned) {
                         $channel = ($index - 1) % $channels;
                         $sample = $unsigned >= 32768 ? $unsigned - 65536 : $unsigned;
@@ -234,8 +311,16 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
             fclose($file);
         }
 
-        $this->peaks = new WaveformPeaks($this->rate, $this->inputChannels, $this->track,
-            $this->mixMono ? 'mono' : 'separate', $frames, $this->targetBuckets === null ? $this->samplesPerBucket : null, $lengths, $data);
+        $this->peaks = new WaveformPeaks(
+            $this->rate,
+            $this->inputChannels,
+            $this->track,
+            $this->mixMono ? 'mono' : 'separate',
+            $frames,
+            $this->targetBuckets === null ? $this->samplesPerBucket : null,
+            $lengths,
+            $data,
+        );
         $json = json_encode($this->peaks, JSON_THROW_ON_ERROR);
         $target = dirname($path).'/peaks.json';
         if (@file_put_contents($target, $json) !== strlen($json) || ! chmod($target, 0600)) {

@@ -10,8 +10,14 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
+/**
+ * Serve the playlists, keys and media files of a protected HLS presentation.
+ */
 class HlsPlaybackController
 {
+    /**
+     * Handle the incoming playback request.
+     */
     public function __invoke(Request $request, HlsPlayback $playback): Response
     {
         $presentation = $playback->resolve($request);
@@ -33,8 +39,12 @@ class HlsPlaybackController
     /**
      * Render the playlist with signed URLs for each of its resources.
      */
-    protected function playlistResponse(Request $request, HlsPresentation $presentation, array $file, array $headers): Response
-    {
+    protected function playlistResponse(
+        Request $request,
+        HlsPresentation $presentation,
+        array $file,
+        array $headers,
+    ): Response {
         try {
             $content = $presentation->render($file, fn ($id): string => $this->resourceUrl($request, $id));
 
@@ -166,8 +176,8 @@ class HlsPlaybackController
     protected function sendRange($stream, int $start, int $end): void
     {
         try {
-            // Some remote Storage streams are not seekable. Discard bounded
-            // chunks rather than loading the prefix or whole segment.
+            // Some remote storage streams cannot seek. In that case we will read and discard
+            // the prefix in bounded chunks instead of loading the prefix or the whole segment.
             if ($start > 0 && @fseek($stream, $start) !== 0) {
                 $remaining = $start;
                 while ($remaining > 0 && ! feof($stream)) {

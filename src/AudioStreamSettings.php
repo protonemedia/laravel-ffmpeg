@@ -6,11 +6,19 @@ use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
 
-/** Encoding overrides for one zero-based output audio track. */
+/**
+ * Configure the encoding overrides of one zero-based output audio track.
+ */
 class AudioStreamSettings
 {
+    /**
+     * The encoding overrides of the track.
+     */
     protected array $settings = [];
 
+    /**
+     * Set the encoder of the track.
+     */
     public function codec(string $codec): self
     {
         if (! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
@@ -22,10 +30,15 @@ class AudioStreamSettings
         return $this;
     }
 
+    /**
+     * Set the target bitrate of the track.
+     */
     public function bitrate(int|string $bitrate): self
     {
         if ((! is_int($bitrate) || $bitrate <= 0)
-            && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
+            && (! is_string($bitrate)
+                || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate)
+                || (float) $bitrate <= 0)) {
             throw new InvalidArgumentException('Bitrates require positive bits per second or an explicit unit string.');
         }
 
@@ -34,31 +47,49 @@ class AudioStreamSettings
         return $this;
     }
 
+    /**
+     * Set the sample rate of the track in hertz.
+     */
     public function sampleRate(int $rate): self
     {
         return $this->options(['-ar', (string) $rate]);
     }
 
+    /**
+     * Set the number of channels of the track.
+     */
     public function channels(int $channels): self
     {
         return $this->options(['-ac', (string) $channels]);
     }
 
+    /**
+     * Set the sample format of the track.
+     */
     public function sampleFormat(string $format): self
     {
         return $this->options(['-sample_fmt', $format]);
     }
 
+    /**
+     * Set the channel layout of the track.
+     */
     public function channelLayout(string $layout): self
     {
         return $this->options(['-channel_layout', $layout]);
     }
 
+    /**
+     * Set the encoder compression level of the track.
+     */
     public function compressionLevel(int $level): self
     {
         return $this->options(['-compression_level', (string) $level]);
     }
 
+    /**
+     * Add a filter to the track, after the output audio filters.
+     */
     public function filter(string $expression): self
     {
         FilterGraph::validateExpression($expression);
@@ -67,6 +98,9 @@ class AudioStreamSettings
         return $this;
     }
 
+    /**
+     * Set curated, scalar encoder options on the track.
+     */
     public function options(array $tokens): self
     {
         CommandCompiler::options($tokens, 'output');
@@ -82,7 +116,13 @@ class AudioStreamSettings
         return $this;
     }
 
-    /** @internal Snapshot; callbacks are not retained in queued exports. */
+    /**
+     * Get a snapshot of the encoding overrides.
+     *
+     * Queued exports keep this snapshot, not the configuring callback.
+     *
+     * @internal
+     */
     public function settings(): array
     {
         return $this->settings;

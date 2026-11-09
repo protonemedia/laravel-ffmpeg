@@ -2,8 +2,15 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Pipeline;
 
-/** @internal Adjusts the outputs PendingExport derives from root settings or output() callbacks. */
+/**
+ * Adjusts the outputs PendingExport derives from root settings or output() callbacks.
+ *
+ * @internal
+ */
 interface ShapesOutputs
 {
+    /**
+     * Get the outputs to compile in place of the derived defaults.
+     */
     public function outputs(array $default, ?string $path): array;
 }

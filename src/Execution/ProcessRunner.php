@@ -9,9 +9,16 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ProcessResult;
 use Throwable;
 
-/** @internal */
+/**
+ * Runs FFmpeg and FFprobe processes within the operation's deadlines and capture limits.
+ *
+ * @internal
+ */
 class ProcessRunner
 {
+    /**
+     * The high-resolution time the operation started, in nanoseconds.
+     */
     protected readonly int $startedAt;
 
     /**
@@ -26,8 +33,13 @@ class ProcessRunner
      */
     protected ?Throwable $applicationFailure = null;
 
-    public function __construct(protected readonly ?float $timeout = null, protected readonly ?float $idleTimeout = null)
-    {
+    /**
+     * Create a new process runner instance.
+     */
+    public function __construct(
+        protected readonly ?float $timeout = null,
+        protected readonly ?float $idleTimeout = null,
+    ) {
         foreach ([$timeout, $idleTimeout] as $seconds) {
             if ($seconds !== null && (! is_finite($seconds) || $seconds <= 0)) {
                 throw new InvalidArgumentException('Process deadlines must be finite, positive seconds or null.');
@@ -37,7 +49,11 @@ class ProcessRunner
         $this->startedAt = hrtime(true);
     }
 
-    /** The operation budget is shared by staging, probing, analysis and encoding. */
+    /**
+     * Ensure the operation has not exceeded its time budget.
+     *
+     * The budget is shared by staging, probing, analysis and encoding.
+     */
     public function check(string $phase): void
     {
         if ($this->timeout !== null && (hrtime(true) - $this->startedAt) / 1e9 >= $this->timeout) {
@@ -45,18 +61,32 @@ class ProcessRunner
         }
     }
 
+    /**
+     * Get the 9.0.x release of the given binary.
+     */
     public function version(string $binary, string $tool, string $directory, string $phase = 'probing'): string
     {
         $result = $this->run([$binary, '-version'], $directory, outputLimit: 65536, phase: $phase);
 
-        if ($result->exitCode !== 0 || ! preg_match('/^'.preg_quote($tool, '/').' version (?:n)?(9\.0\.\d+)(?:\s|-|$)/', $result->output, $matches)) {
-            throw new MediaException(($tool === 'ffprobe' ? 'FFprobe' : 'FFmpeg').' 9.0.x is required.', $phase, 'version');
+        if ($result->exitCode !== 0
+            || ! preg_match(
+                '/^'.preg_quote($tool, '/').' version (?:n)?(9\.0\.\d+)(?:\s|-|$)/',
+                $result->output,
+                $matches,
+            )) {
+            throw new MediaException(
+                ($tool === 'ffprobe' ? 'FFprobe' : 'FFmpeg').' 9.0.x is required.',
+                $phase,
+                'version',
+            );
         }
 
         return $matches[1];
     }
 
-    /** The shared release of a matching FFmpeg and FFprobe 9.0.x pair. */
+    /**
+     * Get the shared release of a matching FFmpeg and FFprobe 9.0.x pair.
+     */
     public function pairVersion(string $ffmpeg, string $ffprobe, string $directory): string
     {
         $version = $this->version($ffmpeg, 'ffmpeg', $directory);
@@ -68,6 +98,9 @@ class ProcessRunner
         return $version;
     }
 
+    /**
+     * Run the given command and get its redacted result.
+     */
     public function run(
         array $command,
         string $directory,
@@ -82,7 +115,13 @@ class ProcessRunner
         $started = hrtime(true);
         $process = null;
         $failure = null;
-        $this->capture = ['output' => '', 'diagnostics' => '', 'overflow' => false, 'lastOutput' => $started, 'failure' => null];
+        $this->capture = [
+            'output' => '',
+            'diagnostics' => '',
+            'overflow' => false,
+            'lastOutput' => $started,
+            'failure' => null,
+        ];
         $this->applicationFailure = null;
 
         try {
@@ -91,7 +130,8 @@ class ProcessRunner
             $this->supervise($process, $phase, $started, $progress, $timeout, $tick);
             $result = $process->wait();
 
-            // strtr() replaces the longest key first in one pass, so a short value inside a longer secret cannot expose the rest.
+            // The strtr() function replaces the longest key first in a single pass, so a
+            // short value that occurs inside a longer secret cannot expose the rest of it.
             return new ProcessResult(
                 $result->exitCode(),
                 $redactOutput ? strtr($this->capture['output'], $redactions) : $this->capture['output'],
@@ -121,11 +161,15 @@ class ProcessRunner
     /**
      * Start the process with a handler that captures its output.
      */
-    protected function startProcess(array $command, string $directory, int $outputLimit, ?ProgressParser $progress): InvokedProcess
-    {
-        // An internal callback is required at start: quietly() disables capture,
-        // but Symfony still drains both pipes into this handler. It never calls
-        // application code or throws before we retain the child handle.
+    protected function startProcess(
+        array $command,
+        string $directory,
+        int $outputLimit,
+        ?ProgressParser $progress,
+    ): InvokedProcess {
+        // The internal callback must be given at start. While quietly() disables capture,
+        // Symfony still drains both pipes into this handler. The handler never calls
+        // application code or throws before we retain the child process handle.
         return Process::path($directory)
             ->env($this->environment($directory))
             ->forever()
@@ -162,8 +206,14 @@ class ProcessRunner
     /**
      * Poll the process until it exits, enforcing the capture limit and deadlines.
      */
-    protected function supervise(InvokedProcess $process, string $phase, int|float $started, ?ProgressParser $progress, ?float $timeout, ?callable $tick): void
-    {
+    protected function supervise(
+        InvokedProcess $process,
+        string $phase,
+        int|float $started,
+        ?ProgressParser $progress,
+        ?float $timeout,
+        ?callable $tick,
+    ): void {
         do {
             $running = $process->running();
 
@@ -240,8 +290,8 @@ class ProcessRunner
     {
         try {
             if ($process->running()) {
-                // Laravel's concrete process supports graceful stop. Its
-                // public contract exposes only signals and wait instead.
+                // Laravel's concrete process supports a graceful stop, but its public
+                // contract only exposes signals and waiting, so we fall back to SIGTERM.
                 if (method_exists($process, 'stop')) {
                     $process->stop(1);
                 } else {
@@ -257,6 +307,9 @@ class ProcessRunner
         }
     }
 
+    /**
+     * Get the minimal environment for a process running in the given directory.
+     */
     protected function environment(string $directory): array
     {
         $inherited = array_merge($_SERVER, $_ENV, getenv());
@@ -268,7 +321,8 @@ class ProcessRunner
             }
         }
 
-        // Temporary files, including any created by the binary, stay private.
+        // We point the temporary directory variables at the workspace so that temporary
+        // files, including any the binary creates, stay private to this operation.
         return array_replace($environment, ['TMPDIR' => $directory, 'TMP' => $directory, 'TEMP' => $directory]);
     }
 }

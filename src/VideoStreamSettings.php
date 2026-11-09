@@ -5,11 +5,19 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 
-/** Encoding overrides for one zero-based output video track. */
+/**
+ * Configure the encoding overrides of one zero-based output video track.
+ */
 class VideoStreamSettings
 {
+    /**
+     * The encoding overrides of the track.
+     */
     protected array $settings = [];
 
+    /**
+     * Set the encoder of the track.
+     */
     public function codec(string $codec): self
     {
         if (! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
@@ -21,10 +29,15 @@ class VideoStreamSettings
         return $this;
     }
 
+    /**
+     * Set the target bitrate of the track.
+     */
     public function bitrate(int|string $bitrate): self
     {
         if ((! is_int($bitrate) || $bitrate <= 0)
-            && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
+            && (! is_string($bitrate)
+                || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate)
+                || (float) $bitrate <= 0)) {
             throw new InvalidArgumentException('Bitrates require positive bits per second or an explicit unit string.');
         }
 
@@ -33,6 +46,9 @@ class VideoStreamSettings
         return $this;
     }
 
+    /**
+     * Set the constant rate factor of the track.
+     */
     public function crf(float $crf): self
     {
         if (! is_finite($crf) || $crf < 0) {
@@ -44,6 +60,9 @@ class VideoStreamSettings
         return $this;
     }
 
+    /**
+     * Set the encoder preset of the track.
+     */
     public function preset(string $preset): self
     {
         if (! preg_match('/^[a-zA-Z0-9_-]+$/D', $preset)) {
@@ -55,7 +74,9 @@ class VideoStreamSettings
         return $this;
     }
 
-    /** Curated, scalar encoder settings; never arbitrary command arguments. */
+    /**
+     * Set curated, scalar encoder options on the track, never arbitrary command arguments.
+     */
     public function options(array $tokens): self
     {
         CommandCompiler::options($tokens, 'output');
@@ -74,16 +95,34 @@ class VideoStreamSettings
         return $this;
     }
 
+    /**
+     * Signal the color characteristics of the track.
+     *
+     * This does not transform pixel values.
+     */
     public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): self
     {
-        $this->options(['-color_primaries', $primaries, '-color_trc', $transfer, '-colorspace', $space, '-color_range', $range]);
-        // FFmpeg 9 encoders may prefer frame metadata over codec-context defaults.
+        $this->options([
+            '-color_primaries', $primaries,
+            '-color_trc', $transfer,
+            '-colorspace', $space,
+            '-color_range', $range,
+        ]);
+
+        // FFmpeg 9 encoders may prefer frame metadata over codec-context defaults, so we
+        // will also tag the frames themselves with the same color characteristics.
         $this->settings['filters'][] = self::colorFilter($primaries, $transfer, $space, $range);
 
         return $this;
     }
 
-    /** @internal Values must first pass color option validation. */
+    /**
+     * Compile the filter that tags frames with the given color characteristics.
+     *
+     * The values must pass color option validation first.
+     *
+     * @internal
+     */
     public static function colorFilter(string $primaries, string $transfer, string $space, string $range): string
     {
         $primaries = $primaries === 'unspecified' ? 'unknown' : $primaries;
@@ -100,7 +139,13 @@ class VideoStreamSettings
         return 'setparams=color_primaries='.$primaries.':color_trc='.$transfer.':colorspace='.$space.':range='.$range;
     }
 
-    /** @internal Snapshot; later callback mutations cannot change the output. */
+    /**
+     * Get a snapshot of the encoding overrides.
+     *
+     * Later changes made by the configuring callback cannot alter the output.
+     *
+     * @internal
+     */
     public function settings(): array
     {
         return $this->settings;

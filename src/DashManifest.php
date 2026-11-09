@@ -7,13 +7,26 @@ use DOMElement;
 use DOMXPath;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 
-/** @internal The deliberately narrow, finite FFmpeg SegmentTimeline dialect we own. */
+/**
+ * The reader for the deliberately narrow, finite FFmpeg SegmentTimeline dialect the package owns.
+ *
+ * @internal
+ */
 class DashManifest
 {
+    /**
+     * The MPD namespace.
+     */
     public const string NS = 'urn:mpeg:dash:schema:mpd:2011';
 
+    /**
+     * The maximum number of segments a manifest may describe.
+     */
     public const int LIMIT = 100000;
 
+    /**
+     * Read and validate a single-representation manifest of the given content type.
+     */
     public static function read(string $path, string $type): array
     {
         $document = self::load($path);
@@ -31,7 +44,13 @@ class DashManifest
 
         self::ensureInventoryMatches($path, $files);
 
-        return ['document' => $document, 'representation' => $representation, 'template' => $template, 'durations' => $durations, 'files' => $files];
+        return [
+            'document' => $document,
+            'representation' => $representation,
+            'template' => $template,
+            'durations' => $durations,
+            'files' => $files,
+        ];
     }
 
     /**
@@ -65,10 +84,18 @@ class DashManifest
     protected static function ensureVocabularyIsAllowed(DOMDocument $document): void
     {
         $allowed = [
-            'MPD' => ['schemaLocation', 'profiles', 'type', 'mediaPresentationDuration', 'maxSegmentDuration', 'minBufferTime'],
+            'MPD' => [
+                'schemaLocation', 'profiles', 'type', 'mediaPresentationDuration', 'maxSegmentDuration',
+                'minBufferTime',
+            ],
             'ProgramInformation' => [], 'ServiceDescription' => ['id'], 'Period' => ['id', 'start'],
-            'AdaptationSet' => ['id', 'contentType', 'startWithSAP', 'segmentAlignment', 'bitstreamSwitching', 'frameRate', 'maxWidth', 'maxHeight', 'par', 'lang'],
-            'Representation' => ['id', 'mimeType', 'codecs', 'bandwidth', 'width', 'height', 'sar', 'audioSamplingRate', 'frameRate'],
+            'AdaptationSet' => [
+                'id', 'contentType', 'startWithSAP', 'segmentAlignment', 'bitstreamSwitching', 'frameRate', 'maxWidth',
+                'maxHeight', 'par', 'lang',
+            ],
+            'Representation' => [
+                'id', 'mimeType', 'codecs', 'bandwidth', 'width', 'height', 'sar', 'audioSamplingRate', 'frameRate',
+            ],
             'AudioChannelConfiguration' => ['schemeIdUri', 'value'],
             'SegmentTemplate' => ['timescale', 'initialization', 'media', 'startNumber'],
             'SegmentTimeline' => [], 'S' => ['t', 'd', 'r'],
@@ -81,7 +108,8 @@ class DashManifest
             foreach ($element->attributes as $attribute) {
                 if (! in_array($attribute->localName, $allowed[$element->localName], true)
                     || ($attribute->namespaceURI !== null && ! ($element->localName === 'MPD'
-                        && $attribute->localName === 'schemaLocation' && $attribute->namespaceURI === 'http://www.w3.org/2001/XMLSchema-instance'))) {
+                        && $attribute->localName === 'schemaLocation'
+                        && $attribute->namespaceURI === 'http://www.w3.org/2001/XMLSchema-instance'))) {
                     self::fail();
                 }
             }
@@ -102,11 +130,13 @@ class DashManifest
         $set = $sets->item(0);
         $representation = $representations->item(0);
         $template = $templates->item(0);
-        if (! $root instanceof DOMElement || ! $set instanceof DOMElement || ! $representation instanceof DOMElement || ! $template instanceof DOMElement
+        if (! $root instanceof DOMElement || ! $set instanceof DOMElement
+            || ! $representation instanceof DOMElement || ! $template instanceof DOMElement
             || $root->localName !== 'MPD' || $root->getAttribute('type') !== 'static'
             || ! preg_match('/\APT[0-9]+(?:\.[0-9]+)?S\z/', $root->getAttribute('mediaPresentationDuration'))
             || $xpath->query('/d:MPD/d:Period')->length !== 1 || $sets->length !== 1
-            || $set->getAttribute('contentType') !== $type || $representations->length !== 1 || $templates->length !== 1) {
+            || $set->getAttribute('contentType') !== $type
+            || $representations->length !== 1 || $templates->length !== 1) {
             self::fail();
         }
 
@@ -191,6 +221,9 @@ class DashManifest
         }
     }
 
+    /**
+     * Get an integer attribute that is at least the given minimum and at most 10^12.
+     */
     protected static function integer(DOMElement $element, string $name, int $minimum): int
     {
         $value = $element->getAttribute($name);
@@ -201,6 +234,9 @@ class DashManifest
         return (int) $value;
     }
 
+    /**
+     * Reject the manifest or its inventory as invalid.
+     */
     public static function fail(): never
     {
         throw MediaException::validation('Invalid or incomplete finite DASH manifest/inventory.', 'artifact');

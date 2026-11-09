@@ -5,11 +5,21 @@ namespace ProtoneMedia\LaravelFFMpeg\Execution;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Media;
 
-/** @internal A typed filter whose file arguments are resolved inside a workspace. */
+/**
+ * A typed filter whose file arguments are resolved inside a workspace.
+ *
+ * @internal
+ */
 readonly class ResourceFilter
 {
+    /**
+     * Create a new resource filter instance.
+     */
     protected function __construct(public string $name, public array $resources, protected string $template) {}
 
+    /**
+     * Create a filter that draws the given text with a font file.
+     */
     public static function drawText(string $text, Media $font, int $size, int $x, int $y, string $color): self
     {
         CommandCompiler::color($color);
@@ -29,9 +39,13 @@ readonly class ResourceFilter
         return new self('drawText', [
             'font' => ['type' => 'file', 'source' => $font],
             'textfile' => ['type' => 'text', 'source' => $text],
-        ], 'drawtext=fontfile=%s:textfile=%s:expansion=none:reload=0:fontsize='.$size.':x='.$x.':y='.$y.':fontcolor='.$color);
+        ], 'drawtext=fontfile=%s:textfile=%s:expansion=none:reload=0:fontsize='.$size.':x='.$x.':y='.$y
+            .':fontcolor='.$color);
     }
 
+    /**
+     * Create a filter that burns the given subtitles into the video.
+     */
     public static function burnSubtitles(Media $subtitles): self
     {
         self::ensureNoInputOptions($subtitles, 'subtitle');
@@ -41,6 +55,9 @@ readonly class ResourceFilter
         ], 'subtitles=filename=%s');
     }
 
+    /**
+     * Create a filter that applies the given 3D LUT file.
+     */
     public static function lut3d(Media $look): self
     {
         self::ensureNoInputOptions($look, 'LUT');
@@ -58,6 +75,9 @@ readonly class ResourceFilter
         }
     }
 
+    /**
+     * Compile the filter, resolving each resource name to its staged path.
+     */
     public function toFilter(callable $resolve): string
     {
         return sprintf($this->template, ...array_map($resolve, array_keys($this->resources)));

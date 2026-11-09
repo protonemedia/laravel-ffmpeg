@@ -13,9 +13,11 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
 
 /**
- * Pitch-preserving playback speed. Clips and input timing options are unsupported.
- * Sources require a zero container/video origin and nonnegative audio origins.
- * Trusted simple filters run first; their timing changes make progress indeterminate.
+ * A pitch-preserving change of playback speed.
+ *
+ * Clips and input timing options are unsupported. Sources require a zero container and video origin
+ * and nonnegative audio origins. Trusted simple filters run first, and their timing changes make
+ * progress indeterminate.
  */
 class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, ValidatesSelections
 {
@@ -33,10 +35,19 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
     use Concerns\VideoFilters;
     use Conditionable, Macroable;
 
+    /**
+     * The export pipeline this builder configures.
+     */
     protected readonly PendingExport $export;
 
-    public function __construct(protected readonly Media $source, string|Filesystem $disk, protected readonly float $factor)
-    {
+    /**
+     * Create a new pending speed instance.
+     */
+    public function __construct(
+        protected readonly Media $source,
+        string|Filesystem $disk,
+        protected readonly float $factor,
+    ) {
         if (! is_finite($factor) || $factor <= 0) {
             throw new InvalidArgumentException('Speed requires a finite positive factor.');
         }
@@ -44,6 +55,9 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         $this->export = new PendingExport($source, $disk, $this);
     }
 
+    /**
+     * Encode the output in two passes.
+     */
     public function twoPass(): self
     {
         $this->export->twoPass();
@@ -51,12 +65,19 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         return $this;
     }
 
+    /**
+     * Save the retimed media to the given path.
+     */
     public function save(?string $path = null): ExportResult
     {
         return $this->export->save($path);
     }
 
-    /** @internal */
+    /**
+     * Append the filters that retime the video and audio by the speed factor.
+     *
+     * @internal
+     */
     public function outputs(array $default, ?string $path): array
     {
         $settings = $this->export->outputConfiguration();
@@ -71,8 +92,8 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         }
 
         if (! $settings['omitAudio']) {
-            // atempo preserves its first timestamp, then generates timestamps at
-            // the new sample rate. Scale only that initial offset beforehand.
+            // The atempo filter keeps its first timestamp and then generates timestamps at the
+            // new sample rate, so we will scale only that initial offset beforehand.
             $settings['audioFilters'][] = 'asetpts=PTS-STARTPTS+STARTPTS/'.$factor;
             $remaining = $this->factor;
             while ($remaining > 2) {
@@ -94,7 +115,11 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         return [new ExportOutput($path ?? 'inspection.mp4', $settings['disk'])->configure($settings)];
     }
 
-    /** @internal */
+    /**
+     * Ensure the output selects at least one stream and only audio and video streams.
+     *
+     * @internal
+     */
     public function selections(array $expected): void
     {
         if ($expected[0] === []) {
@@ -106,31 +131,43 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         }
     }
 
-    /** @internal The retimed duration, when nothing else can change timing. */
+    /**
+     * Get the retimed duration when nothing else can change the timing.
+     *
+     * @internal
+     */
     public function duration(array $metadata, ?float $default): ?float
     {
         $item = $metadata[0];
         // The audio filter scales an initial offset, so audio-only sources may start later.
         PendingExport::assertZeroOrigins($item, 'Speed', audioOnlyOffset: true);
 
-        // Conservatively validate every source audio track, including unselected
-        // tracks, rather than guessing how arbitrary stream selectors resolve.
+        // We conservatively validate every source audio track, including unselected tracks,
+        // rather than guessing how arbitrary stream selectors resolve.
         foreach ($item->audioStreams() as $stream) {
             $start = $stream->get('start_time');
             if (! is_numeric($start) || ! is_finite((float) $start) || (float) $start < 0) {
-                throw MediaException::probing('Speed requires nonnegative audio origins on all source tracks.', 'metadata');
+                throw MediaException::probing(
+                    'Speed requires nonnegative audio origins on all source tracks.',
+                    'metadata',
+                );
             }
         }
 
         $settings = $this->export->outputConfiguration();
-        // Maps can select a shorter track; raw filters/options can alter timing.
-        if ($settings['maps'] !== [] || $settings['omitVideo'] || $settings['omitAudio']
-            || $settings['videoFilters'] !== [] || $settings['audioFilters'] !== [] || $settings['outputOptions'] !== []) {
+        // Maps can select a shorter track, and raw filters or options can alter the timing.
+        if ($settings['maps'] !== []
+            || $settings['omitVideo']
+            || $settings['omitAudio']
+            || $settings['videoFilters'] !== []
+            || $settings['audioFilters'] !== []
+            || $settings['outputOptions'] !== []) {
             return null;
         }
 
         if ($item->videoStreams()->count() > 1 || $item->audioStreams()->count() > 1
-            || $item->streams()->contains(fn ($stream): bool => ! in_array($stream->type(), ['audio', 'video'], true) || $stream->isCoverArt())) {
+            || $item->streams()->contains(fn ($stream): bool => ! in_array($stream->type(), ['audio', 'video'], true)
+                || $stream->isCoverArt())) {
             return null;
         }
 
@@ -140,6 +177,9 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         return $adjusted !== null && is_finite($adjusted) ? $adjusted : null;
     }
 
+    /**
+     * Format the given number for a filter argument.
+     */
     protected function number(float $value): string
     {
         return json_encode($value, JSON_THROW_ON_ERROR);

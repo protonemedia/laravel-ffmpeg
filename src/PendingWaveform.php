@@ -14,7 +14,9 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
-/** A JPEG or PNG picture of the first audio track's waveform. */
+/**
+ * A JPEG or PNG picture of the first audio track's waveform.
+ */
 class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOutputs, ValidatesArtifacts
 {
     use Concerns\AudioFilters;
@@ -29,10 +31,19 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
     use Concerns\VideoFilters;
     use Conditionable, Macroable;
 
+    /**
+     * The export pipeline this builder configures.
+     */
     protected readonly PendingExport $export;
 
+    /**
+     * The graph that draws the waveform.
+     */
     protected readonly string $graph;
 
+    /**
+     * Create a new pending waveform instance.
+     */
     public function __construct(Media $media, string|Filesystem $disk, int $width, int $height, string|array $colors)
     {
         $colors = is_string($colors) ? [$colors] : $colors;
@@ -41,10 +52,13 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
             throw new InvalidArgumentException("The waveform dimensions [{$width}x{$height}] must be positive.");
         }
 
-        if ($colors === [] || ! array_is_list($colors) || array_any($colors, fn ($color): bool => ! is_string($color))) {
+        if ($colors === []
+            || ! array_is_list($colors)
+            || array_any($colors, fn ($color): bool => ! is_string($color))) {
             throw new InvalidArgumentException('A waveform requires a color or a list of colors.');
         }
 
+        // We will validate every color now, so a bad color fails before the export runs.
         array_map(CommandCompiler::color(...), $colors);
 
         $this->graph = '[0:a:0]showwavespic=s='.$width.'x'.$height.':colors='.implode('|', $colors).'[waveform]';
@@ -52,6 +66,9 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
         $this->export->map('[waveform]')->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
+    /**
+     * Save the picture to the given path, as a JPEG or PNG image.
+     */
     public function save(?string $path = null): ExportResult
     {
         $this->export->video(ImageOutput::codec($path));
@@ -59,19 +76,32 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
         return $this->export->save($path);
     }
 
-    /** @internal */
+    /**
+     * Get the graph that draws the waveform.
+     *
+     * @internal
+     */
     public function graph(): string
     {
         return $this->graph;
     }
 
-    /** @internal The clip trims audio samples before the picture is drawn. */
+    /**
+     * Get the outputs without an output-level clip.
+     * The clip trims the audio samples before the picture is drawn.
+     *
+     * @internal
+     */
     public function outputs(array $default, ?string $path): array
     {
         return ImageOutput::unclipped($this->export->outputConfiguration(), $path);
     }
 
-    /** @internal */
+    /**
+     * Move the caller's filters and the clip into the waveform graph.
+     *
+     * @internal
+     */
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
@@ -82,8 +112,8 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
         $command = $default;
         $filters = [];
 
-        // Audio filters run before the picture; geometry and other video filters
-        // run after it. Both belong in the operation-owned conversion graph.
+        // Audio filters run before the picture is drawn, and geometry and other video filters
+        // run after it. We will move both into the graph this operation owns.
         foreach (['-filter:a', '-filter:v'] as $flag) {
             $index = array_search($flag, $command, true);
 
@@ -105,7 +135,8 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
         $command[$index] = str_replace('[0:a:0]', '[0:a:0]'.($audio === '' ? '' : $audio.','), $command[$index]);
 
         if (isset($filters['-filter:v'])) {
-            $command[$index] = substr($command[$index], 0, -strlen('[waveform]')).','.$filters['-filter:v'].'[waveform]';
+            $command[$index] = substr($command[$index], 0, -strlen('[waveform]'))
+                .','.$filters['-filter:v'].'[waveform]';
         }
 
         array_splice($command, -1, 0, ['-frames:v', '1', '-update', '1', '-f', 'image2']);
@@ -113,7 +144,11 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
         return $command;
     }
 
-    /** @internal */
+    /**
+     * Ensure the encoded file is a valid image.
+     *
+     * @internal
+     */
     public function artifact(string $path, string $role, int $size): void
     {
         ImageOutput::validate($path, $role);

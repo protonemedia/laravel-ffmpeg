@@ -2,9 +2,16 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
-/** @internal Output audio filters. Forwards to the PendingExport the builder holds in $export. */
+/**
+ * Forward the output audio filters to the pending export the builder holds in $export.
+ *
+ * @internal
+ */
 trait AudioFilters
 {
+    /**
+     * Add a filter to the output audio chain.
+     */
     public function audioFilter(string $expression): self
     {
         $this->export->audioFilter($expression);
@@ -12,7 +19,11 @@ trait AudioFilters
         return $this;
     }
 
-    /** Linear amplitude multiplier; zero mutes the audio. */
+    /**
+     * Multiply the audio amplitude by the given linear factor.
+     *
+     * A factor of zero mutes the audio.
+     */
     public function volume(float $multiplier): self
     {
         $this->export->volume($multiplier);
@@ -20,7 +31,11 @@ trait AudioFilters
         return $this;
     }
 
-    /** Insert real silence on all channels, extending audio rather than shifting timestamps. */
+    /**
+     * Delay the audio by inserting silence on every channel.
+     *
+     * The silence extends the audio rather than shifting its timestamps.
+     */
     public function delayAudio(float $seconds): self
     {
         $this->export->delayAudio($seconds);

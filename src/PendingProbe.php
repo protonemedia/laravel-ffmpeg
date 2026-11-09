@@ -8,38 +8,80 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
-/** A bounded query, separate from the ordinary Metadata snapshot. */
+/**
+ * A bounded FFprobe query, separate from the ordinary metadata snapshot.
+ */
 class PendingProbe
 {
+    /**
+     * The stream selector, or null for every stream.
+     */
     protected ?string $selector = null;
 
+    /**
+     * The requested field names, keyed by section.
+     */
     protected array $fields = [];
 
+    /**
+     * The section the query reads: streams, packets or frames.
+     */
     protected string $mode = 'streams';
 
+    /**
+     * Indicates if only keyframes are decoded.
+     */
     protected bool $onlyKeyframes = false;
 
+    /**
+     * Indicates if the frames of each stream are counted.
+     */
     protected bool $countFrames = false;
 
+    /**
+     * Indicates if the packets of each stream are counted.
+     */
     protected bool $countPackets = false;
 
+    /**
+     * The start of the read interval in seconds.
+     */
     protected float $start = 0;
 
+    /**
+     * The length of the read interval in seconds.
+     */
     protected float $duration = 10;
 
+    /**
+     * The number of packets to read instead of a duration.
+     */
     protected ?int $packetLimit = null;
 
+    /**
+     * The maximum size of the FFprobe output in bytes.
+     */
     protected int $outputLimit = 4194304;
 
+    /**
+     * The query timeout in seconds.
+     */
     protected float $timeout = 30;
 
+    /**
+     * Create a new pending probe instance.
+     */
     public function __construct(protected readonly Media $media) {}
 
-    /** Global stream index, or a type and optional zero-based type ordinal (v:0). */
+    /**
+     * Limit the query to a global stream index, or to a type and optional zero-based ordinal such as v:0.
+     */
     public function selectStreams(string $selector): self
     {
         if (! preg_match('/\A(?:[0-9]{1,6}|[vVasdt](?::[0-9]{1,6})?)\z/', $selector)) {
-            throw new InvalidArgumentException('The probe stream selector must be a stream index or a typed selector such as v:0.');
+            throw new InvalidArgumentException(
+                'The probe stream selector must be a stream index or a typed selector such as v:0.'
+            );
         }
 
         $this->selector = $selector;
@@ -47,7 +89,11 @@ class PendingProbe
         return $this;
     }
 
-    /** @param array<string, list<string>> $entries Section => field names; no raw FFprobe syntax. */
+    /**
+     * Select the fields to read from each section, without raw FFprobe syntax.
+     *
+     * @param  array<string, list<string>>  $entries  Field names keyed by section.
+     */
     public function entries(array $entries): self
     {
         if ($entries === [] || count($entries) > 9) {
@@ -55,7 +101,10 @@ class PendingProbe
         }
 
         foreach ($entries as $section => $fields) {
-            if (! in_array($section, ['stream', 'stream_tags', 'stream_disposition', 'packet', 'frame', 'format', 'format_tags', 'chapter', 'chapter_tags'], true)) {
+            if (! in_array($section, [
+                'stream', 'stream_tags', 'stream_disposition', 'packet', 'frame',
+                'format', 'format_tags', 'chapter', 'chapter_tags',
+            ], true)) {
                 throw new InvalidArgumentException("The probe section [{$section}] is not supported.");
             }
 
@@ -75,6 +124,9 @@ class PendingProbe
         return $this;
     }
 
+    /**
+     * Read packets in addition to streams.
+     */
     public function packets(): self
     {
         $this->mode = 'packets';
@@ -83,6 +135,9 @@ class PendingProbe
         return $this;
     }
 
+    /**
+     * Read decoded frames in addition to streams.
+     */
     public function frames(): self
     {
         $this->mode = 'frames';
@@ -91,7 +146,10 @@ class PendingProbe
         return $this;
     }
 
-    /** Decoder keyframes, not a claim that every returned timestamp is an exact seek point. */
+    /**
+     * Read only decoded keyframes.
+     * These are decoder keyframes, not a claim that every returned timestamp is an exact seek point.
+     */
     public function keyframes(): self
     {
         $this->mode = 'frames';
@@ -100,6 +158,9 @@ class PendingProbe
         return $this;
     }
 
+    /**
+     * Count the frames of each stream.
+     */
     public function countFrames(bool $enabled = true): self
     {
         $this->countFrames = $enabled;
@@ -107,6 +168,9 @@ class PendingProbe
         return $this;
     }
 
+    /**
+     * Count the packets of each stream.
+     */
     public function countPackets(bool $enabled = true): self
     {
         $this->countPackets = $enabled;
@@ -114,7 +178,10 @@ class PendingProbe
         return $this;
     }
 
-    /** FFprobe seeks to a nearby seek point, not exact trimming. Times round to microseconds. */
+    /**
+     * Read the given interval in seconds.
+     * FFprobe starts at a nearby seek point instead of trimming exactly, and times round to microseconds.
+     */
     public function readInterval(float $start, float $duration): self
     {
         $this->validateStart($start);
@@ -129,7 +196,10 @@ class PendingProbe
         return $this;
     }
 
-    /** Bound demuxed packets, not decoded frames; B-frame decoder delay can affect frame counts. */
+    /**
+     * Read the given number of demuxed packets from the start time.
+     * The limit bounds packets, not decoded frames, so B-frame decoder delay can affect frame counts.
+     */
     public function readPackets(int $count, float $start = 0): self
     {
         $this->validateStart($start);
@@ -143,14 +213,21 @@ class PendingProbe
         return $this;
     }
 
+    /**
+     * Set the maximum output size in bytes and the timeout in seconds.
+     */
     public function limits(int $outputBytes = 4194304, float $timeout = 30): self
     {
         if ($outputBytes < 1 || $outputBytes > 16777216) {
-            throw new InvalidArgumentException("The probe output limit [{$outputBytes}] must be between 1 and 16777216 bytes.");
+            throw new InvalidArgumentException(
+                "The probe output limit [{$outputBytes}] must be between 1 and 16777216 bytes."
+            );
         }
 
         if (! is_finite($timeout) || $timeout <= 0 || $timeout > 120) {
-            throw new InvalidArgumentException("The probe timeout [{$timeout}] must be greater than 0 and at most 120 seconds.");
+            throw new InvalidArgumentException(
+                "The probe timeout [{$timeout}] must be greater than 0 and at most 120 seconds."
+            );
         }
 
         $this->outputLimit = $outputBytes;
@@ -159,6 +236,9 @@ class PendingProbe
         return $this;
     }
 
+    /**
+     * Run the query against the media and get its result.
+     */
     public function get(): ProbeResult
     {
         return $this->media->withInput(
@@ -184,7 +264,11 @@ class PendingProbe
         $redactions = [$path => '[input]'] + $this->media->redactions();
         $result = $runner->run($command, $workspace->path, $redactions, $this->outputLimit, timeout: $this->timeout);
         if ($result->exitCode !== 0) {
-            throw MediaException::probing('FFprobe query failed (exit '.$result->exitCode.').', 'exit', $result->diagnostics);
+            throw MediaException::probing(
+                'FFprobe query failed (exit '.$result->exitCode.').',
+                'exit',
+                $result->diagnostics,
+            );
         }
 
         $data = Media::redactProbeData($this->decode($result->output), $redactions);
@@ -260,13 +344,17 @@ class PendingProbe
             throw MediaException::probing('FFprobe query returned invalid JSON.', 'metadata');
         }
 
+        // A top-level JSON list also decodes to an array, so we also require the output to
+        // start as an object.
         if (! is_array($data) || ! str_starts_with(ltrim($output), '{')) {
             throw MediaException::probing('FFprobe query returned invalid sections.', 'metadata');
         }
 
         foreach (['streams', 'packets', 'frames', 'chapters'] as $section) {
-            if (array_key_exists($section, $data) && (! is_array($data[$section]) || ! array_is_list($data[$section])
-                || array_any($data[$section], fn ($row): bool => ! is_array($row)))) {
+            if (array_key_exists($section, $data)
+                && (! is_array($data[$section])
+                    || ! array_is_list($data[$section])
+                    || array_any($data[$section], fn ($row): bool => ! is_array($row)))) {
                 throw MediaException::probing('FFprobe query returned invalid sections.', 'metadata');
             }
         }
@@ -274,6 +362,9 @@ class PendingProbe
         return $data;
     }
 
+    /**
+     * Get the read interval argument for FFprobe.
+     */
     protected function interval(): string
     {
         // FFprobe's duration parser does not accept scientific notation.
@@ -283,6 +374,9 @@ class PendingProbe
             ? $seconds($this->duration) : '#'.$this->packetLimit);
     }
 
+    /**
+     * Ensure the given start time is finite and within range.
+     */
     protected function validateStart(float $start): void
     {
         if (! is_finite($start) || $start < 0 || $start > 315360000) {

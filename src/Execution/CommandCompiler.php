@@ -4,16 +4,27 @@ namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
 use InvalidArgumentException;
 
-/** @internal */
+/**
+ * Compiles FFmpeg commands and validates the options callers may pass.
+ *
+ * @internal
+ */
 class CommandCompiler
 {
-    /** Compile already resolved, operation-owned inputs and outputs. */
+    /**
+     * Compile the FFmpeg command for already resolved, operation-owned inputs and outputs.
+     */
     public static function compile(string $binary, array $inputs, array $outputs, array $globalOptions = []): array
     {
-        $command = [$binary, '-hide_banner', '-nostdin', '-nostats', '-y', '-xerror', '-loglevel', 'warning', '-progress', 'pipe:1', ...$globalOptions];
+        $command = [
+            $binary, '-hide_banner', '-nostdin', '-nostats', '-y', '-xerror', '-loglevel', 'warning',
+            '-progress', 'pipe:1', ...$globalOptions,
+        ];
 
         foreach ($inputs as $input) {
-            $command = [...$command, '-protocol_whitelist', $input['protocols'], ...$input['options'], '-i', $input['path']];
+            $command = [
+                ...$command, '-protocol_whitelist', $input['protocols'], ...$input['options'], '-i', $input['path'],
+            ];
         }
 
         foreach ($outputs as $output) {
@@ -31,13 +42,17 @@ class CommandCompiler
     public static function color(string $color): string
     {
         if (! preg_match('/\A(?:[a-zA-Z]+|(?:#|0x)[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?)\z/', $color)) {
-            throw new InvalidArgumentException("The color [{$color}] must be a color name or a hexadecimal RGB or RGBA color.");
+            throw new InvalidArgumentException(
+                "The color [{$color}] must be a color name or a hexadecimal RGB or RGBA color."
+            );
         }
 
         return $color;
     }
 
-    /** Parse numeric seconds or HH:MM:SS with up to six fractional digits. */
+    /**
+     * Parse numeric seconds or HH:MM:SS with up to six fractional digits.
+     */
     public static function seconds(float|string $value): float
     {
         if (is_float($value)) {
@@ -45,19 +60,27 @@ class CommandCompiler
         }
 
         if (! preg_match('/\A([0-9]{2,}):([0-5][0-9]):([0-5][0-9](?:\.[0-9]{1,6})?)\z/', $value, $parts)) {
-            throw new InvalidArgumentException('Clip times must be numeric seconds or HH:MM:SS with up to six fractional digits.');
+            throw new InvalidArgumentException(
+                'Clip times must be numeric seconds or HH:MM:SS with up to six fractional digits.'
+            );
         }
 
         return (float) $parts[1] * 3600 + (int) $parts[2] * 60 + (float) $parts[3];
     }
 
-    /** Format seconds as an FFmpeg duration with microsecond precision and no trailing zeros. */
+    /**
+     * Format seconds as an FFmpeg duration with microsecond precision and no trailing zeros.
+     */
     public static function timestamp(float $seconds): string
     {
         return rtrim(rtrim(number_format($seconds, 6, '.', ''), '0'), '.');
     }
 
-    /** Validate flat tokens without allowing caller-defined option arity. */
+    /**
+     * Validate a flat list of option and value tokens of the given scope.
+     *
+     * Every option takes exactly one value, so callers cannot change an option's arity.
+     */
     public static function options(array $tokens, string $scope): array
     {
         $allowed = self::allowedOptions($scope);
@@ -105,10 +128,15 @@ class CommandCompiler
     protected static function allowedOptions(string $scope): array
     {
         return match ($scope) {
-            'global' => ['filter_threads' => 'positive', 'filter_complex_threads' => 'positive',
-                'init_hw_device' => 'hardware-init', 'filter_hw_device' => 'device-name'],
-            'input' => ['probesize' => 'positive', 'analyzeduration' => 'unsigned', 'thread_queue_size' => 'positive',
-                'hwaccel' => 'hardware', 'hwaccel_device' => 'device', 'hwaccel_output_format' => 'word', 'ignore_loop' => 'boolean'],
+            'global' => [
+                'filter_threads' => 'positive', 'filter_complex_threads' => 'positive',
+                'init_hw_device' => 'hardware-init', 'filter_hw_device' => 'device-name',
+            ],
+            'input' => [
+                'probesize' => 'positive', 'analyzeduration' => 'unsigned', 'thread_queue_size' => 'positive',
+                'hwaccel' => 'hardware', 'hwaccel_device' => 'device', 'hwaccel_output_format' => 'word',
+                'ignore_loop' => 'boolean',
+            ],
             'output' => [
                 'f' => 'format', 'preset' => 'word', 'tune' => 'word', 'profile' => 'word', 'level' => 'word',
                 'pix_fmt' => 'word', 'maxrate' => 'rate', 'minrate' => 'rate', 'bufsize' => 'rate',
@@ -121,7 +149,8 @@ class CommandCompiler
                 'cpu-used' => 'unsigned', 'deadline' => 'deadline', 'row-mt' => 'boolean',
                 'rc' => 'rc', 'cq' => 'quality', 'rc-lookahead' => 'unsigned',
                 'spatial-aq' => 'boolean', 'temporal-aq' => 'boolean', 'aq-strength' => 'unsigned',
-                'color_primaries' => 'primaries', 'color_trc' => 'transfer', 'colorspace' => 'colorspace', 'color_range' => 'range',
+                'color_primaries' => 'primaries', 'color_trc' => 'transfer', 'colorspace' => 'colorspace',
+                'color_range' => 'range',
                 'compression_level' => 'unsigned', 'sample_fmt' => 'sample-format', 'channel_layout' => 'layout',
                 'bsf' => 'bitstream', 'avoid_negative_ts' => 'negative-ts', 'max_muxing_queue_size' => 'positive',
                 'muxdelay' => 'decimal', 'muxpreload' => 'decimal', 'flush_packets' => 'boolean',
@@ -147,7 +176,9 @@ class CommandCompiler
         $name = $match[1];
 
         if ($scope !== 'output' && isset($match[2])) {
-            throw new InvalidArgumentException("The FFmpeg option [{$name}] does not accept a stream specifier in the {$scope} scope.");
+            throw new InvalidArgumentException(
+                "The FFmpeg option [{$name}] does not accept a stream specifier in the {$scope} scope."
+            );
         }
 
         return [$name, $match[2] ?? null];
@@ -158,7 +189,10 @@ class CommandCompiler
      */
     protected static function ensureSingleLineValue(string $name, mixed $value): void
     {
-        if (! is_string($value) || str_contains($value, "\0") || str_contains($value, "\n") || str_contains($value, "\r")) {
+        if (! is_string($value)
+            || str_contains($value, "\0")
+            || str_contains($value, "\n")
+            || str_contains($value, "\r")) {
             throw new InvalidArgumentException("The FFmpeg option [{$name}] value must be a single-line string.");
         }
     }
@@ -169,14 +203,17 @@ class CommandCompiler
     protected static function ensureStreamSpecifierIsSupported(string $name, ?string $stream): void
     {
         $videoOnly = ['x264-params', 'x265-params', 'cpu-used', 'deadline', 'row-mt', 'rc', 'cq',
-            'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength', 'color_primaries', 'color_trc', 'colorspace', 'color_range'];
+            'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength', 'color_primaries', 'color_trc', 'colorspace',
+            'color_range'];
         $audioOnly = ['compression_level', 'sample_fmt', 'channel_layout'];
         $fileOnly = ['avoid_negative_ts', 'muxdelay', 'muxpreload', 'flush_packets', 'video_track_timescale',
             'frag_duration', 'min_frag_duration', 'cluster_time_limit', 'cluster_size_limit', 'write_crc32'];
         if ($stream !== null && (in_array($name, $fileOnly, true)
             || (in_array($name, $videoOnly, true) && $stream !== 'v')
             || (in_array($name, $audioOnly, true) && $stream !== 'a'))) {
-            throw new InvalidArgumentException("The FFmpeg option [{$name}] does not accept the [{$stream}] stream specifier.");
+            throw new InvalidArgumentException(
+                "The FFmpeg option [{$name}] does not accept the [{$stream}] stream specifier."
+            );
         }
     }
 
@@ -198,25 +235,50 @@ class CommandCompiler
             'decimal' => (bool) preg_match('/\A[0-9]+(?:\.[0-9]+)?\z/', $value) && is_finite((float) $value),
             'quality' => is_numeric($value) && is_finite((float) $value) && (float) $value >= 0 && (float) $value <= 63,
             'device-name' => (bool) preg_match('/\A[a-zA-Z][a-zA-Z0-9_]*\z/', $value),
-            'hardware-init' => (bool) preg_match('/\A(?:cuda|vaapi|qsv|vulkan|videotoolbox|d3d11va)=[a-zA-Z][a-zA-Z0-9_]*(?::(?:[0-9]+|\/dev\/dri\/renderD[0-9]+)|@[a-zA-Z][a-zA-Z0-9_]*)?\z/', $value),
+            'hardware-init' => (bool) preg_match(
+                '/\A(?:cuda|vaapi|qsv|vulkan|videotoolbox|d3d11va)=[a-zA-Z][a-zA-Z0-9_]*(?::(?:[0-9]+|\/dev\/dri\/renderD[0-9]+)|@[a-zA-Z][a-zA-Z0-9_]*)?\z/',
+                $value,
+            ),
             'x264', 'x265' => self::encoderParameters($value, $type),
             'deadline' => in_array($value, ['best', 'good', 'realtime'], true),
             'rc' => in_array($value, ['constqp', 'vbr', 'cbr'], true),
-            'primaries' => in_array($value, ['bt709', 'bt470m', 'bt470bg', 'smpte170m', 'smpte240m', 'film', 'bt2020', 'smpte428', 'smpte431', 'smpte432', 'unspecified'], true),
-            'transfer' => in_array($value, ['bt709', 'gamma22', 'gamma28', 'smpte170m', 'smpte240m', 'linear', 'iec61966-2-1', 'bt2020-10', 'bt2020-12', 'smpte2084', 'arib-std-b67', 'unspecified'], true),
-            'colorspace' => in_array($value, ['rgb', 'bt709', 'bt470bg', 'smpte170m', 'smpte240m', 'bt2020nc', 'bt2020c', 'unspecified'], true),
+            'primaries' => in_array($value, [
+                'bt709', 'bt470m', 'bt470bg', 'smpte170m', 'smpte240m', 'film', 'bt2020', 'smpte428', 'smpte431',
+                'smpte432', 'unspecified',
+            ], true),
+            'transfer' => in_array($value, [
+                'bt709', 'gamma22', 'gamma28', 'smpte170m', 'smpte240m', 'linear', 'iec61966-2-1', 'bt2020-10',
+                'bt2020-12', 'smpte2084', 'arib-std-b67', 'unspecified',
+            ], true),
+            'colorspace' => in_array($value, [
+                'rgb', 'bt709', 'bt470bg', 'smpte170m', 'smpte240m', 'bt2020nc', 'bt2020c', 'unspecified',
+            ], true),
             'range' => in_array($value, ['tv', 'pc', 'limited', 'full', 'unspecified'], true),
-            'sample-format' => in_array($value, ['u8', 's16', 's32', 's64', 'flt', 'dbl', 'u8p', 's16p', 's32p', 's64p', 'fltp', 'dblp'], true),
-            'layout' => in_array($value, ['mono', 'stereo', '2.1', '3.0', '4.0', 'quad', '5.0', '5.1', '5.1(side)', '7.1', '7.1(wide)'], true),
-            'bitstream' => ($stream === null || in_array($stream, ['v', 'a'], true)) && array_all(explode(',', $value), fn ($filter): bool => in_array($filter, ['aac_adtstoasc', 'h264_mp4toannexb', 'hevc_mp4toannexb', 'extract_extradata', 'remove_extra', 'vp9_superframe', 'av1_frame_merge', 'null'], true)),
+            'sample-format' => in_array($value, [
+                'u8', 's16', 's32', 's64', 'flt', 'dbl', 'u8p', 's16p', 's32p', 's64p', 'fltp', 'dblp',
+            ], true),
+            'layout' => in_array($value, [
+                'mono', 'stereo', '2.1', '3.0', '4.0', 'quad', '5.0', '5.1', '5.1(side)', '7.1', '7.1(wide)',
+            ], true),
+            'bitstream' => ($stream === null || in_array($stream, ['v', 'a'], true))
+                && array_all(explode(',', $value), fn ($filter): bool => in_array($filter, [
+                    'aac_adtstoasc', 'h264_mp4toannexb', 'hevc_mp4toannexb', 'extract_extradata', 'remove_extra',
+                    'vp9_superframe', 'av1_frame_merge', 'null',
+                ], true)),
             'negative-ts' => in_array($value, ['auto', 'disabled', 'make_non_negative', 'make_zero'], true),
-            'hardware' => in_array($value, ['cuda', 'vaapi', 'qsv', 'vulkan', 'videotoolbox', 'd3d11va', 'dxva2'], true),
-            // Device and word values may contain hyphens but never start with one, so no value can pass for an option token.
+            'hardware' => in_array($value, [
+                'cuda', 'vaapi', 'qsv', 'vulkan', 'videotoolbox', 'd3d11va', 'dxva2',
+            ], true),
+            // Device and word values may contain hyphens but never start with one, so a
+            // value can never be mistaken for an option token.
             'device' => (bool) preg_match('/\A[a-zA-Z0-9_\/.:][a-zA-Z0-9_\/.:\-]*\z/', $value),
-            'rate' => (bool) preg_match('/^[0-9]+(?:\.[0-9]+)?(?:[kKmMgG]|\/[1-9][0-9]*)?$/D', $value) && (float) $value > 0,
+            'rate' => (bool) preg_match('/^[0-9]+(?:\.[0-9]+)?(?:[kKmMgG]|\/[1-9][0-9]*)?$/D', $value)
+                && (float) $value > 0,
             'word' => (bool) preg_match('/^[a-zA-Z0-9_.,+][a-zA-Z0-9_.,+\-]*$/D', $value),
             'fps' => in_array($value, ['passthrough', 'cfr', 'vfr', 'auto'], true),
-            'format' => $stream === null && in_array($value, ['mp4', 'mov', 'matroska', 'webm', 'mpegts', 'mp3', 'adts', 'ogg', 'wav', 'flac', 'avi', 'nut'], true),
+            'format' => $stream === null && in_array($value, [
+                'mp4', 'mov', 'matroska', 'webm', 'mpegts', 'mp3', 'adts', 'ogg', 'wav', 'flac', 'avi', 'nut',
+            ], true),
             'subtitle-codec' => $stream === 's' && (bool) preg_match('/\A[a-zA-Z0-9_]+\z/', $value),
             'streamid' => $stream === null && (bool) preg_match('/^[0-9]+:[0-9]+$/D', $value),
         };
@@ -257,9 +319,13 @@ class CommandCompiler
         }
     }
 
+    /**
+     * Determine if the given x264 or x265 parameter string uses only allowed numeric parameters.
+     */
     protected static function encoderParameters(string $value, string $encoder): bool
     {
-        // No filenames, stats, zones, arbitrary library options, or nested syntax.
+        // The allow list deliberately excludes filenames, stats, zones, arbitrary
+        // library options and nested syntax.
         $allowed = ['keyint', 'min-keyint', 'scenecut', 'bframes', 'b-adapt', 'ref', 'rc-lookahead',
             'aq-mode', 'aq-strength', 'qcomp', 'psy-rd', 'deblock', 'vbv-maxrate', 'vbv-bufsize',
             'vbv-init', 'crf', 'qp', 'open-gop', 'repeat-headers', 'aud', 'annexb', 'weightp', 'weightb'];

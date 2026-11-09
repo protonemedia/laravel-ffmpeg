@@ -2,8 +2,15 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Pipeline;
 
-/** @internal Adjusts the presentation duration used for progress, after PendingExport derives its own. */
+/**
+ * Adjusts the presentation duration used for progress reporting.
+ *
+ * @internal
+ */
 interface MeasuresDuration
 {
+    /**
+     * Get the duration in seconds, given the one PendingExport derived.
+     */
     public function duration(array $metadata, ?float $default): ?float;
 }

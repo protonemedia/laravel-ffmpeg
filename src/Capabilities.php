@@ -9,11 +9,21 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
-/** A fresh compiled-in capability snapshot; hardware/device usability is not tested. */
+/**
+ * A fresh snapshot of the features compiled into FFmpeg and FFprobe.
+ *
+ * Hardware and device usability is not tested.
+ */
 readonly class Capabilities implements Arrayable, JsonSerializable
 {
+    /**
+     * The capability report.
+     */
     protected array $data;
 
+    /**
+     * Create a new capabilities instance by inspecting the configured binaries.
+     */
     public function __construct()
     {
         $workspace = new Workspace(new ProcessRunner(120));
@@ -31,37 +41,51 @@ readonly class Capabilities implements Arrayable, JsonSerializable
 
             $data['protocols'] = $this->parseProtocols($this->capture($workspace, $ffmpeg, '-protocols'));
             $data['ffprobe_protocols'] = $this->parseProtocols($this->capture($workspace, $ffprobe, '-protocols'));
-            // Verify an actual write, not just a permission-bit prediction.
+            // We verify an actual write instead of predicting one from the permission bits.
             $file = $workspace->path.'/write-check';
             if (@file_put_contents($file, 'ok') !== 2 || ! @unlink($file)) {
                 throw MediaException::staging('The temporary media root is not writable.', 'filesystem');
             }
 
             $data['temporary_root'] = ['writable' => true];
-            $data['hardware'] = ['device_usability_tested' => false,
-                'note' => 'Compiled-in support only; device, driver, permissions and runtime availability are not tested.'];
+            $data['hardware'] = [
+                'device_usability_tested' => false,
+                'note' => 'Compiled-in support only; device, driver, permissions and runtime availability are not tested.',
+            ];
             $this->data = $data;
         } finally {
             $workspace->delete();
         }
     }
 
+    /**
+     * Get the capability report as an array.
+     */
     public function toArray(): array
     {
         return $this->data;
     }
 
+    /**
+     * Get the capability report for JSON serialization.
+     */
     public function jsonSerialize(): array
     {
         return $this->toArray();
     }
 
+    /**
+     * Get the FFmpeg and FFprobe versions.
+     */
     public function versions(): array
     {
         return $this->data['versions'];
     }
 
-    /** Categories: encoders, muxers, filters, bitstream_filters, hardware_accelerators,
+    /**
+     * Get the names available in the given category.
+     *
+     * Categories: encoders, muxers, filters, bitstream_filters, hardware_accelerators,
      * input_protocols, output_protocols, ffprobe_input_protocols, ffprobe_output_protocols.
      *
      * @return list<string>
@@ -78,13 +102,21 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         };
     }
 
-    /** True means compiled-in, never proof that an encoder can open a hardware device. */
+    /**
+     * Determine if the given name is compiled in.
+     *
+     * This is never proof that an encoder can open a hardware device.
+     */
     public function has(string $category, string $name): bool
     {
         return in_array($name, $this->available($category), true);
     }
 
-    /** @param array<string, list<string>> $requirements */
+    /**
+     * Get the required names that are not compiled in, grouped by category.
+     *
+     * @param  array<string, list<string>>  $requirements
+     */
     public function missing(array $requirements): array
     {
         $missing = [];
@@ -97,8 +129,13 @@ readonly class Capabilities implements Arrayable, JsonSerializable
                 throw new InvalidArgumentException("The capability requirement [{$category}] must be a list of names.");
             }
 
-            if (array_any($names, fn (mixed $name): bool => ! is_string($name) || ! preg_match('/\A[a-zA-Z0-9_.-]{1,128}\z/', $name))) {
-                throw new InvalidArgumentException("The capability requirement [{$category}] contains an invalid name.");
+            if (array_any(
+                $names,
+                fn (mixed $name): bool => ! is_string($name) || ! preg_match('/\A[a-zA-Z0-9_.-]{1,128}\z/', $name),
+            )) {
+                throw new InvalidArgumentException(
+                    "The capability requirement [{$category}] contains an invalid name."
+                );
             }
 
             $absent = array_values(array_diff($names, $this->available($category)));
@@ -110,6 +147,13 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         return $missing;
     }
 
+    /**
+     * Ensure every required name is compiled in.
+     *
+     * @param  array<string, list<string>>  $requirements
+     *
+     * @throws MediaException
+     */
     public function require(array $requirements): self
     {
         if ($this->missing($requirements) !== []) {
@@ -119,19 +163,26 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         return $this;
     }
 
+    /**
+     * Capture the listing the given binary prints for the given option.
+     */
     protected function capture(Workspace $workspace, string $binary, string $option): string
     {
         $result = $workspace->runner->run([$binary, '-hide_banner', $option], $workspace->path,
             outputLimit: 2097152, timeout: 15);
         if ($result->exitCode !== 0) {
-            // Binary output can contain paths, environment details or credentials.
+            // We do not include the binary output, since it can contain paths, environment details or credentials.
             throw MediaException::probing('Cannot inspect media binary capabilities.', 'capability');
         }
 
         return $result->output;
     }
 
-    /** @param 'encoders'|'muxers'|'filters'|'bsfs'|'hwaccels' $kind */
+    /**
+     * Parse the sorted names from a capability listing.
+     *
+     * @param  'encoders'|'muxers'|'filters'|'bsfs'|'hwaccels'  $kind
+     */
     protected function parseList(string $kind, string $output): array
     {
         $header = match ($kind) {
@@ -163,6 +214,9 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         return $names;
     }
 
+    /**
+     * Parse the sorted input and output protocol names from a protocol listing.
+     */
     protected function parseProtocols(string $output): array
     {
         if (! preg_match('/Input:\s*(.*?)\s*Output:\s*(.*)\z/s', $output, $matches)) {

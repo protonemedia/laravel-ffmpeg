@@ -11,11 +11,21 @@ use Illuminate\Support\Facades\Route as Router;
 use Illuminate\Support\Facades\URL;
 use InvalidArgumentException;
 
+/**
+ * The registry of protected HLS playback definitions.
+ */
 class HlsPlayback
 {
+    /**
+     * The registered resolve and authorize callbacks, keyed by definition name.
+     */
     protected array $presentations = [];
 
-    /** Register in a service provider so definitions also exist with cached routes. */
+    /**
+     * Register a playback definition.
+     *
+     * Register definitions in a service provider so they also exist when routes are cached.
+     */
     public function define(string $name, callable $resolve, callable $authorize): self
     {
         $this->presentations[$name] = [Closure::fromCallable($resolve), Closure::fromCallable($authorize)];
@@ -23,6 +33,9 @@ class HlsPlayback
         return $this;
     }
 
+    /**
+     * Register the route that serves the given playback definition.
+     */
     public function routes(string $uri, string $name, string $playback, array $middleware = ['web', 'auth']): Route
     {
         return Router::get(rtrim($uri, '/').'/{hlsResource?}', HlsPlaybackController::class)
@@ -30,11 +43,19 @@ class HlsPlayback
             ->middleware($middleware)->name($name);
     }
 
+    /**
+     * Create a temporary signed URL for the given playback route.
+     *
+     * The URL expires after 30 minutes by default.
+     */
     public function url(string $route, array $parameters = [], ?DateTimeInterface $expires = null): string
     {
         return URL::temporarySignedRoute($route, $expires ?? now()->addMinutes(30), $parameters);
     }
 
+    /**
+     * Resolve the authorized presentation for the given signed request.
+     */
     public function resolve(Request $request): HlsPresentation
     {
         abort_unless(is_string($request->query('expires')) && ctype_digit($request->query('expires'))

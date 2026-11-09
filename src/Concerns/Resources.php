@@ -4,9 +4,16 @@ namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
 use ProtoneMedia\LaravelFFMpeg\Media;
 
-/** @internal Declare files and text that video filters reference by name. Forwards to the PendingExport the builder holds in $export. */
+/**
+ * Forward the files and text that video filters reference by name to the pending export the builder holds in $export.
+ *
+ * @internal
+ */
 trait Resources
 {
+    /**
+     * Declare a file that video filters reference by the given name.
+     */
     public function resource(string $name, Media $media): self
     {
         $this->export->resource($name, $media);
@@ -14,6 +21,9 @@ trait Resources
         return $this;
     }
 
+    /**
+     * Declare a UTF-8 text file that video filters reference by the given name.
+     */
     public function textResource(string $name, string $text): self
     {
         $this->export->textResource($name, $text);
@@ -21,6 +31,9 @@ trait Resources
         return $this;
     }
 
+    /**
+     * Declare a subtitle file that video filters reference by the given name.
+     */
     public function subtitleResource(string $name, Media $media): self
     {
         $this->export->subtitleResource($name, $media);

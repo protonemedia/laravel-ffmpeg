@@ -16,7 +16,9 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
-/** A numbered JPEG or PNG sequence sampled at an interval or as a fixed count. */
+/**
+ * A numbered JPEG or PNG sequence sampled at an interval or as a fixed count.
+ */
 class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ValidatesArtifacts
 {
     use Concerns\Clips;
@@ -30,18 +32,33 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
     use Concerns\VideoFilters;
     use Conditionable, Macroable;
 
+    /**
+     * The export pipeline this builder configures.
+     */
     protected readonly PendingExport $export;
 
+    /**
+     * The clipped media duration in seconds, once the source has been probed.
+     */
     protected ?float $duration = null;
 
-    public function __construct(Media $media, string|Filesystem $disk, protected readonly ?float $every, protected readonly ?int $count)
-    {
+    /**
+     * Create a new pending frames instance.
+     */
+    public function __construct(
+        Media $media,
+        string|Filesystem $disk,
+        protected readonly ?float $every,
+        protected readonly ?int $count,
+    ) {
         if (($every === null) === ($count === null)) {
             throw new InvalidArgumentException('Frame extraction requires exactly one of an interval or a count.');
         }
 
         if ($every !== null && (! is_finite($every) || $every < 0.000001)) {
-            throw new InvalidArgumentException("The frame interval [{$every}] must be finite and at least one microsecond.");
+            throw new InvalidArgumentException(
+                "The frame interval [{$every}] must be finite and at least one microsecond."
+            );
         }
 
         if ($count !== null && $count < 1) {
@@ -52,6 +69,9 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
         $this->export->map('0:V:0')->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
+    /**
+     * Save the frames using the given destination pattern.
+     */
     public function save(?string $path = null): ExportResult
     {
         if ($path === null) {
@@ -64,7 +84,12 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
         return $this->export->save($path);
     }
 
-    /** @internal Count-based sampling spreads frames over the clipped duration; progress uses the source duration. */
+    /**
+     * Record the clipped duration that count-based sampling spreads frames over.
+     * Progress still uses the source duration.
+     *
+     * @internal
+     */
     public function duration(array $metadata, ?float $default): ?float
     {
         $this->duration = $metadata[0]->duration();
@@ -74,14 +99,22 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
             $this->duration = max(0, min($clip['duration'], $this->duration - $clip['start']));
         }
 
-        if ($this->count !== null && ($this->duration === null || CommandCompiler::timestamp($this->duration) === '0')) {
-            throw MediaException::probing('Count-based frame extraction requires a known, positive media duration.', 'metadata');
+        if ($this->count !== null
+            && ($this->duration === null || CommandCompiler::timestamp($this->duration) === '0')) {
+            throw MediaException::probing(
+                'Count-based frame extraction requires a known, positive media duration.',
+                'metadata',
+            );
         }
 
         return $metadata[0]->duration();
     }
 
-    /** @internal */
+    /**
+     * Sample the frames with the fps filter and write them as a numbered image sequence.
+     *
+     * @internal
+     */
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
@@ -114,7 +147,11 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
         return $default;
     }
 
-    /** @internal */
+    /**
+     * Get the private path pattern that FFmpeg writes the frames to.
+     *
+     * @internal
+     */
     public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
         $extension = pathinfo($outputs[0]->destination()['path'], PATHINFO_EXTENSION);
@@ -122,13 +159,21 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
         return [$workspace->path.'/frame-%08d.'.$extension];
     }
 
-    /** @internal */
+    /**
+     * Get the numbered frames to validate and publish.
+     *
+     * @internal
+     */
     public function artifacts(array $default, array $outputs, array $paths): array
     {
         return ImageOutput::sequenceArtifacts($outputs[0], $paths[0], $this->count);
     }
 
-    /** @internal */
+    /**
+     * Ensure each encoded frame is a valid image.
+     *
+     * @internal
+     */
     public function artifact(string $path, string $role, int $size): void
     {
         ImageOutput::validate($path, $role);

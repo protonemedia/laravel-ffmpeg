@@ -11,7 +11,9 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 
-/** A silent video that holds one image for a fixed duration. */
+/**
+ * A silent video that holds one image for a fixed duration.
+ */
 class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
 {
     use Concerns\Fades;
@@ -25,10 +27,20 @@ class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
     use Concerns\VideoFilters;
     use Conditionable, Macroable;
 
+    /**
+     * The export pipeline this builder configures.
+     */
     protected readonly PendingExport $export;
 
-    public function __construct(Media $image, string|Filesystem $disk, protected readonly float $duration, int $frameRate)
-    {
+    /**
+     * Create a new pending still instance.
+     */
+    public function __construct(
+        Media $image,
+        string|Filesystem $disk,
+        protected readonly float $duration,
+        int $frameRate,
+    ) {
         if (! is_finite($duration) || $duration <= 0) {
             throw new InvalidArgumentException("The still duration [{$duration}] must be finite and positive.");
         }
@@ -41,6 +53,9 @@ class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
         $this->export->video('libx264')->outputOptions(['-pix_fmt', 'yuv420p']);
     }
 
+    /**
+     * Map the given input stream specifier or graph label to the output.
+     */
     public function map(string $specifier): self
     {
         $this->export->map($specifier);
@@ -48,19 +63,33 @@ class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
         return $this;
     }
 
-    public function mapVideo(Stream|int|null $stream = null, ?int $input = null, ?int $track = null, bool $optional = false): self
-    {
+    /**
+     * Map a video stream from the given input to the output.
+     */
+    public function mapVideo(
+        Stream|int|null $stream = null,
+        ?int $input = null,
+        ?int $track = null,
+        bool $optional = false,
+    ): self {
         $this->export->mapVideo($stream, $input, $track, $optional);
 
         return $this;
     }
 
+    /**
+     * Save the video to the given path.
+     */
     public function save(?string $path = null): ExportResult
     {
         return $this->export->save($path);
     }
 
-    /** @internal */
+    /**
+     * Limit the output to the duration of the still.
+     *
+     * @internal
+     */
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         array_splice($default, -1, 0, ['-t', CommandCompiler::timestamp($this->duration)]);
@@ -68,7 +97,11 @@ class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
         return $default;
     }
 
-    /** @internal */
+    /**
+     * Get the duration of the still in seconds.
+     *
+     * @internal
+     */
     public function duration(array $metadata, ?float $default): float
     {
         return $this->duration;

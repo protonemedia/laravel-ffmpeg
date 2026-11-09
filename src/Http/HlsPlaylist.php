@@ -14,14 +14,26 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
+/**
+ * A stored HLS playlist whose references can be rewritten to application URLs.
+ */
 class HlsPlaylist implements Responsable
 {
     use Conditionable;
 
+    /**
+     * The normalized disk-relative path of the playlist.
+     */
     protected string $path;
 
+    /**
+     * The URL resolvers, keyed by reference kind.
+     */
     protected array $resolvers = [];
 
+    /**
+     * Create a new HLS playlist instance.
+     */
     public function __construct(protected readonly string|Filesystem $disk, string $path)
     {
         if ($path === '' || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $path)) {
@@ -34,6 +46,9 @@ class HlsPlaylist implements Responsable
         }
     }
 
+    /**
+     * Set the callback that resolves encryption key URLs.
+     */
     public function keyUrlsUsing(callable $resolver): self
     {
         $this->resolvers['key'] = Closure::fromCallable($resolver);
@@ -41,6 +56,9 @@ class HlsPlaylist implements Responsable
         return $this;
     }
 
+    /**
+     * Set the callback that resolves media segment URLs.
+     */
     public function mediaUrlsUsing(callable $resolver): self
     {
         $this->resolvers['media'] = Closure::fromCallable($resolver);
@@ -48,6 +66,9 @@ class HlsPlaylist implements Responsable
         return $this;
     }
 
+    /**
+     * Set the callback that resolves nested playlist URLs.
+     */
     public function playlistUrlsUsing(callable $resolver): self
     {
         $this->resolvers['playlist'] = Closure::fromCallable($resolver);
@@ -55,23 +76,33 @@ class HlsPlaylist implements Responsable
         return $this;
     }
 
+    /**
+     * Get the rendered contents of the playlist.
+     */
     public function get(): string
     {
         return $this->render(false)[$this->path];
     }
 
-    /** @return Collection<string, string> Local playlists only, without fetching keys or media. */
+    /**
+     * Get the rendered contents of the playlist and every local playlist it references.
+     *
+     * Keys and media are never fetched.
+     *
+     * @return Collection<string, string>
+     */
     public function all(): Collection
     {
         return collect($this->render(true));
     }
 
     /**
-     * Delete original disk references, never resolver URLs. Approval must return true
-     * for every unique disk-relative path, including the opened playlist. Discovery
-     * and approval finish before the first delete; adapter failures may leave a
-     * partially deleted set. The application must protect shared files and prevent
-     * concurrent changes to the playlists or their storage during this operation.
+     * Delete the playlist and the original disk files it references, never the resolver URLs.
+     *
+     * The approval callback must return true for every unique disk-relative path, including the opened playlist.
+     * Discovery and approval finish before the first delete, but adapter failures may leave a partially deleted
+     * set. The application must protect shared files and prevent concurrent changes to the playlists or their
+     * storage during this operation.
      *
      * @param  callable(string): bool  $approve
      */
@@ -108,6 +139,9 @@ class HlsPlaylist implements Responsable
         return $this;
     }
 
+    /**
+     * Create an HTTP response that represents the playlist.
+     */
     public function toResponse($request): Response
     {
         return response($this->get(), 200, [
@@ -116,6 +150,11 @@ class HlsPlaylist implements Responsable
         ]);
     }
 
+    /**
+     * Render the playlist, and every local playlist it references when requested.
+     *
+     * @return array<string, string>
+     */
     protected function render(bool $all, ?Closure $discover = null): array
     {
         $pending = [$this->path];
@@ -149,8 +188,15 @@ class HlsPlaylist implements Responsable
      * @param  array<string, Closure>  $resolvers
      * @return array{string, list<string>, int}
      */
-    protected function renderPlaylist(string $path, string $content, bool $all, array $queued, array $resolvers, ?Closure $discover, int $outputBudget): array
-    {
+    protected function renderPlaylist(
+        string $path,
+        string $content,
+        bool $all,
+        array $queued,
+        array $resolvers,
+        ?Closure $discover,
+        int $outputBudget,
+    ): array {
         $lines = explode("\n", str_replace("\r\n", "\n", $content));
         $discovered = [];
         $cache = [];
@@ -168,7 +214,10 @@ class HlsPlaylist implements Responsable
 
                 if ($all && $kind === 'playlist' && $target !== null && ! isset($queued[$target])) {
                     if (count($queued) >= 1024) {
-                        throw MediaException::response('An HLS response cannot read more than 1024 local playlists.', 'artifact');
+                        throw MediaException::response(
+                            'An HLS response cannot read more than 1024 local playlists.',
+                            'artifact',
+                        );
                     }
 
                     $queued[$target] = true;
@@ -198,7 +247,9 @@ class HlsPlaylist implements Responsable
     /**
      * Classify a playlist line and locate the URI it references, if any.
      *
-     * @return array{string|null, int, int, string|null} The reference kind, URI offset, URI length and pending declaration type.
+     * The result holds the reference kind, URI offset, URI length and pending declaration type.
+     *
+     * @return array{string|null, int, int, string|null}
      */
     protected function classifyLine(string $line, ?string $type): array
     {
@@ -231,8 +282,10 @@ class HlsPlaylist implements Responsable
 
             $kind = $type;
             $type = null;
-        } elseif (preg_match('/\A#EXT-X-(?:I-FRAME-STREAM-INF|SESSION-KEY|PART|PRELOAD-HINT|RENDITION-REPORT):/', $line)
-            || (str_starts_with($line, '#EXT') && preg_match('/[:,]URI\s*=/', $line))) {
+        } elseif (
+            preg_match('/\A#EXT-X-(?:I-FRAME-STREAM-INF|SESSION-KEY|PART|PRELOAD-HINT|RENDITION-REPORT):/', $line)
+            || (str_starts_with($line, '#EXT') && preg_match('/[:,]URI\s*=/', $line))
+        ) {
             throw MediaException::response('This response does not support this HLS resource tag.', 'artifact');
         }
 
@@ -253,7 +306,9 @@ class HlsPlaylist implements Responsable
                     throw new InvalidArgumentException;
                 }
 
-                $target = (new WhitespacePathNormalizer)->normalizePath((dirname($path) === '.' ? '' : dirname($path).'/').$decoded);
+                $target = (new WhitespacePathNormalizer)->normalizePath(
+                    (dirname($path) === '.' ? '' : dirname($path).'/').$decoded
+                );
                 if ($target === '') {
                     throw new InvalidArgumentException;
                 }
@@ -276,6 +331,9 @@ class HlsPlaylist implements Responsable
         return $url;
     }
 
+    /**
+     * Read a playlist from the disk within the given byte limit and validate its encoding.
+     */
     protected function read(string $path, int $limit): string
     {
         $stream = null;
@@ -300,24 +358,35 @@ class HlsPlaylist implements Responsable
 
         if (! str_starts_with($normalized, "#EXTM3U\n")
             || ! preg_match('//u', $normalized) || preg_match('/[\x00-\x09\x0B-\x1F\x7F-\x9F]/u', $normalized)) {
-            throw MediaException::response('HLS responses require UTF-8 playlists that start with #EXTM3U and contain no control characters.', 'artifact');
+            throw MediaException::response(
+                'HLS responses require UTF-8 playlists that start with #EXTM3U and contain no control characters.',
+                'artifact',
+            );
         }
 
         return $content;
     }
 
+    /**
+     * Ensure the given value is an HTTP(S) URL or a valid relative URI.
+     */
     protected function validateUri(mixed $uri): void
     {
-        if (! is_string($uri) || $uri === '' || ! preg_match('//u', $uri) || preg_match('/[\s\x00-\x1F\x7F-\x9F"\\\\#]/u', $uri)
+        if (! is_string($uri) || $uri === '' || ! preg_match('//u', $uri)
+            || preg_match('/[\s\x00-\x1F\x7F-\x9F"\\\\#]/u', $uri)
             || preg_match('/%(?![0-9a-f]{2})/i', $uri) || str_starts_with($uri, '//') || parse_url($uri) === false
             || (($scheme = parse_url($uri, PHP_URL_SCHEME)) !== null
-                && (! in_array(strtolower($scheme), ['http', 'https'], true) || ! filter_var($uri, FILTER_VALIDATE_URL)))) {
-            throw MediaException::response('HLS resolvers and references require an HTTP(S) URL or a valid relative URI.', 'artifact');
+                && (! in_array(strtolower($scheme), ['http', 'https'], true)
+                    || ! filter_var($uri, FILTER_VALIDATE_URL)))) {
+            throw MediaException::response(
+                'HLS resolvers and references require an HTTP(S) URL or a valid relative URI.',
+                'artifact',
+            );
         }
     }
 
     /**
-     * Split an attribute list into name => [value, offset] without treating commas inside quotes as separators.
+     * Split an attribute list into name => [value, offset] pairs without splitting on commas inside quotes.
      *
      * @internal
      *
@@ -325,7 +394,12 @@ class HlsPlaylist implements Responsable
      */
     public static function attributes(string $list): ?array
     {
-        preg_match_all('/(?:\A|,)([A-Z0-9-]+)=("[^"\r\n]*"|[^,"\r\n]+)/', $list, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+        preg_match_all(
+            '/(?:\A|,)([A-Z0-9-]+)=("[^"\r\n]*"|[^,"\r\n]+)/',
+            $list,
+            $matches,
+            PREG_SET_ORDER | PREG_OFFSET_CAPTURE,
+        );
         $end = 0;
         $values = [];
         foreach ($matches as $match) {
@@ -340,7 +414,11 @@ class HlsPlaylist implements Responsable
         return $end === strlen($list) ? $values : null;
     }
 
-    /** Return the quoted URI's byte offset and length within a MAP or MEDIA line. */
+    /**
+     * Get the byte offset and length of the quoted URI within a MAP or MEDIA line.
+     *
+     * @return array{int, int}|null
+     */
     protected function resourceUri(string $line, bool $required): ?array
     {
         $start = strpos($line, ':') + 1;
@@ -368,12 +446,18 @@ class HlsPlaylist implements Responsable
         return $uri;
     }
 
-    /** Return the URI's byte offset and length without changing other key attributes. */
+    /**
+     * Get the byte offset and length of the URI within a KEY line without changing its other attributes.
+     *
+     * @return array{int, int}|null
+     */
     protected function keyUri(string $line): ?array
     {
         $values = self::attributes(substr($line, 11));
         $uri = null;
-        if (isset($values['URI']) && str_starts_with($values['URI'][0], '"') && str_ends_with($values['URI'][0], '"')) {
+        if (isset($values['URI'])
+            && str_starts_with($values['URI'][0], '"')
+            && str_ends_with($values['URI'][0], '"')) {
             $uri = [11 + $values['URI'][1] + 1, strlen($values['URI'][0]) - 2];
         }
 

@@ -6,8 +6,14 @@ use BadMethodCallException;
 use DateTimeInterface;
 use Illuminate\Contracts\Filesystem\Filesystem;
 
+/**
+ * A file that an export published to a disk.
+ */
 readonly class GeneratedFile
 {
+    /**
+     * Create a new generated file instance.
+     */
     public function __construct(
         protected Filesystem $filesystem,
         public ?string $disk,
@@ -17,6 +23,9 @@ readonly class GeneratedFile
         public bool $owned = true,
     ) {}
 
+    /**
+     * Get the URL of the file.
+     */
     public function url(): string
     {
         if (! method_exists($this->filesystem, 'url')) {
@@ -26,6 +35,9 @@ readonly class GeneratedFile
         return $this->filesystem->url($this->path);
     }
 
+    /**
+     * Get a temporary URL for the file.
+     */
     public function temporaryUrl(DateTimeInterface $expiration, array $options = []): string
     {
         if (! method_exists($this->filesystem, 'temporaryUrl')) {
@@ -35,19 +47,35 @@ readonly class GeneratedFile
         return $this->filesystem->temporaryUrl($this->path, $expiration, $options);
     }
 
-    /** @return resource|null */
+    /**
+     * Get a read stream for the file.
+     *
+     * @return resource|null
+     */
     public function readStream()
     {
         return $this->filesystem->readStream($this->path);
     }
 
+    /**
+     * Delete the file when the export owns it.
+     */
     public function delete(): bool
     {
         return $this->owned && $this->filesystem->delete($this->path);
     }
 
+    /**
+     * Get the instance as an array.
+     */
     public function toArray(): array
     {
-        return ['disk' => $this->disk, 'path' => $this->path, 'size' => $this->size, 'role' => $this->role, 'owned' => $this->owned];
+        return [
+            'disk' => $this->disk,
+            'path' => $this->path,
+            'size' => $this->size,
+            'role' => $this->role,
+            'owned' => $this->owned,
+        ];
     }
 }

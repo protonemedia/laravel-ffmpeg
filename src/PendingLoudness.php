@@ -14,7 +14,10 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\RunsAnalysis;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 
-/** Audio-only normalization. The held export pipeline owns staging, events, encoding and publication. */
+/**
+ * An audio-only loudness normalization.
+ * The export pipeline it holds owns staging, events, encoding and publication.
+ */
 class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, ValidatesArtifacts
 {
     use Concerns\AudioFilters;
@@ -25,14 +28,29 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
     use Concerns\RunsExport;
     use Conditionable, Macroable;
 
+    /**
+     * The export pipeline this builder configures.
+     */
     protected readonly PendingExport $export;
 
+    /**
+     * The statistics of the measurement pass.
+     */
     protected ?LoudnessStats $measurement = null;
 
+    /**
+     * The statistics of the final normalization pass.
+     */
     protected ?LoudnessStats $normalization = null;
 
+    /**
+     * The workspace of the running export.
+     */
     protected ?Workspace $workspace = null;
 
+    /**
+     * Create a new pending loudness instance.
+     */
     public function __construct(
         protected readonly Media $source,
         string|Filesystem $disk,
@@ -43,9 +61,15 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         protected readonly int $sampleRate = 48000,
         int $audio = 0,
     ) {
-        foreach (['integrated loudness' => [$integrated, -70, -5], 'true peak' => [$truePeak, -9, 0], 'loudness range' => [$range, 1, 50]] as $target => [$value, $min, $max]) {
+        foreach ([
+            'integrated loudness' => [$integrated, -70, -5],
+            'true peak' => [$truePeak, -9, 0],
+            'loudness range' => [$range, 1, 50],
+        ] as $target => [$value, $min, $max]) {
             if (! is_finite($value) || $value < $min || $value > $max) {
-                throw new InvalidArgumentException("The {$target} target [{$value}] must be between {$min} and {$max}.");
+                throw new InvalidArgumentException(
+                    "The {$target} target [{$value}] must be between {$min} and {$max}."
+                );
             }
         }
 
@@ -61,6 +85,9 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         $this->export->map('0:a:'.$audio)->audio('aac');
     }
 
+    /**
+     * Set the audio encoder and bitrate.
+     */
     public function audio(?string $codec = null, mixed $bitrate = null): self
     {
         $this->export->audio($codec, $bitrate);
@@ -68,6 +95,9 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         return $this;
     }
 
+    /**
+     * Set allowed encoder options for every output audio track.
+     */
     public function audioOptions(array $tokens): self
     {
         $this->export->audioOptions($tokens);
@@ -75,21 +105,34 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         return $this;
     }
 
+    /**
+     * Save the normalized audio to the given path.
+     */
     public function save(?string $path = null): LoudnessResult
     {
-        return new LoudnessResult($this->export->save($path), $this->measurement, $this->normalization, $this->linear ? 'linear' : 'dynamic', $this->sampleRate);
+        return new LoudnessResult(
+            $this->export->save($path),
+            $this->measurement,
+            $this->normalization,
+            $this->linear ? 'linear' : 'dynamic',
+            $this->sampleRate,
+        );
     }
 
-    /** @internal */
+    /**
+     * Move the clip and the caller's filters ahead of loudnorm in a single audio filter chain.
+     *
+     * @internal
+     */
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         $settings = $outputs[0]->outputConfiguration();
 
-        // Video fades are the only way to reach video settings on this builder.
         if (($settings['audio']['codec'] ?? null) === 'copy') {
             throw new InvalidArgumentException('Loudness normalization must encode audio, not copy it.');
         }
 
+        // Video fades are the only way to reach video settings on this builder.
         if ($settings['videoFilters'] !== []) {
             throw new InvalidArgumentException('Loudness normalization does not support video filters.');
         }
@@ -106,7 +149,9 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             $token = $command[$i];
 
             if (preg_match('/^-(?:ar|ac)(?::|$)/', $token)) {
-                throw new InvalidArgumentException('Use audioFilter() for channel preprocessing; sampleRate is owned by normalizeLoudness().');
+                throw new InvalidArgumentException(
+                    'Use audioFilter() for channel preprocessing; sampleRate is owned by normalizeLoudness().'
+                );
             }
 
             if ($token === '-filter:a') {
@@ -124,9 +169,12 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             $result[] = $token;
         }
 
-        // Trim before preprocessing and measurement, not as an output seek after loudnorm.
+        // We trim before preprocessing and measurement, instead of seeking the output after loudnorm.
         $clip = $outputs[0]->clipSettings();
-        $filters = $clip === null ? [] : ['atrim=start='.$this->number($clip['start']).':duration='.$this->number($clip['duration']), 'asetpts=PTS-STARTPTS'];
+        $filters = $clip === null ? [] : [
+            'atrim=start='.$this->number($clip['start']).':duration='.$this->number($clip['duration']),
+            'asetpts=PTS-STARTPTS',
+        ];
         if ($filter !== '') {
             $filters[] = $filter;
         }
@@ -135,10 +183,17 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         $filters[] = $this->loudnorm('loudness-final.json');
         $destination = array_pop($result);
 
-        return [...$result, '-vn', '-filter:a', implode(',', $filters), '-ar', (string) $this->sampleRate, $destination];
+        return [
+            ...$result, '-vn', '-filter:a', implode(',', $filters), '-ar', (string) $this->sampleRate, $destination,
+        ];
     }
 
-    /** @internal Called after staging and probing, before the final encoding pass. */
+    /**
+     * Measure the prepared audio and build the final normalization pass.
+     * This runs after staging and probing, before the final encoding pass.
+     *
+     * @internal
+     */
     public function analyze(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         $this->measurement = null;
@@ -151,16 +206,20 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         $preprocessing = substr($command[$filterIndex + 1], 0, -strlen(','.$this->loudnorm('loudness-final.json')));
         $prepared = 'loudness-prepared.nut';
 
-        // Decode selected, trimmed, channel-processed samples only once. Both passes
+        // We decode the selected, trimmed and channel-processed samples only once. Both passes
         // reopen this private lossless file, never a mutable remote or local source.
         $analyze([...$prefix, '-map', $command[$mapIndex + 1], '-vn', '-af', $preprocessing,
             '-map_metadata', '0', '-c:a', 'pcm_f64le', '-f', 'nut', $prepared], 'Loudness analysis failed.');
-        $measure = [$command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1', '-i', $prepared, '-af',
-            $this->loudnorm('loudness-measure.json'), '-f', 'null', '-'];
+        $measure = [
+            $command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1', '-i', $prepared,
+            '-af', $this->loudnorm('loudness-measure.json'), '-f', 'null', '-',
+        ];
         $analyze($measure, 'Loudness analysis failed.');
         $this->measurement = $this->readStats($workspace->path.'/loudness-measure.json', Progress::ANALYSIS);
         $normalizer = $this->loudnorm('loudness-final.json');
 
+        // Linear normalization needs the measured values, so we will pass them to the final
+        // pass whenever they fit the ranges that loudnorm's measured options accept.
         if ($this->measurement->usableMeasurements()) {
             $stats = $this->measurement;
             $normalizer .= ':measured_I='.$this->number($stats->inputIntegrated)
@@ -170,8 +229,12 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
                 .':offset='.$this->number($stats->targetOffset);
         }
 
-        // Keep encoder/container/metadata/publication settings from the ordinary pipeline.
-        $final = [$command[0], '-hide_banner', '-nostdin', '-nostats', '-y', '-xerror', '-progress', 'pipe:1', '-i', $prepared];
+        // The final pass reads the prepared file but keeps the encoder, container, metadata
+        // and publication settings of the ordinary pipeline.
+        $final = [
+            $command[0], '-hide_banner', '-nostdin', '-nostats', '-y', '-xerror', '-progress', 'pipe:1',
+            '-i', $prepared,
+        ];
         for ($i = $inputEnd; $i < count($command); $i++) {
             $token = $command[$i];
             if ($token === '-map') {
@@ -190,6 +253,9 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         return $final;
     }
 
+    /**
+     * Build the loudnorm filter that writes its statistics to the given file.
+     */
     protected function loudnorm(string $statistics): string
     {
         return 'loudnorm=I='.$this->number($this->integrated).':TP='.$this->number($this->truePeak)
@@ -197,11 +263,17 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             .':print_format=json:stats_file='.$statistics;
     }
 
+    /**
+     * Format the given number for a filter argument.
+     */
     protected function number(float $number): string
     {
         return json_encode($number, JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * Read and validate the loudnorm statistics file at the given path.
+     */
     protected function readStats(string $path, string $phase = 'validation'): LoudnessStats
     {
         if (! is_file($path)) {
@@ -219,7 +291,11 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         return LoudnessStats::fromJson($json, $phase);
     }
 
-    /** @internal */
+    /**
+     * Read the final statistics and ensure the output holds one audio stream at the requested sample rate.
+     *
+     * @internal
+     */
     public function artifact(string $path, string $role, int $size): void
     {
         $this->normalization = $this->readStats($this->workspace->path.'/loudness-final.json');
@@ -238,7 +314,10 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         }
 
         if ($streams->first()->sampleRate() !== $this->sampleRate) {
-            throw MediaException::validation("Normalized output must use the requested sample rate [{$this->sampleRate}].", 'artifact');
+            throw MediaException::validation(
+                "Normalized output must use the requested sample rate [{$this->sampleRate}].",
+                'artifact',
+            );
         }
     }
 }

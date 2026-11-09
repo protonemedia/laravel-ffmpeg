@@ -5,9 +5,16 @@ namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use ProtoneMedia\LaravelFFMpeg\PendingQueuedExport;
 
-/** @internal Run, inspect, time out, queue and publish the export. Forwards to the PendingExport the builder holds in $export. */
+/**
+ * Forward running, inspecting, timing out, queueing and publishing to the pending export the builder holds in $export.
+ *
+ * @internal
+ */
 trait RunsExport
 {
+    /**
+     * Create a pending queued export that runs the builder on a queue worker.
+     */
     public function queued(
         ?string $connection = null,
         ?string $queue = null,
@@ -17,7 +24,11 @@ trait RunsExport
         return $this->export->queued($connection, $queue, $delay, $parallel);
     }
 
-    /** A cumulative budget for this execution; null restores the configured process limits. */
+    /**
+     * Set the total time budget of the execution in seconds.
+     *
+     * Passing null restores the configured process limits.
+     */
     public function timeout(?float $seconds): self
     {
         $this->export->timeout($seconds);
@@ -25,6 +36,9 @@ trait RunsExport
         return $this;
     }
 
+    /**
+     * Set how many seconds a process may run without output.
+     */
     public function idleTimeout(?float $seconds): self
     {
         $this->export->idleTimeout($seconds);
@@ -32,7 +46,13 @@ trait RunsExport
         return $this;
     }
 
-    /** @internal Worker batch cancellation is independent of user progress callbacks. */
+    /**
+     * Cancel the execution when the given callback returns true.
+     *
+     * Queue workers use this for batch cancellation, independent of the user's progress callback.
+     *
+     * @internal
+     */
     public function cancelWhen(callable $callback): self
     {
         $this->export->cancelWhen($callback);
@@ -40,6 +60,9 @@ trait RunsExport
         return $this;
     }
 
+    /**
+     * Register a callback that receives the progress of the execution.
+     */
     public function onProgress(callable $callback): self
     {
         $this->export->onProgress($callback);
@@ -47,12 +70,17 @@ trait RunsExport
         return $this;
     }
 
-    /** Pure, redacted inspection. No files or processes are created. */
+    /**
+     * Get the redacted command without creating files or running processes.
+     */
     public function inspect(): array
     {
         return $this->export->inspect();
     }
 
+    /**
+     * Set the disk the output is published to.
+     */
     public function toDisk(string|Filesystem $disk, array $options = []): self
     {
         $this->export->toDisk($disk, $options);
@@ -60,6 +88,9 @@ trait RunsExport
         return $this;
     }
 
+    /**
+     * Set the visibility of the published output.
+     */
     public function visibility(string $visibility): self
     {
         $this->export->visibility($visibility);

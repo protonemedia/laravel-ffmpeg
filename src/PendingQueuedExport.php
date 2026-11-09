@@ -13,18 +13,39 @@ use ProtoneMedia\LaravelFFMpeg\Queue\ExportJob;
 use ProtoneMedia\LaravelFFMpeg\Queue\ExportPlan;
 use ProtoneMedia\LaravelFFMpeg\Queue\HlsBatchJob;
 
+/**
+ * An export that runs on the queue, as a single job or as a parallel HLS batch.
+ */
 class PendingQueuedExport
 {
+    /**
+     * The callback that configures each job before dispatch.
+     */
     protected ?Closure $configure = null;
 
+    /**
+     * The unique identifier of the queued export.
+     */
     public readonly string $id;
 
+    /**
+     * The captured state of the export builder.
+     */
     protected readonly ExportPlan $plan;
 
+    /**
+     * The queue connection the jobs are dispatched to.
+     */
     protected readonly ?string $connection;
 
+    /**
+     * The queue the jobs are dispatched to.
+     */
     protected readonly ?string $queue;
 
+    /**
+     * Create a new pending queued export instance.
+     */
     public function __construct(
         Exportable $export,
         ?string $connection = null,
@@ -39,7 +60,9 @@ class PendingQueuedExport
         $this->plan = new ExportPlan($export);
     }
 
-    /** Configure native Laravel job properties, middleware and chains before dispatch. */
+    /**
+     * Configure the native Laravel job properties, middleware and chains before dispatch.
+     */
     public function configureJob(callable $configure): self
     {
         $this->configure = Closure::fromCallable($configure);
@@ -47,7 +70,9 @@ class PendingQueuedExport
         return $this;
     }
 
-    /** Build without dispatch, for Laravel Bus::chain() and Bus::batch(). */
+    /**
+     * Build the job without dispatching it, for use with Bus::chain() and Bus::batch().
+     */
     public function job(?string $path = null): ExportJob|HlsBatchJob
     {
         if (! $this->parallel) {
@@ -68,17 +93,25 @@ class PendingQueuedExport
             throw new InvalidArgumentException('Parallel HLS requires a shared named destination disk.');
         }
 
+        // An export that splits into a single part has nothing to run in parallel, so we
+        // will dispatch it as one ordinary job instead of a batch.
         $prefix = 'laravel-ffmpeg/queued/'.$this->id;
         $partExports = $export->queueParts($path, $prefix);
         if (count($partExports) === 1) {
             return $this->configure(new ExportJob($this->id, $this->plan, $path));
         }
 
+        // Every part becomes a batched job that writes its playback inventory. Once the
+        // batch completes, the chained finalizer merges those inventories into the master
+        // playlist at the requested path.
         $parts = [];
         $jobs = [];
         foreach ($partExports as $index => [$part, $destination]) {
             $parts[] = $manifest = $prefix.'/inventories/'.$index.'.json';
-            $jobs[] = $this->configure(new ExportJob($this->id, new ExportPlan($part), $destination, $disk, $manifest), initial: false);
+            $jobs[] = $this->configure(
+                new ExportJob($this->id, new ExportPlan($part), $destination, $disk, $manifest),
+                initial: false,
+            );
         }
 
         $finalizer = $this->configure(new ExportJob($this->id, null, $path, $disk, parts: $parts), initial: false);
@@ -97,11 +130,17 @@ class PendingQueuedExport
         return $workflow;
     }
 
+    /**
+     * Dispatch the export to the queue.
+     */
     public function save(?string $path = null): PendingDispatch
     {
         return new PendingDispatch($this->job($path));
     }
 
+    /**
+     * Apply the queue, delay, timeout and retry settings to the given job.
+     */
     protected function configure(ExportJob|HlsBatchJob $job, bool $initial = true): ExportJob|HlsBatchJob
     {
         $job->onConnection($this->connection)->onQueue($this->queue)->delay($initial ? $this->delay : null);

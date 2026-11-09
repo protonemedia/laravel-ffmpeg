@@ -18,7 +18,9 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\RunsAnalysis;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 
-/** Mix the first audio tracks, retaining the primary media's presentation length. */
+/**
+ * A mix of the first audio tracks of two sources that keeps the primary media's presentation length.
+ */
 class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysis, ShapesCommand, ShapesOutputs
 {
     use Concerns\AudioFilters;
@@ -33,12 +35,24 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     use Concerns\VideoFilters;
     use Conditionable, Macroable;
 
+    /**
+     * The export pipeline this builder configures.
+     */
     protected readonly PendingExport $export;
 
+    /**
+     * Indicates if the added track repeats until the primary presentation ends.
+     */
     protected bool $loop = false;
 
+    /**
+     * The offset of the added track in the primary presentation, in seconds.
+     */
     protected float $offset = 0;
 
+    /**
+     * Create a new pending audio mix instance.
+     */
     public function __construct(
         protected readonly Media $source,
         protected readonly Media $added,
@@ -52,16 +66,22 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         }
 
         if (! is_finite($originalVolume) || $originalVolume < 0) {
-            throw new InvalidArgumentException("The original volume [{$originalVolume}] must be finite and nonnegative.");
+            throw new InvalidArgumentException(
+                "The original volume [{$originalVolume}] must be finite and nonnegative."
+            );
         }
 
         $this->export = new PendingExport($source, $disk, $this);
         $this->export->addInput($added);
-        // addInput() falls back to the default disk; keep the primary input's.
+
+        // Adding an input resets the destination to the default disk, so we will set the
+        // primary input's disk again.
         $this->export->toDisk($disk);
     }
 
-    /** Start the added track at this nonnegative offset in the primary presentation. */
+    /**
+     * Start the added track at the given nonnegative offset in the primary presentation.
+     */
     public function at(float $seconds): self
     {
         $this->export->assertOutputMutable();
@@ -74,7 +94,9 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         return $this;
     }
 
-    /** Repeat the added track from its offset, without repeating the initial delay. */
+    /**
+     * Repeat the added track from its offset without repeating the initial delay.
+     */
     public function loop(bool $loop = true): self
     {
         $this->export->assertOutputMutable();
@@ -83,6 +105,9 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         return $this;
     }
 
+    /**
+     * Set the audio encoder and bitrate.
+     */
     public function audio(?string $codec = null, mixed $bitrate = null): self
     {
         $this->export->audio($codec, $bitrate);
@@ -90,6 +115,9 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         return $this;
     }
 
+    /**
+     * Set allowed encoder options for every output audio track.
+     */
     public function audioOptions(array $tokens): self
     {
         $this->export->audioOptions($tokens);
@@ -97,6 +125,9 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         return $this;
     }
 
+    /**
+     * Omit the video from the output.
+     */
     public function withoutVideo(): self
     {
         $this->export->withoutVideo();
@@ -104,12 +135,19 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         return $this;
     }
 
+    /**
+     * Save the mix to the given path.
+     */
     public function save(?string $path = null): ExportResult
     {
         return $this->export->save($path);
     }
 
-    /** @internal */
+    /**
+     * Map the primary video and the mixed audio to the output.
+     *
+     * @internal
+     */
     public function outputs(array $default, ?string $path): array
     {
         $settings = $this->export->outputConfiguration();
@@ -119,39 +157,54 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         }
 
         if ($this->loop && $this->added->protocolWhitelist() !== 'file') {
-            throw new InvalidArgumentException('Looped audio requires a local or downloaded input. Use openUrl(download: true).');
+            throw new InvalidArgumentException(
+                'Looped audio requires a local or downloaded input. Use openUrl(download: true).'
+            );
         }
 
         $settings['maps'] = $settings['omitVideo'] ? [] : ['0:V:0?'];
         $settings['maps'][] = '[mixed_audio]';
         $settings['omitVideo'] = false;
-        $settings['audioFilters'] = []; // Apply these after mixing, inside the owned graph.
+
+        // The caller's audio filters run after mixing, inside the graph this builder owns.
+        $settings['audioFilters'] = [];
         $settings['metadataSource'] ??= 0;
         $settings['chapterSource'] ??= 0;
 
         return [new ExportOutput($path ?? 'inspection.mp4', $settings['disk'])->configure($settings)];
     }
 
-    /** @internal */
+    /**
+     * Get the mix graph, assuming the primary media has audio until it has been probed.
+     *
+     * @internal
+     */
     public function graph(): string
     {
         return $this->mixGraph(true);
     }
 
+    /**
+     * Build the mix graph, with or without the primary media's original audio.
+     */
     protected function mixGraph(bool $originalAudio, ?float $duration = null): string
     {
-        // Fill timestamp gaps and convert both tracks to a common format before
-        // mixing. Padding keeps a short track from shortening the presentation.
+        // We will fill timestamp gaps and convert both tracks to a common format before
+        // mixing them. Padding keeps a short track from shortening the presentation.
         $format = 'aresample=48000:async=1:first_pts=0,aformat=sample_rates=48000:channel_layouts=stereo';
-        // Nothing beyond the primary presentation is audible. Bound the delay
-        // buffer to that presentation, even for very large finite offsets.
+
+        // Nothing beyond the primary presentation is audible, so we bound the delay buffer
+        // to that presentation, even for very large finite offsets.
         $offset = min($this->offset, $duration ?? PHP_INT_MAX / 96000);
         $delay = $offset > 0 ? ',adelay=delays='.sprintf('%.0f', round($offset * 48000)).'S:all=1' : '';
-        $branches = ['[1:a:0]asetpts=PTS-STARTPTS,'.$format.',volume='.json_encode($this->volume, JSON_THROW_ON_ERROR).$delay.',apad[added_audio]'];
+        $branches = ['[1:a:0]asetpts=PTS-STARTPTS,'.$format.',volume='
+            .json_encode($this->volume, JSON_THROW_ON_ERROR).$delay.',apad[added_audio]'];
 
         if ($originalAudio) {
-            $branches[] = '[0:a:0]'.$format.',volume='.json_encode($this->originalVolume, JSON_THROW_ON_ERROR).',apad[original_audio]';
-            $branches[] = '[original_audio][added_audio]amix=inputs=2:duration=first:dropout_transition=0:normalize='.($this->normalize ? '1' : '0').'[audio_mix]';
+            $branches[] = '[0:a:0]'.$format.',volume='
+                .json_encode($this->originalVolume, JSON_THROW_ON_ERROR).',apad[original_audio]';
+            $branches[] = '[original_audio][added_audio]amix=inputs=2:duration=first:dropout_transition=0:normalize='
+                .($this->normalize ? '1' : '0').'[audio_mix]';
         } else {
             $branches[] = '[added_audio]anull[audio_mix]';
         }
@@ -162,7 +215,11 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         return implode(';', $branches);
     }
 
-    /** @internal */
+    /**
+     * Loop the added input when requested and limit the output to the primary duration.
+     *
+     * @internal
+     */
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         $command = $default;
@@ -173,17 +230,24 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
 
         $destination = array_pop($command);
 
-        // The actual finite duration is resolved only after the staged source is
-        // probed. Inspection must not read files, download media, or run FFprobe.
+        // The real duration is only known once the staged source has been probed, so we
+        // will leave a placeholder that analyze() replaces. Inspection must not read files,
+        // download media, or run FFprobe.
         return [...$command, '-t', '[source-duration]', $destination];
     }
 
-    /** @internal */
+    /**
+     * Ensure both sources can be mixed and get the duration for progress.
+     *
+     * @internal
+     */
     public function duration(array $metadata, ?float $default): ?float
     {
         [$source, $added] = $metadata;
         $duration = $source->duration();
-        // Categories name the condition: metadata for durations and origins, mapping for missing tracks.
+
+        // The exception category names the condition: metadata for durations and origins,
+        // and mapping for missing tracks.
         if (! $source->hasVideo() && ! $source->hasAudio()) {
             throw MediaException::probing('Audio mixing requires primary media with video or audio.', 'mapping');
         }
@@ -196,7 +260,10 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         $audio = $source->audio();
         if ($source->hasVideo() && $audio !== null
             && (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0)) {
-            throw MediaException::probing('Original audio requires a known nonnegative timestamp origin relative to video.', 'metadata');
+            throw MediaException::probing(
+                'Original audio requires a known nonnegative timestamp origin relative to video.',
+                'metadata',
+            );
         }
 
         if ($added->audio() === null) {
@@ -210,12 +277,16 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         return $this->export->outputConfiguration()['audioFilters'] === [] ? $duration : null;
     }
 
-    /** @internal */
+    /**
+     * Prepare a looped track and put the final graph and duration into the command.
+     *
+     * @internal
+     */
     public function analyze(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         if ($this->loop) {
-            // Loop decoded samples, not compressed packets: encoder delay and
-            // end padding would otherwise introduce gaps on each repetition.
+            // We loop decoded samples rather than compressed packets, because encoder delay
+            // and end padding would otherwise introduce a gap on each repetition.
             $inputs = array_keys($command, '-i', true);
             $protocols = array_keys($command, '-protocol_whitelist', true);
             $options = array_slice($command, $protocols[1], $inputs[1] + 2 - $protocols[1]);
@@ -223,7 +294,9 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
             $prepared = 'audio-mix-loop.wav';
             $analyze([
                 $command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1',
-                ...$options, '-map', '0:a:0', '-af', 'atrim=duration='.CommandCompiler::timestamp($workspace->probe($this->added)->duration()).',asetpts=PTS-STARTPTS',
+                ...$options, '-map', '0:a:0', '-af',
+                'atrim=duration='.CommandCompiler::timestamp($workspace->probe($this->added)->duration())
+                    .',asetpts=PTS-STARTPTS',
                 '-c:a', 'pcm_f64le', '-f', 'wav', '-rf64', 'auto', $prepared,
             ], 'Audio loop preparation failed.');
             try {
@@ -233,7 +306,11 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
                     throw $exception;
                 }
 
-                throw MediaException::analysis('Looped audio must decode to nonempty samples.', 'artifact', $exception->diagnostics);
+                throw MediaException::analysis(
+                    'Looped audio must decode to nonempty samples.',
+                    'artifact',
+                    $exception->diagnostics,
+                );
             }
 
             if (! $duration) {

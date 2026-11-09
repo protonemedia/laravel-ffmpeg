@@ -7,9 +7,16 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\InputSource;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
-/** @internal A validated single raster image held for a bounded output. */
+/**
+ * A validated single raster image held for a bounded video output.
+ *
+ * @internal
+ */
 readonly class StillInput implements InputSource
 {
+    /**
+     * Create a new still image input instance.
+     */
     public function __construct(protected Media $image, protected int $frameRate)
     {
         if ($image->inputOptions() !== [] || $image->transportOptions() !== []) {
@@ -21,36 +28,57 @@ readonly class StillInput implements InputSource
         }
     }
 
+    /**
+     * Get a stable hash that identifies the image and frame rate.
+     */
     public function identity(): string
     {
         return hash('sha256', serialize([$this->image->identity(), $this->frameRate]));
     }
 
+    /**
+     * Get the file extension of the image.
+     */
     public function extension(): string
     {
         return $this->image->extension();
     }
 
+    /**
+     * Get the label that stands in for the image in metadata.
+     */
     public function label(): string
     {
         return '[still image]';
     }
 
+    /**
+     * Get the FFmpeg protocol whitelist for the staged image.
+     */
     public function protocols(): string
     {
         return 'file';
     }
 
+    /**
+     * Get the FFmpeg options that loop the image at the frame rate.
+     */
     public function options(): array
     {
         return ['-loop', '1', '-framerate', (string) $this->frameRate];
     }
 
+    /**
+     * Get the redactions of the image.
+     */
     public function redactions(): array
     {
         return $this->image->redactions();
     }
 
+    /**
+     * Stage the image and ensure it is a PNG or JPEG with even dimensions.
+     */
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         if ($resource) {
@@ -64,7 +92,10 @@ readonly class StillInput implements InputSource
         }
 
         if ($size[0] < 2 || $size[1] < 2 || $size[0] % 2 || $size[1] % 2) {
-            throw MediaException::staging("The still video image dimensions [{$size[0]}x{$size[1]}] must be positive and even.", 'image');
+            throw MediaException::staging(
+                "The still video image dimensions [{$size[0]}x{$size[1]}] must be positive and even.",
+                'image',
+            );
         }
 
         return $path;

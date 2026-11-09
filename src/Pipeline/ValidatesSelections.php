@@ -2,9 +2,17 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Pipeline;
 
-/** @internal Validates resolved stream types before any encoder starts. */
+/**
+ * Validates resolved stream types before any encoder starts.
+ *
+ * @internal
+ */
 interface ValidatesSelections
 {
-    /** @param  list<list<?string>>  $expected  Ordered stream types per output; null is a graph pad FFmpeg resolves. */
+    /**
+     * Ensure the resolved stream types are supported.
+     *
+     * @param  list<list<?string>>  $expected  Ordered stream types per output; null is a graph pad FFmpeg resolves.
+     */
     public function selections(array $expected): void;
 }

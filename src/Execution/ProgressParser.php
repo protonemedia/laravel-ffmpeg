@@ -6,19 +6,41 @@ use Closure;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 
-/** @internal */
+/**
+ * Parses FFmpeg's -progress output into throttled progress snapshots.
+ *
+ * @internal
+ */
 class ProgressParser
 {
+    /**
+     * The incomplete line carried over from the previous chunk.
+     */
     protected string $buffer = '';
 
+    /**
+     * The key and value pairs of the record being read.
+     */
     protected array $record = [];
 
+    /**
+     * The latest snapshot that has not been delivered yet.
+     */
     protected ?Progress $pending = null;
 
+    /**
+     * The high-resolution time of the last delivery, in nanoseconds.
+     */
     protected int $notifiedAt = 0;
 
+    /**
+     * The callback that receives each snapshot.
+     */
     protected readonly ?Closure $notify;
 
+    /**
+     * Create a new progress parser instance.
+     */
     public function __construct(
         protected readonly ?float $duration,
         protected readonly string $phase = Progress::ENCODING,
@@ -29,9 +51,13 @@ class ProgressParser
         $this->notify = $notify === null ? null : $notify(...);
     }
 
+    /**
+     * Push a chunk of FFmpeg progress output.
+     */
     public function push(string $chunk): void
     {
-        // Read bounded lines, even when a single callback contains many records.
+        // We will read the chunk line by line, even when a single callback holds many
+        // records, and cap each line's length so a malformed stream cannot grow memory.
         foreach (explode("\n", $chunk) as $index => $part) {
             if ($index > 0) {
                 $this->line(rtrim($this->buffer, "\r"));
@@ -46,6 +72,9 @@ class ProgressParser
         }
     }
 
+    /**
+     * Handle a single line of progress output.
+     */
     protected function line(string $line): void
     {
         [$key, $value] = array_pad(explode('=', $line, 2), 2, null);
@@ -70,12 +99,18 @@ class ProgressParser
         }
     }
 
-    /** Deliver the latest snapshot at most every 100 ms, and always once the process has ended. */
+    /**
+     * Deliver the latest snapshot to the callback.
+     *
+     * Snapshots are delivered at most every 100 ms, and always once the process has ended.
+     */
     public function notify(bool $final): void
     {
         $now = hrtime(true);
 
-        if ($this->notify === null || ! $this->pending instanceof Progress || (! $final && $now - $this->notifiedAt < 100000000)) {
+        if ($this->notify === null
+            || ! $this->pending instanceof Progress
+            || (! $final && $now - $this->notifiedAt < 100000000)) {
             return;
         }
 

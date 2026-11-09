@@ -4,9 +4,18 @@ namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
 use InvalidArgumentException;
 
-/** @internal Minimal label/resource lexer, not an FFmpeg filter grammar. */
+/**
+ * A minimal lexer for filter graph labels and resource placeholders.
+ *
+ * This is not a full FFmpeg filter grammar. FFmpeg itself validates filter syntax.
+ *
+ * @internal
+ */
 class FilterGraph
 {
+    /**
+     * Ensure the given filter expression is safe to pass to FFmpeg.
+     */
     public static function validateExpression(string $expression): void
     {
         if ($expression === '') {
@@ -22,7 +31,9 @@ class FilterGraph
         }
     }
 
-    /** Replace whole, unquoted named resource values with generated relative filenames. */
+    /**
+     * Replace whole, unquoted named resource values with generated relative filenames.
+     */
     public static function resources(string $expression, array $resources, array &$used): string
     {
         self::validateExpression($expression);
@@ -81,8 +92,13 @@ class FilterGraph
      *
      * @return array{string, string}
      */
-    protected static function resolvePlaceholder(string $filter, int $offset, string $filterName, bool $quoted, array $resources): array
-    {
+    protected static function resolvePlaceholder(
+        string $filter,
+        int $offset,
+        string $filterName,
+        bool $quoted,
+        array $resources,
+    ): array {
         if (! preg_match('/\A\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/', substr($filter, $offset), $match)) {
             throw new InvalidArgumentException('Resource placeholders must be identifiers such as {{font}}.');
         }
@@ -126,7 +142,9 @@ class FilterGraph
             || ! in_array($key[1], match ($filterName) {
                 'drawtext' => ['fontfile', 'textfile'], 'lut3d' => ['file'], 'subtitles' => ['filename'], default => [],
             }, true)) {
-            throw new InvalidArgumentException('Resource placeholders must be the value of a supported filter file option.');
+            throw new InvalidArgumentException(
+                'Resource placeholders must be the value of a supported filter file option.'
+            );
         }
 
         return $key[1];
@@ -135,8 +153,11 @@ class FilterGraph
     /**
      * Ensure the filter's other options cannot override or expand the given resource.
      */
-    protected static function ensureResourceOptionsAreCompatible(string $filter, string $filterName, array $resource): void
-    {
+    protected static function ensureResourceOptionsAreCompatible(
+        string $filter,
+        string $filterName,
+        array $resource,
+    ): void {
         $options = self::resourceOptions($filter);
 
         if ($filterName === 'subtitles' && isset($options['f'])) {
@@ -153,7 +174,11 @@ class FilterGraph
         }
     }
 
-    /** Resource-bearing filters use named, nonduplicate options only. */
+    /**
+     * Get the named options of a resource-bearing filter.
+     *
+     * Such filters may only use named options, and each option at most once.
+     */
     protected static function resourceOptions(string $filter): array
     {
         $arguments = substr($filter, strpos($filter, '=') + 1);
@@ -176,7 +201,11 @@ class FilterGraph
         return $options;
     }
 
-    /** Check label ownership; FFmpeg validates filter syntax and pad arity. */
+    /**
+     * Ensure every graph label has exactly one producer and one consumer.
+     *
+     * FFmpeg itself validates the filter syntax and pad arity.
+     */
     public static function validate(string $expression, int $inputs, array $mapped): void
     {
         $produced = [];
@@ -231,12 +260,18 @@ class FilterGraph
 
         foreach (array_unique([...array_keys($produced), ...array_keys($consumed)]) as $label) {
             if (($produced[$label] ?? 0) !== 1 || ($consumed[$label] ?? 0) !== 1) {
-                throw new InvalidArgumentException('Each graph label must have one producer and one consumer. Use split or asplit to branch.');
+                throw new InvalidArgumentException(
+                    'Each graph label must have one producer and one consumer. Use split or asplit to branch.'
+                );
             }
         }
     }
 
-    /** Split only outside FFmpeg quotes and backslash escapes. */
+    /**
+     * Split the expression at the given separators outside FFmpeg quotes and backslash escapes.
+     *
+     * @return list<array{string, string}>
+     */
     protected static function split(string $expression, string $separators): array
     {
         $parts = [];

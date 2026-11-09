@@ -2,9 +2,16 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
-/** @internal Audio encoder settings. Forwards to the PendingExport the builder holds in $export. */
+/**
+ * Forward the audio encoder settings to the pending export the builder holds in $export.
+ *
+ * @internal
+ */
 trait AudioCodec
 {
+    /**
+     * Set the audio encoder and bitrate.
+     */
     public function audio(?string $codec = null, mixed $bitrate = null): self
     {
         $this->export->audio($codec, $bitrate);
@@ -12,6 +19,9 @@ trait AudioCodec
         return $this;
     }
 
+    /**
+     * Set allowed encoder options for every output audio track.
+     */
     public function audioOptions(array $tokens): self
     {
         $this->export->audioOptions($tokens);
@@ -19,7 +29,11 @@ trait AudioCodec
         return $this;
     }
 
-    /** Override encoding in mapped output audio order, not input stream order. */
+    /**
+     * Override the encoding of one output audio track.
+     *
+     * Tracks count in mapped output order, not input stream order.
+     */
     public function audioStream(int $track, callable $configure): self
     {
         $this->export->audioStream($track, $configure);

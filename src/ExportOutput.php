@@ -8,15 +8,27 @@ use InvalidArgumentException;
 use League\Flysystem\WhitespacePathNormalizer;
 use LogicException;
 
+/**
+ * Configure one output of an export inside its output() callback.
+ */
 class ExportOutput
 {
     use Conditionable;
     use ConfiguresOutput;
 
+    /**
+     * The disk-relative destination of the output.
+     */
     protected string $path;
 
+    /**
+     * Indicates if the output settings are frozen because the export has started.
+     */
     protected bool $frozen = false;
 
+    /**
+     * Create a new export output instance.
+     */
     public function __construct(string $path, string|Filesystem $disk)
     {
         if ($path === '') {
@@ -42,7 +54,11 @@ class ExportOutput
         $this->disk = $disk;
     }
 
-    /** @internal Import trusted state produced by outputConfiguration(). */
+    /**
+     * Import the trusted settings produced by outputConfiguration().
+     *
+     * @internal
+     */
     public function configure(array $configuration): self
     {
         $this->assertOutputMutable();
@@ -60,6 +76,9 @@ class ExportOutput
         return $this;
     }
 
+    /**
+     * Ensure the output settings may still be changed.
+     */
     protected function assertOutputMutable(): void
     {
         if ($this->frozen) {
@@ -67,11 +86,17 @@ class ExportOutput
         }
     }
 
+    /**
+     * Freeze the output settings once the export starts.
+     */
     public function freeze(): void
     {
         $this->frozen = true;
     }
 
+    /**
+     * Get the disk name and path of the destination.
+     */
     public function destination(): array
     {
         return ['disk' => is_string($this->disk) ? $this->disk : null, 'path' => $this->path];

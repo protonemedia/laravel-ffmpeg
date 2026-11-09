@@ -6,20 +6,32 @@ use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
 
-/** @internal Stateless image-output rules shared by frame, frames, storyboard and waveform builders. */
+/**
+ * The image output rules shared by the frame, frames, storyboard and waveform builders.
+ *
+ * @internal
+ */
 class ImageOutput
 {
-    /** The encoder for a destination's image extension. */
+    /**
+     * Get the encoder for the image extension of the given destination.
+     */
     public static function codec(?string $path): string
     {
         return match (strtolower(pathinfo($path ?? '', PATHINFO_EXTENSION))) {
             'jpg', 'jpeg' => 'mjpeg',
             'png' => 'png',
-            default => throw new InvalidArgumentException('An image destination must have a jpg, jpeg, or png extension.'),
+            default => throw new InvalidArgumentException(
+                'An image destination must have a jpg, jpeg, or png extension.'
+            ),
         };
     }
 
-    /** Require image artifacts to decode as the format their extension names. Other roles pass unchanged. */
+    /**
+     * Ensure an image artifact decodes as the format its extension names.
+     *
+     * Artifacts with any other role pass unchanged.
+     */
     public static function validate(string $path, string $role): void
     {
         if ($role !== 'image') {
@@ -34,7 +46,11 @@ class ImageOutput
         }
     }
 
-    /** For operations that trim inside their own filter: the output itself carries no seek or duration. */
+    /**
+     * Get the outputs for an operation that trims inside its own filter.
+     *
+     * The output itself carries no seek or duration.
+     */
     public static function unclipped(array $settings, ?string $path): array
     {
         $settings['clip'] = null;
@@ -42,28 +58,40 @@ class ImageOutput
         return [new ExportOutput($path ?? 'inspection.mp4', $settings['disk'])->configure($settings)];
     }
 
-    /** A per-track -filter:v:N would replace, or be replaced by, the sampling filter appended to -filter:v. */
+    /**
+     * Ensure the output has no per-track video filters.
+     *
+     * A per-track -filter:v:N would replace, or be replaced by, the sampling filter appended to -filter:v.
+     */
     public static function assertNoTrackVideoFilters(ExportOutput $output): void
     {
         if (array_any($output->outputConfiguration()['videoStreams'], fn ($track): bool => isset($track['filters']))) {
-            throw new InvalidArgumentException('Sampled image operations do not support per-track video filters; add filters to the operation itself.');
+            throw new InvalidArgumentException(
+                'Sampled image operations do not support per-track video filters; add filters to the operation itself.'
+            );
         }
     }
 
-    /** Normalize a destination pattern and require exactly one frame-number placeholder in its filename. */
+    /**
+     * Normalize a destination pattern with exactly one frame number placeholder in its filename.
+     */
     public static function sequenceDestination(string $path): string
     {
         $path = new ExportOutput($path, 'local')->destination()['path'];
 
         if (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', $path)
             || str_contains(dirname($path), '%')) {
-            throw new InvalidArgumentException('A sequence destination requires exactly one %d or %01d to %09d placeholder in its filename.');
+            throw new InvalidArgumentException(
+                'A sequence destination requires exactly one %d or %01d to %09d placeholder in its filename.'
+            );
         }
 
         return $path;
     }
 
-    /** Turn a contiguous %08d sequence in the workspace into artifacts published at the output's pattern. */
+    /**
+     * Get the artifacts for a contiguous %08d sequence, published at the output's pattern.
+     */
     public static function sequenceArtifacts(ExportOutput $output, string $path, ?int $expected = null): array
     {
         $files = glob(str_replace('%08d', '*', $path)) ?: [];

@@ -2,10 +2,16 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
-/** @internal Video and audio fades. Forwards to the PendingExport the builder holds in $export. */
+/**
+ * Forward the video and audio fades to the pending export the builder holds in $export.
+ *
+ * @internal
+ */
 trait Fades
 {
-    /** Fade both video and audio by default, starting at zero seconds. */
+    /**
+     * Fade the video and audio in, starting at zero seconds by default.
+     */
     public function fadeIn(float $duration, float $start = 0, bool $video = true, bool $audio = true): self
     {
         $this->export->fadeIn($duration, $start, $video, $audio);
@@ -13,7 +19,9 @@ trait Fades
         return $this;
     }
 
-    /** Fade both video and audio by default; start is an explicit time in seconds. */
+    /**
+     * Fade the video and audio out from the given start time in seconds.
+     */
     public function fadeOut(float $duration, float $start, bool $video = true, bool $audio = true): self
     {
         $this->export->fadeOut($duration, $start, $video, $audio);

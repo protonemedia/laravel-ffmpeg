@@ -14,46 +14,100 @@ use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use RuntimeException;
 use Throwable;
 
-/** Compose trusted, completed v9 inventories. This never concatenates or rewrites media. */
+/**
+ * A composition of trusted, completed v9 HLS inventories under one new master playlist.
+ *
+ * The composition never concatenates or rewrites media.
+ */
 class PendingHlsMerge
 {
     use Macroable;
 
+    /**
+     * The disk to write the composed master to.
+     */
     protected ?string $disk = null;
 
-    // The composition state below belongs to a single save() and is reset before it returns.
+    // The composition state below belongs to a single save() call and is reset before it returns.
 
+    /**
+     * The disk the composed master is written to.
+     */
     protected ?string $destinationDisk = null;
 
-    /** @var array<string|int, array> */
+    /**
+     * The composed inventory files, keyed by resource ID.
+     *
+     * @var array<string|int, array>
+     */
     protected array $files = [];
 
-    /** @var array<string, int> */
+    /**
+     * The verified file sizes, keyed by resource ID.
+     *
+     * @var array<string, int>
+     */
     protected array $sizes = [];
 
-    /** @var array<string, list<string>> */
+    /**
+     * The composed paths, keyed by disk.
+     *
+     * @var array<string, list<string>>
+     */
     protected array $paths = [];
 
-    /** @var array<string, true> */
+    /**
+     * The resource IDs already claimed by a composed inventory.
+     *
+     * @var array<string, true>
+     */
     protected array $destinations = [];
 
+    /**
+     * The key references of the composed inventories.
+     */
     protected array $keys = [];
 
+    /**
+     * The playlist provenance of the composed inventories.
+     */
     protected array $provenance = [];
 
+    /**
+     * The composed variants, keyed by their aliased names.
+     */
     protected array $variants = [];
 
-    /** @var list<string> */
+    /**
+     * The directive and reference lines of the composed master.
+     *
+     * @var list<string>
+     */
     protected array $lines = [];
 
+    /**
+     * The highest HLS version declared by a composed master.
+     */
     protected int $version = 3;
 
+    /**
+     * The provenance of the first composed playlist that the others must match.
+     */
     protected ?array $clock = null;
 
+    /**
+     * The presentation start time of the first rendition of each stream type.
+     */
     protected array $clocks = [];
 
+    /**
+     * The segment end times of the first rendition of each stream type.
+     */
     protected array $timelines = [];
 
+    /**
+     * Create a new pending HLS merge instance.
+     */
     public function __construct(protected readonly array $presentations)
     {
         if (count($presentations) < 2) {
@@ -61,6 +115,9 @@ class PendingHlsMerge
         }
     }
 
+    /**
+     * Set the disk to write the composed master to.
+     */
     public function toDisk(string $disk): self
     {
         $this->disk = $disk;
@@ -68,6 +125,11 @@ class PendingHlsMerge
         return $this;
     }
 
+    /**
+     * Write the composed master playlist to the given path.
+     *
+     * The master is written to a fresh versioned key beside the given path.
+     */
     public function save(string $path): HlsExportResult
     {
         $this->resetComposition();
@@ -78,7 +140,8 @@ class PendingHlsMerge
                 $this->addPresentation($index, array_keys($this->presentations)[$index], $input, $path);
             }
 
-            // A fresh versioned key is the sole write, after every input and conflict check.
+            // The master is written to a fresh versioned key, and that write is the only one we
+            // make. It happens after every input and path conflict has been checked.
             $destination = $this->versionedDestination($path);
             $storage = Storage::disk($this->destinationDisk);
             $this->paths[$this->destinationDisk][] = $destination;
@@ -151,7 +214,8 @@ class PendingHlsMerge
         $this->addVariants($label, $inventory['variants']);
         $this->keys += $inventory['keys'];
         $this->provenance += $inventory['provenance'];
-        // The response parser validates every master reference before anything is published.
+        // Rendering the master through the response parser validates every one of its
+        // references, so nothing is published when a reference is invalid.
         $this->addMasterLines($presentation, $master, $index, $path);
     }
 
@@ -232,7 +296,9 @@ class PendingHlsMerge
         }
 
         if (abs($metadata['duration'] - $this->clock['duration']) > 0.1) {
-            throw new InvalidArgumentException('Composed VOD presentations require durations within 0.1 seconds of each other.');
+            throw new InvalidArgumentException(
+                'Composed VOD presentations require durations within 0.1 seconds of each other.'
+            );
         }
     }
 
@@ -283,7 +349,9 @@ class PendingHlsMerge
         foreach ($variants as $name => $ids) {
             $name = (is_string($label) ? $label.'-' : '').$name;
             if (isset($this->variants[$name])) {
-                throw new InvalidArgumentException('Composed variant names must be unique; use aliases to prefix them.');
+                throw new InvalidArgumentException(
+                    'Composed variant names must be unique; use aliases to prefix them.'
+                );
             }
 
             if (array_diff($ids, array_keys($this->files)) !== []) {
@@ -299,7 +367,10 @@ class PendingHlsMerge
      */
     protected function addMasterLines(HlsPresentation $presentation, array $master, int $index, string $path): void
     {
-        $masterText = $this->owned(fn (): string => $presentation->render($master, fn ($id): string => HlsPresentation::relativeUrl($presentation->file($id)['path'], $path)));
+        $masterText = $this->owned(fn (): string => $presentation->render(
+            $master,
+            fn ($id): string => HlsPresentation::relativeUrl($presentation->file($id)['path'], $path),
+        ));
         foreach (explode("\n", $masterText) as $line) {
             if (str_starts_with($line, '#EXT-X-VERSION:')) {
                 $this->version = max($this->version, (int) substr($line, 15));
@@ -321,8 +392,12 @@ class PendingHlsMerge
         $start = strpos($line, ':') + 1;
         $attributes = HlsPlaylist::attributes(substr($line, $start))
             ?? throw new InvalidArgumentException('Composition cannot safely combine this master directive.');
-        // Prefix only the group attribute values, from the end so earlier offsets stay valid.
-        foreach (array_reverse(array_intersect_key($attributes, array_flip(['GROUP-ID', 'AUDIO', 'SUBTITLES']))) as [$value, $offset]) {
+        // We will only prefix the group attribute values, and we will work from the end of the
+        // line so the offsets of the earlier attributes stay valid as the line grows.
+        foreach (array_reverse(array_intersect_key(
+            $attributes,
+            array_flip(['GROUP-ID', 'AUDIO', 'SUBTITLES']),
+        )) as [$value, $offset]) {
             if (str_starts_with($value, '"')) {
                 $line = substr_replace($line, '"p'.$index.'-', $start + $offset, 1);
             }
@@ -387,10 +462,22 @@ class PendingHlsMerge
     {
         $master = ['disk' => $this->destinationDisk, 'path' => $destination, 'role' => 'hls-master'];
         $this->files[] = $master;
-        $presentation = new HlsPresentation(array_values($this->files), HlsPresentation::id($this->destinationDisk, $destination), $this->keys, $this->variants, provenance: $this->provenance);
+        $presentation = new HlsPresentation(
+            array_values($this->files),
+            HlsPresentation::id($this->destinationDisk, $destination),
+            $this->keys,
+            $this->variants,
+            provenance: $this->provenance,
+        );
         $this->sizes[HlsPresentation::id($this->destinationDisk, $destination)] = strlen($text);
-        $generated = array_map(fn (array $file): GeneratedFile => new GeneratedFile(Storage::disk($file['disk']), $file['disk'], $file['path'],
-            $this->sizes[HlsPresentation::id($file['disk'], $file['path'])], $file['role'], $file === $master), array_values($this->files));
+        $generated = array_map(fn (array $file): GeneratedFile => new GeneratedFile(
+            Storage::disk($file['disk']),
+            $file['disk'],
+            $file['path'],
+            $this->sizes[HlsPresentation::id($file['disk'], $file['path'])],
+            $file['role'],
+            $file === $master,
+        ), array_values($this->files));
 
         return [$presentation, $generated];
     }
@@ -411,24 +498,40 @@ class PendingHlsMerge
                 throw new RuntimeException('Published size mismatch.');
             }
         } catch (Throwable) {
-            throw MediaException::publication('Cannot publish the composed HLS master.', 'transfer',
-                published: $published, destination: ['disk' => $this->destinationDisk, 'path' => $destination]);
+            throw MediaException::publication(
+                'Cannot publish the composed HLS master.',
+                'transfer',
+                published: $published,
+                destination: ['disk' => $this->destinationDisk, 'path' => $destination],
+            );
         }
     }
 
-    /** Report unowned references and invalid playlists as invalid composition input; storage failures stay MediaExceptions. */
+    /**
+     * Run the given read and report unowned references and invalid playlists as invalid composition input.
+     *
+     * Storage failures are rethrown as the original MediaException.
+     */
     protected function owned(Closure $read): mixed
     {
         try {
             return $read();
         } catch (ItemNotFoundException $exception) {
-            throw new InvalidArgumentException('Composition inventories must reference only files they own.', $exception->getCode(), previous: $exception);
+            throw new InvalidArgumentException(
+                'Composition inventories must reference only files they own.',
+                $exception->getCode(),
+                previous: $exception,
+            );
         } catch (MediaException $exception) {
             if ($exception->category !== 'artifact') {
                 throw $exception;
             }
 
-            throw new InvalidArgumentException('Composition requires valid HLS playlists: '.$exception->getMessage(), $exception->getCode(), previous: $exception);
+            throw new InvalidArgumentException(
+                'Composition requires valid HLS playlists: '.$exception->getMessage(),
+                $exception->getCode(),
+                previous: $exception,
+            );
         }
     }
 }

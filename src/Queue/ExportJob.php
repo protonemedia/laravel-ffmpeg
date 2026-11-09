@@ -18,6 +18,9 @@ use ProtoneMedia\LaravelFFMpeg\HlsExportResult;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
 use RuntimeException;
 
+/**
+ * The queued job that runs an export, a parallel HLS part, or the merge of those parts.
+ */
 class ExportJob implements ShouldBeEncrypted, ShouldQueue
 {
     use Batchable;
@@ -25,16 +28,34 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    /**
+     * The number of times the job may be attempted.
+     */
     public $tries = 1;
 
+    /**
+     * The number of seconds the job can run before timing out.
+     */
     public $timeout;
 
+    /**
+     * The number of seconds to wait before retrying the job.
+     */
     public $backoff = 0;
 
+    /**
+     * The maximum number of unhandled exceptions to allow before failing.
+     */
     public $maxExceptions;
 
+    /**
+     * Indicate if the job should be marked as failed on timeout.
+     */
     public $failOnTimeout = true;
 
+    /**
+     * Create a new job instance.
+     */
     public function __construct(
         public readonly string $exportId,
         public readonly ?ExportPlan $plan,
@@ -44,6 +65,9 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
         public readonly array $parts = [],
     ) {}
 
+    /**
+     * Execute the job.
+     */
     public function handle(): void
     {
         if ($this->batch()?->cancelled()) {
@@ -52,6 +76,8 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
             return;
         }
 
+        // A parallel HLS part that already wrote its inventory has finished before, so we
+        // will not encode it a second time when the job runs again.
         if ($this->manifestPath !== null && Storage::disk($this->manifestDisk)->exists($this->manifestPath)) {
             return;
         }
@@ -61,10 +87,17 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
             $export->cancelWhen(fn () => $this->batch()?->cancelled() ?? false);
             $result = $export->save($this->path);
         } else {
+            // Without a plan, this job is the finalizer of a parallel HLS export. We will read
+            // the inventory of every part, make sure the whole batch succeeded, and then merge
+            // the parts into a single master playlist.
             $presentations = [];
             $batchId = null;
             foreach ($this->parts as $part) {
-                $manifest = json_decode(Storage::disk($this->manifestDisk)->get($part), true, flags: JSON_THROW_ON_ERROR);
+                $manifest = json_decode(
+                    Storage::disk($this->manifestDisk)->get($part),
+                    true,
+                    flags: JSON_THROW_ON_ERROR,
+                );
                 $batchId ??= $manifest['batchId'];
                 if ($manifest['batchId'] !== $batchId) {
                     throw new RuntimeException('Queued HLS inventories must belong to the same batch.');
@@ -81,6 +114,8 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
             $result = new PendingHlsMerge($presentations)->toDisk($this->manifestDisk)->save($this->path);
         }
 
+        // A part stores its playback inventory privately for the finalizer to merge. Only
+        // the finalizer reports the completed export, so a part returns without an event.
         if ($this->manifestPath !== null) {
             if (! $result instanceof HlsExportResult
                 || ! Storage::disk($this->manifestDisk)->put($this->manifestPath, json_encode([
@@ -93,9 +128,14 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
         }
 
         if (config('laravel-ffmpeg.enable_events', true)) {
-            Event::dispatch(new QueuedExportCompleted($this->exportId, $result->files()->map->toArray()->all(),
-                $result instanceof HlsExportResult || ($result instanceof DashExportResult && $result->files()->contains('role', 'hls-master'))
-                    ? $result->playback()->toArray() : null));
+            Event::dispatch(new QueuedExportCompleted(
+                $this->exportId,
+                $result->files()->map->toArray()->all(),
+                $result instanceof HlsExportResult
+                    || ($result instanceof DashExportResult && $result->files()->contains('role', 'hls-master'))
+                    ? $result->playback()->toArray()
+                    : null,
+            ));
         }
     }
 }

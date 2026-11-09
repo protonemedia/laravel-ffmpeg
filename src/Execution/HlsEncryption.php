@@ -9,17 +9,36 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
 use SensitiveParameter;
 
-/** @internal One execution's private keys and bounded-memory segment encryption. */
+/**
+ * The private keys of one execution and the bounded-memory encryption of its segments.
+ *
+ * @internal
+ */
 class HlsEncryption
 {
+    /**
+     * The callback that resolves the URL of each key within a playlist.
+     */
     protected readonly Closure $keyUrl;
 
+    /**
+     * The key directory on the keys disk, with a trailing slash unless it is the root.
+     */
     protected readonly string $directory;
 
+    /**
+     * The generated keys and their artifacts, keyed by rotation index.
+     */
     protected array $keys = [];
 
+    /**
+     * The resolved key URLs, keyed by playlist and rotation index.
+     */
     protected array $urls = [];
 
+    /**
+     * Create a new HLS encryption instance.
+     */
     public function __construct(
         protected readonly string|Filesystem $keysDisk,
         callable $keyUrl,
@@ -36,7 +55,9 @@ class HlsEncryption
         }
 
         if ($key !== null && $rotateEvery !== null) {
-            throw new InvalidArgumentException('A fixed AES-128 key cannot be rotated; omit the key to generate rotated keys.');
+            throw new InvalidArgumentException(
+                'A fixed AES-128 key cannot be rotated; omit the key to generate rotated keys.'
+            );
         }
 
         if (! function_exists('openssl_encrypt')) {
@@ -48,6 +69,11 @@ class HlsEncryption
         $this->keyUrl = Closure::fromCallable($keyUrl);
     }
 
+    /**
+     * Encrypt the given segment with the key of its rotation index and get its key tag.
+     *
+     * @return array{path: string, tag: string}
+     */
     public function segment(string $path, int $sequence, string $playlist, string $variant): array
     {
         $index = $this->rotateEvery === null ? 0 : intdiv($sequence, $this->rotateEvery);
@@ -61,22 +87,34 @@ class HlsEncryption
 
             $target = new ExportOutput($this->directory.$filename, $this->keysDisk)->visibility('private');
             $this->keys[$index] = ['bytes' => $bytes, 'artifact' => [
-                'path' => $local, 'output' => 0, 'target' => $target, 'destination' => $target->destination(), 'role' => 'hls-key',
+                'path' => $local,
+                'output' => 0,
+                'target' => $target,
+                'destination' => $target->destination(),
+                'role' => 'hls-key',
             ]];
         }
 
         $key = $this->keys[$index];
         if (! isset($this->urls[$playlist][$index])) {
             $url = ($this->keyUrl)($key['artifact']['destination']['path'], $playlist, $variant, $index);
-            if (! is_string($url) || $url === '' || ! preg_match('//u', $url) || preg_match('/[\s\x00-\x1F\x7F-\x9F"\\\\#]/u', $url)
+            if (! is_string($url) || $url === '' || ! preg_match('//u', $url)
+                || preg_match('/[\s\x00-\x1F\x7F-\x9F"\\\\#]/u', $url)
                 || str_starts_with($url, '//') || parse_url($url) === false
                 || (($scheme = parse_url($url, PHP_URL_SCHEME)) !== null
-                    && (! in_array(strtolower($scheme), ['http', 'https'], true) || ! filter_var($url, FILTER_VALIDATE_URL)))) {
-                throw MediaException::validation('HLS key URLs require an HTTP(S) URL or a relative URI without quotes, backslashes, whitespace, or fragments.', 'artifact');
+                    && (! in_array(strtolower($scheme), ['http', 'https'], true)
+                        || ! filter_var($url, FILTER_VALIDATE_URL)))) {
+                throw MediaException::validation(
+                    'HLS key URLs require an HTTP(S) URL or a relative URI without quotes, backslashes, whitespace, or fragments.',
+                    'artifact',
+                );
             }
 
             if (in_array($url, $this->urls[$playlist] ?? [], true)) {
-                throw MediaException::validation('Rotated HLS keys must have distinct URLs within each playlist.', 'artifact');
+                throw MediaException::validation(
+                    'Rotated HLS keys must have distinct URLs within each playlist.',
+                    'artifact',
+                );
             }
 
             $this->urls[$playlist][$index] = $url;
@@ -110,7 +148,13 @@ class HlsEncryption
 
                 $length = intdiv(strlen($buffer), 16) * 16;
                 if ($length > 0) {
-                    $ciphertext = openssl_encrypt(substr($buffer, 0, $length), 'aes-128-cbc', $key['bytes'], OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $chain);
+                    $ciphertext = openssl_encrypt(
+                        substr($buffer, 0, $length),
+                        'aes-128-cbc',
+                        $key['bytes'],
+                        OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
+                        $chain,
+                    );
                     if ($ciphertext === false || fwrite($destination, $ciphertext) !== strlen($ciphertext)) {
                         throw MediaException::validation('Cannot encrypt the HLS segment.', 'filesystem');
                     }
@@ -129,14 +173,23 @@ class HlsEncryption
             }
         }
 
-        return ['path' => $encrypted, 'tag' => '#EXT-X-KEY:METHOD=AES-128,URI="'.$this->urls[$playlist][$index].'",IV=0x'.bin2hex($iv)];
+        return [
+            'path' => $encrypted,
+            'tag' => '#EXT-X-KEY:METHOD=AES-128,URI="'.$this->urls[$playlist][$index].'",IV=0x'.bin2hex($iv),
+        ];
     }
 
+    /**
+     * Get the key artifacts that must be published with the export.
+     */
     public function artifacts(): array
     {
         return array_column($this->keys, 'artifact');
     }
 
+    /**
+     * Get the key destinations, keyed by playlist and key URL.
+     */
     public function references(): array
     {
         $references = [];

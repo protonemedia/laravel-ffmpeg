@@ -19,7 +19,9 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 use Throwable;
 
-/** Tiled thumbnail sheets sampled at a fixed interval, with optional WebVTT cues. */
+/**
+ * Tiled thumbnail sheets sampled at a fixed interval, with optional WebVTT cues.
+ */
 class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, ValidatesArtifacts
 {
     use Concerns\Clips;
@@ -33,27 +35,59 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     use Concerns\VideoFilters;
     use Conditionable, Macroable;
 
+    /**
+     * The export pipeline this builder configures.
+     */
     protected readonly PendingExport $export;
 
+    /**
+     * The sampling interval in milliseconds.
+     */
     protected readonly int $interval;
 
+    /**
+     * The clipped media duration in microseconds, once the source has been probed.
+     */
     protected ?int $duration = null;
 
+    /**
+     * The number of thumbnails, once the source has been probed.
+     */
     protected ?int $frames = null;
 
+    /**
+     * The destination path of the WebVTT cues.
+     */
     protected ?string $vttPath = null;
 
+    /**
+     * The callback that resolves the URL of each sheet for the cues.
+     */
     protected ?Closure $imageUrl = null;
 
-    public function __construct(Media $media, string|Filesystem $disk, float $every, protected readonly int $columns, protected readonly int $rows, protected readonly int $margin, protected readonly int $padding)
-    {
+    /**
+     * Create a new pending storyboard instance.
+     */
+    public function __construct(
+        Media $media,
+        string|Filesystem $disk,
+        float $every,
+        protected readonly int $columns,
+        protected readonly int $rows,
+        protected readonly int $margin,
+        protected readonly int $padding,
+    ) {
         if (! is_finite($every) || $every < 0.001 || $every > intdiv(PHP_INT_MAX, 1000000)
             || abs($every * 1000 - round($every * 1000)) > 0.000001) {
-            throw new InvalidArgumentException("The storyboard interval [{$every}] must be a positive whole number of milliseconds.");
+            throw new InvalidArgumentException(
+                "The storyboard interval [{$every}] must be a positive whole number of milliseconds."
+            );
         }
 
         if ($columns < 1 || $rows < 1 || $columns > intdiv(PHP_INT_MAX, $rows)) {
-            throw new InvalidArgumentException("The storyboard grid [{$columns}x{$rows}] must have a positive, representable number of cells.");
+            throw new InvalidArgumentException(
+                "The storyboard grid [{$columns}x{$rows}] must have a positive, representable number of cells."
+            );
         }
 
         if ($margin < 0) {
@@ -69,9 +103,14 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         $this->export->map('0:V:0')->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
+    /**
+     * Write WebVTT cues for the sheets to the given path, optionally resolving sheet URLs with a callback.
+     */
     public function vtt(string $path, ?callable $imageUrl = null): self
     {
         $this->export->assertOutputMutable();
+
+        // We will validate the cue path with the same rules as any output destination.
         $path = new ExportOutput($path, 'local')->destination()['path'];
         if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'vtt') {
             throw new InvalidArgumentException('The cue destination must have a vtt extension.');
@@ -83,6 +122,9 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         return $this;
     }
 
+    /**
+     * Save the sheets using the given destination pattern.
+     */
     public function save(?string $path = null): ExportResult
     {
         if ($path === null) {
@@ -95,7 +137,11 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         return $this->export->save($path);
     }
 
-    /** @internal */
+    /**
+     * Record the clipped duration and thumbnail count, and get the duration for progress.
+     *
+     * @internal
+     */
     public function duration(array $metadata, ?float $default): float
     {
         $duration = $metadata[0]->duration();
@@ -114,13 +160,22 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         return $duration;
     }
 
-    /** @internal Bound individual thumbnails before tiling. Output-level -t would bound sheet timestamps, allowing thumbnails beyond a clip's end. */
+    /**
+     * Get the outputs without an output-level clip, so thumbnails are bounded before tiling.
+     * An output-level -t would bound sheet timestamps and allow thumbnails beyond a clip's end.
+     *
+     * @internal
+     */
     public function outputs(array $default, ?string $path): array
     {
         return ImageOutput::unclipped($this->export->outputConfiguration(), $path);
     }
 
-    /** @internal */
+    /**
+     * Trim, sample and tile the thumbnails into numbered sheets.
+     *
+     * @internal
+     */
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         $command = $default;
@@ -142,45 +197,74 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
             $command[$index + 1] .= ','.$filter;
         }
 
-        $sheets = $this->frames === null ? '[sheets]' : (string) (intdiv($this->frames - 1, $this->columns * $this->rows) + 1);
+        $sheets = $this->frames === null
+            ? '[sheets]'
+            : (string) (intdiv($this->frames - 1, $this->columns * $this->rows) + 1);
         array_splice($command, -1, 0, ['-f', 'image2', '-start_number', '1', '-frames:v', $sheets]);
 
         return $command;
     }
 
-    /** @internal */
+    /**
+     * Get the private path pattern that FFmpeg writes the sheets to.
+     *
+     * @internal
+     */
     public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
         return [$workspace->path.'/sheet-%08d.'.pathinfo($outputs[0]->destination()['path'], PATHINFO_EXTENSION)];
     }
 
-    /** @internal Sheets must tile one consistent thumbnail size before the cues describe them. */
+    /**
+     * Validate the sheets and write the WebVTT cues that describe them.
+     * Every sheet must tile one consistent thumbnail size before the cues can describe it.
+     *
+     * @internal
+     */
     public function artifacts(array $default, array $outputs, array $paths): array
     {
-        $artifacts = ImageOutput::sequenceArtifacts($outputs[0], $paths[0], intdiv($this->frames - 1, $this->columns * $this->rows) + 1);
+        $artifacts = ImageOutput::sequenceArtifacts(
+            $outputs[0],
+            $paths[0],
+            intdiv($this->frames - 1, $this->columns * $this->rows) + 1,
+        );
         $dimensions = null;
         $urls = [];
         foreach ($artifacts as $index => $artifact) {
             ImageOutput::validate($artifact['path'], 'image');
             [$width, $height] = getimagesize($artifact['path']);
+
+            // We will remove the margins and padding to recover the size of one thumbnail,
+            // which must divide the grid evenly and match the size on every other sheet.
             $width -= 2 * $this->margin + ($this->columns - 1) * $this->padding;
             $height -= 2 * $this->margin + ($this->rows - 1) * $this->padding;
             if ($width <= 0 || $height <= 0 || $width % $this->columns !== 0 || $height % $this->rows !== 0
-                || ($dimensions !== null && $dimensions !== [intdiv($width, $this->columns), intdiv($height, $this->rows)])) {
-                throw MediaException::validation('The storyboard sheets have inconsistent grid dimensions.', 'artifact');
+                || ($dimensions !== null
+                    && $dimensions !== [intdiv($width, $this->columns), intdiv($height, $this->rows)])) {
+                throw MediaException::validation(
+                    'The storyboard sheets have inconsistent grid dimensions.',
+                    'artifact',
+                );
             }
 
             $dimensions = [intdiv($width, $this->columns), intdiv($height, $this->rows)];
             if ($this->vttPath !== null) {
                 $key = $artifact['destination']['path'];
                 try {
-                    $url = $this->imageUrl instanceof Closure ? ($this->imageUrl)($key, $index + 1) : $this->relativeUrl($key);
+                    $url = $this->imageUrl instanceof Closure
+                        ? ($this->imageUrl)($key, $index + 1)
+                        : $this->relativeUrl($key);
                 } catch (Throwable) {
                     throw MediaException::validation('Cannot resolve storyboard image URLs.', 'artifact');
                 }
 
+                // Each URL is written into the cue text ahead of an #xywh fragment, so it must
+                // not contain whitespace or a fragment of its own.
                 if (! is_string($url) || $url === '' || preg_match('/[\x00-\x20\x7f#]/', $url)) {
-                    throw MediaException::validation('Storyboard image URLs require a nonempty URI without whitespace or a fragment.', 'artifact');
+                    throw MediaException::validation(
+                        'Storyboard image URLs require a nonempty URI without whitespace or a fragment.',
+                        'artifact',
+                    );
                 }
 
                 $urls[] = $url;
@@ -231,12 +315,19 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         return $artifacts;
     }
 
-    /** @internal */
+    /**
+     * Ensure the encoded file is a valid image.
+     *
+     * @internal
+     */
     public function artifact(string $path, string $role, int $size): void
     {
         ImageOutput::validate($path, $role);
     }
 
+    /**
+     * Get the URL of the given sheet relative to the cue file.
+     */
     protected function relativeUrl(string $key): string
     {
         $from = dirname($this->vttPath) === '.' ? [] : explode('/', dirname($this->vttPath));
@@ -249,6 +340,9 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         return implode('/', [...array_fill(0, count($from), '..'), ...array_map(rawurlencode(...), $to)]);
     }
 
+    /**
+     * Format the given milliseconds as a WebVTT timestamp.
+     */
     protected function timestamp(int $milliseconds): string
     {
         return sprintf('%02d:%02d:%02d.%03d', intdiv($milliseconds, 3600000), intdiv($milliseconds, 60000) % 60,

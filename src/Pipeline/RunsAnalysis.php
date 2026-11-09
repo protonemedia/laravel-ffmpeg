@@ -6,10 +6,16 @@ use Closure;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use ProtoneMedia\LaravelFFMpeg\ProcessResult;
 
-/** @internal Runs analysis passes after probing and may replace compiled command tokens before encoding. */
+/**
+ * Runs analysis passes after probing and may replace compiled command tokens before encoding.
+ *
+ * @internal
+ */
 interface RunsAnalysis
 {
     /**
+     * Run the analysis passes and get the command to encode with.
+     *
      * @param  Closure(list<string>, string): ProcessResult  $analyze  Runs one analysis pass with
      *                                                                 progress and throws the given message on failure.
      */

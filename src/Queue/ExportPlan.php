@@ -15,21 +15,35 @@ use SplObjectStorage;
 use Throwable;
 
 /**
- * @internal Trusted builder state, never request-supplied serialized data.
+ * The captured state of an export builder that a queue worker restores.
+ * It holds trusted builder state, never request-supplied serialized data.
+ *
+ * @internal
  *
  * @template T of Exportable
  */
 readonly class ExportPlan
 {
+    /**
+     * The encoded builder state.
+     */
     protected array $state;
 
-    /** @param T $export */
+    /**
+     * Create a new export plan instance.
+     *
+     * @param  T  $export
+     */
     public function __construct(Exportable $export)
     {
         $this->state = $this->encode($export, new SplObjectStorage);
     }
 
-    /** @return T */
+    /**
+     * Restore a fresh copy of the captured export builder.
+     *
+     * @return T
+     */
     public function restore(): Exportable
     {
         $objects = [];
@@ -37,20 +51,33 @@ readonly class ExportPlan
         return $this->decode($this->state, $objects);
     }
 
+    /**
+     * Encode the given value into serializable plan state.
+     */
     protected function encode(mixed $value, SplObjectStorage $objects): mixed
     {
-        if (is_resource($value) || $value instanceof Filesystem || $value instanceof File || $value instanceof \Symfony\Component\HttpFoundation\File\File) {
-            throw new InvalidArgumentException('Queued exports require durable named disks, not filesystem objects, uploads, local File inputs, or open streams.');
+        if (is_resource($value)
+            || $value instanceof Filesystem
+            || $value instanceof File
+            || $value instanceof \Symfony\Component\HttpFoundation\File\File) {
+            throw new InvalidArgumentException(
+                'Queued exports require durable named disks, not filesystem objects, uploads, local File inputs, or open streams.'
+            );
         }
 
         if (is_array($value)) {
-            return ['type' => 'array', 'items' => array_map(fn ($item): mixed => $this->encode($item, $objects), $value)];
+            return [
+                'type' => 'array',
+                'items' => array_map(fn ($item): mixed => $this->encode($item, $objects), $value),
+            ];
         }
 
         if ($value instanceof Closure) {
             $reflection = new ReflectionFunction($value);
             if ($reflection->getClosureThis() !== null) {
-                throw new InvalidArgumentException('Queued callbacks must be static closures capturing only scalar values or arrays.');
+                throw new InvalidArgumentException(
+                    'Queued callbacks must be static closures capturing only scalar values or arrays.'
+                );
             }
 
             $captures = $reflection->getStaticVariables();
@@ -62,7 +89,9 @@ readonly class ExportPlan
             try {
                 return ['type' => 'closure', 'value' => serialize(new SerializableClosure($value))];
             } catch (Throwable) {
-                throw new InvalidArgumentException('Queue callbacks must be serializable. Use static closures capturing scalar identifiers instead of request or service objects.');
+                throw new InvalidArgumentException(
+                    'Queue callbacks must be serializable. Use static closures capturing scalar identifiers instead of request or service objects.'
+                );
             }
         }
 
@@ -70,10 +99,14 @@ readonly class ExportPlan
             return $value;
         }
 
-        // Laravel's image transformations are scalar value objects that extend nothing.
-        if ((! str_starts_with($value::class, 'ProtoneMedia\\LaravelFFMpeg\\') && ! str_starts_with($value::class, 'Illuminate\\Image\\Transformations\\'))
+        // We only capture the package's own builders and Laravel's image transformations, which
+        // are scalar value objects that extend nothing. A workspace is a runtime service.
+        if ((! str_starts_with($value::class, 'ProtoneMedia\\LaravelFFMpeg\\')
+            && ! str_starts_with($value::class, 'Illuminate\\Image\\Transformations\\'))
             || $value instanceof Workspace) {
-            throw new InvalidArgumentException('Queued export plans accept fresh native builders and serializable callbacks, not runtime services.');
+            throw new InvalidArgumentException(
+                'Queued export plans accept fresh native builders and serializable callbacks, not runtime services.'
+            );
         }
 
         if ($objects->contains($value)) {
@@ -83,7 +116,7 @@ readonly class ExportPlan
         $id = count($objects);
         $objects[$value] = $id;
         $properties = [];
-        // Package classes extend nothing, so their own properties are the whole state.
+        // Package classes extend nothing, so their own properties hold their entire state.
         foreach (new ReflectionClass($value)->getProperties() as $property) {
             if (! $property->isStatic() && $property->isInitialized($value)) {
                 $properties[] = [$value::class, $property->name, $this->encode($property->getValue($value), $objects)];
@@ -93,6 +126,9 @@ readonly class ExportPlan
         return ['type' => 'object', 'class' => $value::class, 'id' => $id, 'properties' => $properties];
     }
 
+    /**
+     * Decode the given plan state, restoring shared objects as shared references.
+     */
     protected function decode(mixed $value, array &$objects): mixed
     {
         if (! is_array($value)) {

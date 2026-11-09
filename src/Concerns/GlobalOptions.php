@@ -2,9 +2,16 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
-/** @internal Pass allowed global FFmpeg options. Forwards to the PendingExport the builder holds in $export. */
+/**
+ * Forward the allowed global FFmpeg options to the pending export the builder holds in $export.
+ *
+ * @internal
+ */
 trait GlobalOptions
 {
+    /**
+     * Add allowed global FFmpeg options to the command.
+     */
     public function globalOptions(array $tokens): self
     {
         $this->export->globalOptions($tokens);

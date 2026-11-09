@@ -5,20 +5,34 @@ namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 use Illuminate\Support\Collection;
 use ProtoneMedia\LaravelFFMpeg\GeneratedFile;
 
-/** @internal Result files and process summaries. Forwards to the ExportResult the result holds in $export. */
+/**
+ * Forward the generated files and process summaries to the export result the result holds in $export.
+ *
+ * @internal
+ */
 trait ExportResultFiles
 {
-    /** @return Collection<int, GeneratedFile> */
+    /**
+     * Get the generated files.
+     *
+     * @return Collection<int, GeneratedFile>
+     */
     public function files(): Collection
     {
         return $this->export->files();
     }
 
+    /**
+     * Get the one generated file that matches the given path and disk.
+     */
     public function file(?string $path = null, ?string $disk = null): GeneratedFile
     {
         return $this->export->file($path, $disk);
     }
 
+    /**
+     * Get the summaries of the FFmpeg processes the export ran.
+     */
     public function processes(): Collection
     {
         return $this->export->processes();

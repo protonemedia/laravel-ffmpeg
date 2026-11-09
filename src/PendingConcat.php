@@ -12,7 +12,9 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 
-/** Joins sources end to end after conforming their geometry, frame rate and audio format. */
+/**
+ * Sources joined end to end after conforming their geometry, frame rate and audio format.
+ */
 class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOutputs
 {
     use Concerns\Clips;
@@ -21,13 +23,26 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     use Concerns\RunsExport;
     use Conditionable, Macroable;
 
+    /**
+     * The export pipeline this builder configures.
+     */
     protected readonly PendingExport $export;
 
+    /**
+     * The video filters that conform every source.
+     */
     protected ?array $videoConformance = null;
 
+    /**
+     * The sample rate, channel count and source channel that every audio track is conformed to.
+     */
     protected ?array $audioConformance = null;
 
-    /** @param array<Media> $sources */
+    /**
+     * Create a new pending concat instance.
+     *
+     * @param  array<Media>  $sources
+     */
     public function __construct(protected readonly array $sources, string|Filesystem $disk)
     {
         if (! array_is_list($sources)) {
@@ -44,22 +59,30 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
             $this->export->addInput($source);
         }
 
-        // addInput() falls back to the default disk; keep the first input's.
+        // Adding an input resets the destination to the default disk, so we will set the
+        // first input's disk again.
         $this->export->toDisk($disk);
     }
 
+    /**
+     * Conform the video of every source to the given dimensions and frame rate.
+     */
     public function conformVideo(int $width, int $height, int|float|string $frameRate, string $fit = 'contain'): self
     {
         $this->export->assertOutputMutable();
 
         if ($width <= 0 || $height <= 0 || $width % 2 || $height % 2) {
-            throw new InvalidArgumentException("The conform dimensions [{$width}x{$height}] must be positive and even.");
+            throw new InvalidArgumentException(
+                "The conform dimensions [{$width}x{$height}] must be positive and even."
+            );
         }
 
         if (! in_array($fit, ['contain', 'cover', 'stretch'], true)) {
             throw new InvalidArgumentException("The conform fit [{$fit}] must be contain, cover, or stretch.");
         }
 
+        // We will let a throwaway output compile the geometry and frame rate filters, so
+        // every source is sized exactly the way an ordinary export would size it.
         $geometry = new ExportOutput('conformance.mp4', $this->export->outputConfiguration()['disk']);
         match ($fit) {
             'stretch' => $geometry->resize($width, $height),
@@ -67,11 +90,16 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
             'contain' => $geometry->contain($width, $height),
         };
         $geometry->frameRate($frameRate);
-        $this->videoConformance = [...$geometry->outputConfiguration()['videoFilters'], 'setsar=1', 'setpts=PTS-STARTPTS'];
+        $this->videoConformance = [
+            ...$geometry->outputConfiguration()['videoFilters'], 'setsar=1', 'setpts=PTS-STARTPTS',
+        ];
 
         return $this;
     }
 
+    /**
+     * Conform the audio of every source to the given sample rate, channel count and source channel.
+     */
     public function conformAudio(int $sampleRate = 48000, int $channels = 2, ?int $channel = null): self
     {
         $this->export->assertOutputMutable();
@@ -93,13 +121,23 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return $this;
     }
 
-    public function video(?string $codec = null, mixed $bitrate = null, ?float $crf = null, ?string $preset = null): self
-    {
+    /**
+     * Set the video encoder, bitrate, CRF and preset.
+     */
+    public function video(
+        ?string $codec = null,
+        mixed $bitrate = null,
+        ?float $crf = null,
+        ?string $preset = null,
+    ): self {
         $this->export->video($codec, $bitrate, $crf, $preset);
 
         return $this;
     }
 
+    /**
+     * Set allowed encoder options for every output video track.
+     */
     public function videoOptions(array $tokens): self
     {
         $this->export->videoOptions($tokens);
@@ -107,6 +145,9 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return $this;
     }
 
+    /**
+     * Set the audio encoder and bitrate.
+     */
     public function audio(?string $codec = null, mixed $bitrate = null): self
     {
         $this->export->audio($codec, $bitrate);
@@ -114,6 +155,9 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return $this;
     }
 
+    /**
+     * Set allowed encoder options for every output audio track.
+     */
     public function audioOptions(array $tokens): self
     {
         $this->export->audioOptions($tokens);
@@ -121,6 +165,9 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return $this;
     }
 
+    /**
+     * Omit the audio from the output.
+     */
     public function withoutAudio(): self
     {
         $this->export->withoutAudio();
@@ -128,6 +175,9 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return $this;
     }
 
+    /**
+     * Set a container metadata tag on the output.
+     */
     public function metadata(string $key, string $value): self
     {
         $this->export->metadata($key, $value);
@@ -135,6 +185,9 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return $this;
     }
 
+    /**
+     * Set a metadata tag on the given output stream.
+     */
     public function streamMetadata(string|int $stream, string $key, string $value): self
     {
         $this->export->streamMetadata($stream, $key, $value);
@@ -142,6 +195,9 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return $this;
     }
 
+    /**
+     * Set the disposition flags of the given output stream.
+     */
     public function disposition(string|int $stream, string|array $flags): self
     {
         $this->export->disposition($stream, $flags);
@@ -149,6 +205,9 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return $this;
     }
 
+    /**
+     * Encode the output in two passes.
+     */
     public function twoPass(): self
     {
         $this->export->twoPass();
@@ -156,12 +215,19 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return $this;
     }
 
+    /**
+     * Save the joined media to the given path.
+     */
     public function save(?string $path = null): ExportResult
     {
         return $this->export->save($path);
     }
 
-    /** @internal */
+    /**
+     * Ensure the sources are conformed and map the joined streams to the output.
+     *
+     * @internal
+     */
     public function outputs(array $default, ?string $path): array
     {
         $settings = $this->export->outputConfiguration();
@@ -187,7 +253,9 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         }
 
         if (array_any($this->sources, fn (Media $source): bool => $source->inputOptions() !== [])) {
-            throw new InvalidArgumentException('Transcoded concat does not support input options that can change source timing.');
+            throw new InvalidArgumentException(
+                'Transcoded concat does not support input options that can change source timing.'
+            );
         }
 
         $settings['maps'] = ['[concat_video]'];
@@ -202,7 +270,11 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         return [new ExportOutput($path ?? 'inspection.mp4', $settings['disk'])->configure($settings)];
     }
 
-    /** @internal */
+    /**
+     * Build the graph that conforms every source and joins them.
+     *
+     * @internal
+     */
     public function graph(): string
     {
         $branches = [];
@@ -214,17 +286,24 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
             if ($this->audioConformance !== null) {
                 ['sampleRate' => $rate, 'channels' => $channels, 'channel' => $channel] = $this->audioConformance;
                 $pan = $channel === null ? '' : 'pan=mono|c0=c'.$channel.',';
-                $branches[] = '['.$index.':a:0]'.$pan.'aresample='.$rate.':async=1:first_pts=0,aformat=sample_rates='.$rate.':channel_layouts='.($channels === 1 ? 'mono' : 'stereo').'[concat_a'.$index.']';
+                $branches[] = '['.$index.':a:0]'.$pan.'aresample='.$rate
+                    .':async=1:first_pts=0,aformat=sample_rates='.$rate
+                    .':channel_layouts='.($channels === 1 ? 'mono' : 'stereo').'[concat_a'.$index.']';
                 $pads[] = '[concat_a'.$index.']';
             }
         }
 
-        $branches[] = implode('', $pads).'concat=n='.count($this->sources).':v=1:a='.($this->audioConformance === null ? '0[concat_video]' : '1[concat_video][concat_audio]');
+        $branches[] = implode('', $pads).'concat=n='.count($this->sources).':v=1:a='
+            .($this->audioConformance === null ? '0[concat_video]' : '1[concat_video][concat_audio]');
 
         return implode(';', $branches);
     }
 
-    /** @internal Validates every source; filter frame rounding and audio tails keep progress indeterminate. */
+    /**
+     * Ensure every source can be joined, leaving progress indeterminate.
+     *
+     * @internal
+     */
     public function duration(array $metadata, ?float $default): ?float
     {
         foreach ($metadata as $item) {
@@ -247,16 +326,23 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
                 }
 
                 if ($channel !== null && ($audio->channels() === null || $channel >= $audio->channels())) {
-                    throw MediaException::probing("Every concat source requires the audio channel [{$channel}].", 'mapping');
+                    throw MediaException::probing(
+                        "Every concat source requires the audio channel [{$channel}].",
+                        'mapping',
+                    );
                 }
 
                 if (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0) {
-                    throw MediaException::probing('Every concat source requires audio with a nonnegative origin.', 'metadata');
+                    throw MediaException::probing(
+                        'Every concat source requires audio with a nonnegative origin.',
+                        'metadata',
+                    );
                 }
             }
         }
 
-        // Filter frame rounding and audio tails can alter the sum; leave progress indeterminate.
+        // Filter frame rounding and audio tails can change the summed duration, so we will
+        // leave progress indeterminate.
         return null;
     }
 }

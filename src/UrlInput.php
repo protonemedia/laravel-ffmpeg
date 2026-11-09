@@ -9,14 +9,23 @@ use ProtoneMedia\LaravelFFMpeg\Execution\InputSource;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use Throwable;
 
-/** @internal */
+/**
+ * A media input at an HTTP(S) URL, read directly by FFmpeg or downloaded first.
+ *
+ * @internal
+ */
 readonly class UrlInput implements InputSource
 {
+    /**
+     * Create a new URL input instance.
+     */
     public function __construct(protected string $url, protected array $headers, public bool $download)
     {
         $parts = parse_url($url);
 
-        if ($parts === false || ! in_array($parts['scheme'] ?? '', ['http', 'https'], true) || empty($parts['host'])) {
+        if ($parts === false
+            || ! in_array($parts['scheme'] ?? '', ['http', 'https'], true)
+            || empty($parts['host'])) {
             throw new InvalidArgumentException('The media URL must be an absolute HTTP(S) URL.');
         }
 
@@ -33,7 +42,9 @@ readonly class UrlInput implements InputSource
         }
 
         if ($headers !== [] && ! $download) {
-            throw new InvalidArgumentException('Per-input HTTP headers require download: true to keep credentials out of process arguments.');
+            throw new InvalidArgumentException(
+                'Per-input HTTP headers require download: true to keep credentials out of process arguments.'
+            );
         }
 
         foreach ($headers as $name => $value) {
@@ -47,36 +58,57 @@ readonly class UrlInput implements InputSource
         }
     }
 
+    /**
+     * Get the redacted properties to show when the input is dumped.
+     */
     public function __debugInfo(): array
     {
         return ['url' => '[url]', 'headers' => '[redacted]', 'download' => $this->download];
     }
 
+    /**
+     * Get the URL of the input.
+     */
     public function url(): string
     {
         return $this->url;
     }
 
+    /**
+     * Get a stable hash that identifies the URL, headers and download mode.
+     */
     public function identity(): string
     {
         return hash('sha256', serialize([$this->url, $this->headers, $this->download]));
     }
 
+    /**
+     * Get the file extension of the URL path.
+     */
     public function extension(): string
     {
         return pathinfo(parse_url($this->url, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION);
     }
 
+    /**
+     * Get the redacted label that stands in for the URL in metadata.
+     */
     public function label(): string
     {
         return '[url]';
     }
 
+    /**
+     * Get the FFmpeg protocol whitelist for the staged input.
+     */
     public function protocols(): string
     {
         return $this->download ? 'file' : (str_starts_with($this->url, 'https:') ? 'https,tls,tcp' : 'http,tcp');
     }
 
+    /**
+     * Get the FFmpeg transport options for direct HTTP(S) input.
+     */
     public function options(): array
     {
         if ($this->download) {
@@ -93,6 +125,9 @@ readonly class UrlInput implements InputSource
         return $options;
     }
 
+    /**
+     * Get the URL and its secret query values to replace in commands and diagnostics.
+     */
     public function redactions(): array
     {
         if (! config('laravel-ffmpeg.redact_credentials')) {
@@ -103,8 +138,13 @@ readonly class UrlInput implements InputSource
     }
 
     /**
-     * @internal The whole query, plus each value whose name looks secret or that is long enough to be a token.
-     * Short values under ordinary names, such as dl=1, also occur inside numbers and metadata.
+     * Get the redactions for the given query string.
+     *
+     * These cover the whole query, plus each value whose name looks secret or that is long enough
+     * to be a token. Short values under ordinary names, such as dl=1, are kept because they also
+     * occur inside numbers and metadata.
+     *
+     * @internal
      */
     public static function queryRedactions(?string $query): array
     {
@@ -117,7 +157,10 @@ readonly class UrlInput implements InputSource
         foreach (explode('&', $query) as $parameter) {
             [$name, $value] = explode('=', $parameter, 2) + [1 => ''];
 
-            if ($value !== '' && (strlen($value) >= 16 || preg_match('/token|sig|key|auth|pass|secret|credential|policy/i', rawurldecode($name)))) {
+            if ($value !== '' && (
+                strlen($value) >= 16
+                || preg_match('/token|sig|key|auth|pass|secret|credential|policy/i', rawurldecode($name))
+            )) {
                 $redactions[$value] = $redactions[rawurldecode($value)] = '[redacted]';
             }
         }
@@ -125,6 +168,9 @@ readonly class UrlInput implements InputSource
         return $redactions;
     }
 
+    /**
+     * Stage the input, downloading it into the workspace when required.
+     */
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
         if (! $resource && in_array(strtolower($this->extension()), Media::MANIFEST_EXTENSIONS, true)) {
@@ -147,8 +193,8 @@ readonly class UrlInput implements InputSource
                 throw MediaException::staging('Cannot protect the downloaded media file.', 'filesystem');
             }
 
-            // Do not follow redirects with reusable credentials, decompress bytes,
-            // or accumulate a response body in PHP memory.
+            // We will not follow redirects with reusable credentials, decompress the bytes,
+            // or accumulate the response body in PHP memory.
             $response = Http::withHeaders($this->headers)->connectTimeout(10)->timeout(60)
                 ->withOptions(['allow_redirects' => false, 'decode_content' => false, 'verify' => true])
                 ->sink($output)->get($this->url);
@@ -175,7 +221,8 @@ readonly class UrlInput implements InputSource
                 throw $throwable;
             }
 
-            // HTTP exceptions can contain signed URLs, headers and response bodies.
+            // We drop the original exception, since HTTP exceptions can contain signed URLs,
+            // headers and response bodies.
             throw MediaException::staging('Cannot download the HTTP media input.', 'transfer');
         } finally {
             fclose($output);

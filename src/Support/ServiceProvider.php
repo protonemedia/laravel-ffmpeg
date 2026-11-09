@@ -6,8 +6,14 @@ use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use ProtoneMedia\LaravelFFMpeg\Console\DoctorCommand;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPlayback;
 
+/**
+ * Register the FFMpeg services, configuration and console commands.
+ */
 class ServiceProvider extends BaseServiceProvider
 {
+    /**
+     * Bootstrap the package services.
+     */
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
@@ -18,6 +24,9 @@ class ServiceProvider extends BaseServiceProvider
         }
     }
 
+    /**
+     * Register the package services.
+     */
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../../config/config.php', 'laravel-ffmpeg');
