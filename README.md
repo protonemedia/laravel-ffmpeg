@@ -718,8 +718,8 @@ $second = FFMpeg::disk('archive')
 
 // Different dimensions, frame rates, or audio layouts: encode a common format.
 $first->concatTranscoded($second)
-    ->normalizeVideo(1280, 720, frameRate: 30, fit: 'contain')
-    ->normalizeAudio(sampleRate: 48000, channels: 2)
+    ->conformVideo(1280, 720, frameRate: 30, fit: 'contain')
+    ->conformAudio(sampleRate: 48000, channels: 2)
     ->video('libx264')
     ->audio('aac')
     ->toDisk('videos')
@@ -733,7 +733,7 @@ $first->concat($second)
     ->save('joined.mkv');
 ```
 
-`concatTranscoded()` requires a video policy and either `normalizeAudio()` or `withoutAudio()`. `contain` adds black bars; `cover` crops; `stretch` changes the aspect ratio. It selects each source's first motion-video and audio streams and preserves delayed audio through silence. Sources must be finite with zero container/video origins. Audio normalization requires audio in every source; it does not invent a track for a silent clip. The helper owns one output and its graph, so it has no filter, map, or graph methods, and stream copy is rejected. See the [concat reference](REWRITE.md#concatenation) for limits and raw graphs.
+`concatTranscoded()` requires a video policy and either `conformAudio()` or `withoutAudio()`. `contain` adds black bars; `cover` crops; `stretch` changes the aspect ratio. It selects each source's first motion-video and audio streams and preserves delayed audio through silence. Sources must be finite with zero container/video origins. Audio normalization requires audio in every source; it does not invent a track for a silent clip. The helper owns one output and its graph, so it has no filter, map, or graph methods, and stream copy is rejected. See the [concat reference](REWRITE.md#concatenation) for limits and raw graphs.
 
 Copy concatenation requires compatible streams and never falls back to transcoding. Transcoded concatenation decodes and encodes every clip. Neither method combines source chapters. Both publish to the first input's output disk unless you call `toDisk()`.
 

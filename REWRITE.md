@@ -870,24 +870,24 @@ $second = FFMpeg::disk('archive')
     ->open('second.mp4');
 
 $first->concatTranscoded($second)
-    ->normalizeVideo(1280, 720, frameRate: 30, fit: 'contain')
-    ->normalizeAudio(sampleRate: 48000, channels: 2)
+    ->conformVideo(1280, 720, frameRate: 30, fit: 'contain')
+    ->conformAudio(sampleRate: 48000, channels: 2)
     ->video('libx264', crf: 23)
     ->audio('aac', bitrate: '128k')
     ->toDisk('videos')
     ->save('normalized.mp4');
 
 $first->concatTranscoded($second)
-    ->normalizeVideo(1280, 720, frameRate: 30, fit: 'cover')
+    ->conformVideo(1280, 720, frameRate: 30, fit: 'cover')
     ->withoutAudio()
     ->video('libx264')
     ->toDisk('videos')
     ->save('silent.mp4');
 ```
 
-`concatTranscoded()` accepts at least one following source and returns a single-output export builder, not a media descriptor. Publication defaults to the first input's output disk. `normalizeVideo()` is required and takes positive even dimensions, a positive numeric or rational frame rate, and `contain`, `cover`, or `stretch`. It produces square pixels. `contain` adds centered black padding; `cover` crops centrally; `stretch` uses the exact dimensions without preserving aspect ratio.
+`concatTranscoded()` accepts at least one following source and returns a single-output export builder, not a media descriptor. Publication defaults to the first input's output disk. `conformVideo()` is required and takes positive even dimensions, a positive numeric or rational frame rate, and `contain`, `cover`, or `stretch`. It produces square pixels. `contain` adds centered black padding; `cover` crops centrally; `stretch` uses the exact dimensions without preserving aspect ratio.
 
-Choose either `normalizeAudio()` or `withoutAudio()`. Audio normalization defaults to 48000 Hz and two channels. `channels` accepts one or two; optional `channel` selects a zero-based source channel before conversion. For example, `normalizeAudio(16000, channels: 1, channel: 0)` keeps the first channel instead of mixing channels. Every source must have a first audio stream when normalization is enabled. Resampling inserts silence for its original nonnegative delay relative to video. The helper does not create audio tracks for sources without audio.
+Choose either `conformAudio()` or `withoutAudio()`. `conformAudio()` defaults to 48000 Hz and two channels. `channels` accepts one or two; optional `channel` selects a zero-based source channel before conversion. For example, `conformAudio(16000, channels: 1, channel: 0)` keeps the first channel instead of mixing channels. Every source must have a first audio stream when normalization is enabled. Resampling inserts silence for its original nonnegative delay relative to video. The helper does not create audio tracks for sources without audio.
 
 Each source must have a finite positive duration, a zero container origin, and a zero first motion-video origin. Missing origins and input options are rejected. Selection uses the first motion-video and first audio streams, not cover art. The helper owns the graph and output maps and omits global metadata and chapters. The builder has no map, source-metadata, chapter, extra-input, graph, output-callback, or root filter methods, and it rejects stream copy. Use ordinary `export()->filterComplex()` for other policies. Every clip is decoded and encoded; frame rounding and audio tails can affect the total duration, so percentage remains unknown.
 
@@ -908,7 +908,7 @@ Stream order, codecs, profiles, time bases, geometry, pixel formats, sample rate
 
 The operation writes its own relative-name manifest with declared durations. Safe generated aliases isolate FFconcat filename syntax from caller keys, including quotes, Unicode, and newlines in local filenames. Aliases use private symlinks where supported, otherwise private copies. Cleanup does not modify or delete source files. Original chapter timelines are not combined. Results and publication use the ordinary export pipeline.
 
-Custom normalization policies use the composition API. This video-only graph stretches both inputs, sets square pixels and a common frame rate, resets video timestamps, and excludes audio:
+Custom conformance policies use the composition API. This video-only graph stretches both inputs, sets square pixels and a common frame rate, resets video timestamps, and excludes audio:
 
 ```php
 $export = $first->export();

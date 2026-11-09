@@ -11,7 +11,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 
-/** Joins sources end to end after normalizing their geometry, frame rate and audio format. */
+/** Joins sources end to end after conforming their geometry, frame rate and audio format. */
 final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOutputs
 {
     use Concerns\Clips;
@@ -22,9 +22,9 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
 
     private readonly PendingExport $export;
 
-    private ?array $normalization = null;
+    private ?array $videoConformance = null;
 
-    private ?array $audioNormalization = null;
+    private ?array $audioConformance = null;
 
     /** @param array<Media> $sources */
     public function __construct(private readonly array $sources, string|Filesystem $disk)
@@ -43,36 +43,36 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
         $this->export->toDisk($disk);
     }
 
-    public function normalizeVideo(int $width, int $height, int|float|string $frameRate, string $fit = 'contain'): self
+    public function conformVideo(int $width, int $height, int|float|string $frameRate, string $fit = 'contain'): self
     {
         $this->export->assertOutputMutable();
 
         if ($width <= 0 || $height <= 0 || $width % 2 || $height % 2
             || ! in_array($fit, ['contain', 'cover', 'stretch'], true)) {
-            throw new InvalidArgumentException('Normalization requires positive even dimensions, a positive frame rate, and contain, cover, or stretch.');
+            throw new InvalidArgumentException('conformVideo() requires positive even dimensions, a positive frame rate, and contain, cover, or stretch.');
         }
 
-        $geometry = new ExportOutput('normalization.mp4', $this->export->outputConfiguration()['disk']);
+        $geometry = new ExportOutput('conformance.mp4', $this->export->outputConfiguration()['disk']);
         match ($fit) {
             'stretch' => $geometry->resize($width, $height),
             'cover' => $geometry->cover($width, $height),
             'contain' => $geometry->contain($width, $height),
         };
         $geometry->frameRate($frameRate);
-        $this->normalization = [...$geometry->outputConfiguration()['videoFilters'], 'setsar=1', 'setpts=PTS-STARTPTS'];
+        $this->videoConformance = [...$geometry->outputConfiguration()['videoFilters'], 'setsar=1', 'setpts=PTS-STARTPTS'];
 
         return $this;
     }
 
-    public function normalizeAudio(int $sampleRate = 48000, int $channels = 2, ?int $channel = null): self
+    public function conformAudio(int $sampleRate = 48000, int $channels = 2, ?int $channel = null): self
     {
         $this->export->assertOutputMutable();
 
         if ($sampleRate <= 0 || ! in_array($channels, [1, 2], true) || ($channel !== null && $channel < 0)) {
-            throw new InvalidArgumentException('Audio normalization requires a positive sample rate, mono or stereo, and a nonnegative channel index.');
+            throw new InvalidArgumentException('conformAudio() requires a positive sample rate, mono or stereo, and a nonnegative channel index.');
         }
 
-        $this->audioNormalization = ['sampleRate' => $sampleRate, 'channels' => $channels, 'channel' => $channel];
+        $this->audioConformance = ['sampleRate' => $sampleRate, 'channels' => $channels, 'channel' => $channel];
 
         return $this;
     }
@@ -150,13 +150,13 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
     {
         $settings = $this->export->outputConfiguration();
 
-        if ($this->normalization === null || ($this->audioNormalization === null && ! $settings['omitAudio'])) {
-            throw new InvalidArgumentException('Choose normalizeVideo() and either normalizeAudio() or withoutAudio().');
+        if ($this->videoConformance === null || ($this->audioConformance === null && ! $settings['omitAudio'])) {
+            throw new InvalidArgumentException('Choose conformVideo() and either conformAudio() or withoutAudio().');
         }
 
-        if (($settings['omitAudio'] && $this->audioNormalization !== null)
+        if (($settings['omitAudio'] && $this->audioConformance !== null)
             || ($settings['video']['codec'] ?? null) === 'copy' || ($settings['audio']['codec'] ?? null) === 'copy') {
-            throw new InvalidArgumentException('Transcoded concat requires transcoded video and audio, and either normalizeAudio() or withoutAudio(), not both.');
+            throw new InvalidArgumentException('Transcoded concat requires transcoded video and audio, and either conformAudio() or withoutAudio(), not both.');
         }
 
         if (array_any($this->sources, fn (Media $source): bool => $source->inputOptions() !== [])) {
@@ -165,7 +165,7 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
 
         $settings['maps'] = ['[concat_video]'];
 
-        if ($this->audioNormalization !== null) {
+        if ($this->audioConformance !== null) {
             $settings['maps'][] = '[concat_audio]';
         }
 
@@ -181,18 +181,18 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
         $branches = [];
         $pads = [];
         foreach ($this->sources as $index => $source) {
-            $branches[] = '['.$index.':V:0]'.implode(',', $this->normalization ?? []).'[concat_v'.$index.']';
+            $branches[] = '['.$index.':V:0]'.implode(',', $this->videoConformance ?? []).'[concat_v'.$index.']';
             $pads[] = '[concat_v'.$index.']';
 
-            if ($this->audioNormalization !== null) {
-                ['sampleRate' => $rate, 'channels' => $channels, 'channel' => $channel] = $this->audioNormalization;
+            if ($this->audioConformance !== null) {
+                ['sampleRate' => $rate, 'channels' => $channels, 'channel' => $channel] = $this->audioConformance;
                 $pan = $channel === null ? '' : 'pan=mono|c0=c'.$channel.',';
                 $branches[] = '['.$index.':a:0]'.$pan.'aresample='.$rate.':async=1:first_pts=0,aformat=sample_rates='.$rate.':channel_layouts='.($channels === 1 ? 'mono' : 'stereo').'[concat_a'.$index.']';
                 $pads[] = '[concat_a'.$index.']';
             }
         }
 
-        $branches[] = implode('', $pads).'concat=n='.count($this->sources).':v=1:a='.($this->audioNormalization === null ? '0[concat_video]' : '1[concat_video][concat_audio]');
+        $branches[] = implode('', $pads).'concat=n='.count($this->sources).':v=1:a='.($this->audioConformance === null ? '0[concat_video]' : '1[concat_video][concat_audio]');
 
         return implode(';', $branches);
     }
@@ -211,9 +211,9 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
 
             PendingExport::assertZeroOrigins($item, 'Transcoded concat');
 
-            if ($this->audioNormalization !== null) {
+            if ($this->audioConformance !== null) {
                 $audio = $item->audio();
-                $channel = $this->audioNormalization['channel'];
+                $channel = $this->audioConformance['channel'];
 
                 if ($audio === null || ($channel !== null && ($audio->channels() === null || $channel >= $audio->channels()))) {
                     throw new MediaException('Every concat source requires audio with the requested channel.', 'probing', 'mapping');

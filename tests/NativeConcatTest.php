@@ -64,8 +64,8 @@ class NativeConcatTest extends TestCase
         $first = FFMpeg::disk('missing')->open('first.mp4');
         $second = FFMpeg::disk('missing')->open('second.mp4');
         foreach (['contain', 'cover', 'stretch'] as $fit) {
-            $export = $first->concatTranscoded($second)->normalizeVideo(128, 96, '30000/1001', $fit)
-                ->normalizeAudio()->video('libx264');
+            $export = $first->concatTranscoded($second)->conformVideo(128, 96, '30000/1001', $fit)
+                ->conformAudio()->video('libx264');
             $command = $export->inspect();
             $this->assertSame($command, $export->inspect());
             $graph = $command[array_search('-filter_complex', $command) + 1];
@@ -97,24 +97,24 @@ class NativeConcatTest extends TestCase
         $first = FFMpeg::disk('missing')->open('first.mp4');
         $second = FFMpeg::disk('missing')->open('second.mp4');
         $new = fn () => $first->concatTranscoded($second);
-        $ready = fn () => $new()->normalizeVideo(128, 96, 10)->withoutAudio();
+        $ready = fn () => $new()->conformVideo(128, 96, 10)->withoutAudio();
         foreach ([
             fn () => $first->concatTranscoded(),
             fn () => $new()->inspect(),
-            fn () => $new()->normalizeVideo(128, 96, 10)->inspect(),
-            fn () => $new()->normalizeAudio()->inspect(),
+            fn () => $new()->conformVideo(128, 96, 10)->inspect(),
+            fn () => $new()->conformAudio()->inspect(),
             fn () => $ready()->video('copy')->inspect(),
             fn () => $ready()->audio('copy')->inspect(),
-            fn () => $ready()->normalizeAudio()->inspect(),
-            fn () => $new()->normalizeVideo(127, 96, 10),
-            fn () => $new()->normalizeVideo(128, 96, '10/0'),
-            fn () => $new()->normalizeVideo(128, 96, '10;null'),
-            fn () => $new()->normalizeVideo(128, 96, NAN),
-            fn () => $new()->normalizeVideo(128, 96, INF),
-            fn () => $new()->normalizeVideo(128, 96, 10, 'unknown'),
-            fn () => $new()->normalizeAudio(0),
-            fn () => $new()->normalizeAudio(channels: 3),
-            fn () => $new()->normalizeAudio(channel: -1),
+            fn () => $ready()->conformAudio()->inspect(),
+            fn () => $new()->conformVideo(127, 96, 10),
+            fn () => $new()->conformVideo(128, 96, '10/0'),
+            fn () => $new()->conformVideo(128, 96, '10;null'),
+            fn () => $new()->conformVideo(128, 96, NAN),
+            fn () => $new()->conformVideo(128, 96, INF),
+            fn () => $new()->conformVideo(128, 96, 10, 'unknown'),
+            fn () => $new()->conformAudio(0),
+            fn () => $new()->conformAudio(channels: 3),
+            fn () => $new()->conformAudio(channel: -1),
         ] as $invalid) {
             try {
                 $invalid();
@@ -153,7 +153,7 @@ class NativeConcatTest extends TestCase
 
         // Without toDisk(), both helpers publish to the first input's disk, not the application default.
         $second->concat($first)->export()->video('copy')->save('copy-default.mp4');
-        $second->concatTranscoded($first)->normalizeVideo(64, 48, 10)->withoutAudio()->video('libx264')->save('transcoded-default.mp4');
+        $second->concatTranscoded($first)->conformVideo(64, 48, 10)->withoutAudio()->video('libx264')->save('transcoded-default.mp4');
         $this->assertTrue(Storage::disk('memory')->exists('copy-default.mp4'));
         $this->assertTrue(Storage::disk('memory')->exists('transcoded-default.mp4'));
 
@@ -166,7 +166,7 @@ class NativeConcatTest extends TestCase
             $this->assertFalse(Storage::disk('memory')->exists('mismatch.mp4'));
         }
 
-        $first->concatTranscoded($different)->normalizeVideo(128, 96, 10)->withoutAudio()
+        $first->concatTranscoded($different)->conformVideo(128, 96, 10)->withoutAudio()
             ->video('libx264', crf: 20)
             ->toDisk('memory')->save('normalized.mp4');
         $normalized = FFMpeg::disk('memory')->open('normalized.mp4');
@@ -184,7 +184,7 @@ class NativeConcatTest extends TestCase
             ->toDisk('memory')->save('raw.mp4');
 
         try {
-            $first->concatTranscoded($different)->normalizeVideo(128, 96, 10)->normalizeAudio()
+            $first->concatTranscoded($different)->conformVideo(128, 96, 10)->conformAudio()
                 ->toDisk('memory')->save('missing-audio.mp4');
             $this->fail('Missing audio was silently accepted.');
         } catch (MediaException $exception) {
@@ -252,8 +252,8 @@ class NativeConcatTest extends TestCase
         $first = FFMpeg::disk()->open(new File($this->root.'/0.mov'));
         $second = FFMpeg::disk()->open(new File($this->root.'/1.mov'));
         $hashes = [hash_file('sha256', $this->root.'/0.mov'), hash_file('sha256', $this->root.'/1.mov')];
-        $first->concatTranscoded($second)->normalizeVideo(128, 96, 10)
-            ->normalizeAudio(16000, 1, channel: 0)->video('libx264', crf: 20)->audio('pcm_s16le')
+        $first->concatTranscoded($second)->conformVideo(128, 96, 10)
+            ->conformAudio(16000, 1, channel: 0)->video('libx264', crf: 20)->audio('pcm_s16le')
             ->toDisk('memory')->save('normalized.mov');
 
         $media = FFMpeg::disk('memory')->open('normalized.mov');
@@ -282,8 +282,8 @@ class NativeConcatTest extends TestCase
         }
 
         // Select the other stereo channel, and repeat an input to catch identity-based collapsing.
-        $first->concatTranscoded($first)->normalizeVideo(128, 96, 10, 'stretch')
-            ->normalizeAudio(16000, 1, channel: 1)->video('libx264')->audio('pcm_s16le')
+        $first->concatTranscoded($first)->conformVideo(128, 96, 10, 'stretch')
+            ->conformAudio(16000, 1, channel: 1)->video('libx264')->audio('pcm_s16le')
             ->toDisk('memory')->save('right.mov');
         file_put_contents($this->root.'/right.mov', Storage::disk('memory')->get('right.mov'));
         $right = Process::run([$binary, '-v', 'error', '-i', $this->root.'/right.mov', '-map', '0:a', '-f', 's16le', 'pipe:1']);
@@ -292,14 +292,14 @@ class NativeConcatTest extends TestCase
             $this->assertEqualsWithDelta($sample, unpack('v', substr($right->output(), (int) ($at * 16000) * 2, 2))[1], 2);
         }
 
-        $first->concatTranscoded($second)->normalizeVideo(128, 96, 10, 'cover')->normalizeAudio()
+        $first->concatTranscoded($second)->conformVideo(128, 96, 10, 'cover')->conformAudio()
             ->video('libx264')->audio('pcm_s16le')->toDisk('memory')->save('stereo.mov');
         $stereo = FFMpeg::disk('memory')->open('stereo.mov')->probe()->audio();
         $this->assertSame(2, $stereo->channels());
         $this->assertSame(48000, $stereo->sampleRate());
 
         try {
-            $first->concatTranscoded($second)->normalizeVideo(128, 96, 10)->normalizeAudio(channel: 1)
+            $first->concatTranscoded($second)->conformVideo(128, 96, 10)->conformAudio(channel: 1)
                 ->toDisk('memory')->save('invalid-channel.mov');
             $this->fail('A missing selected channel was accepted.');
         } catch (MediaException $exception) {
@@ -349,7 +349,7 @@ class NativeConcatTest extends TestCase
 
         try {
             $first->concatTranscoded(FFMpeg::disk()->open(new File($this->root.'/late.mov')))
-                ->normalizeVideo(128, 96, 10)->normalizeAudio()->toDisk('memory')->save('late-normalized.mov');
+                ->conformVideo(128, 96, 10)->conformAudio()->toDisk('memory')->save('late-normalized.mov');
             $this->fail('Transcoded concat accepted a nonzero presentation origin.');
         } catch (MediaException $exception) {
             $this->assertSame('metadata', $exception->category);
@@ -363,7 +363,7 @@ class NativeConcatTest extends TestCase
         $this->assertTrue($tracks->successful(), $tracks->errorOutput());
         try {
             $first->concatTranscoded(FFMpeg::disk()->open(new File($this->root.'/late-second-track.mkv')))
-                ->normalizeVideo(128, 96, 10)->normalizeAudio()->toDisk('memory')->save('late-track.mov');
+                ->conformVideo(128, 96, 10)->conformAudio()->toDisk('memory')->save('late-track.mov');
             $this->fail('Transcoded concat accepted a late second video track.');
         } catch (MediaException $exception) {
             $this->assertSame('metadata', $exception->category);

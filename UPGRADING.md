@@ -118,8 +118,8 @@ $media->export()
 $second = FFMpeg::disk('uploads')
     ->open('second.mp4');
 $media->concatTranscoded($second)
-    ->normalizeVideo(1280, 720, frameRate: 30, fit: 'contain')
-    ->normalizeAudio(sampleRate: 48000, channels: 2)
+    ->conformVideo(1280, 720, frameRate: 30, fit: 'contain')
+    ->conformAudio(sampleRate: 48000, channels: 2)
     ->video('libx264')
     ->audio('aac')
     ->save('joined.mp4');
@@ -161,7 +161,7 @@ $media->export()
     ->save('branded.mp4');
 ```
 
-`concat()` joins compatible streams without silently transcoding. `concatTranscoded()` returns an export builder with one output. Choose `normalizeVideo()` and either `normalizeAudio()` or `withoutAudio()` before saving. Normalization selects each input's first motion-video and audio streams, preserves audio delays, and requires finite sources with zero container/video origins. It rejects root filters, custom graphs, and stream copy. Sources without audio require `withoutAudio()` or a custom graph; the helper does not create missing audio tracks. Source chapters are not combined.
+`concat()` joins compatible streams without silently transcoding. `concatTranscoded()` returns an export builder with one output. Choose `conformVideo()` and either `conformAudio()` or `withoutAudio()` before saving. Transcoded concat selects each input's first motion-video and audio streams, preserves audio delays, and requires finite sources with zero container/video origins. It rejects root filters, custom graphs, and stream copy. Sources without audio require `withoutAudio()` or a custom graph; the helper does not create missing audio tracks. Source chapters are not combined.
 
 ## Replace audio mixing graphs
 
