@@ -30,6 +30,7 @@ class PendingWaveform extends PendingImages
 
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
+        $this->assertNoTrackVideoFilters($outputs[0]);
         if ($this->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Waveform clips require accurate audio trimming.');
         }

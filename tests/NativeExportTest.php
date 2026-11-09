@@ -802,6 +802,7 @@ class NativeExportTest extends TestCase
             fn () => $media->waveform(colors: '#fff'),
             fn () => $media->waveform(colors: "blue\n"),
             fn () => $media->waveform()->clip(0, duration: 1, seek: 'keyframe')->inspect(),
+            fn () => $media->waveform()->videoStream(0, fn ($v) => $v->color('bt709', 'bt709', 'bt709'))->inspect(),
         ] as $invalid) {
             try {
                 $invalid();
