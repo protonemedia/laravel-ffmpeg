@@ -177,20 +177,26 @@ class NativeSpeedTest extends TestCase
     public function progress_uses_retimed_duration_and_stays_indeterminate_for_trusted_filters(): void
     {
         $this->fixture();
-        $metadata = $this->media()->probe();
-        $method = new \ReflectionMethod(\ProtoneMedia\LaravelFFMpeg\PendingSpeed::class, 'prepareEncoding');
-        $this->assertEqualsWithDelta(4, $method->invoke($this->media()->speed(1.5), [$metadata]), 0.01);
-        $this->assertNull($method->invoke($this->media()->speed(1.5)->audioFilter('atempo=1.1'), [$metadata]));
-        $this->assertNull($method->invoke($this->media()->speed(1.5)->mapAudio(), [$metadata]));
-        $percentages = [];
-        $this->media()->speed(1.5)->video('ffv1')->audio('pcm_s16le')->audioFilter('atempo=1.1')
-            ->onProgress(function ($progress) use (&$percentages) {
+        $percentages = function ($operation, string $path): array {
+            $percentages = [];
+            $operation->audio('pcm_s16le')->onProgress(function ($progress) use (&$percentages) {
                 if ($progress->isEncoding()) {
                     $percentages[] = $progress->percentage;
                 }
-            })->save('indeterminate.mkv');
-        $this->assertNotEmpty($percentages);
-        $this->assertSame([null], array_values(array_unique($percentages)));
+            })->save($path);
+            $this->assertNotEmpty($percentages);
+
+            return $percentages;
+        };
+        // Against the 6 second source duration the final percentage would stop near 67.
+        $retimed = $percentages($this->media()->speed(1.5)->video('ffv1'), 'retimed.mkv');
+        $this->assertEqualsWithDelta(100, end($retimed), 1);
+        foreach ([
+            'filtered.mkv' => $this->media()->speed(1.5)->video('ffv1')->audioFilter('atempo=1.1'),
+            'mapped.mkv' => $this->media()->speed(1.5)->mapAudio(),
+        ] as $path => $operation) {
+            $this->assertSame([null], array_values(array_unique($percentages($operation, $path))));
+        }
     }
 
     #[Test]

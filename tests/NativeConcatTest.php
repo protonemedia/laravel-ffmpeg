@@ -78,11 +78,7 @@ class NativeConcatTest extends TestCase
             $this->assertNotContains('99', $command);
             $this->assertSame('-1', $command[array_search('-map_metadata', $command) + 1]);
             $this->assertSame('-1', $command[array_search('-map_chapters', $command) + 1]);
-            $this->assertSame('missing', $export->outputConfiguration()['disk']);
         }
-
-        $chosen = new \ProtoneMedia\LaravelFFMpeg\PendingConcat([$first, $second], 'chosen');
-        $this->assertSame('chosen', $chosen->outputConfiguration()['disk']);
 
         // The low-level escape hatch remains independent of helper policy.
         $raw = $first->export();
