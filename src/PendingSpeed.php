@@ -3,51 +3,65 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
 
 /**
  * Pitch-preserving playback speed. Clips and input timing options are unsupported.
  * Sources require a zero container/video origin and nonnegative audio origins.
  * Trusted simple filters run first; their timing changes make progress indeterminate.
  */
-class PendingSpeed extends PendingExport
+final class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, ValidatesSelections
 {
+    use Concerns\AudioCodec;
+    use Concerns\AudioFilters;
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\Mapping;
+    use Concerns\Metadata;
+    use Concerns\OutputOptions;
+    use Concerns\ResourceFilters;
+    use Concerns\Resources;
+    use Concerns\RunsExport;
+    use Concerns\VideoCodec;
+    use Concerns\VideoFilters;
+    use Conditionable;
+
+    private readonly PendingExport $export;
+
     public function __construct(private readonly Media $source, string|Filesystem $disk, private readonly float $factor)
     {
         if (! is_finite($factor) || $factor <= 0) {
             throw new InvalidArgumentException('Speed requires a finite positive factor.');
         }
 
-        parent::__construct($source, $disk);
+        $this->export = new PendingExport($source, $disk, $this);
     }
 
-    public function addInput(Media $media): int
+    public function twoPass(): self
     {
-        throw new InvalidArgumentException('Speed supports one input.');
+        $this->export->twoPass();
+
+        return $this;
     }
 
-    public function output(string $path, callable $configure): self
+    public function save(?string $path = null): ExportResult
     {
-        throw new InvalidArgumentException('Speed supports one root-configured output.');
+        return $this->export->save($path);
     }
 
-    public function filterComplex(string $expression): self
+    /** @internal */
+    public function outputs(array $default, ?string $path): array
     {
-        throw new InvalidArgumentException('Speed owns its timing filters; custom graphs are unsupported.');
-    }
+        $settings = $this->export->outputConfiguration();
 
-    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
-    {
-        throw new InvalidArgumentException('Speed does not support additional watermark inputs.');
-    }
-
-    protected function configuredOutputs(?string $path = null): array
-    {
-        $settings = $this->outputConfiguration();
-
-        if ($settings['clip'] !== null || $this->source->inputOptions() !== []) {
-            throw new InvalidArgumentException('Speed requires an unclipped source without input options.');
+        if ($this->source->inputOptions() !== []) {
+            throw new InvalidArgumentException('Speed requires a source without input options.');
         }
 
         $factor = self::number($this->factor);
@@ -76,14 +90,16 @@ class PendingSpeed extends PendingExport
         return [(new ExportOutput($path ?? 'inspection.mp4', $settings['disk']))->configure($settings)];
     }
 
-    protected function validateStreamSelections(array $expected): void
+    /** @internal */
+    public function selections(array $expected): void
     {
         if ($expected[0] === [] || array_any($expected[0], fn ($type) => ! in_array($type, ['audio', 'video'], true))) {
             throw new MediaException('Speed requires selected audio or video streams only.', 'probing', 'mapping');
         }
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** @internal The retimed duration, when nothing else can change timing. */
+    public function duration(array $metadata, ?float $default): ?float
     {
         $item = $metadata[0];
         // The audio filter scales an initial offset, so audio-only sources may start later.
@@ -98,7 +114,7 @@ class PendingSpeed extends PendingExport
             }
         }
 
-        $settings = $this->outputConfiguration();
+        $settings = $this->export->outputConfiguration();
         // Maps can select a shorter track; raw filters/options can alter timing.
         if ($settings['maps'] !== [] || $settings['omitVideo'] || $settings['omitAudio']
             || $settings['videoFilters'] !== [] || $settings['audioFilters'] !== [] || $settings['outputOptions'] !== []) {

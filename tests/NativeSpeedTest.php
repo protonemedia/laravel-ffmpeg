@@ -92,11 +92,6 @@ class NativeSpeedTest extends TestCase
         foreach ([
             fn () => $this->media()->speed(1.5)->video('copy')->inspect(),
             fn () => $this->media()->speed(1.5)->audio('copy')->inspect(),
-            fn () => $this->media()->speed(1.5)->clip(0, duration: 1)->inspect(),
-            fn () => $this->media()->speed(1.5)->addInput($this->media()),
-            fn () => $this->media()->speed(1.5)->filterComplex('[0:v]null[v]'),
-            fn () => $this->media()->speed(1.5)->output('x.mp4', fn ($output) => $output->video('libx264')),
-            fn () => $this->media()->speed(1.5)->watermark($this->media()),
             fn () => $this->media()->speed(1.5)->withoutAudio()->withoutVideo()->inspect(),
         ] as $invalid) {
             try {

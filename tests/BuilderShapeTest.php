@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use ProtoneMedia\LaravelFFMpeg\PendingFrame;
 use ProtoneMedia\LaravelFFMpeg\PendingGif;
 use ProtoneMedia\LaravelFFMpeg\PendingFrames;
+use ProtoneMedia\LaravelFFMpeg\PendingSpeed;
 use ProtoneMedia\LaravelFFMpeg\PendingStill;
 use ProtoneMedia\LaravelFFMpeg\PendingStoryboard;
 use ProtoneMedia\LaravelFFMpeg\PendingWaveform;
@@ -34,6 +35,7 @@ class BuilderShapeTest extends TestCase
             'gif' => [PendingGif::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
                 'video', 'videoOptions', 'videoStream', 'color', 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio',
                 'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo', 'outputOptions', 'drawText', 'burnSubtitles', 'lut3d', 'fadeIn', 'fadeOut']],
+            'speed' => [PendingSpeed::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'clip']],
             'still' => [PendingStill::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
                 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'mapAudio', 'withoutAudio', 'withoutVideo']],
         ];
