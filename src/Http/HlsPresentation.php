@@ -25,7 +25,7 @@ class HlsPresentation
                 || ! is_string($file['path'] ?? null) || $file['path'] === ''
                 || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $file['path'])
                 || $canonical !== $file['path']
-                || ! in_array($file['role'] ?? null, ['hls-master', 'hls-playlist', 'hls-segment', 'hls-init', 'hls-key'], true)) {
+                || ! in_array($file['role'] ?? null, ['hls-master', 'hls-playlist', 'hls-segment', 'hls-init', 'hls-key', 'dash-init', 'dash-segment'], true)) {
                 throw new InvalidArgumentException('HLS playback requires named disks and canonical HLS inventory paths.');
             }
             $id = self::id($file['disk'], $file['path']);
@@ -132,7 +132,8 @@ class HlsPresentation
         $roles = match ($kind) {
             'playlist' => ['hls-master', 'hls-playlist'],
             'key' => ['hls-key'],
-            default => ['hls-segment', 'hls-init'],
+            // DASH sharedHls() playlists reference the DASH initialization and media files.
+            default => ['hls-segment', 'hls-init', 'dash-segment', 'dash-init'],
         };
         if ($file === null || ! in_array($file['role'], $roles, true)) {
             throw new HlsResourceNotFoundException('The HLS reference is not an owned '.$kind.' resource.');

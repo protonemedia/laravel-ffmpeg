@@ -16,11 +16,13 @@ use ProtoneMedia\LaravelFFMpeg\DashRepresentation;
 use ProtoneMedia\LaravelFFMpeg\Events;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\PendingDashExport;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Queue\ExportPlan;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use ProtoneMedia\LaravelFFMpeg\Support\Hls;
 
 class NativeDashTest extends TestCase
 {
@@ -171,6 +173,32 @@ class NativeDashTest extends TestCase
     }
 
     #[Test]
+    public function shared_hls_plays_through_protected_hls_routes(): void
+    {
+        $result = $this->export($this->source())->sharedHls()->save('protected/manifest.mpd');
+        $disk = Storage::disk('local');
+        config(['app.key' => 'base64:'.base64_encode(random_bytes(32))]);
+        Hls::define('dash', resolve: fn () => $result->playback(), authorize: fn () => true);
+        Hls::routes('/dash/hls', name: 'dash.hls', playback: 'dash');
+        $this->actingAs(new \Illuminate\Auth\GenericUser(['id' => 1]));
+        $links = fn (string $text) => preg_match_all('~https?://[^\s"]+~', $text, $matches) ? $matches[0] : [];
+
+        $master = $this->get(Hls::url('dash.hls', [], expires: now()->addMinutes(5)))->assertOk()->getContent();
+        $this->assertSame(2, substr_count($master, '#EXT-X-STREAM-INF:'));
+        $this->assertCount(4, $links($master));
+        $variant = $this->get($links($master)[2])->assertOk()->getContent();
+        $media = $links($variant);
+        $this->assertCount(5, $media);
+        $init = $result->representation('low')->files()->firstWhere('role', 'dash-init');
+        $this->assertSame($disk->get($init->path), $this->get($media[0])->assertOk()->streamedContent());
+
+        $selected = $result->playbackForVariants(['low'])->render($result->playback()->file(), fn ($id) => 'owned/'.$id);
+        $this->assertSame(1, substr_count($selected, '#EXT-X-STREAM-INF:'));
+        $this->assertSame(2, substr_count($selected, '#EXT-X-MEDIA:'));
+        $this->assertNotContains('dash-manifest', array_column($result->playback()->toArray()['files'], 'role'));
+    }
+
+    #[Test]
     public function ordinary_queue_job_serialization_runs_without_generating_hls_unless_requested(): void
     {
         $export = $this->export($this->source());
@@ -179,7 +207,10 @@ class NativeDashTest extends TestCase
         $this->assertTrue(Storage::disk('local')->exists('queued/manifest.mpd'));
         $this->assertFalse(Storage::disk('local')->exists('queued/master.m3u8'));
         $this->decode(Storage::disk('local')->path('queued/manifest.mpd'), ['-map', '0']);
-        Event::assertDispatched(Events\QueuedExportCompleted::class);
+        Event::assertDispatched(Events\QueuedExportCompleted::class, fn ($event) => $event->playback === null);
+        unserialize(serialize($this->export($this->source())->sharedHls()->queued()->job('shared/manifest.mpd')))->handle();
+        Event::assertDispatched(Events\QueuedExportCompleted::class, fn ($event) => $event->playback !== null
+            && HlsPresentation::fromArray($event->playback)->file()['path'] === 'shared/master.m3u8');
         $this->assertSame([], glob($this->root.'/*'));
     }
 

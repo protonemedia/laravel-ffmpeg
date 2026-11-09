@@ -925,6 +925,7 @@ $result = $media->dash(segmentDuration: 2)
 
 $result->manifest();
 $result->hlsPlaylist(); // Available only with sharedHls().
+$result->playback();    // Protected HLS inventory; requires sharedHls().
 $result->representation('low')
     ->files();
 $result->adaptationSets();
@@ -933,6 +934,8 @@ $result->adaptationSets();
 DASH supports finite, clear H.264/AAC presentations. Each representation maps exactly one stream into a declared adaptation set. Video boundaries align within a set. All representations use the same accurate clip. The builder owns codecs, muxers, and GOP alignment. Live DASH, two-pass encoding, encryption, DRM, and protected playback descriptors are not supported.
 
 One encoding invocation creates the representations. With `sharedHls()`, both formats reference the same initialization files and media segments. The package validates bounded XML and the complete owned inventory before publication. Segments publish before playlists, with the MPD last. Publication across objects is not atomic. Results report `dash-init`, `dash-segment`, `dash-manifest`, and optional HLS roles. Ordinary queued exports, execution limits, cancellation, progress, and completion events apply.
+
+With `sharedHls()`, `playback()` returns an `HlsPresentation` for the [protected HLS routes](#serve-protected-hls-with-laravel) and the queued completion event carries it. The inventory contains the HLS master, its playlists, and the shared media, but not the MPD. Each master entry is a variant named after its representation, so `playbackForVariants(['low'])` keeps that video representation with every audio rendition. The MPD itself has no protected route, and `mergeHls()` does not accept DASH output.
 
 ### Publish continuous HLS
 

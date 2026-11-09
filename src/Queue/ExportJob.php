@@ -11,6 +11,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use ProtoneMedia\LaravelFFMpeg\DashExportResult;
 use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\HlsExportResult;
@@ -83,7 +84,8 @@ class ExportJob implements ShouldQueue, ShouldBeEncrypted
         }
         if (config('laravel-ffmpeg.enable_events', true)) {
             Event::dispatch(new QueuedExportCompleted($this->exportId, $result->files()->map->toArray()->all(),
-                $result instanceof HlsExportResult ? $result->playback()->toArray() : null));
+                $result instanceof HlsExportResult || ($result instanceof DashExportResult && $result->files()->contains('role', 'hls-master'))
+                    ? $result->playback()->toArray() : null));
         }
     }
 }

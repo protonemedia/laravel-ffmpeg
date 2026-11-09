@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\ItemNotFoundException;
+use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 
 readonly class DashExportResult extends ExportResult
 {
@@ -20,6 +21,41 @@ readonly class DashExportResult extends ExportResult
     public function hlsPlaylist(): GeneratedFile
     {
         return $this->files()->sole(fn ($file) => $file->role === 'hls-master');
+    }
+
+    /**
+     * Protected playback inventory for sharedHls() output, without the DASH manifest. Each master
+     * entry is a variant named after its representation; video variants include every audio rendition.
+     */
+    public function playback(): HlsPresentation
+    {
+        $master = $this->hlsPlaylist();
+        $types = [];
+        foreach ($this->sets as $set) {
+            $types += array_fill_keys($set['representations'], $set['type']);
+        }
+        $audio = array_keys($types, 'audio', true);
+        $variants = [];
+        foreach ($types as $name => $type) {
+            // Audio is a rendition group of the video entries; it is a master entry only without video.
+            if ($type === 'audio' && count($audio) !== count($types)) {
+                continue;
+            }
+            $paths = $this->representations[$name];
+            foreach ($type === 'video' ? $audio : [] as $rendition) {
+                $paths += $this->representations[$rendition];
+            }
+            $variants[$name] = $this->files()->filter(fn ($file) => isset($paths[$file->path]))
+                ->map(fn ($file) => HlsPresentation::id($file->disk ?? '', $file->path))->values()->all();
+        }
+
+        return new HlsPresentation($this->files()->reject(fn ($file) => $file->role === 'dash-manifest')->map->toArray()->values()->all(),
+            HlsPresentation::id($master->disk ?? '', $master->path), variants: $variants);
+    }
+
+    public function playbackForVariants(array $names): HlsPresentation
+    {
+        return $this->playback()->playbackForVariants($names);
     }
 
     /** Exact owned initialization, media, and optional shared HLS playlist files. */
