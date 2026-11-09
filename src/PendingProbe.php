@@ -41,6 +41,7 @@ class PendingProbe
         if (! preg_match('/\A(?:[0-9]{1,6}|[vVasdt](?::[0-9]{1,6})?)\z/', $selector)) {
             throw new InvalidArgumentException('Use a stream index or a typed stream selector such as v:0.');
         }
+
         $this->selector = $selector;
 
         return $this;
@@ -52,17 +53,20 @@ class PendingProbe
         if ($entries === [] || count($entries) > 9) {
             throw new InvalidArgumentException('Select at least one probe section.');
         }
+
         foreach ($entries as $section => $fields) {
             if (! in_array($section, ['stream', 'stream_tags', 'stream_disposition', 'packet', 'frame', 'format', 'format_tags', 'chapter', 'chapter_tags'], true)
                 || ! is_array($fields) || ! array_is_list($fields) || $fields === [] || count($fields) > 64) {
                 throw new InvalidArgumentException('Probe entries require known sections and 1 to 64 field names per section.');
             }
+
             foreach ($fields as $field) {
                 if (! is_string($field) || ! preg_match('/\A[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}\z/', $field)) {
                     throw new InvalidArgumentException('Invalid probe field name.');
                 }
             }
         }
+
         $this->fields = $entries;
 
         return $this;
@@ -114,6 +118,7 @@ class PendingProbe
         if (! is_finite($duration) || $duration < 0.000001 || $duration > 300) {
             throw new InvalidArgumentException('Probe duration must be between one microsecond and 300 seconds.');
         }
+
         $this->start = $start;
         $this->duration = $duration;
         $this->packetLimit = null;
@@ -128,6 +133,7 @@ class PendingProbe
         if ($count < 1 || $count > 100000) {
             throw new InvalidArgumentException('Probe packet count must be between 1 and 100000.');
         }
+
         $this->start = $start;
         $this->packetLimit = $count;
 
@@ -139,6 +145,7 @@ class PendingProbe
         if ($outputBytes < 1 || $outputBytes > 16777216 || ! is_finite($timeout) || $timeout <= 0 || $timeout > 120) {
             throw new InvalidArgumentException('Probe limits require 1 to 16777216 bytes and a positive timeout up to 120 seconds.');
         }
+
         $this->outputLimit = $outputBytes;
         $this->timeout = $timeout;
 
@@ -147,7 +154,7 @@ class PendingProbe
 
     public function get(): ProbeResult
     {
-        return $this->media->withInput(function (string $path, Workspace $workspace) {
+        return $this->media->withInput(function (string $path, Workspace $workspace): \ProtoneMedia\LaravelFFMpeg\ProbeResult {
             $runner = $workspace->runner;
             $binary = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
             // The runner's operation budget is this query's timeout.
@@ -159,19 +166,25 @@ class PendingProbe
             $command = [$binary, '-v', 'error', '-print_format', 'json', '-protocol_whitelist', $protocols,
                 ...$this->media->probeOptions(), '-read_intervals', $this->interval(), '-show_streams'];
             if ($this->selector !== null) {
-                array_push($command, '-select_streams', $this->selector);
+                $command[] = '-select_streams';
+                $command[] = $this->selector;
             }
+
             if ($this->mode !== 'streams') {
                 $command[] = '-show_'.$this->mode;
             }
+
             if ($this->onlyKeyframes) {
-                array_push($command, '-skip_frame', 'nokey');
+                $command[] = '-skip_frame';
+                $command[] = 'nokey';
             }
+
             foreach (['frames' => $this->countFrames, 'packets' => $this->countPackets] as $kind => $enabled) {
                 if ($enabled) {
                     $command[] = '-count_'.$kind;
                 }
             }
+
             if ($this->fields !== []) {
                 $entries = [];
                 foreach ($this->fields as $section => $fields) {
@@ -182,28 +195,35 @@ class PendingProbe
                         $command[] = '-show_chapters';
                     }
                 }
-                array_push($command, '-show_entries', implode(':', $entries));
+
+                $command[] = '-show_entries';
+                $command[] = implode(':', $entries);
             }
+
             $command[] = $path;
             $redactions = [$path => '[input]'] + $this->media->redactions();
             $result = $runner->run($command, $workspace->path, $redactions, $this->outputLimit, timeout: $this->timeout);
             if ($result->exitCode !== 0) {
                 throw new MediaException('FFprobe query failed (exit '.$result->exitCode.').', 'probing', 'exit', $result->diagnostics);
             }
+
             try {
                 $data = json_decode($result->output, true, 64, JSON_THROW_ON_ERROR);
             } catch (JsonException) {
                 throw new MediaException('FFprobe query returned invalid JSON.', 'probing', 'metadata');
             }
+
             if (! is_array($data) || ! str_starts_with(ltrim($result->output), '{')) {
                 throw new MediaException('FFprobe query returned invalid sections.', 'probing', 'metadata');
             }
+
             foreach (['streams', 'packets', 'frames', 'chapters'] as $section) {
                 if (array_key_exists($section, $data) && (! is_array($data[$section]) || ! array_is_list($data[$section])
-                    || array_any($data[$section], fn ($row) => ! is_array($row)))) {
+                    || array_any($data[$section], fn ($row): bool => ! is_array($row)))) {
                     throw new MediaException('FFprobe query returned invalid sections.', 'probing', 'metadata');
                 }
             }
+
             $data = Media::redactProbeData($data, $redactions);
 
             return new ProbeResult($data, [
@@ -217,7 +237,7 @@ class PendingProbe
     private function interval(): string
     {
         // FFprobe's duration parser does not accept scientific notation.
-        $seconds = static fn (float $value) => rtrim(rtrim(sprintf('%.6F', $value), '0'), '.');
+        $seconds = static fn (float $value): string => rtrim(rtrim(sprintf('%.6F', $value), '0'), '.');
 
         return $seconds($this->start).'%+'.($this->packetLimit === null
             ? $seconds($this->duration) : '#'.$this->packetLimit);

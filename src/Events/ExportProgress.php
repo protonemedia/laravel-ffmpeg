@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ProtoneMedia\LaravelFFMpeg\Events;
 
 use ProtoneMedia\LaravelFFMpeg\Progress;

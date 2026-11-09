@@ -60,10 +60,11 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
     public function vtt(string $path, ?callable $imageUrl = null): self
     {
         $this->export->assertOutputMutable();
-        $path = (new ExportOutput($path, 'local'))->destination()['path'];
+        $path = new ExportOutput($path, 'local')->destination()['path'];
         if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'vtt') {
             throw new InvalidArgumentException('The cue destination must have a vtt extension.');
         }
+
         $this->vttPath = $path;
         $this->imageUrl = $imageUrl === null ? null : Closure::fromCallable($imageUrl);
 
@@ -83,17 +84,19 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
     }
 
     /** @internal */
-    public function duration(array $metadata, ?float $default): ?float
+    public function duration(array $metadata, ?float $default): float
     {
         $duration = $metadata[0]->duration();
         $clip = $this->export->clipSettings();
         if ($duration !== null && $clip !== null) {
             $duration = max(0, min($clip['duration'], $duration - $clip['start']));
         }
+
         if ($duration === null || $duration <= 0 || $duration > intdiv(PHP_INT_MAX, 1000000)
             || ($this->duration = (int) round($duration * 1000000)) < 1) {
             throw new MediaException('Storyboards require a known, positive media duration.', Progress::PROBING, 'metadata');
         }
+
         $this->frames = intdiv($this->duration - 1, $this->interval * 1000) + 1;
 
         return $duration;
@@ -112,6 +115,7 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
         if ($this->export->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Storyboards require accurate clipping, not keyframe seek.');
         }
+
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
         $start = $this->export->clipSettings()['start'] ?? 0;
         $end = $this->duration === null ? '[end]' : CommandCompiler::timestamp($start + $this->duration / 1000000);
@@ -125,6 +129,7 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
         } else {
             $command[$index + 1] .= ','.$filter;
         }
+
         $sheets = $this->frames === null ? '[sheets]' : (string) (intdiv($this->frames - 1, $this->columns * $this->rows) + 1);
         array_splice($command, -1, 0, ['-f', 'image2', '-start_number', '1', '-frames:v', $sheets]);
 
@@ -152,20 +157,24 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
                 || ($dimensions !== null && $dimensions !== [intdiv($width, $this->columns), intdiv($height, $this->rows)])) {
                 throw new MediaException('The storyboard sheets have inconsistent grid dimensions.', Progress::VALIDATION, 'artifact');
             }
+
             $dimensions = [intdiv($width, $this->columns), intdiv($height, $this->rows)];
             if ($this->vttPath !== null) {
                 $key = $artifact['destination']['path'];
                 try {
-                    $url = $this->imageUrl === null ? $this->relativeUrl($key) : ($this->imageUrl)($key, $index + 1);
+                    $url = $this->imageUrl instanceof \Closure ? ($this->imageUrl)($key, $index + 1) : $this->relativeUrl($key);
                 } catch (Throwable) {
                     throw new MediaException('Cannot resolve storyboard image URLs.', Progress::VALIDATION, 'artifact');
                 }
+
                 if (! is_string($url) || $url === '' || preg_match('/[\x00-\x20\x7f#]/', $url)) {
                     throw new MediaException('Storyboard image URLs require a nonempty URI without whitespace or a fragment.', Progress::VALIDATION, 'artifact');
                 }
+
                 $urls[] = $url;
             }
         }
+
         if ($this->vttPath === null) {
             return $artifacts;
         }
@@ -175,10 +184,12 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
         if ($file === false) {
             throw new MediaException('Cannot create storyboard cues.', Progress::VALIDATION, 'filesystem');
         }
+
         try {
             if (! chmod($path, 0600) || fwrite($file, "WEBVTT\n\n") !== 8) {
                 throw new MediaException('Cannot write storyboard cues.', Progress::VALIDATION, 'filesystem');
             }
+
             [$width, $height] = $dimensions;
             $end = intdiv($this->duration - 1, 1000) + 1;
             $cells = $this->columns * $this->rows;
@@ -193,12 +204,14 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
                     throw new MediaException('Cannot write storyboard cues.', Progress::VALIDATION, 'filesystem');
                 }
             }
+
             if (! fflush($file)) {
                 throw new MediaException('Cannot flush storyboard cues.', Progress::VALIDATION, 'filesystem');
             }
         } finally {
             fclose($file);
         }
+
         $artifacts[] = ['path' => $path, 'output' => 0, 'role' => 'vtt', 'destination' => [
             'disk' => $outputs[0]->destination()['disk'], 'path' => $this->vttPath,
         ]];
@@ -221,7 +234,7 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
             array_shift($to);
         }
 
-        return implode('/', [...array_fill(0, count($from), '..'), ...array_map('rawurlencode', $to)]);
+        return implode('/', [...array_fill(0, count($from), '..'), ...array_map(rawurlencode(...), $to)]);
     }
 
     private function timestamp(int $milliseconds): string

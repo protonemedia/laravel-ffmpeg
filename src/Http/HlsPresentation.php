@@ -19,8 +19,9 @@ class HlsPresentation
             try {
                 $canonical = is_string($file['path'] ?? null) ? (new WhitespacePathNormalizer)->normalizePath($file['path']) : null;
             } catch (Throwable $exception) {
-                throw new InvalidArgumentException('HLS playback requires canonical inventory paths.', previous: $exception);
+                throw new InvalidArgumentException('HLS playback requires canonical inventory paths.', $exception->getCode(), previous: $exception);
             }
+
             if (! is_string($file['disk'] ?? null) || $file['disk'] === ''
                 || ! is_string($file['path'] ?? null) || $file['path'] === ''
                 || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $file['path'])
@@ -28,12 +29,15 @@ class HlsPresentation
                 || ! in_array($file['role'] ?? null, ['hls-master', 'hls-playlist', 'hls-segment', 'hls-init', 'hls-key', 'dash-init', 'dash-segment'], true)) {
                 throw new InvalidArgumentException('HLS playback requires named disks and canonical HLS inventory paths.');
             }
+
             $id = self::id($file['disk'], $file['path']);
             if (isset($this->files[$id])) {
                 throw new InvalidArgumentException('HLS playback inventory contains a duplicate destination.');
             }
+
             $this->files[$id] = array_intersect_key($file, array_flip(['disk', 'path', 'role']));
         }
+
         if (! isset($this->files[$playlist]) || ! in_array($this->files[$playlist]['role'], ['hls-master', 'hls-playlist'], true)) {
             throw new InvalidArgumentException('HLS playback requires an inventory-owned entry playlist.');
         }
@@ -60,15 +64,18 @@ class HlsPresentation
         if ($names === [] || count(array_unique($names, SORT_REGULAR)) !== count($names)) {
             throw new InvalidArgumentException('Select a nonempty set of unique HLS variants.');
         }
+
         $ids = [$this->playlist => true];
         $variants = [];
         foreach ($names as $name) {
             if (! is_string($name) || ! isset($this->variants[$name])) {
                 throw new ItemNotFoundException('Unknown HLS variant.');
             }
+
             $variants[$name] = $this->variants[$name];
             $ids += array_fill_keys($variants[$name], true);
         }
+
         $files = array_intersect_key($this->files, $ids);
         $keys = array_intersect_key($this->keys, array_flip(array_column($files, 'path')));
         foreach ($keys as $references) {
@@ -99,6 +106,7 @@ class HlsPresentation
                 return $url($this->reference($file, $target, $uri, $kind));
             });
         }
+
         $lines = explode("\n", $playlist->get());
         foreach ($lines as $index => $line) {
             if ($line === $excluded) {
@@ -152,6 +160,6 @@ class HlsPresentation
             array_shift($to);
         }
 
-        return implode('/', [...array_fill(0, count($from), '..'), ...array_map('rawurlencode', $to)]);
+        return implode('/', [...array_fill(0, count($from), '..'), ...array_map(rawurlencode(...), $to)]);
     }
 }

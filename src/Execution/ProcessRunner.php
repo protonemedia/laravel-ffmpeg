@@ -20,6 +20,7 @@ class ProcessRunner
                 throw new InvalidArgumentException('Process deadlines must be finite, positive seconds or null.');
             }
         }
+
         $this->startedAt = hrtime(true);
     }
 
@@ -65,9 +66,11 @@ class ProcessRunner
         ?float $timeout = null,
         ?callable $tick = null,
     ): ProcessResult {
-        $output = $diagnostics = '';
+        $output = '';
+        $diagnostics = '';
         $overflow = false;
-        $started = $lastOutput = hrtime(true);
+        $started = hrtime(true);
+        $lastOutput = $started;
         $process = null;
         $failure = null;
         $applicationFailure = null;
@@ -82,12 +85,12 @@ class ProcessRunner
                 ->env($this->environment($directory))
                 ->forever()
                 ->quietly()
-                ->start($command, function (string $type, string $buffer) use (&$output, &$diagnostics, &$overflow, &$lastOutput, &$captureFailure, $outputLimit, $progress) {
+                ->start($command, function (string $type, string $buffer) use (&$output, &$diagnostics, &$overflow, &$lastOutput, &$captureFailure, $outputLimit, $progress): void {
                     $lastOutput = hrtime(true);
 
                     if ($type === 'err') {
                         $diagnostics = substr($diagnostics.substr($buffer, -65536), -65536);
-                    } elseif ($progress !== null) {
+                    } elseif ($progress instanceof \ProtoneMedia\LaravelFFMpeg\Execution\ProgressParser) {
                         try {
                             $progress->push($buffer);
                         } catch (Throwable $exception) {
@@ -105,7 +108,7 @@ class ProcessRunner
             do {
                 $running = $process->running();
 
-                if ($captureFailure !== null) {
+                if ($captureFailure instanceof \Throwable) {
                     throw $captureFailure;
                 }
 
@@ -129,6 +132,7 @@ class ProcessRunner
                 if ($timeout !== null) {
                     $totalDeadline = $totalDeadline === null ? $timeout : min($timeout, $totalDeadline);
                 }
+
                 $idleDeadline = config('laravel-ffmpeg.idle_timeout');
                 if ($this->idleTimeout !== null) {
                     $idleDeadline = $idleDeadline === null ? $this->idleTimeout : min($idleDeadline, $this->idleTimeout);
@@ -160,12 +164,12 @@ class ProcessRunner
                 $redactOutput ? strtr($output, $redactions) : $output,
                 strtr($diagnostics, $redactions),
                 (hrtime(true) - $started) / 1e9,
-                array_map(fn (string $token) => strtr($token, $redactions), $command),
+                array_map(fn (string $token): string => strtr($token, $redactions), $command),
                 $phase,
             );
-        } catch (Throwable $exception) {
-            $failure = $exception instanceof MediaException || $exception === $applicationFailure
-                ? $exception
+        } catch (Throwable $throwable) {
+            $failure = $throwable instanceof MediaException || $throwable === $applicationFailure
+                ? $throwable
                 : new MediaException('Cannot execute the media process.', $phase, 'process');
 
             throw $failure;
@@ -184,7 +188,7 @@ class ProcessRunner
                         $process->wait();
                     }
                 } catch (Throwable) {
-                    if ($failure === null) {
+                    if (!$failure instanceof \Throwable) {
                         throw new MediaException('Cannot stop the media process.', 'cleanup', 'process');
                     }
                 }

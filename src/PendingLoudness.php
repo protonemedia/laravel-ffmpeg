@@ -115,6 +115,7 @@ final class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, 
         if ($filter !== '') {
             $filters[] = $filter;
         }
+
         $filters[] = 'aresample='.$this->sampleRate;
         $filters[] = $this->loudnorm('loudness-final.json');
         $destination = array_pop($result);
@@ -125,7 +126,8 @@ final class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, 
     /** @internal Called after staging and probing, before the final encoding pass. */
     public function analyze(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
-        $this->measurement = $this->normalization = null;
+        $this->measurement = null;
+        $this->normalization = null;
         $this->workspace = $workspace;
         $inputEnd = array_search('-i', $command, true) + 2;
         $prefix = array_slice($command, 0, $inputEnd);
@@ -158,10 +160,12 @@ final class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, 
         for ($i = $inputEnd; $i < count($command); $i++) {
             $token = $command[$i];
             if ($token === '-map') {
-                array_push($final, '-map', '0:a:0');
+                $final[] = '-map';
+                $final[] = '0:a:0';
                 $i++;
             } elseif ($token === '-filter:a') {
-                array_push($final, '-filter:a', $normalizer);
+                $final[] = '-filter:a';
+                $final[] = $normalizer;
                 $i++;
             } else {
                 $final[] = $token;
@@ -198,12 +202,14 @@ final class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, 
         $this->normalization = $this->readStats($this->workspace->path.'/loudness-final.json');
         try {
             $streams = $this->source->probeArtifact($path, $this->workspace)->streams();
-        } catch (MediaException $exception) {
-            if ($exception->category === 'timeout') {
-                throw $exception;
+        } catch (MediaException $mediaException) {
+            if ($mediaException->category === 'timeout') {
+                throw $mediaException;
             }
+
             $streams = collect();
         }
+
         if ($streams->count() !== 1 || $streams->first()->get('codec_type') !== 'audio' || $streams->first()->sampleRate() !== $this->sampleRate) {
             throw new MediaException('Normalized output must contain one audio stream at the requested sample rate.', 'validation', 'artifact');
         }

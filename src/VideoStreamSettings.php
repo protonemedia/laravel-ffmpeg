@@ -15,6 +15,7 @@ class VideoStreamSettings
         if (! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
             throw new InvalidArgumentException('Invalid FFmpeg encoder name.');
         }
+
         $this->settings['codec'] = $codec;
 
         return $this;
@@ -22,10 +23,11 @@ class VideoStreamSettings
 
     public function bitrate(int|string $bitrate): self
     {
-        if (! (is_int($bitrate) && $bitrate > 0)
+        if ((!is_int($bitrate) || $bitrate <= 0)
             && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
             throw new InvalidArgumentException('Bitrates require positive bits per second or an explicit unit string.');
         }
+
         $this->settings['bitrate'] = $bitrate;
 
         return $this;
@@ -36,6 +38,7 @@ class VideoStreamSettings
         if (! is_finite($crf) || $crf < 0) {
             throw new InvalidArgumentException('CRF must be finite and nonnegative.');
         }
+
         $this->settings['crf'] = $crf;
 
         return $this;
@@ -46,6 +49,7 @@ class VideoStreamSettings
         if (! preg_match('/^[a-zA-Z0-9_-]+$/D', $preset)) {
             throw new InvalidArgumentException('Invalid encoder preset.');
         }
+
         $this->settings['preset'] = $preset;
 
         return $this;
@@ -63,6 +67,7 @@ class VideoStreamSettings
                 'color_primaries', 'color_trc', 'colorspace', 'color_range'], true)) {
                 throw new InvalidArgumentException('Unsupported video stream setting.');
             }
+
             $this->settings[$name] = $tokens[$i + 1];
         }
 

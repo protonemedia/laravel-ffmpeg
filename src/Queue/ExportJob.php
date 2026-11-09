@@ -20,7 +20,10 @@ use RuntimeException;
 
 class ExportJob implements ShouldQueue, ShouldBeEncrypted
 {
-    use Batchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Batchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     public $tries = 1;
 
@@ -48,10 +51,12 @@ class ExportJob implements ShouldQueue, ShouldBeEncrypted
 
             return;
         }
+
         if ($this->manifestPath !== null && Storage::disk($this->manifestDisk)->exists($this->manifestPath)) {
             return;
         }
-        if ($this->plan !== null) {
+
+        if ($this->plan instanceof \ProtoneMedia\LaravelFFMpeg\Queue\ExportPlan) {
             $export = $this->plan->restore();
             $export->cancelWhen(fn () => $this->batch()?->cancelled() ?? false);
             $result = $export->save($this->path);
@@ -64,14 +69,18 @@ class ExportJob implements ShouldQueue, ShouldBeEncrypted
                 if ($manifest['batchId'] !== $batchId) {
                     throw new RuntimeException('Queued HLS inventories must belong to the same batch.');
                 }
+
                 $presentations[] = $manifest['playback'];
             }
+
             $batch = Bus::findBatch($batchId);
             if ($batch === null || $batch->cancelled() || $batch->pendingJobs !== 0 || $batch->failedJobs !== 0) {
                 throw new ExportCancelled('The HLS conversion batch did not complete successfully.');
             }
-            $result = (new PendingHlsMerge($presentations))->toDisk($this->manifestDisk)->save($this->path);
+
+            $result = new PendingHlsMerge($presentations)->toDisk($this->manifestDisk)->save($this->path);
         }
+
         if ($this->manifestPath !== null) {
             if (! $result instanceof HlsExportResult
                 || ! Storage::disk($this->manifestDisk)->put($this->manifestPath, json_encode([
@@ -82,6 +91,7 @@ class ExportJob implements ShouldQueue, ShouldBeEncrypted
 
             return;
         }
+
         if (config('laravel-ffmpeg.enable_events', true)) {
             Event::dispatch(new QueuedExportCompleted($this->exportId, $result->files()->map->toArray()->all(),
                 $result instanceof HlsExportResult || ($result instanceof DashExportResult && $result->files()->contains('role', 'hls-master'))

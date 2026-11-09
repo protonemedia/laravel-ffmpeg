@@ -16,6 +16,7 @@ class AudioStreamSettings
         if (! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
             throw new InvalidArgumentException('Invalid FFmpeg encoder name.');
         }
+
         $this->settings['codec'] = $codec;
 
         return $this;
@@ -23,10 +24,11 @@ class AudioStreamSettings
 
     public function bitrate(int|string $bitrate): self
     {
-        if (! (is_int($bitrate) && $bitrate > 0)
+        if ((!is_int($bitrate) || $bitrate <= 0)
             && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
             throw new InvalidArgumentException('Bitrates require positive bits per second or an explicit unit string.');
         }
+
         $this->settings['bitrate'] = $bitrate;
 
         return $this;
@@ -73,6 +75,7 @@ class AudioStreamSettings
             if (! in_array($name, ['ar', 'ac', 'sample_fmt', 'channel_layout', 'compression_level'], true)) {
                 throw new InvalidArgumentException('Unsupported audio stream setting.');
             }
+
             $this->settings[$name] = $tokens[$i + 1];
         }
 

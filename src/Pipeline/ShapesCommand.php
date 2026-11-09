@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ProtoneMedia\LaravelFFMpeg\Pipeline;
 
 /** @internal Transforms the compiled FFmpeg command, for inspection and execution alike. */

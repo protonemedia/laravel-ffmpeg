@@ -14,7 +14,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
 /** A JPEG or PNG picture of the first audio track's waveform. */
-final class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOutputs, ValidatesArtifacts
+final readonly class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOutputs, ValidatesArtifacts
 {
     use Concerns\AudioFilters;
     use Concerns\Clips;
@@ -28,16 +28,16 @@ final class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, Sha
     use Concerns\VideoFilters;
     use Conditionable;
 
-    private readonly PendingExport $export;
+    private PendingExport $export;
 
-    private readonly string $graph;
+    private string $graph;
 
     public function __construct(Media $media, string|Filesystem $disk, int $width, int $height, string|array $colors)
     {
         $colors = is_string($colors) ? [$colors] : $colors;
 
         if ($width < 1 || $height < 1 || $colors === [] || ! array_is_list($colors)
-            || array_any($colors, fn ($color) => ! is_string($color)
+            || array_any($colors, fn ($color): bool => ! is_string($color)
                 || ! preg_match('/\A(?:[a-zA-Z]+|(?:#|0x)[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?)\z/', $color))) {
             throw new InvalidArgumentException('A waveform requires positive dimensions and a list of color names or RGB/RGBA hexadecimal colors.');
         }

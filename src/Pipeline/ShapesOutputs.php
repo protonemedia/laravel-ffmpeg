@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ProtoneMedia\LaravelFFMpeg\Pipeline;
 
 /** @internal Adjusts the outputs PendingExport derives from root settings or output() callbacks. */

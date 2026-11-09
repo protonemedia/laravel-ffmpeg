@@ -27,6 +27,7 @@ class HlsPlaylist implements Responsable
         if ($path === '' || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $path)) {
             throw new InvalidArgumentException('A playlist requires a disk-relative m3u8 key.');
         }
+
         $this->path = (new WhitespacePathNormalizer)->normalizePath($path);
         if (strtolower(pathinfo($this->path, PATHINFO_EXTENSION)) !== 'm3u8') {
             throw new InvalidArgumentException('A playlist requires an m3u8 extension.');
@@ -82,10 +83,11 @@ class HlsPlaylist implements Responsable
             if ($target === null || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $decoded)) {
                 throw new MediaException('HLS deletion requires safe disk-relative references.', 'response', 'artifact');
             }
+
             $paths[$target] = true;
         });
 
-        $paths = array_map('strval', array_keys($paths));
+        $paths = array_map(strval(...), array_keys($paths));
         foreach ($paths as $path) {
             if ($approve($path) !== true) {
                 throw new MediaException('HLS deletion was not approved for every file.', 'response', 'authorization');
@@ -118,9 +120,11 @@ class HlsPlaylist implements Responsable
     {
         $pending = [$this->path];
         $queued = [$this->path => true];
-        $result = $cache = [];
-        $resolvers = $discover === null ? $this->resolvers : [];
-        $inputBudget = $outputBudget = 16777216;
+        $result = [];
+        $cache = [];
+        $resolvers = $discover instanceof \Closure ? [] : $this->resolvers;
+        $inputBudget = 16777216;
+        $outputBudget = 16777216;
         for ($index = 0; $index < count($pending); $index++) {
             $path = $pending[$index];
             $content = $this->read($path, $inputBudget);
@@ -135,6 +139,7 @@ class HlsPlaylist implements Responsable
                     if ($type !== null) {
                         throw new MediaException('An HLS resource declaration has no URI.', 'response', 'artifact');
                     }
+
                     $type = str_starts_with($line, '#EXTINF:') ? 'media' : 'playlist';
                 } elseif (str_starts_with($line, '#EXT-X-KEY:')) {
                     $key = $this->keyUri($line);
@@ -153,12 +158,14 @@ class HlsPlaylist implements Responsable
                     if ($type === null) {
                         throw new MediaException('An HLS URI has no resource declaration.', 'response', 'artifact');
                     }
+
                     $kind = $type;
                     $type = null;
                 } elseif (preg_match('/\A#EXT-X-(?:I-FRAME-STREAM-INF|SESSION-KEY|PART|PRELOAD-HINT|RENDITION-REPORT):/', $line)
                     || (str_starts_with($line, '#EXT') && preg_match('/[:,]URI\s*=/', $line))) {
                     throw new MediaException('This response does not support this HLS resource tag.', 'response', 'artifact');
                 }
+
                 if ($kind !== null) {
                     $uri = substr($line, $offset, $length);
                     $this->validateUri($uri);
@@ -169,6 +176,7 @@ class HlsPlaylist implements Responsable
                             if ($decoded === '' || ! preg_match('//u', $decoded) || str_contains($decoded, '\\')) {
                                 throw new InvalidArgumentException;
                             }
+
                             $target = (new WhitespacePathNormalizer)->normalizePath((dirname($path) === '.' ? '' : dirname($path).'/').$decoded);
                             if ($target === '') {
                                 throw new InvalidArgumentException;
@@ -177,34 +185,42 @@ class HlsPlaylist implements Responsable
                             throw new MediaException('An HLS reference escapes the disk or has an invalid path.', 'response', 'artifact');
                         }
                     }
-                    if ($discover !== null) {
+
+                    if ($discover instanceof \Closure) {
                         $discover($target, $uri);
                     }
+
                     if ($all && $kind === 'playlist' && $target !== null && ! isset($queued[$target])) {
                         if (count($pending) >= 1024) {
                             throw new MediaException('An HLS response cannot read more than 1024 local playlists.', 'response', 'artifact');
                         }
+
                         $queued[$target] = true;
                         $pending[] = $target;
                     }
+
                     if (isset($resolvers[$kind])) {
                         if (! isset($cache[$kind][$path][$uri])) {
                             $url = ($resolvers[$kind])($target, $path, $uri);
                             $this->validateUri($url);
                             $cache[$kind][$path][$uri] = $url;
                         }
+
                         $line = substr_replace($line, $cache[$kind][$path][$uri], $offset, $length);
                     }
                 }
+
                 $outputBudget -= strlen($line) + ($lineIndex > 0 ? 1 : 0);
                 if ($outputBudget < 0) {
                     throw new MediaException('An HLS response exceeds its 16 MiB output limit.', 'response', 'artifact');
                 }
             }
+
             unset($line);
             if ($type !== null) {
                 throw new MediaException('An HLS resource declaration has no URI.', 'response', 'artifact');
             }
+
             $result[$path] = implode("\n", $lines);
         }
 
@@ -227,6 +243,7 @@ class HlsPlaylist implements Responsable
                 fclose($stream);
             }
         }
+
         $normalized = str_replace("\r\n", "\n", $content);
         if (strlen($content) > $limit || ! str_starts_with($normalized, "#EXTM3U\n")
             || ! preg_match('//u', $normalized) || preg_match('/[\x00-\x09\x0B-\x1F\x7F-\x9F]/u', $normalized)) {
@@ -262,6 +279,7 @@ class HlsPlaylist implements Responsable
             if ($match[0][1] !== $end || isset($values[$match[1][0]])) {
                 return null;
             }
+
             $end += strlen($match[0][0]);
             $values[$match[1][0]] = [$match[2][0], $match[2][1]];
         }
@@ -277,14 +295,17 @@ class HlsPlaylist implements Responsable
         if ($values === null) {
             throw new MediaException('Invalid HLS resource attributes.', 'response', 'artifact');
         }
+
         $uri = null;
         if (isset($values['URI'])) {
             [$value, $offset] = $values['URI'];
             if (! str_starts_with($value, '"') || ! str_ends_with($value, '"')) {
                 throw new MediaException('HLS resource URIs must be quoted.', 'response', 'artifact');
             }
+
             $uri = [$start + $offset + 1, strlen($value) - 2];
         }
+
         if (($required && $uri === null)
             || (! $required && (! isset($values['TYPE'], $values['GROUP-ID'], $values['NAME'])
                 || ($values['TYPE'][0] === 'SUBTITLES' && $uri === null)))) {
@@ -302,6 +323,7 @@ class HlsPlaylist implements Responsable
         if (isset($values['URI']) && str_starts_with($values['URI'][0], '"') && str_ends_with($values['URI'][0], '"')) {
             $uri = [11 + $values['URI'][1] + 1, strlen($values['URI'][0]) - 2];
         }
+
         if (! isset($values['METHOD'])
             || ($values['METHOD'][0] === 'NONE' ? isset($values['URI']) : $uri === null)) {
             throw new MediaException('Invalid HLS key attributes.', 'response', 'artifact');

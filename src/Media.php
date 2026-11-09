@@ -204,9 +204,7 @@ readonly class Media
 
     public function probe(): Metadata
     {
-        return $this->withInput(function (string $path, Workspace $workspace) {
-            return $workspace->probe($this);
-        });
+        return $this->withInput(fn(string $path, Workspace $workspace): \ProtoneMedia\LaravelFFMpeg\Metadata => $workspace->probe($this));
     }
 
     /** The caller's key must change whenever the source bytes or object version change. */
@@ -220,7 +218,7 @@ readonly class Media
             $this->identity(), $versionedKey, config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'),
         ]));
         $data = $cache->get($key);
-        if (! self::isProbeData($data)) {
+        if (! $this->isProbeData($data)) {
             $data = $this->probe()->toArray();
             $cache->put($key, $data, $ttl);
         }
@@ -235,7 +233,7 @@ readonly class Media
             throw new InvalidArgumentException('Audio analysis requires a nonnegative audio track index.');
         }
 
-        return $this->withInput(function (string $path, Workspace $workspace) use ($audioFilter, $audio) {
+        return $this->withInput(function (string $path, Workspace $workspace) use ($audioFilter, $audio): \ProtoneMedia\LaravelFFMpeg\ProcessResult {
             $runner = $workspace->runner;
             $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
             $runner->version($binary, 'ffmpeg', $workspace->path, Progress::ANALYSIS);
@@ -259,15 +257,15 @@ readonly class Media
             $path = $workspace->stage($this);
 
             return $operation($path, $workspace);
-        } catch (Throwable $exception) {
-            $failure = $exception;
+        } catch (Throwable $throwable) {
+            $failure = $throwable;
 
-            throw $exception;
+            throw $throwable;
         } finally {
             try {
                 $workspace->delete();
             } catch (Throwable $exception) {
-                if ($failure === null) {
+                if (!$failure instanceof \Throwable) {
                     throw $exception;
                 }
             }
@@ -282,7 +280,8 @@ readonly class Media
 
         for ($i = 0; $i < count($this->options); $i += 2) {
             if (in_array($this->options[$i], ['-probesize', '-analyzeduration'], true)) {
-                array_push($options, $this->options[$i], $this->options[$i + 1]);
+                $options[] = $this->options[$i];
+                $options[] = $this->options[$i + 1];
             }
         }
 
@@ -319,7 +318,7 @@ readonly class Media
     /** @internal Apply process redactions to every decoded probe string, after JSON decoding so escaped values are covered. */
     public static function redactProbeData(array $data, array $redactions): array
     {
-        array_walk_recursive($data, static function (&$value) use ($redactions) {
+        array_walk_recursive($data, static function (&$value) use ($redactions): void {
             if (is_string($value)) {
                 $value = strtr($value, $redactions);
             }
@@ -346,18 +345,18 @@ readonly class Media
             throw new MediaException('FFprobe returned invalid JSON.', 'probing', 'metadata');
         }
 
-        if (! self::isProbeData($data)) {
+        if (! $this->isProbeData($data)) {
             throw new MediaException('FFprobe returned invalid metadata.', 'probing', 'metadata');
         }
 
         return self::redactProbeData($data, $redactions);
     }
 
-    private static function isProbeData(mixed $data): bool
+    private function isProbeData(mixed $data): bool
     {
         return is_array($data) && isset($data['format'], $data['streams']) && is_array($data['format'])
             && is_array($data['streams']) && array_is_list($data['streams'])
-            && ! array_any($data['streams'], fn ($stream) => ! is_array($stream));
+            && ! array_any($data['streams'], fn ($stream): bool => ! is_array($stream));
     }
 
     /** @internal */
@@ -367,7 +366,8 @@ readonly class Media
             throw new InvalidArgumentException('The staging name must be a safe generated filename.');
         }
 
-        $input = $output = null;
+        $input = null;
+        $output = null;
 
         try {
             if ($this->source instanceof InputSource) {
@@ -413,9 +413,9 @@ readonly class Media
             }
 
             return $path;
-        } catch (Throwable $exception) {
-            if ($exception instanceof MediaException) {
-                throw $exception;
+        } catch (Throwable $throwable) {
+            if ($throwable instanceof MediaException) {
+                throw $throwable;
             }
 
             throw new MediaException('Cannot stage the media input.', 'staging', 'transfer');

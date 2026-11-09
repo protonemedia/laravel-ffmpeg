@@ -19,27 +19,30 @@ final readonly class HlsExportResult implements Result
     public function playlist(): GeneratedFile
     {
         return $this->files()->firstWhere('role', 'hls-master')
-            ?? $this->files()->sole(fn ($file) => $file->role === 'hls-playlist');
+            ?? $this->files()->sole(fn ($file): bool => $file->role === 'hls-playlist');
     }
 
     public function playback(): HlsPresentation
     {
-        if ($this->presentation !== null) {
+        if ($this->presentation instanceof \ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation) {
             return $this->presentation;
         }
+
         $playlist = $this->playlist();
         $variants = [];
         foreach ($this->variants as $name => $paths) {
-            if (array_any($this->renditions, fn ($groups) => array_any($groups, fn ($members) => in_array($name, $members, true)))) {
+            if (array_any($this->renditions, fn ($groups): bool => array_any($groups, fn ($members): bool => in_array($name, $members, true)))) {
                 continue;
             }
+
             foreach ($this->variantGroups[$name] ?? [] as $type => $group) {
                 foreach ($this->renditions[$type][$group] ?? [] as $member) {
                     $paths += $this->variants[$member];
                 }
             }
-            $variants[$name] = $this->files()->filter(fn ($file) => isset($paths[$file->path]))
-                ->map(fn ($file) => HlsPresentation::id($file->disk ?? '', $file->path))->values()->all();
+
+            $variants[$name] = $this->files()->filter(fn ($file): bool => isset($paths[$file->path]))
+                ->map(fn ($file): string => HlsPresentation::id($file->disk ?? '', $file->path))->values()->all();
         }
 
         return new HlsPresentation(
@@ -59,7 +62,7 @@ final readonly class HlsExportResult implements Result
             throw new ItemNotFoundException('Unknown HLS variant.');
         }
 
-        $files = $this->files()->filter(fn ($file) => isset($this->variants[$name][$file->path]))->values();
+        $files = $this->files()->filter(fn ($file): bool => isset($this->variants[$name][$file->path]))->values();
         $references = array_intersect_key($this->keyReferences, array_flip($files->pluck('path')->all()));
         $needed = [];
         foreach ($references as $urls) {
@@ -67,7 +70,8 @@ final readonly class HlsExportResult implements Result
                 $needed[HlsPresentation::id($key['disk'] ?? '', $key['path'])] = true;
             }
         }
-        $keys = $this->files()->filter(fn ($file) => $file->role === 'hls-key'
+
+        $keys = $this->files()->filter(fn ($file): bool => $file->role === 'hls-key'
             && isset($needed[HlsPresentation::id($file->disk ?? '', $file->path)]))->map(fn ($file) => $file->toArray())->values()->all();
 
         return new self($files->all(), $this->processes()->all(), keyReferences: $references, playbackKeys: $keys);

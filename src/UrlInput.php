@@ -73,7 +73,8 @@ readonly class UrlInput implements InputSource
         $options = ['-rw_timeout', '15000000'];
 
         if (str_starts_with($this->url, 'https:')) {
-            array_push($options, '-tls_verify', '1');
+            $options[] = '-tls_verify';
+            $options[] = '1';
         }
 
         return $options;
@@ -156,9 +157,9 @@ readonly class UrlInput implements InputSource
             }
 
             return $path;
-        } catch (Throwable $exception) {
-            if ($exception instanceof MediaException) {
-                throw $exception;
+        } catch (Throwable $throwable) {
+            if ($throwable instanceof MediaException) {
+                throw $throwable;
             }
 
             // HTTP exceptions can contain signed URLs, headers and response bodies.

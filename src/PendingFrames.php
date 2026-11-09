@@ -98,7 +98,8 @@ final class PendingFrames implements Exportable, MeasuresDuration, PackagesArtif
         $options = ['-f', 'image2', '-start_number', '1'];
 
         if ($this->count !== null) {
-            array_push($options, '-frames:v', (string) $this->count);
+            $options[] = '-frames:v';
+            $options[] = (string) $this->count;
         }
 
         array_splice($default, -1, 0, $options);

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
 /** @internal Sources other than a Storage key or a local file. */

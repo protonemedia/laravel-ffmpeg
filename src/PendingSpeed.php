@@ -16,7 +16,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
  * Sources require a zero container/video origin and nonnegative audio origins.
  * Trusted simple filters run first; their timing changes make progress indeterminate.
  */
-final class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, ValidatesSelections
+final readonly class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, ValidatesSelections
 {
     use Concerns\AudioCodec;
     use Concerns\AudioFilters;
@@ -32,9 +32,9 @@ final class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs,
     use Concerns\VideoFilters;
     use Conditionable;
 
-    private readonly PendingExport $export;
+    private PendingExport $export;
 
-    public function __construct(private readonly Media $source, string|Filesystem $disk, private readonly float $factor)
+    public function __construct(private Media $source, string|Filesystem $disk, private float $factor)
     {
         if (! is_finite($factor) || $factor <= 0) {
             throw new InvalidArgumentException('Speed requires a finite positive factor.');
@@ -64,10 +64,11 @@ final class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs,
             throw new InvalidArgumentException('Speed requires a source without input options.');
         }
 
-        $factor = self::number($this->factor);
+        $factor = $this->number($this->factor);
         if (! $settings['omitVideo']) {
             $settings['videoFilters'][] = 'setpts=PTS/'.$factor;
         }
+
         if (! $settings['omitAudio']) {
             // atempo preserves its first timestamp, then generates timestamps at
             // the new sample rate. Scale only that initial offset beforehand.
@@ -77,23 +78,25 @@ final class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs,
                 $settings['audioFilters'][] = 'atempo=2';
                 $remaining /= 2;
             }
+
             while ($remaining < 0.5) {
                 $settings['audioFilters'][] = 'atempo=0.5';
                 $remaining *= 2;
             }
-            $settings['audioFilters'][] = 'atempo='.self::number($remaining);
+
+            $settings['audioFilters'][] = 'atempo='.$this->number($remaining);
         }
 
         // Source chapter timestamps cannot describe a retimed presentation.
         $settings['chapterSource'] ??= -1;
 
-        return [(new ExportOutput($path ?? 'inspection.mp4', $settings['disk']))->configure($settings)];
+        return [new ExportOutput($path ?? 'inspection.mp4', $settings['disk'])->configure($settings)];
     }
 
     /** @internal */
     public function selections(array $expected): void
     {
-        if ($expected[0] === [] || array_any($expected[0], fn ($type) => ! in_array($type, ['audio', 'video'], true))) {
+        if ($expected[0] === [] || array_any($expected[0], fn ($type): bool => ! in_array($type, ['audio', 'video'], true))) {
             throw new MediaException('Speed requires selected audio or video streams only.', 'probing', 'mapping');
         }
     }
@@ -122,7 +125,7 @@ final class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs,
         }
 
         if ($item->videoStreams()->count() > 1 || $item->audioStreams()->count() > 1
-            || $item->streams()->contains(fn ($stream) => ! in_array($stream->type(), ['audio', 'video'], true) || $stream->isCoverArt())) {
+            || $item->streams()->contains(fn ($stream): bool => ! in_array($stream->type(), ['audio', 'video'], true) || $stream->isCoverArt())) {
             return null;
         }
 
@@ -132,7 +135,7 @@ final class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs,
         return $adjusted !== null && is_finite($adjusted) ? $adjusted : null;
     }
 
-    private static function number(float $value): string
+    private function number(float $value): string
     {
         return json_encode($value, JSON_THROW_ON_ERROR);
     }

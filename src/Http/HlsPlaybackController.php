@@ -42,6 +42,7 @@ class HlsPlaybackController
             if (! is_resource($stream)) {
                 abort(404);
             }
+
             if ($file['role'] === 'hls-key') {
                 $key = stream_get_contents($stream, 17);
                 abort_unless(is_string($key) && strlen($key) === 16, 404);
@@ -71,6 +72,7 @@ class HlsPlaybackController
 
                 return response('', 416, [...$headers, 'Content-Range' => 'bytes */'.$size]);
             }
+
             $start = $match[1] === '' ? max(0, $size - (int) $match[2]) : (int) $match[1];
             $end = $match[1] === '' || $match[2] === '' ? $size - 1 : min($size - 1, (int) $match[2]);
             if ($start > $end || $start >= $size) {
@@ -78,9 +80,11 @@ class HlsPlaybackController
 
                 return response('', 416, [...$headers, 'Content-Range' => 'bytes */'.$size]);
             }
+
             $status = 206;
             $headers['Content-Range'] = 'bytes '.$start.'-'.$end.'/'.$size;
         }
+
         $headers['Content-Length'] = (string) max(0, $end - $start + 1);
         if ($request->isMethod('HEAD')) {
             fclose($stream);
@@ -88,7 +92,7 @@ class HlsPlaybackController
             return response('', $status, $headers);
         }
 
-        return response()->stream(function () use ($stream, $start, $end) {
+        return response()->stream(function () use ($stream, $start, $end): void {
             try {
                 // Some remote Storage streams are not seekable. Discard bounded
                 // chunks rather than loading the prefix or whole segment.
@@ -99,15 +103,18 @@ class HlsPlaybackController
                         if ($bytes === false || $bytes === '') {
                             break;
                         }
+
                         $remaining -= strlen($bytes);
                     }
                 }
+
                 $remaining = $end - $start + 1;
                 while ($remaining > 0 && ! feof($stream)) {
                     $bytes = fread($stream, min(1048576, $remaining));
                     if ($bytes === false || $bytes === '') {
                         break;
                     }
+
                     echo $bytes;
                     $remaining -= strlen($bytes);
                 }

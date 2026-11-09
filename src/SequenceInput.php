@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
@@ -52,7 +54,7 @@ readonly class SequenceInput implements InputSource
 
     public function identity(): string
     {
-        return hash('sha256', serialize([$this->rate, array_map(fn ($image) => $image->identity(), $this->images)]));
+        return hash('sha256', serialize([$this->rate, array_map(fn ($image): string => $image->identity(), $this->images)]));
     }
 
     public function extension(): string
@@ -94,6 +96,7 @@ readonly class SequenceInput implements InputSource
             if ($size === false || $size[2] !== $type || ($dimensions !== null && $dimensions !== [$size[0], $size[1]])) {
                 throw new MediaException('Sequence image '.$index.' requires the declared format and matching dimensions.', 'staging', 'sequence');
             }
+
             $dimensions = [$size[0], $size[1]];
             $target = $workspace->path.'/'.$name.'-'.sprintf('%08d', $index).'.'.$this->suffix;
             if (! @symlink($source, $target) && (! @copy($source, $target) || ! chmod($target, 0600))) {

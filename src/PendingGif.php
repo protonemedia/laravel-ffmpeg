@@ -15,7 +15,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
 /** An animated GIF encoded with a palette generated from the clip it shows. */
-final class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
+final readonly class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
 {
     use Concerns\Clips;
     use Concerns\GlobalOptions;
@@ -25,9 +25,9 @@ final class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOut
     use Concerns\VideoFilters;
     use Conditionable;
 
-    private readonly PendingExport $export;
+    private PendingExport $export;
 
-    public function __construct(Media $media, string|Filesystem $disk, int $width = 480, int|float $frameRate = 12, private readonly int $loop = 0)
+    public function __construct(Media $media, string|Filesystem $disk, int $width = 480, int|float $frameRate = 12, private int $loop = 0)
     {
         if ($width <= 0 || $width > 65535 || ! is_finite((float) $frameRate) || $frameRate <= 0 || $loop < -1 || $loop > 65535) {
             throw new InvalidArgumentException('GIF requires a width between 1 and 65535, a finite positive frame rate, and a loop count between -1 and 65535.');
@@ -58,7 +58,7 @@ final class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOut
         $settings['clip'] = null; // Trim before palette generation, not after it.
         $settings['outputOptions'] = ['-f', 'gif', '-loop', (string) $this->loop];
 
-        return [(new ExportOutput($path ?? 'inspection.gif', $settings['disk']))->configure($settings)];
+        return [new ExportOutput($path ?? 'inspection.gif', $settings['disk'])->configure($settings)];
     }
 
     /** @internal Inspection describes encoding; analyze() creates the palette and spool it references. */

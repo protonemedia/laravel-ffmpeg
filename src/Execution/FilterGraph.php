@@ -22,7 +22,8 @@ class FilterGraph
 
         foreach (self::split($expression, ',;') as [$filter, $separator]) {
             preg_match('/^(?:\[[^\]]+\])*\s*([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?=/', $filter, $name);
-            $quoted = $escaped = false;
+            $quoted = false;
+            $escaped = false;
             $compiled = '';
 
             for ($i = 0; $i < strlen($filter); $i++) {
@@ -94,6 +95,7 @@ class FilterGraph
     {
         $arguments = substr($filter, strpos($filter, '=') + 1);
         $arguments = preg_replace('/(?:\[[a-zA-Z_][a-zA-Z0-9_]*\])+\s*$/', '', $arguments);
+
         $options = [];
 
         foreach (self::split($arguments, ':') as [$option]) {
@@ -110,11 +112,12 @@ class FilterGraph
     /** Check label ownership; FFmpeg validates filter syntax and pad arity. */
     public static function validate(string $expression, int $inputs, array $mapped): void
     {
-        $produced = $consumed = [];
-
+        $produced = [];
+        $consumed = [];
         foreach (self::split($expression, ',;') as [$chain]) {
             $labels = [];
-            $quoted = $escaped = false;
+            $quoted = false;
+            $escaped = false;
 
             for ($i = 0; $i < strlen($chain); $i++) {
                 $character = $chain[$i];
@@ -171,7 +174,8 @@ class FilterGraph
     {
         $parts = [];
         $start = 0;
-        $quoted = $escaped = false;
+        $quoted = false;
+        $escaped = false;
 
         for ($i = 0; $i < strlen($expression); $i++) {
             $character = $expression[$i];

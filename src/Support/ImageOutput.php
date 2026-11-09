@@ -40,13 +40,13 @@ final class ImageOutput
     {
         $settings['clip'] = null;
 
-        return [(new ExportOutput($path ?? 'inspection.mp4', $settings['disk']))->configure($settings)];
+        return [new ExportOutput($path ?? 'inspection.mp4', $settings['disk'])->configure($settings)];
     }
 
     /** A per-track -filter:v:N would replace, or be replaced by, the sampling filter appended to -filter:v. */
     public static function assertNoTrackVideoFilters(ExportOutput $output): void
     {
-        if (array_any($output->outputConfiguration()['videoStreams'], fn ($track) => isset($track['filters']))) {
+        if (array_any($output->outputConfiguration()['videoStreams'], fn ($track): bool => isset($track['filters']))) {
             throw new InvalidArgumentException('Sampled image operations do not support per-track video filters; add filters to the operation itself.');
         }
     }
@@ -54,7 +54,7 @@ final class ImageOutput
     /** Normalize a destination pattern and require exactly one frame-number placeholder in its filename. */
     public static function sequenceDestination(string $path): string
     {
-        $path = (new ExportOutput($path, 'local'))->destination()['path'];
+        $path = new ExportOutput($path, 'local')->destination()['path'];
 
         if (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', $path)
             || str_contains(dirname($path), '%')) {

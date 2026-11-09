@@ -13,7 +13,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
 /** One JPEG or PNG frame at a timestamp, returned as bytes or published. */
-final class PendingFrame implements Exportable, MeasuresDuration, ShapesCommand, ValidatesArtifacts
+final readonly class PendingFrame implements Exportable, MeasuresDuration, ShapesCommand, ValidatesArtifacts
 {
     use Concerns\Fades;
     use Concerns\GlobalOptions;
@@ -25,9 +25,9 @@ final class PendingFrame implements Exportable, MeasuresDuration, ShapesCommand,
     use Concerns\VideoFilters;
     use Conditionable;
 
-    private readonly PendingExport $export;
+    private PendingExport $export;
 
-    private readonly float $at;
+    private float $at;
 
     public function __construct(Media $media, string|Filesystem $disk, float|string $at)
     {

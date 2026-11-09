@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ProtoneMedia\LaravelFFMpeg\Pipeline;
 
 /** @internal A builder the queue can capture, restore in a worker, and run. */

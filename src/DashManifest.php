@@ -10,9 +10,9 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 /** @internal The deliberately narrow, finite FFmpeg SegmentTimeline dialect we own. */
 final class DashManifest
 {
-    public const NS = 'urn:mpeg:dash:schema:mpd:2011';
+    public const string NS = 'urn:mpeg:dash:schema:mpd:2011';
 
-    public const LIMIT = 100000;
+    public const int LIMIT = 100000;
 
     public static function read(string $path, string $type): array
     {
@@ -21,18 +21,21 @@ final class DashManifest
             || preg_match('/<!|<\?(?!xml\s)/i', $bytes) || ! class_exists(DOMDocument::class)) {
             self::fail();
         }
+
         $document = new DOMDocument;
         $previous = libxml_use_internal_errors(true);
         try {
-            if (! $document->loadXML($bytes, LIBXML_NONET) || $document->doctype !== null) {
+            if (! $document->loadXML($bytes, LIBXML_NONET) || $document->doctype instanceof \DOMDocumentType) {
                 self::fail();
             }
         } finally {
             libxml_clear_errors();
             libxml_use_internal_errors($previous);
         }
+
         $xpath = new DOMXPath($document);
         $xpath->registerNamespace('d', self::NS);
+
         $allowed = [
             'MPD' => ['schemaLocation', 'profiles', 'type', 'mediaPresentationDuration', 'maxSegmentDuration', 'minBufferTime'],
             'ProgramInformation' => [], 'ServiceDescription' => ['id'], 'Period' => ['id', 'start'],
@@ -46,6 +49,7 @@ final class DashManifest
             if ($element->namespaceURI !== self::NS || ! isset($allowed[$element->localName])) {
                 self::fail();
             }
+
             foreach ($element->attributes as $attribute) {
                 if (! in_array($attribute->localName, $allowed[$element->localName], true)
                     || ($attribute->namespaceURI !== null && ! ($element->localName === 'MPD'
@@ -54,6 +58,7 @@ final class DashManifest
                 }
             }
         }
+
         $root = $document->documentElement;
         $sets = $xpath->query('/d:MPD/d:Period/d:AdaptationSet');
         $representations = $xpath->query('//d:Representation');
@@ -64,6 +69,7 @@ final class DashManifest
             || $sets->item(0)->getAttribute('contentType') !== $type || $representations->length !== 1 || $templates->length !== 1) {
             self::fail();
         }
+
         $representation = $representations->item(0);
         $template = $templates->item(0);
         if ($representation->parentNode !== $sets->item(0) || $template->parentNode !== $representation
@@ -77,6 +83,7 @@ final class DashManifest
             || $xpath->query('d:SegmentTimeline', $template)->length !== 1) {
             self::fail();
         }
+
         $scale = self::integer($template, 'timescale', 1);
         $durations = [];
         $time = 0;
@@ -87,6 +94,7 @@ final class DashManifest
                 || $repeat >= self::LIMIT || count($durations) + $repeat + 1 > self::LIMIT) {
                 self::fail();
             }
+
             for ($i = 0; $i <= $repeat; $i++) {
                 $durations[] = $duration / $scale;
                 $time += $duration;
@@ -95,13 +103,16 @@ final class DashManifest
                 }
             }
         }
+
         if ($durations === []) {
             self::fail();
         }
+
         $files = ['init.mp4'];
         foreach ($durations as $index => $duration) {
             $files[] = sprintf('segment-%08d.m4s', $index + 1);
         }
+
         $expected = ['index.mpd', ...$files];
         sort($expected);
         $actual = [];
@@ -109,17 +120,20 @@ final class DashManifest
             if ($file->isDot()) {
                 continue;
             }
+
             if ($file->isLink() || ! $file->isFile() || $file->getSize() <= 0 || count($actual) >= self::LIMIT + 2) {
                 self::fail();
             }
+
             $actual[] = $file->getFilename();
         }
+
         sort($actual);
         if ($actual !== $expected) {
             self::fail();
         }
 
-        return compact('document', 'representation', 'template', 'durations', 'files');
+        return ['document' => $document, 'representation' => $representation, 'template' => $template, 'durations' => $durations, 'files' => $files];
     }
 
     private static function integer(DOMElement $element, string $name, int $minimum): int

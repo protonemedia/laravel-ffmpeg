@@ -63,6 +63,7 @@ final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, 
         if (! is_finite($seconds) || $seconds < 0) {
             throw new InvalidArgumentException('Audio mix offsets require finite nonnegative seconds.');
         }
+
         $this->offset = $seconds;
 
         return $this;
@@ -111,6 +112,7 @@ final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, 
         if (($settings['audio']['codec'] ?? null) === 'copy') {
             throw new InvalidArgumentException('Audio mixing requires encoded audio.');
         }
+
         if ($this->loop && $this->added->protocolWhitelist() !== 'file') {
             throw new InvalidArgumentException('Looped audio requires a local or downloaded input. Use openUrl(download: true).');
         }
@@ -122,7 +124,7 @@ final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, 
         $settings['metadataSource'] ??= 0;
         $settings['chapterSource'] ??= 0;
 
-        return [(new ExportOutput($path ?? 'inspection.mp4', $settings['disk']))->configure($settings)];
+        return [new ExportOutput($path ?? 'inspection.mp4', $settings['disk'])->configure($settings)];
     }
 
     /** @internal */
@@ -163,6 +165,7 @@ final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, 
             $inputs = array_keys($command, '-i', true);
             array_splice($command, $inputs[1], 0, ['-stream_loop', '-1']);
         }
+
         $destination = array_pop($command);
 
         // The actual finite duration is resolved only after the staged source is
@@ -179,18 +182,22 @@ final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, 
         if (! $source->hasVideo() && ! $source->hasAudio()) {
             throw new MediaException('Audio mixing requires primary media with video or audio.', 'probing', 'mapping');
         }
+
         if ($duration === null || $duration <= 0) {
             throw new MediaException('Audio mixing requires finite primary media.', 'probing', 'metadata');
         }
+
         PendingExport::assertZeroOrigins($source, 'Audio mixing', audioOnlyOffset: true);
         $audio = $source->audio();
         if ($source->hasVideo() && $audio !== null
             && (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0)) {
             throw new MediaException('Original audio requires a known nonnegative timestamp origin relative to video.', 'probing', 'metadata');
         }
+
         if ($added->audio() === null) {
             throw new MediaException('Added audio requires an audio track.', 'probing', 'mapping');
         }
+
         if ($added->duration() === null || $added->duration() <= 0) {
             throw new MediaException('Added audio requires a finite duration.', 'probing', 'metadata');
         }
@@ -220,15 +227,19 @@ final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, 
                 if ($exception->category === 'timeout') {
                     throw $exception;
                 }
+
                 throw new MediaException('Looped audio must decode to nonempty samples.', Progress::ANALYSIS, 'artifact', $exception->diagnostics);
             }
+
             if (! $duration) {
                 throw new MediaException('Looped audio must decode to nonempty samples.', Progress::ANALYSIS, 'artifact');
             }
+
             array_splice($command, $protocols[1], $inputs[1] + 2 - $protocols[1], [
                 '-protocol_whitelist', 'file', '-stream_loop', '-1', '-i', $prepared,
             ]);
         }
+
         $source = $workspace->probe($this->source);
         $graph = $this->mixGraph($source->hasAudio(), $source->duration());
         FilterGraph::validate($graph, 2, ['mixed_audio']);

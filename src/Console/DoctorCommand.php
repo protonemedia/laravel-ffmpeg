@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ProtoneMedia\LaravelFFMpeg\Console;
 
 use Illuminate\Console\Command;
@@ -24,6 +26,7 @@ class DoctorCommand extends Command
                 'protocol' => 'input_protocols', 'bsf' => 'bitstream_filters', 'hwaccel' => 'hardware_accelerators'] as $option => $category) {
                 $requirements[$category] = $this->option($option);
             }
+
             $requirements['ffprobe_input_protocols'] = $this->option('protocol');
             $missing = $capabilities->missing($requirements);
             if ($this->option('json')) {
@@ -32,9 +35,11 @@ class DoctorCommand extends Command
                 foreach ($capabilities->versions() as $tool => $version) {
                     $this->line($tool.': '.$version);
                 }
+
                 foreach (['encoders', 'muxers', 'filters', 'input_protocols', 'output_protocols', 'bitstream_filters', 'hardware_accelerators'] as $category) {
                     $this->line($category.': '.count($capabilities->available($category)));
                 }
+
                 $this->info('Temporary root: writable');
                 $this->warn('Compiled-in support only. GPU/device usability is NOT tested.');
                 if ($missing !== []) {

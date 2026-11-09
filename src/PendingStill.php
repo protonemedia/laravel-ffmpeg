@@ -11,7 +11,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 
 /** A silent video that holds one image for a fixed duration. */
-final class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
+final readonly class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
 {
     use Concerns\Fades;
     use Concerns\GlobalOptions;
@@ -24,13 +24,14 @@ final class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
     use Concerns\VideoFilters;
     use Conditionable;
 
-    private readonly PendingExport $export;
+    private PendingExport $export;
 
-    public function __construct(Media $image, string|Filesystem $disk, private readonly float $duration, int $frameRate)
+    public function __construct(Media $image, string|Filesystem $disk, private float $duration, int $frameRate)
     {
         if (! is_finite($duration) || $duration <= 0 || $frameRate < 1 || $frameRate > 240) {
             throw new InvalidArgumentException('Still video requires a finite positive duration and a frame rate between 1 and 240.');
         }
+
         $this->export = new PendingExport(new Media($disk, new StillInput($image, $frameRate)), $disk, $this);
         $this->export->video('libx264')->outputOptions(['-pix_fmt', 'yuv420p']);
     }
@@ -63,7 +64,7 @@ final class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
     }
 
     /** @internal */
-    public function duration(array $metadata, ?float $default): ?float
+    public function duration(array $metadata, ?float $default): float
     {
         return $this->duration;
     }

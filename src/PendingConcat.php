@@ -30,7 +30,7 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
     public function __construct(private readonly array $sources, string|Filesystem $disk)
     {
         if (! array_is_list($sources) || count($sources) < 2
-            || array_any($sources, fn ($source) => ! $source instanceof Media)) {
+            || array_any($sources, fn (mixed $source): bool => ! $source instanceof Media)) {
             throw new InvalidArgumentException('Transcoded concat requires at least two media inputs.');
         }
 
@@ -69,7 +69,7 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
             throw new InvalidArgumentException('Audio normalization requires a positive sample rate, mono or stereo, and a nonnegative channel index.');
         }
 
-        $this->audioNormalization = compact('sampleRate', 'channels', 'channel');
+        $this->audioNormalization = ['sampleRate' => $sampleRate, 'channels' => $channels, 'channel' => $channel];
 
         return $this;
     }
@@ -156,7 +156,7 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
             throw new InvalidArgumentException('Transcoded concat requires transcoded video and audio, and either normalizeAudio() or withoutAudio(), not both.');
         }
 
-        if (array_any($this->sources, fn ($source) => $source->inputOptions() !== [])) {
+        if (array_any($this->sources, fn (\ProtoneMedia\LaravelFFMpeg\Media $source): bool => $source->inputOptions() !== [])) {
             throw new InvalidArgumentException('Transcoded concat does not support input options that can change source timing.');
         }
 
@@ -169,14 +169,14 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
         $settings['omitAudio'] = false;
         $settings['metadataSource'] = $settings['chapterSource'] = -1;
 
-        return [(new ExportOutput($path ?? 'inspection.mp4', $settings['disk']))->configure($settings)];
+        return [new ExportOutput($path ?? 'inspection.mp4', $settings['disk'])->configure($settings)];
     }
 
     /** @internal */
     public function graph(): string
     {
-        $branches = $pads = [];
-
+        $branches = [];
+        $pads = [];
         foreach ($this->sources as $index => $source) {
             $branches[] = '['.$index.':V:0]'.implode(',', $this->normalization ?? []).'[concat_v'.$index.']';
             $pads[] = '[concat_v'.$index.']';
@@ -201,9 +201,11 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
             if ($item->video() === null) {
                 throw new MediaException('Transcoded concat requires a video stream in every source.', 'probing', 'mapping');
             }
+
             if ($item->duration() === null || $item->duration() <= 0) {
                 throw new MediaException('Transcoded concat requires finite sources.', 'probing', 'metadata');
             }
+
             PendingExport::assertZeroOrigins($item, 'Transcoded concat');
 
             if ($this->audioNormalization !== null) {
@@ -213,6 +215,7 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
                 if ($audio === null || ($channel !== null && ($audio->channels() === null || $channel >= $audio->channels()))) {
                     throw new MediaException('Every concat source requires audio with the requested channel.', 'probing', 'mapping');
                 }
+
                 if (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0) {
                     throw new MediaException('Every concat source requires audio with a nonnegative origin.', 'probing', 'metadata');
                 }

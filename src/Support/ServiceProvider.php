@@ -6,7 +6,7 @@ use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 
 class ServiceProvider extends BaseServiceProvider
 {
-    public function boot()
+    public function boot(): void
     {
         if ($this->app->runningInConsole()) {
             $this->publishes([
@@ -16,11 +16,11 @@ class ServiceProvider extends BaseServiceProvider
         }
     }
 
-    public function register()
+    public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../../config/config.php', 'laravel-ffmpeg');
 
-        $this->app->singleton('laravel-ffmpeg', fn () => new MediaOpenerFactory);
+        $this->app->singleton('laravel-ffmpeg', fn (): \ProtoneMedia\LaravelFFMpeg\Support\MediaOpenerFactory => new MediaOpenerFactory);
         $this->app->singleton(\ProtoneMedia\LaravelFFMpeg\Http\HlsPlayback::class);
     }
 }

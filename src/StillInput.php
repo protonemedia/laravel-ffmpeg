@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use InvalidArgumentException;
@@ -52,6 +54,7 @@ readonly class StillInput implements InputSource
         if ($resource) {
             throw new MediaException('Still video cannot be used as a filter resource.', 'staging', 'resource');
         }
+
         $path = $workspace->stage($this->image, resource: true);
         $size = @getimagesize($path);
         if ($size === false || ! in_array($size[2], [IMAGETYPE_PNG, IMAGETYPE_JPEG], true)

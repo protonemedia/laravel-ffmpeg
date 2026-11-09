@@ -75,7 +75,7 @@ class ProgressParser
     {
         $now = hrtime(true);
 
-        if ($this->notify === null || $this->pending === null || (! $final && $now - $this->notifiedAt < 100000000)) {
+        if ($this->notify === null || !$this->pending instanceof \ProtoneMedia\LaravelFFMpeg\Progress || (! $final && $now - $this->notifiedAt < 100000000)) {
             return;
         }
 

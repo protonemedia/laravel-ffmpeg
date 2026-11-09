@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use JsonSerializable;
@@ -41,7 +43,7 @@ readonly class WaveformPeaks implements JsonSerializable
             'samplesPerBucket' => $this->samplesPerBucket,
             'bucketCount' => count($this->bucketFrames),
             'bucketFrames' => $this->bucketFrames,
-            'bucketDurations' => array_map(fn ($frames) => $frames / $this->sampleRate, $this->bucketFrames),
+            'bucketDurations' => array_map(fn ($frames): int|float => $frames / $this->sampleRate, $this->bucketFrames),
             'channels' => $this->channels,
         ];
     }

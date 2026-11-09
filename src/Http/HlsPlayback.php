@@ -43,6 +43,7 @@ class HlsPlayback
         if ($definition === null) {
             throw new InvalidArgumentException('Register the HLS playback definition in a service provider.');
         }
+
         $parameters = $request->route()->parameters();
         unset($parameters['hlsResource'], $parameters['_hlsPlayback']);
         $parameters['request'] = $request;

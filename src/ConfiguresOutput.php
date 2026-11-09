@@ -58,6 +58,7 @@ trait ConfiguresOutput
         if ($track < 0 || isset($this->videoStreams[$track])) {
             throw new InvalidArgumentException('Video track indexes must be nonnegative and configured once.');
         }
+
         $settings = new VideoStreamSettings;
         $configure($settings);
         $this->videoStreams[$track] = $settings->settings();
@@ -72,6 +73,7 @@ trait ConfiguresOutput
         if ($track < 0 || isset($this->audioStreams[$track])) {
             throw new InvalidArgumentException('Audio track indexes must be nonnegative and configured once.');
         }
+
         $settings = new AudioStreamSettings;
         $configure($settings);
         $this->audioStreams[$track] = $settings->settings();
@@ -117,7 +119,7 @@ trait ConfiguresOutput
             throw new InvalidArgumentException('Invalid encoder preset.');
         }
 
-        $this->video = array_replace($this->video, array_filter(compact('codec', 'bitrate', 'crf', 'preset'), fn ($value) => $value !== null));
+        $this->video = array_replace($this->video, array_filter(['codec' => $codec, 'bitrate' => $bitrate, 'crf' => $crf, 'preset' => $preset], fn ($value): bool => $value !== null));
 
         return $this;
     }
@@ -127,7 +129,7 @@ trait ConfiguresOutput
         $this->assertOutputMutable();
         $this->codec($codec);
         $this->bitrate($bitrate);
-        $this->audio = array_replace($this->audio, array_filter(compact('codec', 'bitrate'), fn ($value) => $value !== null));
+        $this->audio = array_replace($this->audio, array_filter(['codec' => $codec, 'bitrate' => $bitrate], fn ($value): bool => $value !== null));
 
         return $this;
     }
@@ -141,7 +143,7 @@ trait ConfiguresOutput
 
     private function bitrate(mixed $bitrate): void
     {
-        if ($bitrate !== null && ! (is_int($bitrate) && $bitrate > 0)
+        if ($bitrate !== null && (!is_int($bitrate) || $bitrate <= 0)
             && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
             throw new InvalidArgumentException('Bitrates require a positive integer in bits per second or an explicit unit string, such as 2500k.');
         }
@@ -174,11 +176,11 @@ trait ConfiguresOutput
             $stream = null;
         }
 
-        if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($stream !== null && $track !== null)) {
+        if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($stream instanceof \ProtoneMedia\LaravelFFMpeg\Stream && $track !== null)) {
             throw new InvalidArgumentException('Stream input and track indexes must be nonnegative.');
         }
 
-        return $stream !== null ? $this->mapProbedStream($stream, 'video', $input, $optional)
+        return $stream instanceof \ProtoneMedia\LaravelFFMpeg\Stream ? $this->mapProbedStream($stream, 'video', $input, $optional)
             : $this->map(($input ?? 0).':v:'.($track ?? 0).($optional ? '?' : ''));
     }
 
@@ -196,14 +198,14 @@ trait ConfiguresOutput
         }
 
         if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($track !== null && $language !== null)
-            || ($stream !== null && ($track !== null || $language !== null))
+            || ($stream instanceof \ProtoneMedia\LaravelFFMpeg\Stream && ($track !== null || $language !== null))
             || ($language !== null && ! preg_match('/^[a-zA-Z][a-zA-Z0-9_-]*$/D', $language))) {
             throw new InvalidArgumentException('Choose a nonnegative audio track or a language tag, not both.');
         }
 
         $selector = $language === null ? (string) ($track ?? 0) : 'm:language:'.$language;
 
-        return $stream !== null ? $this->mapProbedStream($stream, 'audio', $input, $optional)
+        return $stream instanceof \ProtoneMedia\LaravelFFMpeg\Stream ? $this->mapProbedStream($stream, 'audio', $input, $optional)
             : $this->map(($input ?? 0).':a:'.$selector.($optional ? '?' : ''));
     }
 
@@ -213,7 +215,7 @@ trait ConfiguresOutput
             throw new InvalidArgumentException('Mapping requires a probed '.$type.' stream.');
         }
 
-        $this->maps[] = compact('stream', 'input', 'optional');
+        $this->maps[] = ['stream' => $stream, 'input' => $input, 'optional' => $optional];
 
         return $this;
     }
@@ -332,7 +334,7 @@ trait ConfiguresOutput
     /** @internal */
     public function resourceFilters(): array
     {
-        return array_values(array_filter($this->videoFilters, fn ($filter) => $filter instanceof ResourceFilter));
+        return array_values(array_filter($this->videoFilters, fn ($filter): bool => $filter instanceof ResourceFilter));
     }
 
     public function audioFilter(string $expression): self
@@ -353,7 +355,7 @@ trait ConfiguresOutput
 
         $parts = explode('/', (string) $rate);
 
-        if (count($parts) > 2 || array_any($parts, fn ($part) => ! preg_match('/\A(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\z/', $part)
+        if (count($parts) > 2 || array_any($parts, fn ($part): bool => ! preg_match('/\A(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\z/', $part)
             || ! is_finite((float) $part) || (float) $part <= 0)
             || ! is_finite((float) $parts[0] / (float) ($parts[1] ?? 1))
             || (float) $parts[0] / (float) ($parts[1] ?? 1) <= 0) {
@@ -512,7 +514,7 @@ trait ConfiguresOutput
             $flags = $flags === '0' ? [] : explode('+', $flags);
         }
 
-        if (! array_is_list($flags) || array_any($flags, fn ($flag) => ! is_string($flag) || ! in_array($flag, [
+        if (! array_is_list($flags) || array_any($flags, fn ($flag): bool => ! is_string($flag) || ! in_array($flag, [
             'default', 'dub', 'original', 'comment', 'lyrics', 'karaoke', 'forced',
             'hearing_impaired', 'visual_impaired', 'clean_effects', 'attached_pic',
             'timed_thumbnails', 'non_diegetic', 'captions', 'descriptions', 'metadata',
@@ -634,10 +636,12 @@ trait ConfiguresOutput
 
         if ($this->clip !== null) {
             if ($this->clip['seek'] === 'accurate') {
-                array_push($options, '-ss', CommandCompiler::timestamp($this->clip['start']));
+                $options[] = '-ss';
+                $options[] = CommandCompiler::timestamp($this->clip['start']);
             }
 
-            array_push($options, '-t', CommandCompiler::timestamp($this->clip['duration']));
+            $options[] = '-t';
+            $options[] = CommandCompiler::timestamp($this->clip['duration']);
         }
 
         foreach ($maps as $map) {
@@ -646,19 +650,25 @@ trait ConfiguresOutput
                 $map = substr($map, 0, -1).':?';
             }
 
-            array_push($options, '-map', $map);
+            $options[] = '-map';
+            $options[] = $map;
         }
 
-        array_push($options, '-map_metadata', (string) ($this->metadataSource ?? 0), '-map_chapters', (string) ($this->chapterSource ?? ($this->clip === null ? 0 : -1)));
+        $options[] = '-map_metadata';
+        $options[] = (string) ($this->metadataSource ?? 0);
+        $options[] = '-map_chapters';
+        $options[] = (string) ($this->chapterSource ?? ($this->clip === null ? 0 : -1));
 
         foreach ([['v', $this->video, $this->videoFilters], ['a', $this->audio, $this->audioFilters]] as [$type, $encoding, $filters]) {
             foreach ($encoding as $name => $value) {
                 $option = match ($name) { 'codec' => 'c', 'bitrate' => 'b', default => $name };
-                array_push($options, '-'.$option.':'.$type, (string) $value);
+                $options[] = '-'.$option.':'.$type;
+                $options[] = (string) $value;
             }
 
             if ($filters !== []) {
-                array_push($options, '-filter:'.$type, implode(',', array_map($compileFilter, $filters)));
+                $options[] = '-filter:'.$type;
+                $options[] = implode(',', array_map($compileFilter, $filters));
             }
         }
 
@@ -666,37 +676,45 @@ trait ConfiguresOutput
             foreach ($streams as $track => $encoding) {
                 foreach ($encoding as $name => $value) {
                     if ($name === 'filters') {
-                        array_push($options, '-filter:'.$type.':'.$track, implode(',', array_map($compileFilter, [...$baseFilters, ...$value])));
+                        $options[] = '-filter:'.$type.':'.$track;
+                        $options[] = implode(',', array_map($compileFilter, [...$baseFilters, ...$value]));
                         continue;
                     }
+
                     $option = match ($name) { 'codec' => 'c', 'bitrate' => 'b', default => $name };
-                    array_push($options, '-'.$option.':'.$type.':'.$track, (string) $value);
+                    $options[] = '-'.$option.':'.$type.':'.$track;
+                    $options[] = (string) $value;
                 }
             }
         }
 
         foreach ($this->metadata as $key => $value) {
-            array_push($options, '-metadata', $key.'='.$value);
+            $options[] = '-metadata';
+            $options[] = $key.'='.$value;
         }
 
         foreach ($this->streamMetadata as [$stream, $key, $value]) {
-            array_push($options, '-metadata:s:'.$stream, $key.'='.$value);
+            $options[] = '-metadata:s:'.$stream;
+            $options[] = $key.'='.$value;
         }
 
         foreach ($this->dispositions as [$stream, $flags]) {
-            array_push($options, '-disposition:'.$stream, $flags);
+            $options[] = '-disposition:'.$stream;
+            $options[] = $flags;
         }
 
         if (! $this->omitVideo && ($this->video['codec'] ?? null) !== 'copy'
-            && ! array_any($this->outputOptions, fn ($token) => preg_match('/^-(?:r|fps_mode)(?::|$)/', $token))) {
-            array_push($options, '-fps_mode:v', 'passthrough');
+            && ! array_any($this->outputOptions, fn ($token): int|false => preg_match('/^-(?:r|fps_mode)(?::|$)/', $token))) {
+            $options[] = '-fps_mode:v';
+            $options[] = 'passthrough';
         }
 
         // A published ffmpeg array replaces the package one; omit threads only when it is false or null.
         $threads = config('laravel-ffmpeg.ffmpeg.threads', 12);
 
         if ($threads !== false && $threads !== null && ! in_array('-threads', $this->outputOptions, true)) {
-            array_push($options, '-threads', (string) $threads);
+            $options[] = '-threads';
+            $options[] = (string) $threads;
         }
 
         return [...$options, ...$this->outputOptions];
@@ -713,13 +731,15 @@ trait ConfiguresOutput
             if (! in_array($parts[0], $encoderOptions, true)) {
                 continue;
             }
+
             foreach ([['v', $this->video, $this->videoStreams], ['a', $this->audio, $this->audioStreams]] as [$type, $base, $streams]) {
                 if (isset($parts[1]) && $parts[1] !== $type) {
                     continue;
                 }
+
                 $encodings = isset($parts[2]) ? [array_replace($base, $streams[(int) $parts[2]] ?? [])]
-                    : [$base, ...array_map(fn ($override) => array_replace($base, $override), $streams)];
-                if (array_any($encodings, fn ($encoding) => ($encoding['codec'] ?? null) === 'copy')) {
+                    : [$base, ...array_map(fn ($override): array => array_replace($base, $override), $streams)];
+                if (array_any($encodings, fn ($encoding): bool => ($encoding['codec'] ?? null) === 'copy')) {
                     throw new InvalidArgumentException('Copied streams cannot have encoder output options.');
                 }
             }
@@ -806,15 +826,18 @@ trait ConfiguresOutput
                 for ($i = 0; $i < count($value); $i += 2) {
                     $overrides[] = $value[$i];
                 }
+
                 $tokens = $shared[$key];
                 $shared[$key] = [];
                 for ($i = 0; $i < count($tokens); $i += 2) {
                     if ($tokens[$i] === '-streamid' || ! in_array($tokens[$i], $overrides, true)) {
-                        array_push($shared[$key], $tokens[$i], $tokens[$i + 1]);
+                        $shared[$key][] = $tokens[$i];
+                        $shared[$key][] = $tokens[$i + 1];
                     }
                 }
+
                 array_push($shared[$key], ...$value);
-            } elseif ($value !== [] && $value !== null && $value !== false) {
+            } elseif (!in_array($value, [[], null, false], true)) {
                 $shared[$key] = $value;
             }
         }

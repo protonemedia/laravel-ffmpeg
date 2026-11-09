@@ -55,6 +55,7 @@ readonly class RtspCamera implements InputSource
         if (! config('laravel-ffmpeg.redact_credentials')) {
             return [];
         }
+
         $redactions = [$this->url => '[rtsp]'];
         $parts = parse_url($this->url);
         // A password is a credential at any length; a username on its own is not.
@@ -72,9 +73,11 @@ readonly class RtspCamera implements InputSource
         if ($resource) {
             throw new MediaException('Capture an RTSP snapshot before using it as a resource.', 'staging', 'resource');
         }
+
         $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
         $runner = $workspace->runner;
         $runner->version($binary, 'ffmpeg', $workspace->path, 'staging');
+
         $path = $workspace->path.'/'.$name;
         $result = $runner->run([
             $binary, '-hide_banner', '-nostdin', '-y', '-xerror', '-loglevel', 'error',

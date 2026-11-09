@@ -74,7 +74,7 @@ readonly class ConcatInput implements InputSource
         foreach ($this->inputs as $index => $input) {
             $metadata = $workspace->probe($input);
             $duration = $metadata->duration();
-            $streams = $metadata->streams()->map(fn ($stream) => array_map(fn ($field) => $stream->get($field), $fields))->all();
+            $streams = $metadata->streams()->map(fn ($stream): array => array_map(fn (string $field) => $stream->get($field), $fields))->all();
 
             if ($duration === null || $duration <= 0 || $streams === []
                 || in_array($metadata->get('format.format_name'), ['concat', 'hls', 'dash'], true)) {

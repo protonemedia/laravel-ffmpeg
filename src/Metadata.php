@@ -43,43 +43,43 @@ readonly class Metadata
     /** @return Collection<int, Stream> */
     public function streams(): Collection
     {
-        return collect($this->data['streams'])->map(fn (array $stream) => new Stream($stream, $this->sourceIdentity));
+        return collect($this->data['streams'])->map(fn (array $stream): \ProtoneMedia\LaravelFFMpeg\Stream => new Stream($stream, $this->sourceIdentity));
     }
 
     /** @return Collection<int, Stream> */
     public function videoStreams(): Collection
     {
-        return $this->streams()->filter(fn (Stream $stream) => $stream->type() === 'video'
+        return $this->streams()->filter(fn (Stream $stream): bool => $stream->type() === 'video'
             && ! $stream->isCoverArt())->values();
     }
 
     /** @return Collection<int, Stream> */
     public function audioStreams(): Collection
     {
-        return $this->streams()->filter(fn (Stream $stream) => $stream->type() === 'audio')->values();
+        return $this->streams()->filter(fn (Stream $stream): bool => $stream->type() === 'audio')->values();
     }
 
     /** @return Collection<int, Stream> */
     public function subtitleStreams(): Collection
     {
-        return $this->streams()->filter(fn (Stream $stream) => $stream->type() === 'subtitle')->values();
+        return $this->streams()->filter(fn (Stream $stream): bool => $stream->type() === 'subtitle')->values();
     }
 
     /** @return Collection<int, Stream> */
     public function coverArt(): Collection
     {
-        return $this->streams()->filter(fn (Stream $stream) => $stream->type() === 'video'
+        return $this->streams()->filter(fn (Stream $stream): bool => $stream->type() === 'video'
             && $stream->isCoverArt())->values();
     }
 
     public function hasVideo(): bool
     {
-        return $this->video() !== null;
+        return $this->video() instanceof \ProtoneMedia\LaravelFFMpeg\Stream;
     }
 
     public function hasAudio(): bool
     {
-        return $this->audio() !== null;
+        return $this->audio() instanceof \ProtoneMedia\LaravelFFMpeg\Stream;
     }
 
     public function video(): ?Stream

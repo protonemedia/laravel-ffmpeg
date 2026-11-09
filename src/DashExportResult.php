@@ -19,12 +19,12 @@ final readonly class DashExportResult implements Result
 
     public function manifest(): GeneratedFile
     {
-        return $this->files()->sole(fn ($file) => $file->role === 'dash-manifest');
+        return $this->files()->sole(fn ($file): bool => $file->role === 'dash-manifest');
     }
 
     public function hlsPlaylist(): GeneratedFile
     {
-        return $this->files()->sole(fn ($file) => $file->role === 'hls-master');
+        return $this->files()->sole(fn ($file): bool => $file->role === 'hls-master');
     }
 
     /**
@@ -38,6 +38,7 @@ final readonly class DashExportResult implements Result
         foreach ($this->sets as $set) {
             $types += array_fill_keys($set['representations'], $set['type']);
         }
+
         $audio = array_keys($types, 'audio', true);
         $variants = [];
         foreach ($types as $name => $type) {
@@ -45,15 +46,17 @@ final readonly class DashExportResult implements Result
             if ($type === 'audio' && count($audio) !== count($types)) {
                 continue;
             }
+
             $paths = $this->representations[$name];
             foreach ($type === 'video' ? $audio : [] as $rendition) {
                 $paths += $this->representations[$rendition];
             }
-            $variants[$name] = $this->files()->filter(fn ($file) => isset($paths[$file->path]))
-                ->map(fn ($file) => HlsPresentation::id($file->disk ?? '', $file->path))->values()->all();
+
+            $variants[$name] = $this->files()->filter(fn ($file): bool => isset($paths[$file->path]))
+                ->map(fn ($file): string => HlsPresentation::id($file->disk ?? '', $file->path))->values()->all();
         }
 
-        return new HlsPresentation($this->files()->reject(fn ($file) => $file->role === 'dash-manifest')->map->toArray()->values()->all(),
+        return new HlsPresentation($this->files()->reject(fn ($file): bool => $file->role === 'dash-manifest')->map->toArray()->values()->all(),
             HlsPresentation::id($master->disk ?? '', $master->path), variants: $variants);
     }
 
@@ -69,7 +72,7 @@ final readonly class DashExportResult implements Result
             throw new ItemNotFoundException('Unknown DASH representation.');
         }
 
-        return new ExportResult($this->files()->filter(fn ($file) => isset($this->representations[$name][$file->path]))->values()->all(), $this->processes()->all());
+        return new ExportResult($this->files()->filter(fn ($file): bool => isset($this->representations[$name][$file->path]))->values()->all(), $this->processes()->all());
     }
 
     /** @return Collection<string, array{type: string, representations: array}> */

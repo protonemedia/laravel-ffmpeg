@@ -89,6 +89,7 @@ final class PendingLiveHls
         if (! is_finite($seconds) || $seconds <= 0) {
             throw new InvalidArgumentException('Live timeout must be positive and finite.');
         }
+
         $this->deadline = $seconds;
 
         return $this;
@@ -101,6 +102,7 @@ final class PendingLiveHls
         if ($maxRetries < 0 || $maxRetries > 10000 || ! is_finite($delay) || $delay < 0 || $delay > 3600) {
             throw new InvalidArgumentException('Invalid live reconnect policy.');
         }
+
         $this->retries = $maxRetries;
         $this->retryDelay = $delay;
         $this->reconnectOnEof = $reconnectOnEof;
@@ -124,9 +126,13 @@ final class PendingLiveHls
 
         $disk = is_string($this->disk) ? Storage::disk($this->disk) : $this->disk;
         $playlist = $directory.'/index.m3u8';
-        $entries = $owned = [];
+        $entries = [];
+        $owned = [];
         $playlistPublished = false;
-        $next = $published = $attempts = $discontinuities = 0;
+        $next = 0;
+        $published = 0;
+        $attempts = 0;
+        $discontinuities = 0;
         $status = 'running';
         $workspace = null;
         $applicationFailure = null;
@@ -140,15 +146,17 @@ final class PendingLiveHls
         };
         $check = function () use (&$status, &$applicationFailure, $started, $interrupt): void {
             try {
-                $cancelled = $this->stopped || ($this->cancellation !== null && ($this->cancellation)());
-            } catch (Throwable $exception) {
-                $applicationFailure = $exception;
-                throw $exception;
+                $cancelled = $this->stopped || ($this->cancellation instanceof \Closure && ($this->cancellation)());
+            } catch (Throwable $throwable) {
+                $applicationFailure = $throwable;
+                throw $throwable;
             }
+
             if ($cancelled) {
                 $status = 'cancelled';
                 throw $interrupt;
             }
+
             if ($this->deadline !== null && (hrtime(true) - $started) / 1e9 >= $this->deadline) {
                 $status = 'timed_out';
                 throw $interrupt;
@@ -159,6 +167,7 @@ final class PendingLiveHls
             if ($disk->allFiles($directory) !== []) {
                 throw new MediaException('Live HLS requires an empty, exclusively owned destination namespace.', 'publication', 'ownership');
             }
+
             $check();
             $workspace = new Workspace;
             $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
@@ -182,15 +191,18 @@ final class PendingLiveHls
                     if (! is_file($local)) {
                         return;
                     }
+
                     $bytes = file_get_contents($local, length: 1048577);
                     if ($bytes === false || strlen($bytes) > 1048576
                         || ! preg_match('/^#EXT-X-MEDIA-SEQUENCE:([0-9]+)$/m', $bytes, $sequence)) {
                         throw new MediaException('Invalid live encoder playlist.', 'publication', 'artifact');
                     }
+
                     $number = (int) $sequence[1];
                     if ($number < $start || $number > $last + 1) {
                         throw new MediaException('The live publisher missed an encoder window.', 'publication', 'window');
                     }
+
                     $duration = null;
                     $changed = false;
                     foreach (explode("\n", trim($bytes)) as $line) {
@@ -207,11 +219,13 @@ final class PendingLiveHls
                             if ($duration === null || $line !== $name) {
                                 throw new MediaException('Unowned live segment reference.', 'publication', 'ownership');
                             }
+
                             if ($number > $last) {
                                 $input = @fopen($workspace->path.'/'.$name, 'rb');
                                 if ($input === false) {
                                     throw new MediaException('Cannot read a completed live segment.', 'publication', 'artifact');
                                 }
+
                                 $key = $directory.'/'.$name;
                                 try {
                                     if (fstat($input)['size'] === 0 || ! $disk->put($key, $input)) {
@@ -220,6 +234,7 @@ final class PendingLiveHls
                                 } finally {
                                     fclose($input);
                                 }
+
                                 $owned[$key] = $number;
                                 $entries[] = ['number' => $number, 'duration' => $duration, 'key' => $key,
                                     'discontinuity' => $attempts > 1 && $number === $start];
@@ -228,22 +243,27 @@ final class PendingLiveHls
                                 $published++;
                                 $changed = true;
                             }
+
                             $number++;
                             $duration = null;
                         } elseif (! preg_match('/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+|#EXT-X-MEDIA-SEQUENCE:[0-9]+|#EXT-X-ENDLIST)\z/', $line)) {
                             throw new MediaException('Unexpected live playlist directive.', 'publication', 'artifact');
                         }
                     }
+
                     if ($duration !== null) {
                         throw new MediaException('Incomplete live segment reference.', 'publication', 'artifact');
                     }
+
                     if ($entries === [] || (! $changed && ! $finished)) {
                         return;
                     }
+
                     while (count($entries) > $this->window) {
                         $removed = array_shift($entries);
                         $discontinuities += (int) $removed['discontinuity'];
                     }
+
                     // A playlist's target duration cannot change. One second of
                     // headroom covers ordinary audio/video frame rounding.
                     $text = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:".((int) ceil($this->segmentDuration) + 1)
@@ -252,12 +272,15 @@ final class PendingLiveHls
                         $text .= ($entry['discontinuity'] ? "#EXT-X-DISCONTINUITY\n" : '')
                             .'#EXTINF:'.sprintf('%.6F', $entry['duration']).",\n".basename($entry['key'])."\n";
                     }
+
                     if ($finished) {
                         $text .= "#EXT-X-ENDLIST\n";
                     }
+
                     if (! $disk->put($playlist, $text)) {
                         throw new MediaException('Cannot replace the live playlist.', 'publication', 'transfer');
                     }
+
                     $playlistPublished = true;
                     // Commit first, prune second: never delete references of the last visible playlist.
                     foreach ($owned as $key => $sequence) {
@@ -265,10 +288,12 @@ final class PendingLiveHls
                             if (! $disk->delete($key)) {
                                 throw new MediaException('Cannot prune live destination retention.', 'publication', 'retention');
                             }
+
                             unset($owned[$key]);
                         }
                     }
-                    if ($changed && $this->publication !== null) {
+
+                    if ($changed && $this->publication instanceof \Closure) {
                         try {
                             ($this->publication)($snapshot());
                         } catch (Throwable $exception) {
@@ -297,18 +322,22 @@ final class PendingLiveHls
                     if ($entries === []) {
                         throw new MediaException('Live encoder produced no segments.', 'live', 'artifact');
                     }
+
                     $status = 'completed';
                     break;
                 }
+
                 if ($attempts > $this->retries) {
                     throw new MediaException('Live source exhausted its reconnect policy after '.$attempts.' attempts.', 'live', 'source');
                 }
+
                 // Only local generated files are removed. Destination history is owned above.
                 foreach (glob($workspace->path.'/'.$prefix.'*') ?: [] as $file) {
                     if (! @unlink($file)) {
                         throw new MediaException('Cannot prune local live segments.', 'cleanup', 'filesystem');
                     }
                 }
+
                 $until = hrtime(true) + (int) ($this->retryDelay * 1e9);
                 while (hrtime(true) < $until) {
                     $check();
@@ -317,23 +346,26 @@ final class PendingLiveHls
             } while (true);
 
             return $snapshot();
-        } catch (Throwable $exception) {
-            if ($exception === $interrupt) {
+        } catch (Throwable $throwable) {
+            if ($throwable === $interrupt) {
                 return $snapshot();
             }
+
             $failed = true;
-            if ($exception === $applicationFailure) {
-                throw $exception;
+            if ($throwable === $applicationFailure) {
+                throw $throwable;
             }
+
             // Do not attach adapter/process exceptions: they may contain credentials.
-            throw new MediaException($exception instanceof MediaException ? $exception->getMessage() : 'Live publication failed.',
-                $exception instanceof MediaException ? $exception->phase : 'publication',
-                $exception instanceof MediaException ? $exception->category : 'transfer',
-                published: array_map(fn (string $key) => ['disk' => is_string($this->disk) ? $this->disk : null, 'path' => $key],
+            throw new MediaException($throwable instanceof MediaException ? $throwable->getMessage() : 'Live publication failed.',
+                $throwable instanceof MediaException ? $throwable->phase : 'publication',
+                $throwable instanceof MediaException ? $throwable->category : 'transfer',
+                published: array_map(fn (string $key): array => ['disk' => is_string($this->disk) ? $this->disk : null, 'path' => $key],
                     [...array_keys($owned), ...($playlistPublished ? [$playlist] : [])]));
         } finally {
             // A stop() request ends this session, not later runs of the same builder.
-            $this->running = $this->stopped = false;
+            $this->running = false;
+            $this->stopped = false;
             try {
                 $workspace?->delete();
             } catch (Throwable $exception) {

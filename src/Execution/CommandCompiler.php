@@ -124,8 +124,7 @@ class CommandCompiler
                 'range' => in_array($value, ['tv', 'pc', 'limited', 'full', 'unspecified'], true),
                 'sample-format' => in_array($value, ['u8', 's16', 's32', 's64', 'flt', 'dbl', 'u8p', 's16p', 's32p', 's64p', 'fltp', 'dblp'], true),
                 'layout' => in_array($value, ['mono', 'stereo', '2.1', '3.0', '4.0', 'quad', '5.0', '5.1', '5.1(side)', '7.1', '7.1(wide)'], true),
-                'bitstream' => ! isset($match[2]) || in_array($match[2], ['v', 'a'], true)
-                    ? array_all(explode(',', $value), fn ($filter) => in_array($filter, ['aac_adtstoasc', 'h264_mp4toannexb', 'hevc_mp4toannexb', 'extract_extradata', 'remove_extra', 'vp9_superframe', 'av1_frame_merge', 'null'], true)) : false,
+                'bitstream' => (! isset($match[2]) || in_array($match[2], ['v', 'a'], true)) && array_all(explode(',', $value), fn ($filter): bool => in_array($filter, ['aac_adtstoasc', 'h264_mp4toannexb', 'hevc_mp4toannexb', 'extract_extradata', 'remove_extra', 'vp9_superframe', 'av1_frame_merge', 'null'], true)),
                 'negative-ts' => in_array($value, ['auto', 'disabled', 'make_non_negative', 'make_zero'], true),
                 'hardware' => in_array($value, ['cuda', 'vaapi', 'qsv', 'vulkan', 'videotoolbox', 'd3d11va', 'dxva2'], true),
                 // Device and word values may contain hyphens but never start with one, so no value can pass for an option token.
@@ -147,8 +146,10 @@ class CommandCompiler
                 if (isset($devices[$device[1]]) || (isset($device[2]) && ! isset($devices[$device[2]]))) {
                     throw new InvalidArgumentException('Hardware device names must be unique and derived from an earlier declaration.');
                 }
+
                 $devices[$device[1]] = true;
             }
+
             $seen[$flag] = true;
         }
 
@@ -171,12 +172,14 @@ class CommandCompiler
         if ($encoder === 'x265') {
             $allowed = [...$allowed, 'pools', 'frame-threads', 'wpp', 'sao', 'rect', 'amp', 'rd', 'ctu', 'log-level'];
         }
+
         $seen = [];
         foreach (explode(':', $value) as $parameter) {
             if (! preg_match('/\A([a-z0-9-]+)=(-?[0-9]+(?:\.[0-9]+)?)\z/', $parameter, $parts)
                 || ! in_array($parts[1], $allowed, true) || isset($seen[$parts[1]]) || ! is_finite((float) $parts[2])) {
                 return false;
             }
+
             $seen[$parts[1]] = true;
         }
 

@@ -28,6 +28,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
                     'bsfs' => 'bitstream_filters', 'hwaccels' => 'hardware_accelerators', default => $kind,
                 }] = $this->parseList($kind, $output);
             }
+
             $data['protocols'] = $this->parseProtocols($this->capture($workspace, $ffmpeg, '-protocols'));
             $data['ffprobe_protocols'] = $this->parseProtocols($this->capture($workspace, $ffprobe, '-protocols'));
             // Verify an actual write, not just a permission-bit prediction.
@@ -35,6 +36,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
             if (@file_put_contents($file, 'ok') !== 2 || ! @unlink($file)) {
                 throw new MediaException('The temporary media root is not writable.', 'staging', 'filesystem');
             }
+
             $data['temporary_root'] = ['writable' => true];
             $data['hardware'] = ['device_usability_tested' => false,
                 'note' => 'Compiled-in support only; device, driver, permissions and runtime availability are not tested.'];
@@ -87,9 +89,10 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         $missing = [];
         foreach ($requirements as $category => $names) {
             if (! is_string($category) || ! is_array($names) || ! array_is_list($names)
-                || array_any($names, fn ($name) => ! is_string($name) || ! preg_match('/\A[a-zA-Z0-9_.-]{1,128}\z/', $name))) {
+                || array_any($names, fn (mixed $name): bool => ! is_string($name) || ! preg_match('/\A[a-zA-Z0-9_.-]{1,128}\z/', $name))) {
                 throw new InvalidArgumentException('Capability requirements must contain lists of names.');
             }
+
             $absent = array_values(array_diff($names, $this->available($category)));
             if ($absent !== []) {
                 $missing[$category] = $absent;
@@ -129,6 +132,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         if (! str_starts_with(ltrim($output), $header)) {
             throw new MediaException('Invalid media capability listing.', 'probing', 'capability');
         }
+
         $pattern = match ($kind) {
             'encoders' => '/^\s+[VAS][A-Z.]{5}\s+([a-zA-Z0-9_,-]+)\s+[^=]/m',
             'muxers' => '/^\s+E\s+([a-zA-Z0-9_,-]+)\s+/m',
@@ -140,6 +144,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         foreach ($matches[1] as $name) {
             array_push($names, ...explode(',', $name));
         }
+
         $names = array_values(array_unique($names));
         sort($names);
         if ($names === [] && $kind !== 'hwaccels') {
@@ -154,12 +159,14 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         if (! preg_match('/Input:\s*(.*?)\s*Output:\s*(.*)\z/s', $output, $matches)) {
             throw new MediaException('Invalid media protocol listing.', 'probing', 'capability');
         }
+
         $protocols = [];
         foreach (['input' => 1, 'output' => 2] as $direction => $index) {
             $names = preg_split('/\s+/', trim($matches[$index]), flags: PREG_SPLIT_NO_EMPTY);
-            if ($names === [] || array_any($names, fn ($name) => ! preg_match('/\A[a-zA-Z0-9_]+\z/', $name))) {
+            if ($names === [] || array_any($names, fn ($name): bool => ! preg_match('/\A[a-zA-Z0-9_]+\z/', $name))) {
                 throw new MediaException('Invalid media protocol listing.', 'probing', 'capability');
             }
+
             sort($names);
             $protocols[$direction] = array_values(array_unique($names));
         }

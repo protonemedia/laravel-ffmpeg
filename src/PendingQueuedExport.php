@@ -53,32 +53,40 @@ class PendingQueuedExport
         if (! $this->parallel) {
             return $this->configure(new ExportJob($this->id, $this->plan, $path));
         }
+
         $export = $this->plan->restore();
         if (! $export instanceof PendingHlsExport || $path === null) {
             throw new InvalidArgumentException('Parallel queue exports require HLS and a master destination.');
         }
+
         $disk = $export->filesystem();
         if (! is_string($disk)) {
             throw new InvalidArgumentException('Parallel HLS requires a shared named destination disk.');
         }
+
         $prefix = 'laravel-ffmpeg/queued/'.$this->id;
         $partExports = $export->queueParts($path, $prefix);
         if (count($partExports) === 1) {
             return $this->configure(new ExportJob($this->id, $this->plan, $path));
         }
-        $parts = $jobs = [];
+
+        $parts = [];
+        $jobs = [];
         foreach ($partExports as $index => [$part, $destination]) {
             $parts[] = $manifest = $prefix.'/inventories/'.$index.'.json';
             $jobs[] = $this->configure(new ExportJob($this->id, new ExportPlan($part), $destination, $disk, $manifest), initial: false);
         }
+
         $finalizer = $this->configure(new ExportJob($this->id, null, $path, $disk, parts: $parts), initial: false);
         $batch = Bus::batch($jobs)->name('FFmpeg '.$this->id);
         if ($this->connection !== null) {
             $batch->onConnection($this->connection);
         }
+
         if ($this->queue !== null) {
             $batch->onQueue($this->queue);
         }
+
         $workflow = $this->configure(new HlsBatchJob($batch, $finalizer));
         $workflow->allOnConnection($this->connection)->allOnQueue($this->queue);
 
@@ -97,7 +105,7 @@ class PendingQueuedExport
         $job->timeout = config('laravel-ffmpeg.queue.timeout') ?? ($timeout === null ? 0 : (int) ceil($timeout) + 30);
         $job->tries = config('laravel-ffmpeg.queue.tries', 1);
         $job->backoff = config('laravel-ffmpeg.queue.backoff', 0);
-        if ($this->configure !== null) {
+        if ($this->configure instanceof \Closure) {
             ($this->configure)($job);
         }
 
