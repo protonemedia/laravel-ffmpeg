@@ -85,12 +85,6 @@ class NativeInputHelpersTest extends TestCase
             $this->assertSame('image', $exception->category);
             $this->assertFalse(Storage::disk('input-helpers')->exists('bad.mp4'));
         }
-        try {
-            FFMpeg::open('photo.png')->still(1)->clip(0, duration: 0.2);
-            $this->fail('Still clipping overrode the owned duration.');
-        } catch (InvalidArgumentException) {
-            $this->assertSame([], glob($this->root.'/work/*'));
-        }
         foreach ([[0, 25], [-1, 25], [INF, 25], [NAN, 25], [1, 0], [1, 241]] as [$duration, $rate]) {
             try {
                 FFMpeg::open('photo.png')->still($duration, $rate);

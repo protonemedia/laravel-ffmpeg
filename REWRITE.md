@@ -939,7 +939,7 @@ FFMpeg::disk('images')
     ->save('title.mp4');
 ```
 
-`Media::still(float $duration, int $frameRate = 25): PendingStill` holds a standalone PNG or JPEG for a finite positive duration. Frame rate is an integer from 1 to 240. Input images must have even dimensions of at least two pixels, without media input options. Local, staged Storage, and downloaded images are supported. The builder defaults to `libx264` and `yuv420p`, generates no audio, and supports one root-configured output. Ordinary output geometry and publication settings remain available. `clip()` is rejected because `still()` owns duration. Frame rounding can affect the final duration. This is a repeated still image, not a timelapse or animation decoder.
+`Media::still(float $duration, int $frameRate = 25): PendingStill` holds a standalone PNG or JPEG for a finite positive duration. Frame rate is an integer from 1 to 240. Input images must have even dimensions of at least two pixels, without media input options. Local, staged Storage, and downloaded images are supported. The builder defaults to `libx264` and `yuv420p`, generates no audio, and supports one root-configured output. Ordinary output geometry and publication settings remain available. It has no `clip()`, because `still()` owns duration, and no audio, `output()`, `addInput()`, graph, watermark, cover-art, or two-pass methods. Frame rounding can affect the final duration. This is a repeated still image, not a timelapse or animation decoder.
 
 ```php
 FFMpeg::disk('photos')

@@ -3,42 +3,68 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 
-class PendingStill extends PendingExport
+/** A silent video that holds one image for a fixed duration. */
+final class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
 {
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\Metadata;
+    use Concerns\OutputOptions;
+    use Concerns\ResourceFilters;
+    use Concerns\Resources;
+    use Concerns\RunsExport;
+    use Concerns\VideoCodec;
+    use Concerns\VideoFilters;
+    use Conditionable;
+
+    private readonly PendingExport $export;
+
     public function __construct(Media $image, string|Filesystem $disk, private readonly float $duration, int $frameRate)
     {
         if (! is_finite($duration) || $duration <= 0 || $frameRate < 1 || $frameRate > 240) {
             throw new InvalidArgumentException('Still video requires a finite positive duration and a frame rate between 1 and 240.');
         }
-        parent::__construct(new Media($disk, new StillInput($image, $frameRate)), $disk);
-        $this->video('libx264')->outputOptions(['-pix_fmt', 'yuv420p']);
+        $this->export = new PendingExport(new Media($disk, new StillInput($image, $frameRate)), $disk, $this);
+        $this->export->video('libx264')->outputOptions(['-pix_fmt', 'yuv420p']);
     }
 
-    public function output(string $path, callable $configure): self
+    public function map(string $specifier): self
     {
-        throw new InvalidArgumentException('Still video supports one root-configured output.');
+        $this->export->map($specifier);
+
+        return $this;
     }
 
-    public function clip(float|string $start, float|string|null $duration = null, float|string|null $end = null, string $seek = 'accurate'): self
+    public function mapVideo(Stream|int|null $stream = null, ?int $input = null, ?int $track = null, bool $optional = false): self
     {
-        throw new InvalidArgumentException('Set the still duration with still() instead of clipping an infinite image input.');
+        $this->export->mapVideo($stream, $input, $track, $optional);
+
+        return $this;
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    public function save(?string $path = null): ExportResult
     {
-        $command = parent::command($outputs, $paths, $outputPaths);
-        array_splice($command, -1, 0, ['-t', CommandCompiler::timestamp($this->duration)]);
-
-        return $command;
+        return $this->export->save($path);
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** @internal */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
-        parent::prepareEncoding($metadata);
+        array_splice($default, -1, 0, ['-t', CommandCompiler::timestamp($this->duration)]);
 
+        return $default;
+    }
+
+    /** @internal */
+    public function duration(array $metadata, ?float $default): ?float
+    {
         return $this->duration;
     }
 }

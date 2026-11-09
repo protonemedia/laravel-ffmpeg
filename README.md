@@ -527,7 +527,7 @@ FFMpeg::disk('images')
     ->save('title.mp4');
 ```
 
-`still()` returns a single-output video builder with H.264 and `yuv420p` defaults. Duration must be finite and positive; integer frame rate ranges from 1 to 240. Input must be a standalone PNG or JPEG with even dimensions of at least two pixels, without input options. Local, staged Storage, and downloaded images are supported. No audio track is created. Frame rounding can affect the final duration.
+`still()` returns a single-output video builder with H.264 and `yuv420p` defaults. Duration must be finite and positive; integer frame rate ranges from 1 to 240. Input must be a standalone PNG or JPEG with even dimensions of at least two pixels, without input options. Local, staged Storage, and downloaded images are supported. No audio track is created, so the builder has no audio, clipping, or extra-input methods. Video codec, geometry, filter, metadata, and publication methods work as on `export()`. Frame rounding can affect the final duration.
 
 Waveform `colors` accepts a string or a nonempty list of strings. One string means one color, not a delimited list. Use names such as `'blue'` or RGB/RGBA hexadecimal colors with a `#` or `0x` prefix.
 
