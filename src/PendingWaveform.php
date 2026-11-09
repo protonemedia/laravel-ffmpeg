@@ -37,11 +37,15 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
     {
         $colors = is_string($colors) ? [$colors] : $colors;
 
-        if ($width < 1 || $height < 1 || $colors === [] || ! array_is_list($colors)
-            || array_any($colors, fn ($color): bool => ! is_string($color)
-                || ! preg_match('/\A(?:[a-zA-Z]+|(?:#|0x)[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?)\z/', $color))) {
-            throw new InvalidArgumentException('A waveform requires positive dimensions and a list of color names or RGB/RGBA hexadecimal colors.');
+        if ($width < 1 || $height < 1) {
+            throw new InvalidArgumentException("The waveform dimensions [{$width}x{$height}] must be positive.");
         }
+
+        if ($colors === [] || ! array_is_list($colors) || array_any($colors, fn ($color): bool => ! is_string($color))) {
+            throw new InvalidArgumentException('A waveform requires a color or a list of colors.');
+        }
+
+        array_map(CommandCompiler::color(...), $colors);
 
         $this->graph = '[0:a:0]showwavespic=s='.$width.'x'.$height.':colors='.implode('|', $colors).'[waveform]';
         $this->export = new PendingExport($media, $disk, $this, 'image');

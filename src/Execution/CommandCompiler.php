@@ -23,6 +23,20 @@ class CommandCompiler
         return $command;
     }
 
+    /**
+     * Ensure the given value is a color name or a hexadecimal RGB or RGBA color.
+     *
+     * @throws InvalidArgumentException
+     */
+    public static function color(string $color): string
+    {
+        if (! preg_match('/\A(?:[a-zA-Z]+|(?:#|0x)[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?)\z/', $color)) {
+            throw new InvalidArgumentException("The color [{$color}] must be a color name or a hexadecimal RGB or RGBA color.");
+        }
+
+        return $color;
+    }
+
     /** Parse numeric seconds or HH:MM:SS with up to six fractional digits. */
     public static function seconds(float|string $value): float
     {

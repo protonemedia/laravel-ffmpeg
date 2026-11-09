@@ -274,10 +274,10 @@ trait ConfiguresOutput
     protected function canvas(int $width, int $height, ?string $background): self
     {
         $this->assertOutputMutable();
+        $this->ensureEvenDimensions($width, $height);
 
-        if ($width <= 0 || $height <= 0 || $width % 2 !== 0 || $height % 2 !== 0
-            || ($background !== null && ! preg_match('/\A(?:[a-zA-Z]+|(?:#|0x)[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?)\z/', $background))) {
-            throw new InvalidArgumentException('Cover and contain require positive even dimensions and a background color name or RGB/RGBA hexadecimal color.');
+        if ($background !== null) {
+            CommandCompiler::color($background);
         }
 
         $canvas = $background === null
@@ -302,21 +302,39 @@ trait ConfiguresOutput
 
     public function crop(int $width, int $height, ?int $x = null, ?int $y = null): self
     {
-        if ($width <= 0 || $height <= 0 || $width % 2 || $height % 2 || ($x !== null && $x < 0) || ($y !== null && $y < 0)) {
-            throw new InvalidArgumentException('Crop requires positive even dimensions and nonnegative offsets.');
-        }
+        $this->ensureEvenDimensions($width, $height);
+        $this->ensureOffsetIsNotNegative($x, $y);
 
         return $this->videoFilter('crop=w='.$width.':h='.$height.':x='.($x ?? '(iw-ow)/2').':y='.($y ?? '(ih-oh)/2').':exact=1');
     }
 
     public function pad(int $width, int $height, ?int $x = null, ?int $y = null, string $background = 'black'): self
     {
-        if ($width <= 0 || $height <= 0 || $width % 2 || $height % 2 || ($x !== null && $x < 0) || ($y !== null && $y < 0)
-            || ! preg_match('/\A(?:[a-zA-Z]+|(?:#|0x)[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?)\z/', $background)) {
-            throw new InvalidArgumentException('Pad requires positive even dimensions, nonnegative offsets, and a background color name or RGB/RGBA hexadecimal color.');
-        }
+        $this->ensureEvenDimensions($width, $height);
+        $this->ensureOffsetIsNotNegative($x, $y);
+        CommandCompiler::color($background);
 
         return $this->videoFilter('pad=w='.$width.':h='.$height.':x='.($x ?? '(ow-iw)/2').':y='.($y ?? '(oh-ih)/2').':color='.$background);
+    }
+
+    /**
+     * Ensure the given frame dimensions are positive and even, as most encoders require.
+     */
+    protected function ensureEvenDimensions(int $width, int $height): void
+    {
+        if ($width <= 0 || $height <= 0 || $width % 2 !== 0 || $height % 2 !== 0) {
+            throw new InvalidArgumentException("The dimensions [{$width}x{$height}] must be positive and even.");
+        }
+    }
+
+    /**
+     * Ensure the given offset does not point outside the top-left corner.
+     */
+    protected function ensureOffsetIsNotNegative(?int $x, ?int $y): void
+    {
+        if (($x ?? 0) < 0 || ($y ?? 0) < 0) {
+            throw new InvalidArgumentException('The offset ['.($x ?? 'center').', '.($y ?? 'center').'] must not be negative.');
+        }
     }
 
     public function drawText(string $text, Media $font, int $size = 24, int $x = 0, int $y = 0, string $color = 'white'): self

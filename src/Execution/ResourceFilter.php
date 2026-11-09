@@ -12,9 +12,10 @@ readonly class ResourceFilter
 
     public static function drawText(string $text, Media $font, int $size, int $x, int $y, string $color): self
     {
-        if (! mb_check_encoding($text, 'UTF-8') || str_contains($text, "\0") || $size <= 0
-            || ! preg_match('/^(?:[a-zA-Z]+|0x[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?)$/D', $color)) {
-            throw new InvalidArgumentException('Draw text requires UTF-8 without NUL bytes, a positive size, and a color name or 0xRRGGBB color.');
+        CommandCompiler::color($color);
+
+        if (! mb_check_encoding($text, 'UTF-8') || str_contains($text, "\0") || $size <= 0) {
+            throw new InvalidArgumentException('Draw text requires UTF-8 without NUL bytes and a positive size.');
         }
 
         return new self('drawText', [
