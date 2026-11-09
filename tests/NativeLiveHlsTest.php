@@ -145,6 +145,10 @@ class NativeLiveHlsTest extends TestCase
         $this->assertTrue($observed);
         $this->assertSame(2, $result->attempts);
         $this->assertSame('cancelled', $result->status);
+        // stop() ends one session; running the same builder again starts fresh.
+        $again = $live->run('reconnect-again');
+        $this->assertSame(2, $again->attempts);
+        $this->assertSame('cancelled', $again->status);
         $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
     }
 

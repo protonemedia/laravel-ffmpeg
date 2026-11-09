@@ -329,7 +329,8 @@ final class PendingLiveHls
                 $exception instanceof MediaException ? $exception->category : 'transfer',
                 published: [...array_keys($owned), ...($playlistPublished ? [$playlist] : [])]);
         } finally {
-            $this->running = false;
+            // A stop() request ends this session, not later runs of the same builder.
+            $this->running = $this->stopped = false;
             $workspace?->delete();
         }
     }
