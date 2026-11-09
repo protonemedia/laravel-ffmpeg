@@ -29,9 +29,9 @@ trait VideoFilters
     }
 
     /** Clockwise quarter turns, applied in filter order after FFmpeg's input autorotation. */
-    public function rotate(int $degrees): self
+    public function rotate(int $angle): self
     {
-        $this->export->rotate($degrees);
+        $this->export->rotate($angle);
 
         return $this;
     }

@@ -278,9 +278,9 @@ trait ConfiguresOutput
     }
 
     /** Clockwise quarter turns, applied in filter order after FFmpeg's input autorotation. */
-    public function rotate(int $degrees): self
+    public function rotate(int $angle): self
     {
-        return $this->videoFilter(match ($degrees) {
+        return $this->videoFilter(match ($angle) {
             90, -270 => 'transpose=clock',
             180, -180 => 'hflip,vflip',
             270, -90 => 'transpose=cclock',
