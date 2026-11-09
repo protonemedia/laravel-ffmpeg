@@ -717,6 +717,12 @@ class NativeCompositionTest extends TestCase
             $this->assertGreaterThan(220, $red['red']);
             imagedestroy($frame);
         }
+        // Per-track video filters run with the output filters, before the overlay.
+        $colored = $media->export()->watermark($logo)->video('libx264')->toDisk('memory')
+            ->videoStream(0, fn ($video) => $video->color('bt709', 'bt709', 'bt709'));
+        $this->assertNotContains('-filter:v:0', $colored->inspect());
+        $colored->save('colored.mp4');
+        $this->assertSame('bt709', FFMpeg::disk('memory')->open('colored.mp4')->probe()->video()->get('color_primaries'));
         foreach ([
             fn () => $media->export()->watermark($logo)->video('copy')->inspect(),
             fn () => $media->export()->watermark($logo)->withoutVideo()->inspect(),

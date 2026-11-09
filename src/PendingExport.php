@@ -414,7 +414,9 @@ class PendingExport
                 $filter = 'null';
                 $processed = [];
                 for ($i = 0; $i < count($options); $i++) {
-                    if ($options[$i] === '-filter:v') {
+                    // A per-track chain for the one mapped video stream already
+                    // includes the output filters, and comes after them.
+                    if ($options[$i] === '-filter:v' || $options[$i] === '-filter:v:0') {
                         $filter = $options[++$i];
                     } elseif ($options[$i] === '-map' && str_starts_with($options[$i + 1], '0:V:0')) {
                         array_push($processed, '-map', '[watermark_out'.$index.']');
