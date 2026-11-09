@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Http;
 use Illuminate\Support\ItemNotFoundException;
 use InvalidArgumentException;
 use League\Flysystem\WhitespacePathNormalizer;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\HlsResourceNotFoundException;
 use Throwable;
 
 /** A trusted, persistable inventory. Never construct this from request input. */
@@ -116,11 +117,13 @@ class HlsPresentation
         return implode("\n", $lines);
     }
 
+    /** @throws HlsResourceNotFoundException when the inventory does not own the resource */
     public function file(?string $id = null): array
     {
-        return $this->files[$id ?? $this->playlist] ?? abort(404);
+        return $this->files[$id ?? $this->playlist] ?? throw new HlsResourceNotFoundException('Unknown HLS resource.');
     }
 
+    /** @throws HlsResourceNotFoundException when the reference is not an owned resource of this kind */
     public function reference(array $source, ?string $target, string $uri, string $kind): string
     {
         $key = $kind === 'key' ? ($this->keys[$source['path']][$uri] ?? null) : null;
@@ -131,7 +134,9 @@ class HlsPresentation
             'key' => ['hls-key'],
             default => ['hls-segment', 'hls-init'],
         };
-        abort_unless($file !== null && in_array($file['role'], $roles, true), 404);
+        if ($file === null || ! in_array($file['role'], $roles, true)) {
+            throw new HlsResourceNotFoundException('The HLS reference is not an owned '.$kind.' resource.');
+        }
 
         return $id;
     }

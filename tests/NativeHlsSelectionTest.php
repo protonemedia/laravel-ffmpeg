@@ -297,6 +297,24 @@ class NativeHlsSelectionTest extends TestCase
             $this->assertStringContainsString('prefix', $exception->getMessage());
         }
         $this->assertSame($before, $disk->allFiles());
+        // A master that references a file outside its inventory is invalid input, not an HTTP 404.
+        $master = collect($first['files'])->firstWhere('role', 'hls-master')['path'];
+        $original = $disk->get($master);
+        $disk->put($master, rtrim($original, "\n")."\n#EXT-X-STREAM-INF:BANDWIDTH=1\nmissing/index.m3u8\n");
+        try {
+            (new PendingHlsMerge(['one' => $first, 'two' => $second]))->save('catalog/master.m3u8');
+            $this->fail('A master with an unowned reference was accepted.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertInstanceOf(\Illuminate\Support\ItemNotFoundException::class, $exception->getPrevious());
+        }
+        $disk->put($master, $original);
+        $this->assertSame($before, $disk->allFiles());
+        try {
+            HlsPresentation::fromArray($first)->file('unknown');
+            $this->fail('An unknown resource was returned.');
+        } catch (\Illuminate\Support\ItemNotFoundException) {
+            $this->addToAssertionCount(1);
+        }
         $disk->delete('second/small/segment-00000000.ts');
         $this->expectException(InvalidArgumentException::class);
         (new PendingHlsMerge(['one' => $first, 'two' => $second]))->save('catalog/master.m3u8');

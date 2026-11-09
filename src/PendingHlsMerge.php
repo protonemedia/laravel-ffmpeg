@@ -2,7 +2,9 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
+use Closure;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\ItemNotFoundException;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPlaylist;
@@ -48,7 +50,7 @@ class PendingHlsMerge
                 default => throw new InvalidArgumentException('Compose only trusted v9 presentation inventories.'),
             };
             $inventory = $presentation->toArray();
-            $master = $presentation->file();
+            $master = $this->owned(fn () => $presentation->file());
             if ($master['role'] !== 'hls-master' || $inventory['variants'] === []) {
                 throw new InvalidArgumentException('Composition requires a v9 master with variant provenance.');
             }
@@ -78,7 +80,7 @@ class PendingHlsMerge
                         || ! in_array($metadata['segmentType'] ?? null, ['mpegts', 'fmp4'], true)) {
                         throw new InvalidArgumentException('Composition requires retained v9 VOD clock provenance.');
                     }
-                    $text = $presentation->render($file, fn ($id) => 'owned/'.$id);
+                    $text = $this->owned(fn () => $presentation->render($file, fn ($id) => 'owned/'.$id));
                     preg_match_all('/^#EXTINF:([0-9]+(?:\.[0-9]+)?),/m', $text, $durations);
                     if (substr_count($text, '#EXT-X-ENDLIST') !== 1 || substr_count($text, '#EXT-X-PLAYLIST-TYPE:VOD') !== 1
                         || str_contains($text, '#EXT-X-DISCONTINUITY') || str_contains($text, '#EXT-X-BYTERANGE')
@@ -130,9 +132,9 @@ class PendingHlsMerge
             $keys += $inventory['keys'];
             $provenance += $inventory['provenance'];
             // The response parser validates every master reference before anything is published.
-            $masterText = $presentation->render($master, function ($id) use ($presentation, $path) {
+            $masterText = $this->owned(fn () => $presentation->render($master, function ($id) use ($presentation, $path) {
                 return $this->relativeUrl($presentation->file($id)['path'], $path);
-            });
+            }));
             foreach (explode("\n", $masterText) as $line) {
                 if (str_starts_with($line, '#EXT-X-VERSION:')) {
                     $version = max($version, (int) substr($line, 15));
@@ -198,6 +200,21 @@ class PendingHlsMerge
         }
 
         return new HlsExportResult($generated, [], presentation: $presentation);
+    }
+
+    /** Report unowned references and invalid playlists as invalid composition input; storage failures stay MediaExceptions. */
+    private function owned(Closure $read): mixed
+    {
+        try {
+            return $read();
+        } catch (ItemNotFoundException $exception) {
+            throw new InvalidArgumentException('Composition inventories must reference only files they own.', previous: $exception);
+        } catch (MediaException $exception) {
+            if ($exception->category !== 'artifact') {
+                throw $exception;
+            }
+            throw new InvalidArgumentException('Composition requires valid HLS playlists: '.$exception->getMessage(), previous: $exception);
+        }
     }
 
     private function relativeUrl(string $target, string $playlist): string
