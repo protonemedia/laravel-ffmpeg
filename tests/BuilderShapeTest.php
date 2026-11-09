@@ -6,6 +6,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ProtoneMedia\LaravelFFMpeg\PendingFrame;
+use ProtoneMedia\LaravelFFMpeg\PendingFrames;
 use ProtoneMedia\LaravelFFMpeg\PendingStill;
 use ReflectionClass;
 
@@ -16,6 +17,9 @@ class BuilderShapeTest extends TestCase
     {
         return [
             'frame' => [PendingFrame::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
+                'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'map', 'mapVideo', 'mapAudio',
+                'withoutAudio', 'withoutVideo', 'metadata', 'metadataFrom', 'withoutMetadata', 'streamMetadata', 'disposition', 'chaptersFrom']],
+            'frames' => [PendingFrames::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
                 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'map', 'mapVideo', 'mapAudio',
                 'withoutAudio', 'withoutVideo', 'metadata', 'metadataFrom', 'withoutMetadata', 'streamMetadata', 'disposition', 'chaptersFrom']],
             'still' => [PendingStill::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',

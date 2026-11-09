@@ -432,7 +432,7 @@ class NativeExportTest extends TestCase
         } catch (InvalidArgumentException) {
             $this->addToAssertionCount(1);
         }
-        foreach ([$media->frames(count: 2), $media->waveform()] as $images) {
+        foreach ([$media->waveform()] as $images) {
             try {
                 $images->addInput($media);
                 $this->fail('An unused image input was accepted.');
