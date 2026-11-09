@@ -153,6 +153,25 @@ class NativeLiveHlsTest extends TestCase
     }
 
     #[Test]
+    public function workspace_cleanup_failure_does_not_replace_an_application_exception(): void
+    {
+        $live = (new PendingLiveHls($this->source(1.2), Storage::disk('local'), 0.4, 3))
+            ->onPublish(function (): void {
+                // A missing workspace makes Workspace::delete() fail during cleanup.
+                foreach (glob($this->root.'/laravel-ffmpeg-*') as $workspace) {
+                    rename($workspace, $this->root.'/moved-'.basename($workspace));
+                }
+                throw new \RuntimeException('Application publication hook failed.');
+            });
+        try {
+            $live->run('cleanup');
+            $this->fail('The application exception was swallowed.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Application publication hook failed.', $exception->getMessage());
+        }
+    }
+
+    #[Test]
     public function failed_native_source_consumes_explicit_retry_budget_and_redacts_errors(): void
     {
         $disk = Storage::disk('local');

@@ -130,6 +130,7 @@ final class PendingLiveHls
         $status = 'running';
         $workspace = null;
         $applicationFailure = null;
+        $failed = false;
         $started = hrtime(true);
         $interrupt = new RuntimeException('Live session interrupted.');
         $this->running = true;
@@ -320,6 +321,7 @@ final class PendingLiveHls
             if ($exception === $interrupt) {
                 return $snapshot();
             }
+            $failed = true;
             if ($exception === $applicationFailure) {
                 throw $exception;
             }
@@ -332,7 +334,14 @@ final class PendingLiveHls
         } finally {
             // A stop() request ends this session, not later runs of the same builder.
             $this->running = $this->stopped = false;
-            $workspace?->delete();
+            try {
+                $workspace?->delete();
+            } catch (Throwable $exception) {
+                // As in Media::withInput(), a cleanup failure must not replace the failure in flight.
+                if (! $failed) {
+                    throw $exception;
+                }
+            }
         }
     }
 }
