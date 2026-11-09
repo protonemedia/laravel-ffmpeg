@@ -606,6 +606,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
             $keyTags = [];
             $init = null;
             $start = null;
+            $streamType = 'subtitle';
             $subtitlePath = null;
             $name = array_keys($this->variants)[$index];
             $extension = $this->isSubtitle($index) ? 'vtt' : ($this->segmentType === 'fmp4' ? 'm4s' : 'ts');
@@ -663,6 +664,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
                     } elseif ($count === 1) {
                         $metadata = $this->media->probeArtifact($probePath, $this->workspace);
                         $stream = $metadata->video() ?? $metadata->audio();
+                        $streamType = $metadata->video() instanceof Stream ? 'video' : 'audio';
                         $start = $stream?->get('start_time');
                     }
 
@@ -693,7 +695,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
                 'path' => $output->destination()['path'], 'start' => $start, 'subtitle' => $subtitlePath, 'duration' => $total];
             $this->provenance[$output->destination()['path']] = ['version' => 9, 'start' => $start, 'duration' => $total,
                 'clip' => $output->clipSettings(), 'segmentType' => $this->segmentType, 'subtitle' => $this->isSubtitle($index),
-                'streamType' => $this->isSubtitle($index) ? 'subtitle' : ($metadata->video() instanceof \ProtoneMedia\LaravelFFMpeg\Stream ? 'video' : 'audio')];
+                'streamType' => $streamType];
             $lines[$targets[0]] = '#EXT-X-TARGETDURATION:'.max(1, (int) ceil($longest));
             $rendered = [];
             foreach ($lines as $lineIndex => $line) {

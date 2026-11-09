@@ -29,8 +29,7 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
     /** @param array<Media> $sources */
     public function __construct(private readonly array $sources, string|Filesystem $disk)
     {
-        if (! array_is_list($sources) || count($sources) < 2
-            || array_any($sources, fn (mixed $source): bool => ! $source instanceof Media)) {
+        if (! array_is_list($sources) || count($sources) < 2) {
             throw new InvalidArgumentException('Transcoded concat requires at least two media inputs.');
         }
 

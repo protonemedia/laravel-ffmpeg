@@ -13,16 +13,22 @@ use ReflectionFunction;
 use SplObjectStorage;
 use Throwable;
 
-/** @internal Trusted builder state, never request-supplied serialized data. */
+/**
+ * @internal Trusted builder state, never request-supplied serialized data.
+ *
+ * @template T of Exportable
+ */
 final readonly class ExportPlan
 {
     private array $state;
 
+    /** @param T $export */
     public function __construct(Exportable $export)
     {
         $this->state = $this->encode($export, new SplObjectStorage);
     }
 
+    /** @return T */
     public function restore(): Exportable
     {
         $objects = [];

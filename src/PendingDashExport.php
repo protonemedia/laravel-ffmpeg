@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use DOMDocument;
+use DOMElement;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
@@ -389,8 +390,16 @@ final class PendingDashExport implements Exportable, MeasuresDuration, PackagesA
             $clocks[$setName] = $parsed['durations'];
             $longest = max($longest, array_sum($parsed['durations']));
             $representation = $document->importNode($parsed['representation'], true);
+            if (! $representation instanceof DOMElement) {
+                DashManifest::fail();
+            }
+
             $representation->setAttribute('id', $name);
             $template = $representation->getElementsByTagNameNS(DashManifest::NS, 'SegmentTemplate')->item(0);
+            if (! $template instanceof DOMElement) {
+                DashManifest::fail();
+            }
+
             $template->setAttribute('initialization', $name.'/init.mp4');
             $template->setAttribute('media', $name.'/segment-$Number%08d$.m4s');
             $sets[$setName]->appendChild($representation);

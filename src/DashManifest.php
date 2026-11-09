@@ -63,16 +63,18 @@ final class DashManifest
         $sets = $xpath->query('/d:MPD/d:Period/d:AdaptationSet');
         $representations = $xpath->query('//d:Representation');
         $templates = $xpath->query('//d:SegmentTemplate');
-        if ($root->localName !== 'MPD' || $root->getAttribute('type') !== 'static'
+        $set = $sets->item(0);
+        $representation = $representations->item(0);
+        $template = $templates->item(0);
+        if (! $root instanceof DOMElement || ! $set instanceof DOMElement || ! $representation instanceof DOMElement || ! $template instanceof DOMElement
+            || $root->localName !== 'MPD' || $root->getAttribute('type') !== 'static'
             || ! preg_match('/\APT[0-9]+(?:\.[0-9]+)?S\z/', $root->getAttribute('mediaPresentationDuration'))
             || $xpath->query('/d:MPD/d:Period')->length !== 1 || $sets->length !== 1
-            || $sets->item(0)->getAttribute('contentType') !== $type || $representations->length !== 1 || $templates->length !== 1) {
+            || $set->getAttribute('contentType') !== $type || $representations->length !== 1 || $templates->length !== 1) {
             self::fail();
         }
 
-        $representation = $representations->item(0);
-        $template = $templates->item(0);
-        if ($representation->parentNode !== $sets->item(0) || $template->parentNode !== $representation
+        if ($representation->parentNode !== $set || $template->parentNode !== $representation
             || $representation->getAttribute('id') !== '0' || $representation->getAttribute('mimeType') !== $type.'/mp4'
             || ! preg_match('/\A[a-zA-Z0-9.,]+\z/', $representation->getAttribute('codecs'))
             || self::integer($representation, 'bandwidth', 1) <= 0
@@ -88,6 +90,10 @@ final class DashManifest
         $durations = [];
         $time = 0;
         foreach ($xpath->query('d:SegmentTimeline/d:S', $template) as $segment) {
+            if (! $segment instanceof DOMElement) {
+                self::fail();
+            }
+
             $duration = self::integer($segment, 'd', 1);
             $repeat = $segment->hasAttribute('r') ? self::integer($segment, 'r', 0) : 0;
             if (($segment->hasAttribute('t') && self::integer($segment, 't', 0) !== $time)

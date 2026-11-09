@@ -123,6 +123,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         return $result->output;
     }
 
+    /** @param 'encoders'|'muxers'|'filters'|'bsfs'|'hwaccels' $kind */
     private function parseList(string $kind, string $output): array
     {
         $header = match ($kind) {
