@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace ProtoneMedia\LaravelFFMpeg\Pipeline;
 
 /** @internal Limits two-pass encoding to some outputs and strips packaging options from the analysis pass. */

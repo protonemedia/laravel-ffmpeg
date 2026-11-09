@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace ProtoneMedia\LaravelFFMpeg\Support;
 
 use Illuminate\Support\Facades\Facade;

@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace ProtoneMedia\LaravelFFMpeg\Pipeline;
 
 /** @internal Adds checks after PendingExport has verified that an artifact is a nonempty file. */

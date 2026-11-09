@@ -1,10 +1,9 @@
 <?php
 
-declare(strict_types=1);
-
-use Rector\Config\RectorConfig;
 use Rector\CodingStyle\Rector\Use_\SeparateMultiUseImportsRector;
+use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\If_\RemoveAlwaysTrueIfConditionRector;
+use Rector\TypeDeclaration\Rector\StmtsAwareInterface\SafeDeclareStrictTypesRector;
 
 return RectorConfig::configure()
     ->withPaths([
@@ -13,6 +12,8 @@ return RectorConfig::configure()
     ->withSkip([
         // Laravel groups trait imports on one line, as in `use Conditionable, Macroable;`.
         SeparateMultiUseImportsRector::class,
+        // Laravel packages do not declare strict types.
+        SafeDeclareStrictTypesRector::class,
         // Closures fill $entries by reference, which Rector cannot see.
         RemoveAlwaysTrueIfConditionRector::class => [
             __DIR__.'/src/PendingLiveHls.php',

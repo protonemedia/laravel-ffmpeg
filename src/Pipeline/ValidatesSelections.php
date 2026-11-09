@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace ProtoneMedia\LaravelFFMpeg\Pipeline;
 
 /** @internal Validates resolved stream types before any encoder starts. */

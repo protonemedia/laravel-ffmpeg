@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace ProtoneMedia\LaravelFFMpeg;
 
 /** A bounded snapshot. Segment paths are the current playlist's references, not all history. */
