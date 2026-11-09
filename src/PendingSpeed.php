@@ -79,7 +79,7 @@ class PendingSpeed extends PendingExport
     protected function validateStreamSelections(array $expected): void
     {
         if ($expected[0] === [] || array_any($expected[0], fn ($type) => ! in_array($type, ['audio', 'video'], true))) {
-            throw new MediaException('Speed requires selected audio or video streams only.', 'probing', 'speed');
+            throw new MediaException('Speed requires selected audio or video streams only.', 'probing', 'mapping');
         }
     }
 
@@ -88,7 +88,7 @@ class PendingSpeed extends PendingExport
         $item = $metadata[0];
         $origin = $item->get('format.start_time');
         if (! is_numeric($origin) || ! is_finite((float) $origin) || abs((float) $origin) > 0.000001) {
-            throw new MediaException('Speed requires a zero source presentation origin.', 'probing', 'speed');
+            throw new MediaException('Speed requires a zero source presentation origin.', 'probing', 'metadata');
         }
 
         // Conservatively validate every source A/V track, including unselected
@@ -100,7 +100,7 @@ class PendingSpeed extends PendingExport
             $start = $stream->get('start_time');
             if (! is_numeric($start) || ! is_finite((float) $start) || (float) $start < 0
                 || ($stream->type() === 'video' && abs((float) $start) > 0.000001)) {
-                throw new MediaException('Speed requires zero video origins and nonnegative audio origins on all source tracks.', 'probing', 'speed');
+                throw new MediaException('Speed requires zero video origins and nonnegative audio origins on all source tracks.', 'probing', 'metadata');
             }
         }
 

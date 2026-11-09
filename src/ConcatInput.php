@@ -78,13 +78,13 @@ readonly class ConcatInput implements InputSource
 
             if ($duration === null || $duration <= 0 || $streams === []
                 || in_array($metadata->get('format.format_name'), ['concat', 'hls', 'dash'], true)) {
-                throw new MediaException('Concat input '.$index.' requires finite standalone media with streams.', 'probing', 'concat');
+                throw new MediaException('Concat input '.$index.' requires finite standalone media with streams.', 'probing', 'metadata');
             }
 
             $start = $metadata->get('format.start_time', '0');
 
             if (! is_numeric($start) || (float) $start !== 0.0) {
-                throw new MediaException('Concat input '.$index.' requires a zero presentation origin. Use an explicit normalization graph.', 'probing', 'concat');
+                throw new MediaException('Concat input '.$index.' requires a zero presentation origin. Use an explicit normalization graph.', 'probing', 'metadata');
             }
 
             if ($layout !== null && $layout !== $streams) {

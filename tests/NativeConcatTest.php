@@ -201,7 +201,7 @@ class NativeConcatTest extends TestCase
                 ->toDisk('memory')->save('missing-audio.mp4');
             $this->fail('Missing audio was silently accepted.');
         } catch (MediaException $exception) {
-            $this->assertSame('concat', $exception->category);
+            $this->assertSame('mapping', $exception->category);
             $this->assertFalse(Storage::disk('memory')->exists('missing-audio.mp4'));
         }
 
@@ -316,7 +316,7 @@ class NativeConcatTest extends TestCase
                 ->toDisk('memory')->save('invalid-channel.mov');
             $this->fail('A missing selected channel was accepted.');
         } catch (MediaException $exception) {
-            $this->assertSame('concat', $exception->category);
+            $this->assertSame('mapping', $exception->category);
             $this->assertFalse(Storage::disk('memory')->exists('invalid-channel.mov'));
         }
 
@@ -356,7 +356,7 @@ class NativeConcatTest extends TestCase
                 ->export()->video('copy')->audio('copy')->toDisk('memory')->save('late.mov');
             $this->fail('A nonzero presentation origin was accepted.');
         } catch (MediaException $exception) {
-            $this->assertSame('concat', $exception->category);
+            $this->assertSame('metadata', $exception->category);
             $this->assertFalse(Storage::disk('memory')->exists('late.mov'));
         }
 
@@ -365,7 +365,7 @@ class NativeConcatTest extends TestCase
                 ->normalizeVideo(128, 96, 10)->normalizeAudio()->toDisk('memory')->save('late-normalized.mov');
             $this->fail('Transcoded concat accepted a nonzero presentation origin.');
         } catch (MediaException $exception) {
-            $this->assertSame('concat', $exception->category);
+            $this->assertSame('metadata', $exception->category);
             $this->assertFalse(Storage::disk('memory')->exists('late-normalized.mov'));
         }
 

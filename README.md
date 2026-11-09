@@ -120,7 +120,7 @@ sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
 
 If the shell command succeeds but the application fails, check the application's cached configuration, executable permissions, and directory traversal permissions. Rebuild Laravel's configuration cache and restart long-running queue workers after changing binary paths. Also check that the temporary root and Storage destinations are writable by those users.
 
-A launch failure means the selected executable could not start. A version failure means the pair is unsupported or mismatched. An encoding failure means FFmpeg started but rejected the command or media. Inspect `MediaException::phase`, `category`, and bounded `diagnostics` to distinguish these cases. Check required encoders and filters with the configured executable's `-encoders` and `-filters` options. Raw commands and unredacted process exceptions can contain credentials; do not publish them in logs or error responses.
+A launch failure means the selected executable could not start. A version failure means the pair is unsupported or mismatched. An encoding failure means FFmpeg started but rejected the command or media. Inspect `MediaException::phase`, `category`, and bounded `diagnostics` to distinguish these cases. Categories name the condition rather than the operation, for example `metadata` for an unknown duration or presentation origin and `mapping` for a missing track. Check required encoders and filters with the configured executable's `-encoders` and `-filters` options. Raw commands and unredacted process exceptions can contain credentials; do not publish them in logs or error responses.
 
 #### Inspect capabilities
 

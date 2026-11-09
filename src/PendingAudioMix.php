@@ -149,23 +149,29 @@ class PendingAudioMix extends PendingExport
         [$source, $added] = $metadata;
         $duration = $source->duration();
         $origin = $source->get('format.start_time');
+        // Categories name the condition: metadata for durations and origins, mapping for missing tracks.
+        if (! $source->hasVideo() && ! $source->hasAudio()) {
+            throw new MediaException('Audio mixing requires primary media with video or audio.', 'probing', 'mapping');
+        }
         if ($duration === null || $duration <= 0
-            || ($source->hasVideo() && (! is_numeric($origin) || abs((float) $origin) > 0.000001))
-            || (! $source->hasVideo() && ! $source->hasAudio())) {
-            throw new MediaException('Audio mixing requires finite primary media and zero video presentation origins.', 'probing', 'audio-mix');
+            || ($source->hasVideo() && (! is_numeric($origin) || abs((float) $origin) > 0.000001))) {
+            throw new MediaException('Audio mixing requires finite primary media and zero video presentation origins.', 'probing', 'metadata');
         }
         foreach ($source->videoStreams() as $stream) {
             if (! is_numeric($stream->get('start_time')) || abs((float) $stream->get('start_time')) > 0.000001) {
-                throw new MediaException('Audio mixing requires zero video origins.', 'probing', 'audio-mix');
+                throw new MediaException('Audio mixing requires zero video origins.', 'probing', 'metadata');
             }
         }
         $audio = $source->audio();
         if ($source->hasVideo() && $audio !== null
             && (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0)) {
-            throw new MediaException('Original audio requires a known nonnegative timestamp origin relative to video.', 'probing', 'audio-mix');
+            throw new MediaException('Original audio requires a known nonnegative timestamp origin relative to video.', 'probing', 'metadata');
         }
-        if ($added->audio() === null || $added->duration() === null || $added->duration() <= 0) {
-            throw new MediaException('Added audio requires a finite audio track.', 'probing', 'audio-mix');
+        if ($added->audio() === null) {
+            throw new MediaException('Added audio requires an audio track.', 'probing', 'mapping');
+        }
+        if ($added->duration() === null || $added->duration() <= 0) {
+            throw new MediaException('Added audio requires a finite duration.', 'probing', 'metadata');
         }
 
         return $this->outputConfiguration()['audioFilters'] === [] ? $duration : null;

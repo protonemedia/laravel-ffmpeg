@@ -133,19 +133,24 @@ class PendingConcat extends PendingExport
             $video = $item->video();
             $origin = $item->get('format.start_time');
 
-            if ($item->duration() === null || $item->duration() <= 0 || $video === null
+            if ($video === null) {
+                throw new MediaException('Transcoded concat requires a video stream in every source.', 'probing', 'mapping');
+            }
+            if ($item->duration() === null || $item->duration() <= 0
                 || ! is_numeric($origin) || abs((float) $origin) > 0.000001
                 || ! is_numeric($video->get('start_time')) || abs((float) $video->get('start_time')) > 0.000001) {
-                throw new MediaException('Transcoded concat requires finite sources with zero presentation and video origins.', 'probing', 'concat');
+                throw new MediaException('Transcoded concat requires finite sources with zero presentation and video origins.', 'probing', 'metadata');
             }
 
             if ($this->audioNormalization !== null) {
                 $audio = $item->audio();
                 $channel = $this->audioNormalization['channel'];
 
-                if ($audio === null || ! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0
-                    || ($channel !== null && ($audio->channels() === null || $channel >= $audio->channels()))) {
-                    throw new MediaException('Every concat source requires audio with a nonnegative origin and the requested channel.', 'probing', 'concat');
+                if ($audio === null || ($channel !== null && ($audio->channels() === null || $channel >= $audio->channels()))) {
+                    throw new MediaException('Every concat source requires audio with the requested channel.', 'probing', 'mapping');
+                }
+                if (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0) {
+                    throw new MediaException('Every concat source requires audio with a nonnegative origin.', 'probing', 'metadata');
                 }
             }
         }

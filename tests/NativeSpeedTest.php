@@ -166,7 +166,7 @@ class NativeSpeedTest extends TestCase
                     $operation->save('missing.mkv');
                     $this->fail('An empty stream selection was accepted.');
                 } catch (MediaException $exception) {
-                    $this->assertSame('probing', $exception->phase);
+                    $this->assertSame(['probing', 'mapping'], [$exception->phase, $exception->category]);
                 }
             }
         }
@@ -210,7 +210,7 @@ class NativeSpeedTest extends TestCase
             $this->media('shifted.mkv')->speed(1.5)->save('failed.mkv');
             $this->fail('Nonzero timeline accepted.');
         } catch (MediaException $exception) {
-            $this->assertSame('probing', $exception->phase);
+            $this->assertSame(['probing', 'metadata'], [$exception->phase, $exception->category]);
         }
         $this->assertSame($hash, hash_file('sha256', $source));
         $this->assertFalse(Storage::disk('speed-native')->exists('failed.mkv'));

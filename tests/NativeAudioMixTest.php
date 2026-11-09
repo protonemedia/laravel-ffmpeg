@@ -294,14 +294,17 @@ class NativeAudioMixTest extends TestCase
         $this->ffmpeg(['-f', 'lavfi', '-i', 'color=blue:s=48x32:r=10:d=1', '-c:v', 'ffv1', $this->path('no-audio.mkv')]);
         $this->ffmpeg(['-i', $this->path('source.mkv'), '-c', 'copy', '-output_ts_offset', '1', $this->path('shifted.mkv')]);
         foreach ([
-            $source->backgroundMusic($this->media('no-audio.mkv')),
-            $this->media('shifted.mkv')->backgroundMusic($music),
-            $source->backgroundMusic($music)->audioFilter('not_a_real_filter'),
-        ] as $invalid) {
+            [$source->backgroundMusic($this->media('no-audio.mkv')), 'mapping'],
+            [$this->media('shifted.mkv')->backgroundMusic($music), 'metadata'],
+            [$source->backgroundMusic($music)->audioFilter('not_a_real_filter'), null],
+        ] as [$invalid, $category]) {
             try {
                 $invalid->video('copy')->audio('pcm_f64le')->save('retained.mkv');
                 $this->fail('Expected invalid audio or filter to fail.');
-            } catch (MediaException) {
+            } catch (MediaException $exception) {
+                if ($category !== null) {
+                    $this->assertSame($category, $exception->category);
+                }
                 $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
             }
             $this->assertSame([], glob($this->root.'/workspaces/*'));
