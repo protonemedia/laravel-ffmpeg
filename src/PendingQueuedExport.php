@@ -55,8 +55,12 @@ class PendingQueuedExport
         }
 
         $export = $this->plan->restore();
-        if (! $export instanceof PendingHlsExport || $path === null) {
-            throw new InvalidArgumentException('Parallel queue exports require HLS and a master destination.');
+        if (! $export instanceof PendingHlsExport) {
+            throw new InvalidArgumentException('Parallel queue exports require an HLS export.');
+        }
+
+        if ($path === null) {
+            throw new InvalidArgumentException('Parallel queue exports require a master playlist destination.');
         }
 
         $disk = $export->filesystem();

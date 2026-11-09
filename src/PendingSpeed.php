@@ -97,8 +97,12 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
     /** @internal */
     public function selections(array $expected): void
     {
-        if ($expected[0] === [] || array_any($expected[0], fn ($type): bool => ! in_array($type, ['audio', 'video'], true))) {
-            throw MediaException::probing('Speed requires selected audio or video streams only.', 'mapping');
+        if ($expected[0] === []) {
+            throw MediaException::probing('Speed requires at least one selected stream.', 'mapping');
+        }
+
+        if (array_any($expected[0], fn ($type): bool => ! in_array($type, ['audio', 'video'], true))) {
+            throw MediaException::probing('Speed supports only audio and video streams.', 'mapping');
         }
     }
 

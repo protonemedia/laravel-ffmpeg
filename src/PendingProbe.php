@@ -39,7 +39,7 @@ class PendingProbe
     public function selectStreams(string $selector): self
     {
         if (! preg_match('/\A(?:[0-9]{1,6}|[vVasdt](?::[0-9]{1,6})?)\z/', $selector)) {
-            throw new InvalidArgumentException('Use a stream index or a typed stream selector such as v:0.');
+            throw new InvalidArgumentException('The probe stream selector must be a stream index or a typed selector such as v:0.');
         }
 
         $this->selector = $selector;
@@ -51,13 +51,16 @@ class PendingProbe
     public function entries(array $entries): self
     {
         if ($entries === [] || count($entries) > 9) {
-            throw new InvalidArgumentException('Select at least one probe section.');
+            throw new InvalidArgumentException('Probe entries must select between 1 and 9 sections.');
         }
 
         foreach ($entries as $section => $fields) {
-            if (! in_array($section, ['stream', 'stream_tags', 'stream_disposition', 'packet', 'frame', 'format', 'format_tags', 'chapter', 'chapter_tags'], true)
-                || ! is_array($fields) || ! array_is_list($fields) || $fields === [] || count($fields) > 64) {
-                throw new InvalidArgumentException('Probe entries require known sections and 1 to 64 field names per section.');
+            if (! in_array($section, ['stream', 'stream_tags', 'stream_disposition', 'packet', 'frame', 'format', 'format_tags', 'chapter', 'chapter_tags'], true)) {
+                throw new InvalidArgumentException("The probe section [{$section}] is not supported.");
+            }
+
+            if (! is_array($fields) || ! array_is_list($fields) || $fields === [] || count($fields) > 64) {
+                throw new InvalidArgumentException("The probe section [{$section}] must list 1 to 64 field names.");
             }
 
             foreach ($fields as $field) {
@@ -142,8 +145,12 @@ class PendingProbe
 
     public function limits(int $outputBytes = 4194304, float $timeout = 30): self
     {
-        if ($outputBytes < 1 || $outputBytes > 16777216 || ! is_finite($timeout) || $timeout <= 0 || $timeout > 120) {
-            throw new InvalidArgumentException('Probe limits require 1 to 16777216 bytes and a positive timeout up to 120 seconds.');
+        if ($outputBytes < 1 || $outputBytes > 16777216) {
+            throw new InvalidArgumentException("The probe output limit [{$outputBytes}] must be between 1 and 16777216 bytes.");
+        }
+
+        if (! is_finite($timeout) || $timeout <= 0 || $timeout > 120) {
+            throw new InvalidArgumentException("The probe timeout [{$timeout}] must be greater than 0 and at most 120 seconds.");
         }
 
         $this->outputLimit = $outputBytes;

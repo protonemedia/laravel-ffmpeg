@@ -12,8 +12,12 @@ readonly class StillInput implements InputSource
 {
     public function __construct(protected Media $image, protected int $frameRate)
     {
-        if ($image->inputOptions() !== [] || $image->transportOptions() !== [] || $image->protocolWhitelist() !== 'file') {
-            throw new InvalidArgumentException('Still video requires a local or downloaded image without input options.');
+        if ($image->inputOptions() !== [] || $image->transportOptions() !== []) {
+            throw new InvalidArgumentException('The still video image must not have input options.');
+        }
+
+        if ($image->protocolWhitelist() !== 'file') {
+            throw new InvalidArgumentException('The still video image must be a local or downloaded file.');
         }
     }
 
@@ -55,9 +59,12 @@ readonly class StillInput implements InputSource
 
         $path = $workspace->stage($this->image, resource: true);
         $size = @getimagesize($path);
-        if ($size === false || ! in_array($size[2], [IMAGETYPE_PNG, IMAGETYPE_JPEG], true)
-            || $size[0] < 2 || $size[1] < 2 || $size[0] % 2 || $size[1] % 2) {
-            throw MediaException::staging('Still video requires a PNG/JPEG image with positive even dimensions.', 'image');
+        if ($size === false || ! in_array($size[2], [IMAGETYPE_PNG, IMAGETYPE_JPEG], true)) {
+            throw MediaException::staging('The still video image must be a PNG or JPEG image.', 'image');
+        }
+
+        if ($size[0] < 2 || $size[1] < 2 || $size[0] % 2 || $size[1] % 2) {
+            throw MediaException::staging("The still video image dimensions [{$size[0]}x{$size[1]}] must be positive and even.", 'image');
         }
 
         return $path;

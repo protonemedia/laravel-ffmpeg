@@ -29,8 +29,12 @@ class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
 
     public function __construct(Media $image, string|Filesystem $disk, protected readonly float $duration, int $frameRate)
     {
-        if (! is_finite($duration) || $duration <= 0 || $frameRate < 1 || $frameRate > 240) {
-            throw new InvalidArgumentException('Still video requires a finite positive duration and a frame rate between 1 and 240.');
+        if (! is_finite($duration) || $duration <= 0) {
+            throw new InvalidArgumentException("The still duration [{$duration}] must be finite and positive.");
+        }
+
+        if ($frameRate < 1 || $frameRate > 240) {
+            throw new InvalidArgumentException("The still frame rate [{$frameRate}] must be between 1 and 240.");
         }
 
         $this->export = new PendingExport(new Media($disk, new StillInput($image, $frameRate)), $disk, $this);

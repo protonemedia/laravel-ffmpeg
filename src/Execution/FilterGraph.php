@@ -9,8 +9,16 @@ class FilterGraph
 {
     public static function validateExpression(string $expression): void
     {
-        if ($expression === '' || str_contains($expression, "\0") || preg_match('~[a-z][a-z0-9+.-]*://~i', $expression)) {
-            throw new InvalidArgumentException('Filters require a nonempty, developer-trusted expression without network URLs.');
+        if ($expression === '') {
+            throw new InvalidArgumentException('The filter expression must not be empty.');
+        }
+
+        if (str_contains($expression, "\0")) {
+            throw new InvalidArgumentException('The filter expression must not contain NUL bytes.');
+        }
+
+        if (preg_match('~[a-z][a-z0-9+.-]*://~i', $expression)) {
+            throw new InvalidArgumentException('The filter expression must not contain network URLs.');
         }
     }
 
@@ -30,13 +38,23 @@ class FilterGraph
                 $character = $filter[$i];
 
                 if (! $escaped && substr($filter, $i, 2) === '{{') {
-                    if (! preg_match('/\A\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/', substr($filter, $i), $match)
-                        || $quoted || ! preg_match('/(?:^|[:=])([a-z]+)=$/', substr($filter, 0, $i), $key)
+                    if (! preg_match('/\A\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/', substr($filter, $i), $match)) {
+                        throw new InvalidArgumentException('Resource placeholders must be identifiers such as {{font}}.');
+                    }
+
+                    if ($quoted) {
+                        throw new InvalidArgumentException('Resource placeholders must not be quoted.');
+                    }
+
+                    if (! preg_match('/(?:^|[:=])([a-z]+)=$/', substr($filter, 0, $i), $key)
                         || ! in_array($key[1], match ($name[1] ?? '') {
                             'drawtext' => ['fontfile', 'textfile'], 'lut3d' => ['file'], 'subtitles' => ['filename'], default => [],
-                        }, true)
-                        || ! isset($resources[$match[1]])) {
-                        throw new InvalidArgumentException('Resources require a known, whole unquoted named file value.');
+                        }, true)) {
+                        throw new InvalidArgumentException('Resource placeholders must be the value of a supported filter file option.');
+                    }
+
+                    if (! isset($resources[$match[1]])) {
+                        throw new InvalidArgumentException('Resource placeholders must name a defined resource.');
                     }
 
                     $resource = $resources[$match[1]];
@@ -49,11 +67,17 @@ class FilterGraph
                     if (in_array($name[1], ['drawtext', 'subtitles'], true)) {
                         $options = self::resourceOptions($filter);
 
-                        if (($name[1] === 'subtitles' && isset($options['f']))
-                            || ($name[1] === 'drawtext' && isset($options['textfile'], $options['text']))
-                            || ($resource['type'] === 'text' && (($options['expansion'] ?? null) !== 'none'
-                                || ($options['reload'] ?? '0') !== '0'))) {
-                            throw new InvalidArgumentException('File resources require one filename; literal text requires expansion=none and reload=0.');
+                        if ($name[1] === 'subtitles' && isset($options['f'])) {
+                            throw new InvalidArgumentException('The subtitles filter must not combine filename and f.');
+                        }
+
+                        if ($name[1] === 'drawtext' && isset($options['textfile'], $options['text'])) {
+                            throw new InvalidArgumentException('The drawtext filter must not combine textfile and text.');
+                        }
+
+                        if ($resource['type'] === 'text' && (($options['expansion'] ?? null) !== 'none'
+                            || ($options['reload'] ?? '0') !== '0')) {
+                            throw new InvalidArgumentException('Text resources require expansion=none and reload=0.');
                         }
                     }
 
@@ -99,8 +123,12 @@ class FilterGraph
         $options = [];
 
         foreach (self::split($arguments, ':') as [$option]) {
-            if (! preg_match('/^([a-zA-Z_][a-zA-Z0-9_]*)=(.*)$/sD', $option, $match) || isset($options[$match[1]])) {
-                throw new InvalidArgumentException('Resource filters require named, nonduplicate options.');
+            if (! preg_match('/^([a-zA-Z_][a-zA-Z0-9_]*)=(.*)$/sD', $option, $match)) {
+                throw new InvalidArgumentException('Resource filter options must be named.');
+            }
+
+            if (isset($options[$match[1]])) {
+                throw new InvalidArgumentException('Resource filter options must not be repeated.');
             }
 
             $options[$match[1]] = $match[2];

@@ -69,7 +69,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     public function __construct(protected readonly Media $media, string|Filesystem $disk, protected readonly float $segmentDuration)
     {
         if (! is_finite($segmentDuration) || $segmentDuration < 0.001 || $segmentDuration > 86400) {
-            throw new InvalidArgumentException('HLS segment duration must be between 0.001 and 86400 seconds.');
+            throw new InvalidArgumentException("The HLS segment duration [{$segmentDuration}] must be between 0.001 and 86400 seconds.");
         }
 
         $this->export = new PendingExport($media, $disk, $this, 'hls-playlist');
@@ -119,7 +119,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         $this->export->assertOutputMutable();
         $type = strtolower($type);
         if (! in_array($type, ['vod', 'event', 'live'], true)) {
-            throw new InvalidArgumentException('HLS playlist type must be vod, event, or live.');
+            throw new InvalidArgumentException("The HLS playlist type [{$type}] must be vod, event, or live.");
         }
 
         $this->playlistType = $type;
@@ -144,8 +144,10 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     {
         $this->export->assertOutputMutable();
 
-        if (! preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9_-]*\z/', $name) || isset($this->variants[$name])) {
-            throw new InvalidArgumentException('HLS variant names must be unique simple path components.');
+        $this->ensureSimpleName($name, 'HLS variant name');
+
+        if (isset($this->variants[$name])) {
+            throw new InvalidArgumentException("The HLS variant [{$name}] is already defined.");
         }
 
         $paths = ['playlist' => $playlist, 'segments' => $segments, 'init' => $init];
@@ -157,10 +159,16 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             $path = new ExportOutput($path, $this->export->filesystem())->destination()['path'];
             if (! in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), match ($type) {
                 'playlist' => ['m3u8'], 'init' => ['mp4'], default => ['ts', 'm4s', 'vtt'],
-            }, true)
-                || ($type === 'segments' && (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', $path)
-                    || str_contains(dirname($path), '%')))) {
-                throw new InvalidArgumentException('HLS requires m3u8 playlists, mp4 initialization files, and ts, m4s, or vtt segments with one %d or %01d through %09d filename placeholder.');
+            }, true)) {
+                throw new InvalidArgumentException(match ($type) {
+                    'playlist' => 'The HLS variant playlist must have an m3u8 extension.',
+                    'init' => 'The HLS initialization file must have an mp4 extension.',
+                    default => 'The HLS segment path must have a ts, m4s, or vtt extension.',
+                });
+            }
+
+            if ($type === 'segments' && (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', $path) || str_contains(dirname($path), '%'))) {
+                throw new InvalidArgumentException('The HLS segment filename must contain one %d or %01d through %09d placeholder.');
             }
 
             $paths[$type] = $path;
@@ -228,18 +236,35 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         ?string $init,
     ): self {
         $this->export->assertOutputMutable();
-        if (! preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9_-]*\z/', $group)
-            || $name === '' || ! preg_match('//u', $name) || preg_match('/["\\\\\x00-\x1F\x7F-\x9F]/u', $name)
-            || ($language !== null && ! preg_match('/\A[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*\z/', $language))
-            || ($channels !== null && ! preg_match('/\A[1-9][0-9]*(?:\/[A-Z0-9]+)?\z/', $channels))
-            || ($default && ! $autoselect)) {
-            throw new InvalidArgumentException('Invalid HLS rendition attributes; DEFAULT requires AUTOSELECT.');
+        $this->ensureSimpleName($group, 'HLS rendition group');
+
+        if ($name === '' || ! preg_match('//u', $name) || preg_match('/["\\\\\x00-\x1F\x7F-\x9F]/u', $name)) {
+            throw new InvalidArgumentException('The HLS rendition name must be non-empty UTF-8 text without quotes, backslashes, or control characters.');
+        }
+
+        if ($language !== null && ! preg_match('/\A[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*\z/', $language)) {
+            throw new InvalidArgumentException('The HLS rendition language must be a language tag.');
+        }
+
+        if ($channels !== null && ! preg_match('/\A[1-9][0-9]*(?:\/[A-Z0-9]+)?\z/', $channels)) {
+            throw new InvalidArgumentException('The HLS rendition channels must be a positive channel count with an optional parameter list.');
+        }
+
+        if ($default && ! $autoselect) {
+            throw new InvalidArgumentException('A default HLS rendition must also be autoselected.');
         }
 
         foreach ($this->renditions as $rendition) {
-            if ($rendition['type'] === $type && $rendition['group'] === $group
-                && ($rendition['name'] === $name || ($default && $rendition['default']))) {
-                throw new InvalidArgumentException('Rendition names and the default must be unique within each group.');
+            if ($rendition['type'] !== $type || $rendition['group'] !== $group) {
+                continue;
+            }
+
+            if ($rendition['name'] === $name) {
+                throw new InvalidArgumentException("The HLS rendition group [{$group}] already has a rendition with this name.");
+            }
+
+            if ($default && $rendition['default']) {
+                throw new InvalidArgumentException("The HLS rendition group [{$group}] already has a default rendition.");
             }
         }
 
@@ -248,6 +273,16 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         $this->renditions[$id] = ['type' => $type, 'group' => $group, 'name' => $name, 'language' => $language, 'default' => $default, 'autoselect' => $autoselect, 'forced' => $forced, 'channels' => $channels];
 
         return $this;
+    }
+
+    /**
+     * Ensure the given name is a simple path component that cannot traverse directories.
+     */
+    protected function ensureSimpleName(string $name, string $subject): void
+    {
+        if (! preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9_-]*\z/', $name)) {
+            throw new InvalidArgumentException("The {$subject} must be a simple path component.");
+        }
     }
 
     public function encrypt(
@@ -293,15 +328,23 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             $rendition = $this->renditions[$name] ?? null;
             $subtitle = ($rendition['type'] ?? null) === 'SUBTITLES';
             $segments = $this->variantPaths[$name]['segments'];
-            if (($segments !== null && strtolower(pathinfo($segments, PATHINFO_EXTENSION)) !== ($subtitle ? 'vtt' : ($this->segmentType === 'fmp4' ? 'm4s' : 'ts')))
-                || ($this->variantPaths[$name]['init'] !== null && $this->segmentType !== 'fmp4')) {
-                throw new InvalidArgumentException('Segment and initialization paths must match the selected HLS packaging.');
+            $extension = $subtitle ? 'vtt' : ($this->segmentType === 'fmp4' ? 'm4s' : 'ts');
+            if ($segments !== null && strtolower(pathinfo($segments, PATHINFO_EXTENSION)) !== $extension) {
+                throw new InvalidArgumentException("The HLS segment path must have the [{$extension}] extension of the selected packaging.");
+            }
+
+            if ($this->variantPaths[$name]['init'] !== null && $this->segmentType !== 'fmp4') {
+                throw new InvalidArgumentException('The HLS initialization file requires fMP4 packaging.');
             }
 
             $settings = $variant->inherit($this->export->outputConfiguration());
             if ($rendition !== null) {
-                if ($settings['maps'] === [] || array_any($variant->groups(), fn ($group): bool => $group !== null)) {
-                    throw new InvalidArgumentException('Alternate renditions require explicit maps and cannot reference groups.');
+                if ($settings['maps'] === []) {
+                    throw new InvalidArgumentException('An HLS alternate rendition requires an explicit map.');
+                }
+
+                if (array_any($variant->groups(), fn ($group): bool => $group !== null)) {
+                    throw new InvalidArgumentException('An HLS alternate rendition cannot reference rendition groups.');
                 }
 
                 $settings['omitVideo'] = false;
@@ -315,7 +358,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             } else {
                 foreach ($variant->groups() as $type => $group) {
                     if ($group !== null && ! array_any($this->renditions, fn ($item): bool => $item['type'] === $type && $item['group'] === $group)) {
-                        throw new InvalidArgumentException('A variant references an undefined HLS rendition group.');
+                        throw new InvalidArgumentException("The HLS rendition group [{$group}] is not defined.");
                     }
                 }
 
@@ -354,11 +397,15 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     {
         $this->outputs([], $path);
         if ($this->playlistType !== 'vod') {
-            throw new InvalidArgumentException('Parallel HLS composition requires VOD playlists. Use a single queued export for event or live playlist types.');
+            throw new InvalidArgumentException('Parallel HLS composition requires VOD playlists; use a single queued export for event or live playlists.');
         }
 
-        if ($this->playlistCallback instanceof Closure || in_array('-filter_complex', $this->export->inspect(), true)) {
-            throw new InvalidArgumentException('Parallel HLS does not accept custom playlist callbacks or complex graphs. Use a single queued export.');
+        if ($this->playlistCallback instanceof Closure) {
+            throw new InvalidArgumentException('Parallel HLS does not accept custom playlist callbacks; use a single queued export.');
+        }
+
+        if (in_array('-filter_complex', $this->export->inspect(), true)) {
+            throw new InvalidArgumentException('Parallel HLS does not accept complex graphs; use a single queued export.');
         }
 
         $remaining = array_diff(array_keys($this->variants), array_keys($this->renditions));

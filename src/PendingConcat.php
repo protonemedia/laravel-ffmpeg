@@ -30,7 +30,11 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /** @param array<Media> $sources */
     public function __construct(protected readonly array $sources, string|Filesystem $disk)
     {
-        if (! array_is_list($sources) || count($sources) < 2) {
+        if (! array_is_list($sources)) {
+            throw new InvalidArgumentException('Transcoded concat requires a list of media inputs.');
+        }
+
+        if (count($sources) < 2) {
             throw new InvalidArgumentException('Transcoded concat requires at least two media inputs.');
         }
 
@@ -48,9 +52,12 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     {
         $this->export->assertOutputMutable();
 
-        if ($width <= 0 || $height <= 0 || $width % 2 || $height % 2
-            || ! in_array($fit, ['contain', 'cover', 'stretch'], true)) {
-            throw new InvalidArgumentException('conformVideo() requires positive even dimensions, a positive frame rate, and contain, cover, or stretch.');
+        if ($width <= 0 || $height <= 0 || $width % 2 || $height % 2) {
+            throw new InvalidArgumentException("The conform dimensions [{$width}x{$height}] must be positive and even.");
+        }
+
+        if (! in_array($fit, ['contain', 'cover', 'stretch'], true)) {
+            throw new InvalidArgumentException("The conform fit [{$fit}] must be contain, cover, or stretch.");
         }
 
         $geometry = new ExportOutput('conformance.mp4', $this->export->outputConfiguration()['disk']);
@@ -69,8 +76,16 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     {
         $this->export->assertOutputMutable();
 
-        if ($sampleRate <= 0 || ! in_array($channels, [1, 2], true) || ($channel !== null && $channel < 0)) {
-            throw new InvalidArgumentException('conformAudio() requires a positive sample rate, mono or stereo, and a nonnegative channel index.');
+        if ($sampleRate <= 0) {
+            throw new InvalidArgumentException("The conform sample rate [{$sampleRate}] must be positive.");
+        }
+
+        if (! in_array($channels, [1, 2], true)) {
+            throw new InvalidArgumentException("The conform channel count [{$channels}] must be 1 or 2.");
+        }
+
+        if ($channel !== null && $channel < 0) {
+            throw new InvalidArgumentException("The conform channel index [{$channel}] must not be negative.");
         }
 
         $this->audioConformance = ['sampleRate' => $sampleRate, 'channels' => $channels, 'channel' => $channel];
@@ -151,13 +166,24 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     {
         $settings = $this->export->outputConfiguration();
 
-        if ($this->videoConformance === null || ($this->audioConformance === null && ! $settings['omitAudio'])) {
-            throw new InvalidArgumentException('Choose conformVideo() and either conformAudio() or withoutAudio().');
+        if ($this->videoConformance === null) {
+            throw new InvalidArgumentException('Transcoded concat requires conformVideo().');
         }
 
-        if (($settings['omitAudio'] && $this->audioConformance !== null)
-            || ($settings['video']['codec'] ?? null) === 'copy' || ($settings['audio']['codec'] ?? null) === 'copy') {
-            throw new InvalidArgumentException('Transcoded concat requires transcoded video and audio, and either conformAudio() or withoutAudio(), not both.');
+        if ($this->audioConformance === null && ! $settings['omitAudio']) {
+            throw new InvalidArgumentException('Transcoded concat requires conformAudio() or withoutAudio().');
+        }
+
+        if ($settings['omitAudio'] && $this->audioConformance !== null) {
+            throw new InvalidArgumentException('Transcoded concat accepts conformAudio() or withoutAudio(), not both.');
+        }
+
+        if (($settings['video']['codec'] ?? null) === 'copy') {
+            throw new InvalidArgumentException('Transcoded concat must transcode video, not copy it.');
+        }
+
+        if (($settings['audio']['codec'] ?? null) === 'copy') {
+            throw new InvalidArgumentException('Transcoded concat must transcode audio, not copy it.');
         }
 
         if (array_any($this->sources, fn (Media $source): bool => $source->inputOptions() !== [])) {
@@ -216,8 +242,12 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
                 $audio = $item->audio();
                 $channel = $this->audioConformance['channel'];
 
-                if ($audio === null || ($channel !== null && ($audio->channels() === null || $channel >= $audio->channels()))) {
-                    throw MediaException::probing('Every concat source requires audio with the requested channel.', 'mapping');
+                if ($audio === null) {
+                    throw MediaException::probing('Every concat source requires an audio stream.', 'mapping');
+                }
+
+                if ($channel !== null && ($audio->channels() === null || $channel >= $audio->channels())) {
+                    throw MediaException::probing("Every concat source requires the audio channel [{$channel}].", 'mapping');
                 }
 
                 if (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0) {

@@ -16,10 +16,20 @@ readonly class UrlInput implements InputSource
     {
         $parts = parse_url($url);
 
-        if ($parts === false || ! in_array($parts['scheme'] ?? '', ['http', 'https'], true)
-            || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])
-            || isset($parts['fragment']) || preg_match('/[\x00-\x20\x7f]/', $url)) {
-            throw new InvalidArgumentException('openUrl() requires an HTTP(S) URL without user information, fragments, or whitespace.');
+        if ($parts === false || ! in_array($parts['scheme'] ?? '', ['http', 'https'], true) || empty($parts['host'])) {
+            throw new InvalidArgumentException('The media URL must be an absolute HTTP(S) URL.');
+        }
+
+        if (isset($parts['user']) || isset($parts['pass'])) {
+            throw new InvalidArgumentException('The media URL must not contain user information.');
+        }
+
+        if (isset($parts['fragment'])) {
+            throw new InvalidArgumentException('The media URL must not contain a fragment.');
+        }
+
+        if (preg_match('/[\x00-\x20\x7f]/', $url)) {
+            throw new InvalidArgumentException('The media URL must not contain whitespace or control characters.');
         }
 
         if ($headers !== [] && ! $download) {
@@ -27,9 +37,12 @@ readonly class UrlInput implements InputSource
         }
 
         foreach ($headers as $name => $value) {
-            if (! is_string($name) || ! preg_match('/\A[!#$%&\x27*+.^_`|~0-9a-z-]+\z/i', $name)
-                || ! is_string($value) || preg_match('/[\x00-\x1f\x7f]/', $value)) {
-                throw new InvalidArgumentException('HTTP headers require valid names and single-line string values.');
+            if (! is_string($name) || ! preg_match('/\A[!#$%&\x27*+.^_`|~0-9a-z-]+\z/i', $name)) {
+                throw new InvalidArgumentException('The HTTP header names must be valid tokens.');
+            }
+
+            if (! is_string($value) || preg_match('/[\x00-\x1f\x7f]/', $value)) {
+                throw new InvalidArgumentException('The HTTP header values must be single-line strings.');
             }
         }
     }

@@ -17,8 +17,12 @@ readonly class ConcatInput implements InputSource
         }
 
         foreach ($inputs as $input) {
-            if ($input->protocolWhitelist() !== 'file' || $input->inputOptions() !== [] || $input->transportOptions() !== []) {
-                throw new InvalidArgumentException('Concat inputs require standalone local or staged files without input options. Use download: true for URLs.');
+            if ($input->protocolWhitelist() !== 'file') {
+                throw new InvalidArgumentException('Concat inputs must be local or downloaded files; use download: true for URLs.');
+            }
+
+            if ($input->inputOptions() !== [] || $input->transportOptions() !== []) {
+                throw new InvalidArgumentException('Concat inputs must not have input options.');
             }
         }
     }
@@ -76,19 +80,26 @@ readonly class ConcatInput implements InputSource
             $duration = $metadata->duration();
             $streams = $metadata->streams()->map(fn ($stream): array => array_map(fn (string $field) => $stream->get($field), $fields))->all();
 
-            if ($duration === null || $duration <= 0 || $streams === []
-                || in_array($metadata->get('format.format_name'), ['concat', 'hls', 'dash'], true)) {
-                throw MediaException::probing('Concat input '.$index.' requires finite standalone media with streams.', 'metadata');
+            if ($duration === null || $duration <= 0) {
+                throw MediaException::probing("Concat input [{$index}] must have a finite positive duration.", 'metadata');
+            }
+
+            if ($streams === []) {
+                throw MediaException::probing("Concat input [{$index}] must contain streams.", 'metadata');
+            }
+
+            if (in_array($metadata->get('format.format_name'), ['concat', 'hls', 'dash'], true)) {
+                throw MediaException::probing("Concat input [{$index}] must be standalone media, not a playlist or manifest.", 'metadata');
             }
 
             $start = $metadata->get('format.start_time', '0');
 
             if (! is_numeric($start) || (float) $start !== 0.0) {
-                throw MediaException::probing('Concat input '.$index.' requires a zero presentation origin. Use an explicit normalization graph.', 'metadata');
+                throw MediaException::probing("Concat input [{$index}] must start at zero; use an explicit normalization graph.", 'metadata');
             }
 
             if ($layout !== null && $layout !== $streams) {
-                throw MediaException::probing('Concat input '.$index.' has a different stream layout or codec parameters. Use an explicit normalization graph.', 'concat');
+                throw MediaException::probing("Concat input [{$index}] stream layout or codec parameters differ from the first input; use an explicit normalization graph.", 'concat');
             }
 
             $layout = $streams;

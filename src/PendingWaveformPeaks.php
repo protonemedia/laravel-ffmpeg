@@ -106,8 +106,16 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $stream = $metadata[0]->audioStreams()->get($this->track);
         $this->rate = (int) ($stream?->get('sample_rate') ?? 0);
         $this->inputChannels = (int) ($stream?->get('channels') ?? 0);
-        if ($this->rate < 1 || $this->inputChannels < 1 || $this->inputChannels > 64) {
-            throw MediaException::probing('The selected audio track requires a sample rate and 1 to 64 channels.', 'mapping');
+        if ($stream === null) {
+            throw MediaException::probing("The audio track [{$this->track}] does not exist.", 'mapping');
+        }
+
+        if ($this->rate < 1) {
+            throw MediaException::probing("The audio track [{$this->track}] has no known sample rate.", 'mapping');
+        }
+
+        if ($this->inputChannels < 1 || $this->inputChannels > 64) {
+            throw MediaException::probing("The audio track channel count [{$this->inputChannels}] must be between 1 and 64.", 'mapping');
         }
 
         // FFprobe reports custom orders as "4 channels (FL+FR+LFE+BC)".

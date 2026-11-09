@@ -245,9 +245,13 @@ class HlsPlaylist implements Responsable
         }
 
         $normalized = str_replace("\r\n", "\n", $content);
-        if (strlen($content) > $limit || ! str_starts_with($normalized, "#EXTM3U\n")
+        if (strlen($content) > $limit) {
+            throw MediaException::response('An HLS response exceeds its 16 MiB input limit.', 'artifact');
+        }
+
+        if (! str_starts_with($normalized, "#EXTM3U\n")
             || ! preg_match('//u', $normalized) || preg_match('/[\x00-\x09\x0B-\x1F\x7F-\x9F]/u', $normalized)) {
-            throw MediaException::response('HLS responses require UTF-8 playlists within the 16 MiB input limit.', 'artifact');
+            throw MediaException::response('HLS responses require UTF-8 playlists that start with #EXTM3U and contain no control characters.', 'artifact');
         }
 
         return $content;

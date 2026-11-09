@@ -13,10 +13,24 @@ readonly class RtspCamera implements InputSource
     public function __construct(protected string $url, protected string $transport = 'tcp', protected float $timeout = 15)
     {
         $parts = parse_url($url);
-        if ($parts === false || ($parts['scheme'] ?? null) !== 'rtsp' || empty($parts['host'])
-            || preg_match('/[\x00-\x20\x7f]/', $url) || isset($parts['fragment'])
-            || ! in_array($transport, ['tcp', 'udp'], true) || ! is_finite($timeout) || $timeout <= 0 || $timeout > 300) {
-            throw new InvalidArgumentException('RTSP snapshots require an rtsp URL, tcp/udp transport and a timeout between zero and 300 seconds.');
+        if ($parts === false || ($parts['scheme'] ?? null) !== 'rtsp' || empty($parts['host'])) {
+            throw new InvalidArgumentException('The camera URL must be an absolute rtsp URL.');
+        }
+
+        if (preg_match('/[\x00-\x20\x7f]/', $url)) {
+            throw new InvalidArgumentException('The camera URL must not contain whitespace or control characters.');
+        }
+
+        if (isset($parts['fragment'])) {
+            throw new InvalidArgumentException('The camera URL must not contain a fragment.');
+        }
+
+        if (! in_array($transport, ['tcp', 'udp'], true)) {
+            throw new InvalidArgumentException("The RTSP transport [{$transport}] must be tcp or udp.");
+        }
+
+        if (! is_finite($timeout) || $timeout <= 0 || $timeout > 300) {
+            throw new InvalidArgumentException("The RTSP timeout [{$timeout}] must be greater than 0 and at most 300 seconds.");
         }
     }
 

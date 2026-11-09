@@ -14,8 +14,16 @@ readonly class ResourceFilter
     {
         CommandCompiler::color($color);
 
-        if (! mb_check_encoding($text, 'UTF-8') || str_contains($text, "\0") || $size <= 0) {
-            throw new InvalidArgumentException('Draw text requires UTF-8 without NUL bytes and a positive size.');
+        if (! mb_check_encoding($text, 'UTF-8')) {
+            throw new InvalidArgumentException('The draw text must be valid UTF-8.');
+        }
+
+        if (str_contains($text, "\0")) {
+            throw new InvalidArgumentException('The draw text must not contain NUL bytes.');
+        }
+
+        if ($size <= 0) {
+            throw new InvalidArgumentException("The draw text size [{$size}] must be positive.");
         }
 
         return new self('drawText', [
@@ -26,9 +34,7 @@ readonly class ResourceFilter
 
     public static function burnSubtitles(Media $subtitles): self
     {
-        if ($subtitles->inputOptions() !== []) {
-            throw new InvalidArgumentException('Subtitle resources do not accept media input options.');
-        }
+        self::ensureNoInputOptions($subtitles, 'subtitle');
 
         return new self('burnSubtitles', [
             'subtitles' => ['type' => 'subtitle', 'source' => $subtitles],
@@ -37,11 +43,19 @@ readonly class ResourceFilter
 
     public static function lut3d(Media $look): self
     {
-        if ($look->inputOptions() !== []) {
-            throw new InvalidArgumentException('LUT resources do not accept media input options.');
-        }
+        self::ensureNoInputOptions($look, 'LUT');
 
         return new self('lut3d', ['look' => ['type' => 'file', 'source' => $look]], 'lut3d=file=%s');
+    }
+
+    /**
+     * Ensure the given resource media has no input options, which file filters cannot apply.
+     */
+    protected static function ensureNoInputOptions(Media $media, string $resource): void
+    {
+        if ($media->inputOptions() !== []) {
+            throw new InvalidArgumentException("The {$resource} resource must not have media input options.");
+        }
     }
 
     public function toFilter(callable $resolve): string

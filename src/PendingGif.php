@@ -33,9 +33,20 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
 
     public function __construct(Media $media, string|Filesystem $disk, int $width = 480, int|float $frameRate = 12, bool $loop = true, ?int $loops = null)
     {
-        if ($width <= 0 || $width > 65535 || ! is_finite((float) $frameRate) || $frameRate <= 0
-            || ($loops !== null && (! $loop || $loops < 1 || $loops > 65535))) {
-            throw new InvalidArgumentException('GIF requires a width between 1 and 65535, a finite positive frame rate, and, when looping, a loop count between 1 and 65535.');
+        if ($width <= 0 || $width > 65535) {
+            throw new InvalidArgumentException("The GIF width [{$width}] must be between 1 and 65535.");
+        }
+
+        if (! is_finite((float) $frameRate) || $frameRate <= 0) {
+            throw new InvalidArgumentException("The GIF frame rate [{$frameRate}] must be finite and positive.");
+        }
+
+        if ($loops !== null && ! $loop) {
+            throw new InvalidArgumentException('A GIF loop count requires looping.');
+        }
+
+        if ($loops !== null && ($loops < 1 || $loops > 65535)) {
+            throw new InvalidArgumentException("The GIF loop count [{$loops}] must be between 1 and 65535.");
         }
 
         $this->loopCount = $loop ? $loops ?? 0 : -1;

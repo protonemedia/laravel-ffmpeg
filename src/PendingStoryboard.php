@@ -48,9 +48,20 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     public function __construct(Media $media, string|Filesystem $disk, float $every, protected readonly int $columns, protected readonly int $rows, protected readonly int $margin, protected readonly int $padding)
     {
         if (! is_finite($every) || $every < 0.001 || $every > intdiv(PHP_INT_MAX, 1000000)
-            || abs($every * 1000 - round($every * 1000)) > 0.000001
-            || $columns < 1 || $rows < 1 || $columns > intdiv(PHP_INT_MAX, $rows) || $margin < 0 || $padding < 0) {
-            throw new InvalidArgumentException('Storyboards require a positive whole-millisecond interval, a positive integer grid, and nonnegative spacing.');
+            || abs($every * 1000 - round($every * 1000)) > 0.000001) {
+            throw new InvalidArgumentException("The storyboard interval [{$every}] must be a positive whole number of milliseconds.");
+        }
+
+        if ($columns < 1 || $rows < 1 || $columns > intdiv(PHP_INT_MAX, $rows)) {
+            throw new InvalidArgumentException("The storyboard grid [{$columns}x{$rows}] must have a positive, representable number of cells.");
+        }
+
+        if ($margin < 0) {
+            throw new InvalidArgumentException("The storyboard margin [{$margin}] must not be negative.");
+        }
+
+        if ($padding < 0) {
+            throw new InvalidArgumentException("The storyboard padding [{$padding}] must not be negative.");
         }
 
         $this->interval = (int) round($every * 1000);

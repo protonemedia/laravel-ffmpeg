@@ -46,7 +46,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     public function __construct(Media $media, string|Filesystem $disk, protected readonly float $segmentDuration)
     {
         if (! is_finite($segmentDuration) || $segmentDuration < 0.001 || $segmentDuration > 86400) {
-            throw new InvalidArgumentException('DASH segment duration must be between 0.001 and 86400 seconds.');
+            throw new InvalidArgumentException("The DASH segment duration [{$segmentDuration}] must be between 0.001 and 86400 seconds.");
         }
 
         $this->export = new PendingExport($media, $disk, $this, 'dash-manifest');
@@ -135,8 +135,12 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $this->export->assertOutputMutable();
         $this->identifier($name);
-        if (isset($this->sets[$name]) || ! in_array($type, ['video', 'audio'], true)) {
-            throw new InvalidArgumentException('DASH adaptation sets require unique names and video or audio type.');
+        if (isset($this->sets[$name])) {
+            throw new InvalidArgumentException("The DASH adaptation set [{$name}] is already defined.");
+        }
+
+        if (! in_array($type, ['video', 'audio'], true)) {
+            throw new InvalidArgumentException("The DASH adaptation set type [{$type}] must be video or audio.");
         }
 
         $this->sets[$name] = ['type' => $type, 'representations' => []];
@@ -148,8 +152,16 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $this->export->assertOutputMutable();
         $this->identifier($name);
-        if (isset($this->representations[$name]) || ! isset($this->sets[$adaptationSet]) || count($this->representations) >= 64) {
-            throw new InvalidArgumentException('DASH requires unique representation names, a declared adaptation set, and at most 64 representations.');
+        if (isset($this->representations[$name])) {
+            throw new InvalidArgumentException("The DASH representation [{$name}] is already defined.");
+        }
+
+        if (! isset($this->sets[$adaptationSet])) {
+            throw new InvalidArgumentException("The DASH adaptation set [{$adaptationSet}] is not defined.");
+        }
+
+        if (count($this->representations) >= 64) {
+            throw new InvalidArgumentException('A DASH export supports at most 64 representations.');
         }
 
         $representation = new DashRepresentation;
@@ -190,8 +202,14 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /** @internal */
     public function outputs(array $default, ?string $path): array
     {
-        if ($this->representations === [] || array_any($this->sets, fn ($set): bool => $set['representations'] === [])) {
-            throw new InvalidArgumentException('DASH requires populated adaptation sets.');
+        if ($this->representations === []) {
+            throw new InvalidArgumentException('A DASH export requires at least one representation.');
+        }
+
+        foreach ($this->sets as $name => $set) {
+            if ($set['representations'] === []) {
+                throw new InvalidArgumentException("The DASH adaptation set [{$name}] has no representations.");
+            }
         }
 
         if (! class_exists(DOMDocument::class)) {
@@ -210,12 +228,29 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         foreach ($this->representations as $name => $representation) {
             $settings = $representation->inherit($this->export->outputConfiguration());
             $type = $this->type($name);
-            if ($settings['maps'] === [] || $settings['omitAudio'] || $settings['omitVideo'] || $settings['videoStreams'] !== []
-                || ($settings['audioStreams'] ?? []) !== []
-                || ($settings[$type]['codec'] ?? null) !== ($type === 'video' ? 'libx264' : 'aac')
-                || ($settings['clip']['seek'] ?? 'accurate') !== 'accurate'
-                || ($outputs !== [] && $settings['clip'] !== $clip)) {
-                throw new InvalidArgumentException('DASH representations require one explicit map, H.264/AAC encoding, identical accurate clips, and no stream omission or per-track overrides.');
+            if ($settings['maps'] === []) {
+                throw new InvalidArgumentException("The DASH representation [{$name}] requires an explicit map.");
+            }
+
+            if ($settings['omitAudio'] || $settings['omitVideo']) {
+                throw new InvalidArgumentException("The DASH representation [{$name}] cannot omit streams.");
+            }
+
+            if ($settings['videoStreams'] !== [] || ($settings['audioStreams'] ?? []) !== []) {
+                throw new InvalidArgumentException("The DASH representation [{$name}] cannot override per-track settings.");
+            }
+
+            $codec = $type === 'video' ? 'libx264' : 'aac';
+            if (($settings[$type]['codec'] ?? null) !== $codec) {
+                throw new InvalidArgumentException("The DASH representation [{$name}] must encode {$type} with [{$codec}].");
+            }
+
+            if (($settings['clip']['seek'] ?? 'accurate') !== 'accurate') {
+                throw new InvalidArgumentException("The DASH representation [{$name}] requires an accurate clip.");
+            }
+
+            if ($outputs !== [] && $settings['clip'] !== $clip) {
+                throw new InvalidArgumentException('DASH representations require identical clips.');
             }
 
             $clip = $settings['clip'];
@@ -294,8 +329,12 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /** @internal */
     public function duration(array $metadata, ?float $default): float
     {
-        if ($default === null || $default <= 0 || ceil($default / $this->segmentDuration) * count($this->representations) > DashManifest::LIMIT) {
-            throw new InvalidArgumentException('DASH requires a known finite duration within its 100000 segment inventory limit.');
+        if ($default === null || $default <= 0) {
+            throw new InvalidArgumentException('DASH requires a known positive presentation duration.');
+        }
+
+        if (ceil($default / $this->segmentDuration) * count($this->representations) > DashManifest::LIMIT) {
+            throw new InvalidArgumentException('The DASH segment inventory must stay within 100000 segments.');
         }
 
         return $default;

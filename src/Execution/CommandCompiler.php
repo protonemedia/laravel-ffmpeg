@@ -99,12 +99,19 @@ class CommandCompiler
             $value = $tokens[$i + 1];
 
             if (! is_string($flag) || ! preg_match('/^-([a-z0-9_-]+)(?::([vasdt])(?::([0-9]+))?)?$/D', $flag, $match)
-                || ! isset($allowed[$match[1]]) || ($scope !== 'output' && isset($match[2]))
-                || ! is_string($value) || str_contains($value, "\0") || str_contains($value, "\n") || str_contains($value, "\r")) {
-                throw new InvalidArgumentException('Unsupported or misplaced FFmpeg option.');
+                || ! isset($allowed[$match[1]])) {
+                throw new InvalidArgumentException("The FFmpeg option is not supported in the {$scope} scope.");
             }
 
             $name = $match[1];
+
+            if ($scope !== 'output' && isset($match[2])) {
+                throw new InvalidArgumentException("The FFmpeg option [{$name}] does not accept a stream specifier in the {$scope} scope.");
+            }
+
+            if (! is_string($value) || str_contains($value, "\0") || str_contains($value, "\n") || str_contains($value, "\r")) {
+                throw new InvalidArgumentException("The FFmpeg option [{$name}] value must be a single-line string.");
+            }
 
             $videoOnly = ['x264-params', 'x265-params', 'cpu-used', 'deadline', 'row-mt', 'rc', 'cq',
                 'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength', 'color_primaries', 'color_trc', 'colorspace', 'color_range'];
@@ -114,11 +121,11 @@ class CommandCompiler
             if (isset($match[2]) && (in_array($name, $fileOnly, true)
                 || (in_array($name, $videoOnly, true) && $match[2] !== 'v')
                 || (in_array($name, $audioOnly, true) && $match[2] !== 'a'))) {
-                throw new InvalidArgumentException('Unsupported stream scope for FFmpeg option.');
+                throw new InvalidArgumentException("The FFmpeg option [{$name}] does not accept the [{$match[2]}] stream specifier.");
             }
 
             if (isset($seen[$flag]) && ! in_array($name, ['streamid', 'init_hw_device'], true)) {
-                throw new InvalidArgumentException('Duplicate FFmpeg option.');
+                throw new InvalidArgumentException("The FFmpeg option [{$name}] must not be repeated.");
             }
 
             $valid = match ($allowed[$name]) {
@@ -152,13 +159,17 @@ class CommandCompiler
             };
 
             if (! $valid) {
-                throw new InvalidArgumentException('Invalid FFmpeg option value.');
+                throw new InvalidArgumentException("The FFmpeg option [{$name}] has an invalid value.");
             }
 
             if ($name === 'init_hw_device') {
                 preg_match('/=([a-zA-Z][a-zA-Z0-9_]*)(?:[^@]*@([a-zA-Z][a-zA-Z0-9_]*))?/', $value, $device);
-                if (isset($devices[$device[1]]) || (isset($device[2]) && ! isset($devices[$device[2]]))) {
-                    throw new InvalidArgumentException('Hardware device names must be unique and derived from an earlier declaration.');
+                if (isset($devices[$device[1]])) {
+                    throw new InvalidArgumentException('Hardware device names must be unique.');
+                }
+
+                if (isset($device[2]) && ! isset($devices[$device[2]])) {
+                    throw new InvalidArgumentException('Hardware devices must derive from an earlier declaration.');
                 }
 
                 $devices[$device[1]] = true;

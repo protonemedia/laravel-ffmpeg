@@ -103,9 +103,7 @@ class PendingExport implements Exportable
     public function timeout(?float $seconds): self
     {
         $this->assertMutable();
-        if ($seconds !== null && (! is_finite($seconds) || $seconds <= 0)) {
-            throw new InvalidArgumentException('An operation timeout must be finite, positive seconds or null.');
-        }
+        $this->ensureTimeoutIsPositive('operation', $seconds);
 
         $this->timeoutSeconds = $seconds;
 
@@ -115,13 +113,21 @@ class PendingExport implements Exportable
     public function idleTimeout(?float $seconds): self
     {
         $this->assertMutable();
-        if ($seconds !== null && (! is_finite($seconds) || $seconds <= 0)) {
-            throw new InvalidArgumentException('An idle timeout must be finite, positive seconds or null.');
-        }
+        $this->ensureTimeoutIsPositive('idle', $seconds);
 
         $this->idleTimeoutSeconds = $seconds;
 
         return $this;
+    }
+
+    /**
+     * Ensure the given timeout is either null or a finite, positive number of seconds.
+     */
+    protected function ensureTimeoutIsPositive(string $kind, ?float $seconds): void
+    {
+        if ($seconds !== null && (! is_finite($seconds) || $seconds <= 0)) {
+            throw new InvalidArgumentException("The {$kind} timeout [{$seconds}] must be finite and positive.");
+        }
     }
 
     /** @internal Worker batch cancellation is independent of user progress callbacks. */
@@ -171,8 +177,12 @@ class PendingExport implements Exportable
 
     public function textResource(string $name, string $text): self
     {
-        if (! mb_check_encoding($text, 'UTF-8') || str_contains($text, "\0")) {
-            throw new InvalidArgumentException('Text resources require UTF-8 without NUL bytes.');
+        if (! mb_check_encoding($text, 'UTF-8')) {
+            throw new InvalidArgumentException("The text resource [{$name}] must be valid UTF-8.");
+        }
+
+        if (str_contains($text, "\0")) {
+            throw new InvalidArgumentException("The text resource [{$name}] must not contain NUL bytes.");
         }
 
         return $this->addResource($name, 'text', $text);
@@ -181,7 +191,7 @@ class PendingExport implements Exportable
     public function subtitleResource(string $name, Media $media): self
     {
         if ($media->inputOptions() !== []) {
-            throw new InvalidArgumentException('Subtitle resources do not accept media input options.');
+            throw new InvalidArgumentException("The subtitle resource [{$name}] does not accept input options.");
         }
 
         return $this->addResource($name, 'subtitle', $media);
@@ -191,8 +201,12 @@ class PendingExport implements Exportable
     {
         $this->assertMutable();
 
-        if (! preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/D', $name) || isset($this->resources[$name])) {
-            throw new InvalidArgumentException('Resource names must be unique simple identifiers.');
+        if (! preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/D', $name)) {
+            throw new InvalidArgumentException("The resource name [{$name}] must be a simple identifier.");
+        }
+
+        if (isset($this->resources[$name])) {
+            throw new InvalidArgumentException("The resource [{$name}] is already declared.");
         }
 
         $this->resources[$name] = ['type' => $type, 'source' => $source];
@@ -244,8 +258,12 @@ class PendingExport implements Exportable
     public function coverArt(Media $image): self
     {
         $this->assertMutable();
-        if ($this->coverInput !== null || $image->inputOptions() !== []) {
-            throw new InvalidArgumentException('Cover art requires one image without input options.');
+        if ($this->coverInput !== null) {
+            throw new InvalidArgumentException('An export accepts only one cover art image.');
+        }
+
+        if ($image->inputOptions() !== []) {
+            throw new InvalidArgumentException('Cover art images take no input options.');
         }
 
         $this->inputs[] = $image;
@@ -362,14 +380,44 @@ class PendingExport implements Exportable
         $graph = $this->filterGraph();
         $watermarking = $this->watermarks !== [];
         $covering = $this->coverInput !== null;
-        if ($covering && ($graph !== null || $watermarking || count($this->inputs) !== 2
-            || count($outputs) !== 1 || $this->outputRole !== 'media' || $this->twoPass)) {
-            throw new InvalidArgumentException('Cover art requires one media output, one source, and no graph, watermark, or two-pass encoding.');
+        if ($covering) {
+            if ($graph !== null) {
+                throw new InvalidArgumentException('Cover art does not support a complex filter graph.');
+            }
+
+            if ($watermarking) {
+                throw new InvalidArgumentException('Cover art cannot be combined with watermarks.');
+            }
+
+            if (count($this->inputs) !== 2) {
+                throw new InvalidArgumentException('Cover art requires exactly one source input.');
+            }
+
+            if (count($outputs) !== 1) {
+                throw new InvalidArgumentException('Cover art requires exactly one output.');
+            }
+
+            if ($this->outputRole !== 'media') {
+                throw new InvalidArgumentException("The output role [{$this->outputRole}] does not support cover art.");
+            }
+
+            if ($this->twoPass) {
+                throw new InvalidArgumentException('Cover art does not support two-pass encoding.');
+            }
         }
 
-        if ($watermarking && ($graph !== null || count($this->inputs) !== count($this->watermarks) + 1
-            || ! in_array($this->outputRole, ['media', 'hls-playlist'], true))) {
-            throw new InvalidArgumentException('Watermarks require a media export and own their image inputs and graph; use filterComplex() for custom compositions.');
+        if ($watermarking) {
+            if ($graph !== null) {
+                throw new InvalidArgumentException('Watermarks do not support filterComplex(); compose the overlay in the graph instead.');
+            }
+
+            if (count($this->inputs) !== count($this->watermarks) + 1) {
+                throw new InvalidArgumentException('Watermarks require exactly one source input besides their images.');
+            }
+
+            if (! in_array($this->outputRole, ['media', 'hls-playlist'], true)) {
+                throw new InvalidArgumentException("The output role [{$this->outputRole}] does not support watermarks.");
+            }
         }
 
         $composition = ! $covering && ! $watermarking && (count($this->inputs) > 1 || $graph !== null);
@@ -390,14 +438,41 @@ class PendingExport implements Exportable
 
             if ($covering) {
                 $settings = $output->outputConfiguration();
-                if (! in_array(strtolower(pathinfo($output->destination()['path'], PATHINFO_EXTENSION)), ['mp4', 'm4a', 'mp3'], true)
-                    || $output->hasMaps() || $settings['omitVideo'] || $settings['omitAudio']
-                    || $settings['videoFilters'] !== [] || $settings['audioFilters'] !== [] || $settings['videoStreams'] !== []
-                    || $settings['audioStreams'] !== []
-                    || $settings['outputOptions'] !== [] || $settings['dispositions'] !== [] || $settings['clip'] !== null
-                    || ! in_array($settings['video'], [[], ['codec' => 'copy']], true)
+                if (! in_array(strtolower(pathinfo($output->destination()['path'], PATHINFO_EXTENSION)), ['mp4', 'm4a', 'mp3'], true)) {
+                    throw new InvalidArgumentException('Cover art requires an MP4, M4A, or MP3 destination.');
+                }
+
+                if ($output->hasMaps()) {
+                    throw new InvalidArgumentException('Cover art outputs select their streams automatically and take no maps.');
+                }
+
+                if ($settings['omitVideo'] || $settings['omitAudio']) {
+                    throw new InvalidArgumentException('Cover art outputs must keep the source video and audio.');
+                }
+
+                if ($settings['videoFilters'] !== [] || $settings['audioFilters'] !== []) {
+                    throw new InvalidArgumentException('Cover art outputs do not support filters.');
+                }
+
+                if ($settings['videoStreams'] !== [] || $settings['audioStreams'] !== []) {
+                    throw new InvalidArgumentException('Cover art outputs do not support per-track settings.');
+                }
+
+                if ($settings['outputOptions'] !== []) {
+                    throw new InvalidArgumentException('Cover art outputs do not support output options.');
+                }
+
+                if ($settings['dispositions'] !== []) {
+                    throw new InvalidArgumentException('Cover art outputs do not support disposition overrides.');
+                }
+
+                if ($settings['clip'] !== null) {
+                    throw new InvalidArgumentException('Cover art outputs do not support clipping.');
+                }
+
+                if (! in_array($settings['video'], [[], ['codec' => 'copy']], true)
                     || ! in_array($settings['audio'], [[], ['codec' => 'copy']], true)) {
-                    throw new InvalidArgumentException('Cover art supports MP4, M4A, or MP3 with unchanged audio/video, automatic maps, and no encoding, clipping, or disposition overrides.');
+                    throw new InvalidArgumentException('Cover art outputs copy video and audio without encoding settings.');
                 }
 
                 $settings['video'] = $settings['audio'] = ['codec' => 'copy'];
@@ -408,8 +483,16 @@ class PendingExport implements Exportable
 
             if ($watermarking) {
                 $settings = $output->outputConfiguration();
-                if ($output->hasMaps() || $settings['omitVideo'] || ($settings['video']['codec'] ?? null) === 'copy') {
-                    throw new InvalidArgumentException('Watermarks require automatically selected, transcoded video.');
+                if ($output->hasMaps()) {
+                    throw new InvalidArgumentException('Watermarked outputs select their video automatically and take no maps.');
+                }
+
+                if ($settings['omitVideo']) {
+                    throw new InvalidArgumentException('Watermarked outputs must keep their video.');
+                }
+
+                if (($settings['video']['codec'] ?? null) === 'copy') {
+                    throw new InvalidArgumentException('Watermarked outputs must transcode video, not copy it.');
                 }
 
                 $settings['metadataSource'] ??= 0;
@@ -421,18 +504,32 @@ class PendingExport implements Exportable
                 throw new InvalidArgumentException('Every composition output requires explicit maps.');
             }
 
-            if (count($this->inputs) > 1 && ($output->metadataSource() === null || $output->chapterSource() === null)) {
-                throw new InvalidArgumentException('Multiple inputs require explicit metadata and chapter sources, or omission.');
+            if (count($this->inputs) > 1 && $output->metadataSource() === null) {
+                throw new InvalidArgumentException('Exports with multiple inputs require metadataFrom() or withoutMetadata().');
+            }
+
+            if (count($this->inputs) > 1 && $output->chapterSource() === null) {
+                throw new InvalidArgumentException('Exports with multiple inputs require chaptersFrom() or withoutMetadata(chapters: true).');
             }
 
             foreach ([$output->metadataSource(), $output->chapterSource()] as $source) {
                 if ($source !== null && $source >= count($this->inputs)) {
-                    throw new InvalidArgumentException('Metadata or chapters reference an invalid input.');
+                    throw new InvalidArgumentException("The metadata or chapter input [{$source}] does not exist.");
                 }
             }
 
-            if ($output->inputSeekOptions() !== [] && (count($this->inputs) > 1 || count($outputs) > 1 || $graph !== null)) {
-                throw new InvalidArgumentException('Keyframe clips require one input and one output without a complex graph.');
+            if ($output->inputSeekOptions() !== []) {
+                if (count($this->inputs) > 1) {
+                    throw new InvalidArgumentException('Keyframe clips require a single input.');
+                }
+
+                if (count($outputs) > 1) {
+                    throw new InvalidArgumentException('Keyframe clips require a single output.');
+                }
+
+                if ($graph !== null) {
+                    throw new InvalidArgumentException('Keyframe clips do not support a complex filter graph.');
+                }
             }
 
             $maps = $this->resolveMaps($output);
@@ -504,9 +601,24 @@ class PendingExport implements Exportable
             if ($this->twoPass && in_array($index, $this->twoPassOutputIndexes($outputs), true)) {
                 $settings = $output->outputConfiguration();
                 $video = $settings['video'];
-                if ($settings['omitVideo'] || ! isset($video['codec'], $video['bitrate'])
-                    || $video['codec'] === 'copy' || isset($video['crf'])) {
-                    throw new InvalidArgumentException('Every two-pass output requires an explicit video encoder and target bitrate, without CRF.');
+                if ($settings['omitVideo']) {
+                    throw new InvalidArgumentException('Two-pass outputs must keep their video.');
+                }
+
+                if (! isset($video['codec'])) {
+                    throw new InvalidArgumentException('Two-pass outputs require an explicit video encoder.');
+                }
+
+                if (! isset($video['bitrate'])) {
+                    throw new InvalidArgumentException('Two-pass outputs require a target video bitrate.');
+                }
+
+                if ($video['codec'] === 'copy') {
+                    throw new InvalidArgumentException('Two-pass outputs must transcode video, not copy it.');
+                }
+
+                if (isset($video['crf'])) {
+                    throw new InvalidArgumentException('Two-pass outputs use a target bitrate, not CRF.');
                 }
 
                 $options[] = '-pass:v';
@@ -925,8 +1037,12 @@ class PendingExport implements Exportable
             $image = $metadata[$mark['input']];
             $gif = $image->get('format.format_name') === 'gif' && $image->video()?->get('codec_name') === 'gif';
             if ((! $gif && ! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true))
-                || $image->streams()->count() !== 1 || (! $gif && $mark['loop'])) {
-                throw MediaException::probing('Watermarks require a standalone PNG, JPEG, or GIF image; loop() requires a GIF.', 'watermark');
+                || $image->streams()->count() !== 1) {
+                throw MediaException::probing('Watermarks require a standalone PNG, JPEG, or GIF image.', 'watermark');
+            }
+
+            if (! $gif && $mark['loop']) {
+                throw MediaException::probing('Only GIF watermarks can loop().', 'watermark');
             }
         }
     }
@@ -972,11 +1088,14 @@ class PendingExport implements Exportable
     public static function assertZeroOrigins(Metadata $item, string $operation, bool $audioOnlyOffset = false): void
     {
         $origin = $item->get('format.start_time');
-        if (((! $audioOnlyOffset || $item->hasVideo())
-                && (! is_numeric($origin) || ! is_finite((float) $origin) || abs((float) $origin) > 0.000001))
-            || $item->videoStreams()->contains(fn (Stream $stream): bool => ! is_numeric($stream->get('start_time'))
-                || abs((float) $stream->get('start_time')) > 0.000001)) {
-            throw MediaException::probing($operation.' requires a zero presentation origin and zero video origins.', 'metadata');
+        if ((! $audioOnlyOffset || $item->hasVideo())
+            && (! is_numeric($origin) || ! is_finite((float) $origin) || abs((float) $origin) > 0.000001)) {
+            throw MediaException::probing($operation.' requires a zero presentation origin.', 'metadata');
+        }
+
+        if ($item->videoStreams()->contains(fn (Stream $stream): bool => ! is_numeric($stream->get('start_time'))
+            || abs((float) $stream->get('start_time')) > 0.000001)) {
+            throw MediaException::probing($operation.' requires zero origins on every video stream.', 'metadata');
         }
     }
 

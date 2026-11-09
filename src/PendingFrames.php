@@ -36,10 +36,16 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
 
     public function __construct(Media $media, string|Filesystem $disk, protected readonly ?float $every, protected readonly ?int $count)
     {
-        if (($every === null) === ($count === null)
-            || ($every !== null && (! is_finite($every) || $every < 0.000001))
-            || ($count !== null && $count < 1)) {
-            throw new InvalidArgumentException('Specify exactly one positive frame count or a finite interval of at least one microsecond.');
+        if (($every === null) === ($count === null)) {
+            throw new InvalidArgumentException('Frame extraction requires exactly one of an interval or a count.');
+        }
+
+        if ($every !== null && (! is_finite($every) || $every < 0.000001)) {
+            throw new InvalidArgumentException("The frame interval [{$every}] must be finite and at least one microsecond.");
+        }
+
+        if ($count !== null && $count < 1) {
+            throw new InvalidArgumentException("The frame count [{$count}] must be positive.");
         }
 
         $this->export = new PendingExport($media, $disk, $this, 'image');

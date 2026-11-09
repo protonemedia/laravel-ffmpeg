@@ -34,14 +34,18 @@ readonly class Media
     public function __construct(protected string|Filesystem $disk, string|File|UploadedFile|InputSource $source, array $inputOptions = [])
     {
         if (is_string($source)) {
-            if ($source === '' || preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $source)) {
-                throw new InvalidArgumentException('open() requires a disk-relative key. Use a File for an absolute local path.');
+            if ($source === '') {
+                throw new InvalidArgumentException('The media key must not be empty.');
+            }
+
+            if (preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $source)) {
+                throw new InvalidArgumentException('The media key must be disk-relative; use a File for an absolute local path.');
             }
 
             $source = (new WhitespacePathNormalizer)->normalizePath($source);
 
             if ($source === '') {
-                throw new InvalidArgumentException('The media key cannot be empty.');
+                throw new InvalidArgumentException('The media key must not be empty.');
             }
         }
 
@@ -216,8 +220,12 @@ readonly class Media
     /** The caller's key must change whenever the source bytes or object version change. */
     public function probeCached(Cache $cache, string $versionedKey, DateTimeInterface|DateInterval|int $ttl = 3600): Metadata
     {
-        if ($versionedKey === '' || (is_int($ttl) && $ttl < 1)) {
-            throw new InvalidArgumentException('Cached probing requires a source-versioned key and positive TTL.');
+        if ($versionedKey === '') {
+            throw new InvalidArgumentException('The probe cache key must not be empty.');
+        }
+
+        if (is_int($ttl) && $ttl < 1) {
+            throw new InvalidArgumentException("The probe cache TTL [{$ttl}] must be positive.");
         }
 
         $key = 'laravel-ffmpeg:probe:v1:'.hash('sha256', serialize([
@@ -236,7 +244,7 @@ readonly class Media
     {
         FilterGraph::validateExpression($audioFilter);
         if ($audio < 0) {
-            throw new InvalidArgumentException('Audio analysis requires a nonnegative audio track index.');
+            throw new InvalidArgumentException("The audio track index [{$audio}] must not be negative.");
         }
 
         return $this->withInput(function (string $path, Workspace $workspace) use ($audioFilter, $audio): ProcessResult {

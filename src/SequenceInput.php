@@ -20,8 +20,16 @@ readonly class SequenceInput implements InputSource
 
     public function __construct(string|Filesystem $disk, string $pattern, int $count, float|string $framerate, int $start)
     {
-        if ($count < 1 || $start < 0 || $start > PHP_INT_MAX - ($count - 1)) {
-            throw new InvalidArgumentException('An image sequence requires a positive count and a nonnegative integer range.');
+        if ($count < 1) {
+            throw new InvalidArgumentException("The image sequence count [{$count}] must be positive.");
+        }
+
+        if ($start < 0) {
+            throw new InvalidArgumentException("The image sequence start number [{$start}] must not be negative.");
+        }
+
+        if ($start > PHP_INT_MAX - ($count - 1)) {
+            throw new InvalidArgumentException('The image sequence range must not exceed the maximum integer.');
         }
 
         if (preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $pattern)) {
@@ -30,9 +38,12 @@ readonly class SequenceInput implements InputSource
 
         $pattern = (new WhitespacePathNormalizer)->normalizePath($pattern);
         $suffix = strtolower(pathinfo($pattern, PATHINFO_EXTENSION));
-        if (! preg_match('/\A[^%]*%(?:0[1-9][0-9]?)?d[^%]*\z/', $pattern)
-            || str_contains(dirname($pattern), '%') || ! in_array($suffix, ['png', 'jpg', 'jpeg'], true)) {
-            throw new InvalidArgumentException('Use one %d or %0Nd placeholder in a PNG or JPEG filename.');
+        if (! preg_match('/\A[^%]*%(?:0[1-9][0-9]?)?d[^%]*\z/', $pattern) || str_contains(dirname($pattern), '%')) {
+            throw new InvalidArgumentException('The image sequence pattern must contain one %d or %0Nd placeholder in its filename.');
+        }
+
+        if (! in_array($suffix, ['png', 'jpg', 'jpeg'], true)) {
+            throw new InvalidArgumentException('The image sequence pattern must end in a PNG or JPEG extension.');
         }
 
         $rate = (string) $framerate;
@@ -91,8 +102,12 @@ readonly class SequenceInput implements InputSource
         foreach ($this->images as $index => $image) {
             $source = $workspace->stage($image);
             $size = @getimagesize($source);
-            if ($size === false || $size[2] !== $type || ($dimensions !== null && $dimensions !== [$size[0], $size[1]])) {
-                throw MediaException::staging('Sequence image '.$index.' requires the declared format and matching dimensions.', 'sequence');
+            if ($size === false || $size[2] !== $type) {
+                throw MediaException::staging("Sequence image [{$index}] does not match the declared image format.", 'sequence');
+            }
+
+            if ($dimensions !== null && $dimensions !== [$size[0], $size[1]]) {
+                throw MediaException::staging("Sequence image [{$index}] dimensions do not match the first image.", 'sequence');
             }
 
             $dimensions = [$size[0], $size[1]];

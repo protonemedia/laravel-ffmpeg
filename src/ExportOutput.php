@@ -19,15 +19,23 @@ class ExportOutput
 
     public function __construct(string $path, string|Filesystem $disk)
     {
-        if ($path === '' || preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $path)) {
+        if ($path === '') {
+            throw new InvalidArgumentException('The destination must not be empty.');
+        }
+
+        if (preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $path)) {
             throw new InvalidArgumentException('The destination must be a disk-relative key.');
         }
 
         $path = (new WhitespacePathNormalizer)->normalizePath($path);
         $extension = pathinfo($path, PATHINFO_EXTENSION);
 
-        if ($path === '' || ($extension !== '' && ! preg_match('/^[a-zA-Z0-9]{1,16}$/D', $extension))) {
-            throw new InvalidArgumentException('Invalid media destination.');
+        if ($path === '') {
+            throw new InvalidArgumentException('The destination must name a file.');
+        }
+
+        if ($extension !== '' && ! preg_match('/^[a-zA-Z0-9]{1,16}$/D', $extension)) {
+            throw new InvalidArgumentException('The destination extension must be 1 to 16 letters or numbers.');
         }
 
         $this->path = $path;

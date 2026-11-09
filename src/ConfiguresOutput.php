@@ -55,8 +55,10 @@ trait ConfiguresOutput
     public function videoStream(int $track, callable $configure): self
     {
         $this->assertOutputMutable();
-        if ($track < 0 || isset($this->videoStreams[$track])) {
-            throw new InvalidArgumentException('Video track indexes must be nonnegative and configured once.');
+        $this->ensureIndexIsNotNegative('video track', $track);
+
+        if (isset($this->videoStreams[$track])) {
+            throw new InvalidArgumentException("The video track [{$track}] is already configured.");
         }
 
         $settings = new VideoStreamSettings;
@@ -70,8 +72,10 @@ trait ConfiguresOutput
     public function audioStream(int $track, callable $configure): self
     {
         $this->assertOutputMutable();
-        if ($track < 0 || isset($this->audioStreams[$track])) {
-            throw new InvalidArgumentException('Audio track indexes must be nonnegative and configured once.');
+        $this->ensureIndexIsNotNegative('audio track', $track);
+
+        if (isset($this->audioStreams[$track])) {
+            throw new InvalidArgumentException("The audio track [{$track}] is already configured.");
         }
 
         $settings = new AudioStreamSettings;
@@ -176,8 +180,11 @@ trait ConfiguresOutput
             $stream = null;
         }
 
-        if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($stream instanceof Stream && $track !== null)) {
-            throw new InvalidArgumentException('Stream input and track indexes must be nonnegative.');
+        $this->ensureIndexIsNotNegative('input', $input);
+        $this->ensureIndexIsNotNegative('video track', $track);
+
+        if ($stream instanceof Stream && $track !== null) {
+            throw new InvalidArgumentException('A probed stream cannot be combined with a track index.');
         }
 
         return $stream instanceof Stream ? $this->mapProbedStream($stream, 'video', $input, $optional)
@@ -197,10 +204,19 @@ trait ConfiguresOutput
             $stream = null;
         }
 
-        if (($input !== null && $input < 0) || ($track !== null && $track < 0) || ($track !== null && $language !== null)
-            || ($stream instanceof Stream && ($track !== null || $language !== null))
-            || ($language !== null && ! preg_match('/^[a-zA-Z][a-zA-Z0-9_-]*$/D', $language))) {
-            throw new InvalidArgumentException('Choose a nonnegative audio track or a language tag, not both.');
+        $this->ensureIndexIsNotNegative('input', $input);
+        $this->ensureIndexIsNotNegative('audio track', $track);
+
+        if ($track !== null && $language !== null) {
+            throw new InvalidArgumentException('Choose an audio track or a language tag, not both.');
+        }
+
+        if ($stream instanceof Stream && ($track !== null || $language !== null)) {
+            throw new InvalidArgumentException('A probed stream cannot be combined with a track index or language tag.');
+        }
+
+        if ($language !== null && ! preg_match('/^[a-zA-Z][a-zA-Z0-9_-]*$/D', $language)) {
+            throw new InvalidArgumentException("The language tag [{$language}] is invalid.");
         }
 
         $selector = $language === null ? (string) ($track ?? 0) : 'm:language:'.$language;
@@ -211,13 +227,27 @@ trait ConfiguresOutput
 
     protected function mapProbedStream(Stream $stream, string $type, ?int $input, bool $optional): self
     {
-        if ($stream->get('codec_type') !== $type || $stream->index() === null || $stream->sourceIdentity() === null) {
-            throw new InvalidArgumentException('Mapping requires a probed '.$type.' stream.');
+        if ($stream->get('codec_type') !== $type) {
+            throw new InvalidArgumentException("The mapped stream is not a {$type} stream.");
+        }
+
+        if ($stream->index() === null || $stream->sourceIdentity() === null) {
+            throw new InvalidArgumentException('The mapped stream must come from a probe.');
         }
 
         $this->maps[] = ['stream' => $stream, 'input' => $input, 'optional' => $optional];
 
         return $this;
+    }
+
+    /**
+     * Ensure the given input or track index is not negative.
+     */
+    protected function ensureIndexIsNotNegative(string $subject, ?int $index): void
+    {
+        if ($index !== null && $index < 0) {
+            throw new InvalidArgumentException("The {$subject} [{$index}] must not be negative.");
+        }
     }
 
     public function withoutAudio(): self
@@ -250,8 +280,12 @@ trait ConfiguresOutput
     {
         $this->assertOutputMutable();
 
-        if (($width === null && $height === null) || ($width !== null && $width <= 0) || ($height !== null && $height <= 0)) {
-            throw new InvalidArgumentException('Resize requires at least one positive dimension.');
+        if ($width === null && $height === null) {
+            throw new InvalidArgumentException('Resize requires a width, a height, or both.');
+        }
+
+        if (($width ?? 1) <= 0 || ($height ?? 1) <= 0) {
+            throw new InvalidArgumentException('The dimensions ['.($width ?? 'auto').'x'.($height ?? 'auto').'] must be positive.');
         }
 
         $this->videoFilters[] = 'scale=w='.($width ?? -2).':h='.($height ?? -2).':reset_sar=1';
@@ -416,8 +450,12 @@ trait ConfiguresOutput
      */
     public function deinterlace(string $mode = 'frame', string $parity = 'auto', bool $onlyInterlaced = true): self
     {
-        if (! in_array($mode, ['frame', 'field'], true) || ! in_array($parity, ['auto', 'tff', 'bff'], true)) {
-            throw new InvalidArgumentException('Deinterlace requires frame or field mode and auto, tff, or bff parity.');
+        if (! in_array($mode, ['frame', 'field'], true)) {
+            throw new InvalidArgumentException("The deinterlace mode [{$mode}] must be frame or field.");
+        }
+
+        if (! in_array($parity, ['auto', 'tff', 'bff'], true)) {
+            throw new InvalidArgumentException("The deinterlace parity [{$parity}] must be auto, tff, or bff.");
         }
 
         return $this->videoFilter('bwdif=mode=send_'.$mode.':parity='.$parity.':deint='.($onlyInterlaced ? 'interlaced' : 'all'));
@@ -464,8 +502,16 @@ trait ConfiguresOutput
     {
         $this->assertOutputMutable();
 
-        if (! is_finite($duration) || $duration <= 0 || ! is_finite($start) || $start < 0 || (! $video && ! $audio)) {
-            throw new InvalidArgumentException('Fades require a finite positive duration, a finite nonnegative start, and video or audio.');
+        if (! is_finite($duration) || $duration <= 0) {
+            throw new InvalidArgumentException("The fade duration [{$duration}] must be finite and positive.");
+        }
+
+        if (! is_finite($start) || $start < 0) {
+            throw new InvalidArgumentException("The fade start [{$start}] must be finite and not negative.");
+        }
+
+        if (! $video && ! $audio) {
+            throw new InvalidArgumentException('A fade must apply to video, audio, or both.');
         }
 
         $timing = 't='.$type.':st='.rtrim(rtrim(sprintf('%.17F', $start), '0'), '.').':d='.rtrim(rtrim(sprintf('%.17F', $duration), '0'), '.');
@@ -567,8 +613,12 @@ trait ConfiguresOutput
 
     protected function metadataTag(string $key, string $value): void
     {
-        if (! preg_match('/^[a-zA-Z0-9_.:-]+$/D', $key) || str_contains($value, "\0")) {
-            throw new InvalidArgumentException('Invalid metadata tag.');
+        if (! preg_match('/^[a-zA-Z0-9_.:-]+$/D', $key)) {
+            throw new InvalidArgumentException('Metadata keys may contain only letters, numbers, underscores, periods, colons, and dashes.');
+        }
+
+        if (str_contains($value, "\0")) {
+            throw new InvalidArgumentException('Metadata values must not contain NUL bytes.');
         }
     }
 
@@ -592,11 +642,24 @@ trait ConfiguresOutput
         $duration = $duration === null ? null : CommandCompiler::seconds($duration);
         $end = $end === null ? null : CommandCompiler::seconds($end);
 
-        if (! is_finite($start) || $start < 0 || ($duration === null) === ($end === null)
-            || ($duration !== null && (! is_finite($duration) || $duration <= 0))
-            || ($end !== null && (! is_finite($end) || $end <= $start))
-            || ! in_array($seek, ['accurate', 'keyframe'], true)) {
-            throw new InvalidArgumentException('A clip needs a nonnegative start and either a positive duration or a later end.');
+        if (! is_finite($start) || $start < 0) {
+            throw new InvalidArgumentException("The clip start [{$start}] must be finite and not negative.");
+        }
+
+        if (($duration === null) === ($end === null)) {
+            throw new InvalidArgumentException('A clip requires either a duration or an end, not both.');
+        }
+
+        if ($duration !== null && (! is_finite($duration) || $duration <= 0)) {
+            throw new InvalidArgumentException("The clip duration [{$duration}] must be finite and positive.");
+        }
+
+        if ($end !== null && (! is_finite($end) || $end <= $start)) {
+            throw new InvalidArgumentException("The clip end [{$end}] must be finite and after the start.");
+        }
+
+        if (! in_array($seek, ['accurate', 'keyframe'], true)) {
+            throw new InvalidArgumentException("The clip seek mode [{$seek}] must be accurate or keyframe.");
         }
 
         $this->clip = ['start' => $start, 'duration' => $duration ?? $end - $start, 'seek' => $seek];
@@ -624,9 +687,7 @@ trait ConfiguresOutput
 
     public function outputArguments(callable $compileFilter, array $maps): array
     {
-        if (isset($this->video['bitrate'], $this->video['crf'])) {
-            throw new InvalidArgumentException('Choose either a target bitrate or CRF.');
-        }
+        $this->ensureSingleRateControl($this->video);
 
         if ($this->maps !== [] && ($this->omitAudio || $this->omitVideo)) {
             throw new InvalidArgumentException('Use maps alone to omit tracks when explicit mapping is enabled.');
@@ -637,29 +698,19 @@ trait ConfiguresOutput
         }
 
         foreach ([[$this->video, $this->videoFilters], [$this->audio, $this->audioFilters]] as [$encoding, $filters]) {
-            if (($encoding['codec'] ?? null) === 'copy' && ($filters !== [] || count($encoding) > 1
-                || ($this->clip !== null && $this->clip['seek'] === 'accurate'))) {
-                throw new InvalidArgumentException('Copied streams cannot have filters, encoder settings, or accurate clipping.');
-            }
+            $this->ensureCopyIsUnmodified($encoding, $filters);
         }
 
         $options = [];
 
-        foreach ($this->videoStreams as $track => $overrides) {
+        foreach ($this->videoStreams as $overrides) {
             $encoding = array_replace($this->video, $overrides);
-            if (isset($encoding['bitrate'], $encoding['crf'])
-                || (($encoding['codec'] ?? null) === 'copy' && (count($encoding) > 1 || $this->videoFilters !== []
-                    || ($this->clip !== null && $this->clip['seek'] === 'accurate')))) {
-                throw new InvalidArgumentException('Video track settings conflict with rate control, copying, or filters.');
-            }
+            $this->ensureSingleRateControl($encoding);
+            $this->ensureCopyIsUnmodified($encoding, $this->videoFilters);
         }
 
         foreach ($this->audioStreams as $overrides) {
-            $encoding = array_replace($this->audio, $overrides);
-            if (($encoding['codec'] ?? null) === 'copy' && (count($encoding) > 1 || $this->audioFilters !== []
-                || ($this->clip !== null && $this->clip['seek'] === 'accurate'))) {
-                throw new InvalidArgumentException('Copied audio tracks cannot have filters or encoder settings.');
-            }
+            $this->ensureCopyIsUnmodified(array_replace($this->audio, $overrides), $this->audioFilters);
         }
 
         $this->validateCopyOptions();
@@ -753,6 +804,38 @@ trait ConfiguresOutput
         }
 
         return [...$options, ...$this->outputOptions];
+    }
+
+    /**
+     * Ensure the given encoding does not combine a target bitrate with CRF.
+     */
+    protected function ensureSingleRateControl(array $encoding): void
+    {
+        if (isset($encoding['bitrate'], $encoding['crf'])) {
+            throw new InvalidArgumentException('Choose either a target bitrate or CRF, not both.');
+        }
+    }
+
+    /**
+     * Ensure a copied stream has no filters, encoder settings, or accurate clipping.
+     */
+    protected function ensureCopyIsUnmodified(array $encoding, array $filters): void
+    {
+        if (($encoding['codec'] ?? null) !== 'copy') {
+            return;
+        }
+
+        if ($filters !== []) {
+            throw new InvalidArgumentException('Copied streams cannot have filters.');
+        }
+
+        if (count($encoding) > 1) {
+            throw new InvalidArgumentException('Copied streams cannot have encoder settings.');
+        }
+
+        if ($this->clip !== null && $this->clip['seek'] === 'accurate') {
+            throw new InvalidArgumentException('Copied streams cannot use accurate clipping.');
+        }
     }
 
     protected function validateCopyOptions(): void

@@ -22,12 +22,18 @@ class HlsPresentation
                 throw new InvalidArgumentException('HLS playback requires canonical inventory paths.', $exception->getCode(), previous: $exception);
             }
 
-            if (! is_string($file['disk'] ?? null) || $file['disk'] === ''
-                || ! is_string($file['path'] ?? null) || $file['path'] === ''
+            if (! is_string($file['disk'] ?? null) || $file['disk'] === '') {
+                throw new InvalidArgumentException('Each HLS playback inventory file requires a named disk.');
+            }
+
+            if (! is_string($file['path'] ?? null) || $file['path'] === ''
                 || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $file['path'])
-                || $canonical !== $file['path']
-                || ! in_array($file['role'] ?? null, ['hls-master', 'hls-playlist', 'hls-segment', 'hls-init', 'hls-key', 'dash-init', 'dash-segment'], true)) {
-                throw new InvalidArgumentException('HLS playback requires named disks and canonical HLS inventory paths.');
+                || $canonical !== $file['path']) {
+                throw new InvalidArgumentException('Each HLS playback inventory path must be canonical and disk-relative.');
+            }
+
+            if (! in_array($file['role'] ?? null, ['hls-master', 'hls-playlist', 'hls-segment', 'hls-init', 'hls-key', 'dash-init', 'dash-segment'], true)) {
+                throw new InvalidArgumentException('Each HLS playback inventory file requires a known HLS role.');
             }
 
             $id = self::id($file['disk'], $file['path']);
@@ -61,8 +67,12 @@ class HlsPresentation
 
     public function playbackForVariants(array $names): self
     {
-        if ($names === [] || count(array_unique($names, SORT_REGULAR)) !== count($names)) {
-            throw new InvalidArgumentException('Select a nonempty set of unique HLS variants.');
+        if ($names === []) {
+            throw new InvalidArgumentException('The HLS variant selection must not be empty.');
+        }
+
+        if (count(array_unique($names, SORT_REGULAR)) !== count($names)) {
+            throw new InvalidArgumentException('The HLS variant selection must not contain duplicates.');
         }
 
         $ids = [$this->playlist => true];

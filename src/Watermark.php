@@ -80,8 +80,12 @@ class Watermark
     /** Draw the mark at this size in output pixels. One dimension keeps the aspect ratio; two stretch. */
     public function size(?int $width = null, ?int $height = null): self
     {
-        if (($width === null && $height === null) || ($width !== null && $width < 1) || ($height !== null && $height < 1)) {
-            throw new InvalidArgumentException('A watermark size requires at least one positive dimension.');
+        if ($width === null && $height === null) {
+            throw new InvalidArgumentException('A watermark size requires a width, a height, or both.');
+        }
+
+        if (($width ?? 1) < 1 || ($height ?? 1) < 1) {
+            throw new InvalidArgumentException('The watermark size ['.($width ?? 'auto').'x'.($height ?? 'auto').'] must be positive.');
         }
 
         $this->width = $width;
@@ -94,7 +98,7 @@ class Watermark
     public function opacity(float $opacity): self
     {
         if (! is_finite($opacity) || $opacity < 0 || $opacity > 1) {
-            throw new InvalidArgumentException('Watermark opacity must be between zero and one.');
+            throw new InvalidArgumentException("The watermark opacity [{$opacity}] must be between 0 and 1.");
         }
 
         $this->opacity = $opacity;
@@ -142,8 +146,12 @@ class Watermark
      */
     public function crop(int $width, int $height, int $x, int $y): self
     {
-        if ($width < 1 || $height < 1 || $x < 0 || $y < 0) {
-            throw new InvalidArgumentException('A watermark crop requires positive dimensions and a nonnegative offset.');
+        if ($width < 1 || $height < 1) {
+            throw new InvalidArgumentException("The watermark crop dimensions [{$width}x{$height}] must be positive.");
+        }
+
+        if ($x < 0 || $y < 0) {
+            throw new InvalidArgumentException("The watermark crop offset [{$x}, {$y}] must not be negative.");
         }
 
         return $this->edit(new Crop($width, $height, $x, $y));

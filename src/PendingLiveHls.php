@@ -49,8 +49,12 @@ class PendingLiveHls
         protected readonly float $segmentDuration = 6,
         protected readonly int $window = 6,
     ) {
-        if (! is_finite($segmentDuration) || $segmentDuration < 0.1 || $segmentDuration > 3600 || $window < 2 || $window > 1000) {
-            throw new InvalidArgumentException('Live HLS requires a segment duration of 0.1–3600 seconds and a window of 2–1000.');
+        if (! is_finite($segmentDuration) || $segmentDuration < 0.1 || $segmentDuration > 3600) {
+            throw new InvalidArgumentException("The live HLS segment duration [{$segmentDuration}] must be between 0.1 and 3600 seconds.");
+        }
+
+        if ($window < 2 || $window > 1000) {
+            throw new InvalidArgumentException("The live HLS window [{$window}] must be between 2 and 1000 segments.");
         }
     }
 
@@ -90,7 +94,7 @@ class PendingLiveHls
     {
         $this->mutable();
         if (! is_finite($seconds) || $seconds <= 0) {
-            throw new InvalidArgumentException('Live timeout must be positive and finite.');
+            throw new InvalidArgumentException("The live timeout [{$seconds}] must be positive and finite.");
         }
 
         $this->deadline = $seconds;
@@ -102,8 +106,12 @@ class PendingLiveHls
     public function retry(int $maxRetries, float $delay = 1, bool $reconnectOnEof = false): self
     {
         $this->mutable();
-        if ($maxRetries < 0 || $maxRetries > 10000 || ! is_finite($delay) || $delay < 0 || $delay > 3600) {
-            throw new InvalidArgumentException('Invalid live reconnect policy.');
+        if ($maxRetries < 0 || $maxRetries > 10000) {
+            throw new InvalidArgumentException("The live reconnect retry count [{$maxRetries}] must be between 0 and 10000.");
+        }
+
+        if (! is_finite($delay) || $delay < 0 || $delay > 3600) {
+            throw new InvalidArgumentException("The live reconnect delay [{$delay}] must be between 0 and 3600 seconds.");
         }
 
         $this->retries = $maxRetries;
@@ -123,8 +131,12 @@ class PendingLiveHls
     public function run(string $directory): LiveHlsResult
     {
         $this->mutable();
-        if (! preg_match('/\A[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\z/', $directory) || strlen($directory) > 200) {
+        if (! preg_match('/\A[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*\z/', $directory)) {
             throw new InvalidArgumentException('Live HLS requires a dedicated relative namespace of simple path components.');
+        }
+
+        if (strlen($directory) > 200) {
+            throw new InvalidArgumentException('The live HLS namespace must not exceed 200 characters.');
         }
 
         $disk = is_string($this->disk) ? Storage::disk($this->disk) : $this->disk;

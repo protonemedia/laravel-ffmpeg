@@ -47,8 +47,12 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         protected readonly float $originalVolume = 1,
         protected readonly bool $normalize = false,
     ) {
-        if (! is_finite($volume) || $volume < 0 || ! is_finite($originalVolume) || $originalVolume < 0) {
-            throw new InvalidArgumentException('Mix volumes require finite nonnegative amplitude multipliers.');
+        if (! is_finite($volume) || $volume < 0) {
+            throw new InvalidArgumentException("The mix volume [{$volume}] must be finite and nonnegative.");
+        }
+
+        if (! is_finite($originalVolume) || $originalVolume < 0) {
+            throw new InvalidArgumentException("The original volume [{$originalVolume}] must be finite and nonnegative.");
         }
 
         $this->export = new PendingExport($source, $disk, $this);

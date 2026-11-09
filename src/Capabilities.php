@@ -89,9 +89,16 @@ readonly class Capabilities implements Arrayable, JsonSerializable
     {
         $missing = [];
         foreach ($requirements as $category => $names) {
-            if (! is_string($category) || ! is_array($names) || ! array_is_list($names)
-                || array_any($names, fn (mixed $name): bool => ! is_string($name) || ! preg_match('/\A[a-zA-Z0-9_.-]{1,128}\z/', $name))) {
-                throw new InvalidArgumentException('Capability requirements must contain lists of names.');
+            if (! is_string($category)) {
+                throw new InvalidArgumentException('Capability requirement categories must be strings.');
+            }
+
+            if (! is_array($names) || ! array_is_list($names)) {
+                throw new InvalidArgumentException("The capability requirement [{$category}] must be a list of names.");
+            }
+
+            if (array_any($names, fn (mixed $name): bool => ! is_string($name) || ! preg_match('/\A[a-zA-Z0-9_.-]{1,128}\z/', $name))) {
+                throw new InvalidArgumentException("The capability requirement [{$category}] contains an invalid name.");
             }
 
             $absent = array_values(array_diff($names, $this->available($category)));

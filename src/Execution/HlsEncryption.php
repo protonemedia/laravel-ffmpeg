@@ -27,9 +27,16 @@ class HlsEncryption
         protected readonly ?int $rotateEvery,
         string $directory,
     ) {
-        if (($key !== null && strlen($key) !== 16) || ($rotateEvery !== null && $rotateEvery < 1)
-            || ($key !== null && $rotateEvery !== null)) {
-            throw new InvalidArgumentException('AES-128 requires a 16-byte key, or generated keys with a positive rotation interval.');
+        if ($key !== null && strlen($key) !== 16) {
+            throw new InvalidArgumentException('The AES-128 key must be exactly 16 bytes.');
+        }
+
+        if ($rotateEvery !== null && $rotateEvery < 1) {
+            throw new InvalidArgumentException("The HLS key rotation interval [{$rotateEvery}] must be positive.");
+        }
+
+        if ($key !== null && $rotateEvery !== null) {
+            throw new InvalidArgumentException('A fixed AES-128 key cannot be rotated; omit the key to generate rotated keys.');
         }
 
         if (! function_exists('openssl_encrypt')) {

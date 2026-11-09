@@ -63,8 +63,12 @@ class PendingHlsMerge
             };
             $inventory = $presentation->toArray();
             $master = $this->owned(fn (): array => $presentation->file());
-            if ($master['role'] !== 'hls-master' || $inventory['variants'] === []) {
-                throw new InvalidArgumentException('Composition requires a v9 master with variant provenance.');
+            if ($master['role'] !== 'hls-master') {
+                throw new InvalidArgumentException('Each composed presentation must start at a v9 HLS master playlist.');
+            }
+
+            if ($inventory['variants'] === []) {
+                throw new InvalidArgumentException('Each composed presentation requires variant provenance.');
             }
 
             $diskName ??= $master['disk'];
@@ -107,9 +111,16 @@ class PendingHlsMerge
                     }
 
                     $clock ??= $metadata;
-                    if ($metadata['segmentType'] !== $clock['segmentType'] || $metadata['clip'] !== $clock['clip']
-                        || abs($metadata['duration'] - $clock['duration']) > 0.1) {
-                        throw new InvalidArgumentException('Composed VOD presentations require compatible packaging, clips, and duration.');
+                    if ($metadata['segmentType'] !== $clock['segmentType']) {
+                        throw new InvalidArgumentException('Composed VOD presentations require the same segment packaging.');
+                    }
+
+                    if ($metadata['clip'] !== $clock['clip']) {
+                        throw new InvalidArgumentException('Composed VOD presentations require the same clip.');
+                    }
+
+                    if (abs($metadata['duration'] - $clock['duration']) > 0.1) {
+                        throw new InvalidArgumentException('Composed VOD presentations require durations within 0.1 seconds of each other.');
                     }
 
                     if (! ($metadata['subtitle'] ?? false)) {
@@ -151,8 +162,12 @@ class PendingHlsMerge
 
             foreach ($inventory['variants'] as $name => $ids) {
                 $name = (is_string($label) ? $label.'-' : '').$name;
-                if (isset($variants[$name]) || array_diff($ids, array_keys($files)) !== []) {
-                    throw new InvalidArgumentException('Composition variant names conflict or reference an unowned artifact.');
+                if (isset($variants[$name])) {
+                    throw new InvalidArgumentException('Composed variant names must be unique; use aliases to prefix them.');
+                }
+
+                if (array_diff($ids, array_keys($files)) !== []) {
+                    throw new InvalidArgumentException('A composed variant references an unowned artifact.');
                 }
 
                 $variants[$name] = $ids;
@@ -187,8 +202,12 @@ class PendingHlsMerge
 
         // A fresh versioned key is the sole write, after every input and conflict check.
         $destination = new ExportOutput($path, $diskName)->destination()['path'];
-        if ($destination !== $path || strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'm3u8') {
-            throw new InvalidArgumentException('Composition requires a canonical m3u8 destination.');
+        if ($destination !== $path) {
+            throw new InvalidArgumentException('The composition destination must be a canonical path.');
+        }
+
+        if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'm3u8') {
+            throw new InvalidArgumentException('The composition destination must have an m3u8 extension.');
         }
 
         $destination = substr($path, 0, -5).'.'.bin2hex(random_bytes(16)).'.m3u8';
@@ -206,8 +225,12 @@ class PendingHlsMerge
         }
 
         $text = implode("\n", ['#EXTM3U', '#EXT-X-VERSION:'.$version, ...$lines, '']);
-        if (strlen($text) > 16777216 || $storage->exists($destination)) {
-            throw new InvalidArgumentException('The composition master exceeds its budget or already exists.');
+        if (strlen($text) > 16777216) {
+            throw new InvalidArgumentException('The composition master must fit within the 16 MiB limit.');
+        }
+
+        if ($storage->exists($destination)) {
+            throw new InvalidArgumentException('The composition master destination already exists.');
         }
 
         $master = ['disk' => $diskName, 'path' => $destination, 'role' => 'hls-master'];

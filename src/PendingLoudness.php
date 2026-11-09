@@ -43,14 +43,18 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         protected readonly int $sampleRate = 48000,
         int $audio = 0,
     ) {
-        foreach ([[$integrated, -70, -5], [$truePeak, -9, 0], [$range, 1, 50]] as [$value, $min, $max]) {
+        foreach (['integrated loudness' => [$integrated, -70, -5], 'true peak' => [$truePeak, -9, 0], 'loudness range' => [$range, 1, 50]] as $target => [$value, $min, $max]) {
             if (! is_finite($value) || $value < $min || $value > $max) {
-                throw new InvalidArgumentException('Loudness targets are outside FFmpeg loudnorm ranges.');
+                throw new InvalidArgumentException("The {$target} target [{$value}] must be between {$min} and {$max}.");
             }
         }
 
-        if ($audio < 0 || $sampleRate < 8000 || $sampleRate > 192000) {
-            throw new InvalidArgumentException('Choose a nonnegative audio track and a sample rate from 8000 to 192000.');
+        if ($audio < 0) {
+            throw new InvalidArgumentException("The audio track [{$audio}] must not be negative.");
+        }
+
+        if ($sampleRate < 8000 || $sampleRate > 192000) {
+            throw new InvalidArgumentException("The sample rate [{$sampleRate}] must be between 8000 and 192000.");
         }
 
         $this->export = new PendingExport($source, $disk, $this);
@@ -82,8 +86,16 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         $settings = $outputs[0]->outputConfiguration();
 
         // Video fades are the only way to reach video settings on this builder.
-        if (($settings['audio']['codec'] ?? null) === 'copy' || $settings['videoFilters'] !== [] || $outputs[0]->inputSeekOptions() !== []) {
-            throw new InvalidArgumentException('Loudness normalization requires audio encoding without video or keyframe seeking.');
+        if (($settings['audio']['codec'] ?? null) === 'copy') {
+            throw new InvalidArgumentException('Loudness normalization must encode audio, not copy it.');
+        }
+
+        if ($settings['videoFilters'] !== []) {
+            throw new InvalidArgumentException('Loudness normalization does not support video filters.');
+        }
+
+        if ($outputs[0]->inputSeekOptions() !== []) {
+            throw new InvalidArgumentException('Loudness normalization requires accurate clips, not keyframe seek.');
         }
 
         $command = $default;
@@ -192,8 +204,16 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
 
     protected function readStats(string $path, string $phase = 'validation'): LoudnessStats
     {
-        if (! is_file($path) || filesize($path) > 65536 || ($json = file_get_contents($path)) === false) {
-            throw new MediaException('Loudness statistics are missing or oversized.', $phase, 'analysis');
+        if (! is_file($path)) {
+            throw new MediaException('Loudness statistics are missing.', $phase, 'analysis');
+        }
+
+        if (filesize($path) > 65536) {
+            throw new MediaException('Loudness statistics exceed 64 KiB.', $phase, 'analysis');
+        }
+
+        if (($json = file_get_contents($path)) === false) {
+            throw new MediaException('Loudness statistics cannot be read.', $phase, 'analysis');
         }
 
         return LoudnessStats::fromJson($json, $phase);
@@ -213,8 +233,12 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             $streams = collect();
         }
 
-        if ($streams->count() !== 1 || $streams->first()->get('codec_type') !== 'audio' || $streams->first()->sampleRate() !== $this->sampleRate) {
-            throw MediaException::validation('Normalized output must contain one audio stream at the requested sample rate.', 'artifact');
+        if ($streams->count() !== 1 || $streams->first()->get('codec_type') !== 'audio') {
+            throw MediaException::validation('Normalized output must contain exactly one audio stream.', 'artifact');
+        }
+
+        if ($streams->first()->sampleRate() !== $this->sampleRate) {
+            throw MediaException::validation("Normalized output must use the requested sample rate [{$this->sampleRate}].", 'artifact');
         }
     }
 }
