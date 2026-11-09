@@ -129,7 +129,8 @@ class PendingExport implements Exportable
         return $this;
     }
 
-    protected function assertOutputMutable(): void
+    /** @internal Builders call this before changing settings they own, such as storyboard cues or HLS variants. */
+    public function assertOutputMutable(): void
     {
         $this->assertMutable();
 

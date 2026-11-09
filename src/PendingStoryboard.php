@@ -4,14 +4,36 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\PackagesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 use Throwable;
 
-class PendingStoryboard extends PendingImages
+/** Tiled thumbnail sheets sampled at a fixed interval, with optional WebVTT cues. */
+final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, ValidatesArtifacts
 {
+    use Concerns\Clips;
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\OutputOptions;
+    use Concerns\ResourceFilters;
+    use Concerns\Resources;
+    use Concerns\RunsExport;
+    use Concerns\VideoCodec;
+    use Concerns\VideoFilters;
+    use Conditionable;
+
+    private readonly PendingExport $export;
+
     private readonly int $interval;
 
     private ?int $duration = null;
@@ -24,8 +46,6 @@ class PendingStoryboard extends PendingImages
 
     public function __construct(Media $media, string|Filesystem $disk, float $every, private readonly int $columns, private readonly int $rows, private readonly int $margin, private readonly int $padding)
     {
-        parent::__construct($media, $disk);
-
         if (! is_finite($every) || $every < 0.001 || $every > intdiv(PHP_INT_MAX, 1000000)
             || abs($every * 1000 - round($every * 1000)) > 0.000001
             || $columns < 1 || $rows < 1 || $columns > intdiv(PHP_INT_MAX, $rows) || $margin < 0 || $padding < 0) {
@@ -33,12 +53,14 @@ class PendingStoryboard extends PendingImages
         }
 
         $this->interval = (int) round($every * 1000);
+        $this->export = new PendingExport($media, $disk, $this, 'image');
+        $this->export->map('0:V:0')->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
     public function vtt(string $path, ?callable $imageUrl = null): self
     {
-        $this->assertOutputMutable();
-        $path = $this->configuredOutputs($path)[0]->destination()['path'];
+        $this->export->assertOutputMutable();
+        $path = (new ExportOutput($path, 'local'))->destination()['path'];
         if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'vtt') {
             throw new InvalidArgumentException('The cue destination must have a vtt extension.');
         }
@@ -54,13 +76,17 @@ class PendingStoryboard extends PendingImages
             throw new InvalidArgumentException('A storyboard requires an image destination pattern.');
         }
 
-        return parent::save($this->sequenceDestination($path));
+        $path = ImageOutput::sequenceDestination($path);
+        $this->export->video(ImageOutput::codec($path));
+
+        return $this->export->save($path);
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** @internal */
+    public function duration(array $metadata, ?float $default): ?float
     {
         $duration = $metadata[0]->duration();
-        $clip = $this->clipSettings();
+        $clip = $this->export->clipSettings();
         if ($duration !== null && $clip !== null) {
             $duration = max(0, min($clip['duration'], $duration - $clip['start']));
         }
@@ -73,21 +99,21 @@ class PendingStoryboard extends PendingImages
         return $duration;
     }
 
-    protected function configuredOutputs(?string $path = null): array
+    /** @internal Bound individual thumbnails before tiling. Output-level -t would bound sheet timestamps, allowing thumbnails beyond a clip's end. */
+    public function outputs(array $default, ?string $path): array
     {
-        // Bound individual thumbnails before tiling. Output-level -t would
-        // bound sheet timestamps, allowing thumbnails beyond a clip's end.
-        return $this->unclippedOutputs($path);
+        return ImageOutput::unclipped($this->export->outputConfiguration(), $path);
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    /** @internal */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
-        $command = parent::command($outputs, $paths, $outputPaths);
-        if (count($paths) !== 1 || in_array('-filter_complex', $command, true) || $this->inputSeekOptions() !== []) {
-            throw new InvalidArgumentException('Storyboards require one input without a complex graph or keyframe seek.');
+        $command = $default;
+        if ($this->export->inputSeekOptions() !== []) {
+            throw new InvalidArgumentException('Storyboards require accurate clipping, not keyframe seek.');
         }
-        $this->assertNoTrackVideoFilters($outputs[0]);
-        $start = $this->clipSettings()['start'] ?? 0;
+        ImageOutput::assertNoTrackVideoFilters($outputs[0]);
+        $start = $this->export->clipSettings()['start'] ?? 0;
         $end = $this->duration === null ? '[end]' : CommandCompiler::timestamp($start + $this->duration / 1000000);
         $filter = 'trim=start='.CommandCompiler::timestamp($start).':end='.$end.',setpts=PTS-STARTPTS,'
             .'fps=fps=1/'.CommandCompiler::timestamp($this->interval / 1000).':start_time=0:round=near:eof_action=pass,'
@@ -105,18 +131,20 @@ class PendingStoryboard extends PendingImages
         return $command;
     }
 
-    protected function outputPaths(array $outputs, Workspace $workspace): array
+    /** @internal */
+    public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
         return [$workspace->path.'/sheet-%08d.'.pathinfo($outputs[0]->destination()['path'], PATHINFO_EXTENSION)];
     }
 
-    protected function artifacts(array $outputs, array $paths): array
+    /** @internal Sheets must tile one consistent thumbnail size before the cues describe them. */
+    public function artifacts(array $default, array $outputs, array $paths): array
     {
-        $artifacts = $this->sequenceArtifacts($outputs[0], $paths[0], intdiv($this->frames - 1, $this->columns * $this->rows) + 1);
+        $artifacts = ImageOutput::sequenceArtifacts($outputs[0], $paths[0], intdiv($this->frames - 1, $this->columns * $this->rows) + 1);
         $dimensions = null;
         $urls = [];
         foreach ($artifacts as $index => $artifact) {
-            $this->validateArtifact($artifact['path']);
+            ImageOutput::validate($artifact['path'], 'image');
             [$width, $height] = getimagesize($artifact['path']);
             $width -= 2 * $this->margin + ($this->columns - 1) * $this->padding;
             $height -= 2 * $this->margin + ($this->rows - 1) * $this->padding;
@@ -176,6 +204,12 @@ class PendingStoryboard extends PendingImages
         ]];
 
         return $artifacts;
+    }
+
+    /** @internal */
+    public function artifact(string $path, string $role, int $size): void
+    {
+        ImageOutput::validate($path, $role);
     }
 
     private function relativeUrl(string $key): string

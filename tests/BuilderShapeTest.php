@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use ProtoneMedia\LaravelFFMpeg\PendingFrame;
 use ProtoneMedia\LaravelFFMpeg\PendingFrames;
 use ProtoneMedia\LaravelFFMpeg\PendingStill;
+use ProtoneMedia\LaravelFFMpeg\PendingStoryboard;
 use ReflectionClass;
 
 class BuilderShapeTest extends TestCase
@@ -15,13 +16,14 @@ class BuilderShapeTest extends TestCase
     /** Builders hold the export pipeline instead of extending it, and expose only what they support. */
     public static function builders(): array
     {
+        $images = ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
+            'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'map', 'mapVideo', 'mapAudio',
+            'withoutAudio', 'withoutVideo', 'metadata', 'metadataFrom', 'withoutMetadata', 'streamMetadata', 'disposition', 'chaptersFrom'];
+
         return [
-            'frame' => [PendingFrame::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
-                'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'map', 'mapVideo', 'mapAudio',
-                'withoutAudio', 'withoutVideo', 'metadata', 'metadataFrom', 'withoutMetadata', 'streamMetadata', 'disposition', 'chaptersFrom']],
-            'frames' => [PendingFrames::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
-                'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'map', 'mapVideo', 'mapAudio',
-                'withoutAudio', 'withoutVideo', 'metadata', 'metadataFrom', 'withoutMetadata', 'streamMetadata', 'disposition', 'chaptersFrom']],
+            'frame' => [PendingFrame::class, [...$images, 'clip']],
+            'frames' => [PendingFrames::class, $images],
+            'storyboard' => [PendingStoryboard::class, $images],
             'still' => [PendingStill::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
                 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'mapAudio', 'withoutAudio', 'withoutVideo']],
         ];
