@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use PHPUnit\Framework\Attributes\Test;
+use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class NativeAnimatedWatermarkTest extends TestCase
@@ -56,6 +57,16 @@ class NativeAnimatedWatermarkTest extends TestCase
                     }
                 }
             }
+            // Overlay setup must not depend on a subclass calling parent::prepareEncoding().
+            $custom = new class($media, 'animated') extends PendingExport
+            {
+                protected function prepareEncoding(array $metadata): ?float
+                {
+                    return null;
+                }
+            };
+            $custom->watermark($logo)->video('libx264')->save('custom.mp4');
+            $this->assertEqualsWithDelta(1.6, FFMpeg::disk('animated')->open('custom.mp4')->probe()->duration(), 0.05);
             $this->assertSame([], glob($root.'/work/*'));
         } finally {
             (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($root);

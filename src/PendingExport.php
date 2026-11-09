@@ -594,6 +594,8 @@ class PendingExport
                     $redactions[$outputPath] = '[output:'.$index.']';
                 }
 
+                // Overlay facts never depend on subclasses calling parent::prepareEncoding().
+                $this->prepareOverlays($metadata);
                 $duration = $this->prepareEncoding($metadata);
                 $durations = array_map(function ($output) use ($duration) {
                     $clip = $output->clipSettings();
@@ -821,7 +823,8 @@ class PendingExport
         ], array_keys($outputs));
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** Validate cover-art and watermark inputs and resolve the facts command() needs for them. */
+    private function prepareOverlays(array $metadata): void
     {
         if ($this->coverInput !== null) {
             $image = $metadata[$this->coverInput];
@@ -836,8 +839,6 @@ class PendingExport
                 throw new MediaException('Cover art accepts sources containing only motion video and audio.', 'probing', 'cover-art');
             }
             $this->coverVideoTrack = $metadata[0]->streams()->filter(fn ($stream) => $stream->get('codec_type') === 'video')->count();
-
-            return $metadata[0]->duration();
         }
         foreach ($this->watermarks as $mark) {
             $image = $metadata[$mark['input']];
@@ -852,6 +853,13 @@ class PendingExport
                     throw new MediaException('Looping GIF overlays require a finite primary duration.', 'probing', 'watermark');
                 }
             }
+        }
+    }
+
+    protected function prepareEncoding(array $metadata): ?float
+    {
+        if ($this->coverInput !== null) {
+            return $metadata[0]->duration();
         }
         foreach ($this->configuredOutputs() as $output) {
             // Inserted silence extends the selected audio, not necessarily the video.
