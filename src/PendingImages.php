@@ -47,6 +47,23 @@ abstract class PendingImages extends PendingExport
         return $size;
     }
 
+    /** For operations that trim inside their own filter, as GIF does: the output itself carries no seek or duration. */
+    protected function unclippedOutputs(?string $path): array
+    {
+        $settings = $this->outputConfiguration();
+        $settings['clip'] = null;
+
+        return [(new ExportOutput($path ?? 'inspection.mp4', $settings['disk']))->configure($settings)];
+    }
+
+    /** A per-track -filter:v:N would replace, or be replaced by, the sampling filter appended to -filter:v. */
+    protected function assertNoTrackVideoFilters(ExportOutput $output): void
+    {
+        if (array_any($output->outputConfiguration()['videoStreams'], fn ($track) => isset($track['filters']))) {
+            throw new InvalidArgumentException('Sampled image operations do not support per-track video filters; add filters to the operation itself.');
+        }
+    }
+
     protected function sequenceDestination(string $path): string
     {
         $path = $this->configuredOutputs($path)[0]->destination()['path'];

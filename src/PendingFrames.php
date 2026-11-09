@@ -49,6 +49,7 @@ class PendingFrames extends PendingImages
 
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
+        $this->assertNoTrackVideoFilters($outputs[0]);
         $command = parent::command($outputs, $paths, $outputPaths);
         $rate = $this->every !== null ? '1/'.$this->clipTimestamp($this->every)
             : $this->count.'/'.($this->duration === null ? '[duration]' : $this->clipTimestamp($this->duration));

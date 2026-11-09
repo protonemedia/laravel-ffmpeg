@@ -22,6 +22,12 @@ class PendingWaveform extends PendingImages
         $this->filterComplex('[0:a:0]showwavespic=s='.$width.'x'.$height.':colors='.implode('|', $colors).'[waveform]');
     }
 
+    protected function configuredOutputs(?string $path = null): array
+    {
+        // The clip trims audio samples before the picture is drawn.
+        return $this->unclippedOutputs($path);
+    }
+
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
         if ($this->inputSeekOptions() !== []) {
@@ -48,10 +54,6 @@ class PendingWaveform extends PendingImages
         if ($clip !== null) {
             $audio .= ($audio === '' ? '' : ',').'atrim=start='.$this->clipTimestamp($clip['start'])
                 .':duration='.$this->clipTimestamp($clip['duration']).',asetpts=PTS-STARTPTS';
-
-            foreach (['-ss', '-t'] as $flag) {
-                array_splice($command, array_search($flag, $command, true), 2);
-            }
         }
 
         $index = array_search('-filter_complex', $command, true) + 1;

@@ -65,6 +65,18 @@ class NativeStoryboardTest extends TestCase
             ->resize(width: 20)->vtt('metadata/preview.vtt')->inspect();
         $this->assertStringContainsString('tile=layout=3x2:nb_frames=6:margin=3:padding=2', $command[array_search('-filter:v', $command) + 1]);
         $this->assertNotContains('metadata/preview.vtt', $command);
+        $clipped = $media->storyboard(every: 0.2)->clip(1, duration: 2)->inspect();
+        $this->assertNotContains('-ss', $clipped);
+        $this->assertNotContains('-t', $clipped);
+        $this->assertStringStartsWith('trim=start=1:end=', $clipped[array_search('-filter:v', $clipped) + 1]);
+        foreach ([$media->storyboard(every: 1), $media->frames(every: 1)] as $operation) {
+            try {
+                // A per-track -filter:v:0 would silently replace or be replaced by the sampling filter.
+                $operation->videoStream(0, fn ($video) => $video->color('bt709', 'bt709', 'bt709'))->inspect();
+                $this->fail('Per-track video filters must be rejected for sampled image operations.');
+            } catch (InvalidArgumentException) {
+            }
+        }
         foreach ([[0, 2, 2, 0, 0], [INF, 2, 2, 0, 0], [0.0001, 2, 2, 0, 0], [0.0015, 2, 2, 0, 0],
             [1, 0, 2, 0, 0], [1, 2, 0, 0, 0], [1, 2, 2, -1, 0], [1, 2, 2, 0, -1], [1, PHP_INT_MAX, 2, 0, 0]] as $arguments) {
             try {

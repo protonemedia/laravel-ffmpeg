@@ -69,7 +69,14 @@ class PendingStoryboard extends PendingImages
         }
         $this->frames = intdiv($this->duration - 1, $this->interval * 1000) + 1;
 
-        return $metadata[0]->duration();
+        return $duration;
+    }
+
+    protected function configuredOutputs(?string $path = null): array
+    {
+        // Bound individual thumbnails before tiling. Output-level -t would
+        // bound sheet timestamps, allowing thumbnails beyond a clip's end.
+        return $this->unclippedOutputs($path);
     }
 
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
@@ -78,14 +85,7 @@ class PendingStoryboard extends PendingImages
         if (count($paths) !== 1 || in_array('-filter_complex', $command, true) || $this->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Storyboards require one input without a complex graph or keyframe seek.');
         }
-
-        // Bound individual thumbnails before tiling. Output-level -t would
-        // bound sheet timestamps, allowing thumbnails beyond a clip's end.
-        foreach (['-ss', '-t'] as $flag) {
-            if (($index = array_search($flag, $command, true)) !== false) {
-                array_splice($command, $index, 2);
-            }
-        }
+        $this->assertNoTrackVideoFilters($outputs[0]);
         $start = $this->clipSettings()['start'] ?? 0;
         $end = $this->duration === null ? '[end]' : $this->clipTimestamp($start + $this->duration / 1000000);
         $filter = 'trim=start='.$this->clipTimestamp($start).':end='.$end.',setpts=PTS-STARTPTS,'
