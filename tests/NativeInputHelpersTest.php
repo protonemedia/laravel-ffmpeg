@@ -242,6 +242,7 @@ class NativeInputHelpersTest extends TestCase
     public function rtsp_snapshots_capture_real_tcp_and_udp_frames_and_bound_failed_cameras(): void
     {
         $binary = $this->native();
+        config(['laravel-ffmpeg.redact_credentials' => true]);
         $encoded = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=green:s=80x48:r=10',
             '-t', '1', '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
             '-x264-params', 'aud=1:repeat-headers=1:keyint=1', '-f', 'h264', $this->root.'/frames.h264']);

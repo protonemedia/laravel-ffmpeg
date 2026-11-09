@@ -120,7 +120,7 @@ sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
 
 If the shell command succeeds but the application fails, check the application's cached configuration, executable permissions, and directory traversal permissions. Rebuild Laravel's configuration cache and restart long-running queue workers after changing binary paths. Also check that the temporary root and Storage destinations are writable by those users.
 
-A launch failure means the selected executable could not start. A version failure means the pair is unsupported or mismatched. An encoding failure means FFmpeg started but rejected the command or media. Inspect `MediaException::phase`, `category`, and bounded, redacted `diagnostics` to distinguish these cases. Check required encoders and filters with the configured executable's `-encoders` and `-filters` options. Raw commands and unredacted process exceptions can contain credentials; do not publish them in logs or error responses.
+A launch failure means the selected executable could not start. A version failure means the pair is unsupported or mismatched. An encoding failure means FFmpeg started but rejected the command or media. Inspect `MediaException::phase`, `category`, and bounded `diagnostics` to distinguish these cases. Check required encoders and filters with the configured executable's `-encoders` and `-filters` options. Raw commands and unredacted process exceptions can contain credentials; do not publish them in logs or error responses.
 
 #### Inspect capabilities
 
@@ -1106,7 +1106,7 @@ try {
         ->path;
     $result->file('lesson.mp4', disk: 'uploads');
     $result->files();
-    $result->processes(); // Bounded, redacted summaries.
+    $result->processes(); // Bounded process summaries.
     $stream = $result->file()
         ->readStream(); // The caller closes this stream.
 } catch (MediaException $exception) {
@@ -1303,7 +1303,30 @@ See [application integration recipes](docs/integrations.md) for versioned profil
 
 ### Configuration and security
 
-Configuration is published as `config/laravel-ffmpeg.php`. Total and idle deadlines are distinct and use seconds. Output validation is not a hostile-media sandbox. Untrusted inputs require operating-system isolation and resource limits. Known credentials are redacted from diagnostics, but direct signed URLs remain visible in process arguments.
+Configuration is published as `config/laravel-ffmpeg.php`. Total and idle deadlines are distinct and use seconds. Output validation is not a hostile-media sandbox. Untrusted inputs require operating-system isolation and resource limits. Credential redaction is opt-in, and direct signed URLs always remain visible in process arguments.
+
+#### Credential redaction
+
+Credential redaction is disabled by default. To enable it, set `FFMPEG_REDACT_CREDENTIALS=true` or the `redact_credentials` configuration option:
+
+```php
+'redact_credentials' => env('FFMPEG_REDACT_CREDENTIALS', false),
+```
+
+When redaction is enabled, the package replaces the following strings in `MediaException` diagnostics, process summaries and commands, `analyze()` output, and `probeQuery()` results:
+
+| String | Replacement |
+| --- | --- |
+| The whole `openUrl()` URL | `[url]` |
+| The whole RTSP URL | `[rtsp]` |
+| The whole query string | `[query]` |
+| A query value whose name contains `token`, `sig`, `key`, `auth`, `pass`, `secret`, `credential`, or `policy` | `[redacted]` |
+| Any other query value of 16 or more characters | `[redacted]` |
+| The RTSP `user:password` pair, and the password alone | `[redacted]` |
+
+Query values are matched in raw and URL-decoded form. Shorter query values with other names, such as `dl=1`, and RTSP usernames are kept, because the same text also occurs inside numbers and metadata. Replacement is a plain string match that tries the longest string first. It never changes the arguments passed to FFmpeg.
+
+Input placeholders such as `[input]` and `[input:0]` replace staged paths and direct URL arguments whether or not redaction is enabled.
 
 Use `inspect()` for pure argument inspection, `globalOptions()`, `outputOptions()`, and `inputOptions:` for supported scoped options. Reserved filenames, binaries, progress transport, and statistics paths cannot be overridden. There is no driver forwarding or arbitrary before-save command mutation.
 

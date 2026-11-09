@@ -81,18 +81,30 @@ readonly class UrlInput implements InputSource
 
     public function redactions(): array
     {
-        $redactions = [$this->url => '[url]'];
-        $query = parse_url($this->url, PHP_URL_QUERY);
+        if (! config('laravel-ffmpeg.redact_credentials')) {
+            return [];
+        }
 
-        if ($query !== null && $query !== '') {
-            $redactions[$query] = '[query]';
+        return [$this->url => '[url]'] + self::queryRedactions(parse_url($this->url, PHP_URL_QUERY));
+    }
 
-            foreach (explode('&', $query) as $parameter) {
-                $value = explode('=', $parameter, 2)[1] ?? '';
+    /**
+     * @internal The whole query, plus each value whose name looks secret or that is long enough to be a token.
+     * Short values under ordinary names, such as dl=1, also occur inside numbers and metadata.
+     */
+    public static function queryRedactions(?string $query): array
+    {
+        if ($query === null || $query === '') {
+            return [];
+        }
 
-                if ($value !== '') {
-                    $redactions[$value] = $redactions[rawurldecode($value)] = '[redacted]';
-                }
+        $redactions = [$query => '[query]'];
+
+        foreach (explode('&', $query) as $parameter) {
+            [$name, $value] = explode('=', $parameter, 2) + [1 => ''];
+
+            if ($value !== '' && (strlen($value) >= 16 || preg_match('/token|sig|key|auth|pass|secret|credential|policy/i', rawurldecode($name)))) {
+                $redactions[$value] = $redactions[rawurldecode($value)] = '[redacted]';
             }
         }
 

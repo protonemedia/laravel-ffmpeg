@@ -52,22 +52,19 @@ readonly class RtspCamera implements InputSource
 
     public function redactions(): array
     {
+        if (! config('laravel-ffmpeg.redact_credentials')) {
+            return [];
+        }
         $redactions = [$this->url => '[rtsp]'];
         $parts = parse_url($this->url);
-        foreach (['user', 'pass', 'query'] as $key) {
-            if (isset($parts[$key]) && $parts[$key] !== '') {
-                $redactions[$parts[$key]] = '[redacted]';
-                $redactions[rawurldecode($parts[$key])] = '[redacted]';
-            }
-        }
-        foreach (explode('&', $parts['query'] ?? '') as $parameter) {
-            $value = explode('=', $parameter, 2)[1] ?? '';
-            if ($value !== '') {
-                $redactions[$value] = $redactions[rawurldecode($value)] = '[redacted]';
+        // A password is a credential at any length; a username on its own is not.
+        if (($parts['pass'] ?? '') !== '') {
+            foreach ([($parts['user'] ?? '').':'.$parts['pass'], $parts['pass']] as $secret) {
+                $redactions[$secret] = $redactions[rawurldecode($secret)] = '[redacted]';
             }
         }
 
-        return $redactions;
+        return $redactions + UrlInput::queryRedactions($parts['query'] ?? null);
     }
 
     public function stage(Workspace $workspace, string $name, bool $resource): string

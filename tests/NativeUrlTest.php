@@ -104,6 +104,7 @@ class NativeUrlTest extends TestCase
     public function public_urls_probe_export_and_redact_signed_queries_without_downloading(): void
     {
         $this->native();
+        config(['laravel-ffmpeg.redact_credentials' => true]);
         Http::preventStrayRequests();
         $url = $this->server().'/public?signature=private-signed-value';
         $media = FFMpeg::openUrl($url);

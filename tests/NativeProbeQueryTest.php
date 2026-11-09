@@ -160,6 +160,7 @@ class NativeProbeQueryTest extends TestCase
     #[Test]
     public function url_queries_use_the_source_protocol_policy_and_redact_decoded_json(): void
     {
+        config(['laravel-ffmpeg.redact_credentials' => true]);
         $url = 'https://example.test/video.mp4?token=private-value';
         $this->fakeProbe(function (PendingProcess $process) use ($url) {
             if (in_array('-protocols', $process->command, true)) {

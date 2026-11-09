@@ -207,7 +207,7 @@ class PendingProbe
             // Redact after JSON decoding so escaped URLs and paths are covered.
             array_walk_recursive($data, static function (&$value) use ($redactions) {
                 if (is_string($value)) {
-                    $value = str_replace(array_keys($redactions), array_values($redactions), $value);
+                    $value = strtr($value, $redactions);
                 }
             });
 

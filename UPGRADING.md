@@ -8,7 +8,7 @@ This guide describes the `9.x` development branch, not a published release.
 
 Use PHP 8.4 or later, Laravel 12 or 13, and matching FFmpeg and FFprobe 9.0.x binaries. The tested patch is 9.0.2. Install the codecs, filters, fonts, and HTTPS support that your application needs.
 
-Republish the configuration and review your application's values. Keep `ffmpeg.binaries`, `ffprobe.binaries`, `ffmpeg.threads`, `timeout`, and `temporary_files_root`. `idle_timeout` is separate from the total deadline. The legacy log channel and encrypted-HLS temporary root no longer apply. Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to the matching pair.
+Republish the configuration and review your application's values. Keep `ffmpeg.binaries`, `ffprobe.binaries`, `ffmpeg.threads`, `timeout`, and `temporary_files_root`. `idle_timeout` is separate from the total deadline. The legacy log channel and encrypted-HLS temporary root no longer apply. Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to the matching pair. Set `FFMPEG_REDACT_CREDENTIALS=true` to redact signed URLs and credentials from diagnostics and process summaries.
 
 ## Replace the entrypoint and format objects
 

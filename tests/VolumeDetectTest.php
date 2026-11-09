@@ -109,6 +109,7 @@ class VolumeDetectTest extends TestCase
     #[Test]
     public function signed_urls_are_redacted_in_both_output_streams_commands_and_explicit_exceptions(): void
     {
+        config(['laravel-ffmpeg.redact_credentials' => true]);
         $url = 'https://example.invalid/audio.wav?token=private-token';
         Process::preventStrayProcesses();
         Process::fake(function (PendingProcess $process) use ($url) {
@@ -134,6 +135,33 @@ class VolumeDetectTest extends TestCase
             $this->assertNull($exception->getPrevious());
         }
         $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function credential_redaction_is_opt_in_and_keeps_short_ordinary_values(): void
+    {
+        $url = 'https://example.invalid/audio.wav?dl=1&v=2&token=abc&id=0123456789abcdef';
+        Process::preventStrayProcesses();
+        Process::fake(function (PendingProcess $process) {
+            return match (true) {
+                in_array('-version', $process->command, true) => Process::result(output: 'ffmpeg version 9.0.2'),
+                in_array('-protocols', $process->command, true) => Process::result(output: "Input:\nhttps\ntls\ntcp\nOutput:\nhttps\n"),
+                in_array('rtsp', $process->command, true) || str_contains(implode(' ', $process->command), 'rtsp://')
+                    => Process::result(errorOutput: 'user admin rejected with password 1234', exitCode: 1),
+                default => Process::result(errorOutput: "mean_volume: -21.5 dB\nmax_volume: -2.0 dB\nabc 0123456789abcdef dl=1&v=2&token=abc&id=0123456789abcdef"),
+            };
+        });
+        $output = "mean_volume: -21.5 dB\nmax_volume: -2.0 dB\nabc 0123456789abcdef dl=1&v=2&token=abc&id=0123456789abcdef";
+        $this->assertSame($output, trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
+
+        config(['laravel-ffmpeg.redact_credentials' => true]);
+        $this->assertSame("mean_volume: -21.5 dB\nmax_volume: -2.0 dB\n[redacted] [redacted] [query]", trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
+        try {
+            FFMpeg::openRtsp('rtsp://admin:1234@camera.invalid/live')->frame()->toDisk('memory')->save('snapshot.png');
+            $this->fail('A failed RTSP capture was accepted.');
+        } catch (MediaException $exception) {
+            $this->assertSame('user admin rejected with password [redacted]', trim($exception->diagnostics));
+        }
     }
 
     #[Test]

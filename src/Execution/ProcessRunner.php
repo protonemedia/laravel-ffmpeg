@@ -142,12 +142,13 @@ class ProcessRunner
 
             $result = $process->wait();
 
+            // strtr() replaces the longest key first in one pass, so a short value inside a longer secret cannot expose the rest.
             return new ProcessResult(
                 $result->exitCode(),
-                $redactOutput ? str_replace(array_keys($redactions), array_values($redactions), $output) : $output,
-                str_replace(array_keys($redactions), array_values($redactions), $diagnostics),
+                $redactOutput ? strtr($output, $redactions) : $output,
+                strtr($diagnostics, $redactions),
                 (hrtime(true) - $started) / 1e9,
-                array_map(fn (string $token) => str_replace(array_keys($redactions), array_values($redactions), $token), $command),
+                array_map(fn (string $token) => strtr($token, $redactions), $command),
                 $phase,
             );
         } catch (Throwable $exception) {
