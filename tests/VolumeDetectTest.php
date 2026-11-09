@@ -137,6 +137,20 @@ class VolumeDetectTest extends TestCase
     }
 
     #[Test]
+    public function missing_url_protocols_fail_in_the_analysis_phase(): void
+    {
+        Process::preventStrayProcesses();
+        Process::fake(fn (PendingProcess $process) => Process::result(output: in_array('-version', $process->command, true)
+            ? 'ffmpeg version 9.0.2' : "Input:\nfile\nOutput:\nfile\n"));
+        try {
+            FFMpeg::disk('memory')->openUrl('https://example.invalid/audio.wav')->analyze();
+            $this->fail('Analysis ran without the required URL protocols.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['analysis', 'capability'], [$exception->phase, $exception->category]);
+        }
+    }
+
+    #[Test]
     public function invalid_analysis_requests_fail_before_staging_or_process_execution(): void
     {
         Process::fake();
@@ -176,6 +190,7 @@ class VolumeDetectTest extends TestCase
             $this->fail('A missing executable returned a result.');
         } catch (MediaException $exception) {
             $this->assertContains($exception->category, ['process', 'version']);
+            $this->assertSame('analysis', $exception->phase);
             $this->assertSame([], glob($this->root.'/workspaces/*'));
             $this->assertSame('source bytes', Storage::disk('memory')->get('audio.wav'));
         }

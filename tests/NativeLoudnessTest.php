@@ -174,6 +174,27 @@ class NativeLoudnessTest extends TestCase
     }
 
     #[Test]
+    public function invalid_measurement_statistics_fail_in_the_analysis_phase(): void
+    {
+        $this->fixture();
+        $binary = $this->root.'/ffmpeg';
+        // Wrap the real binary so only the measurement pass leaves invalid statistics.
+        file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\n"
+            .'passthru(implode(" ", array_map("escapeshellarg", ['.var_export($this->native(), true).', ...array_slice($argv, 1)])), $code);'."\n"
+            .'if (in_array("-af", $argv, true) && str_contains(implode(" ", $argv), "stats_file=loudness-measure.json")) { file_put_contents("loudness-measure.json", "{}"); }'."\n"
+            .'exit($code);');
+        chmod($binary, 0700);
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $binary]);
+        try {
+            $this->operation()->save('normalized.wav');
+            $this->fail('Invalid loudness statistics were accepted.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['analysis', 'analysis', 'Invalid loudness statistics.'], [$exception->phase, $exception->category, $exception->getMessage()]);
+        }
+        $this->assertFalse(Storage::disk('loudness-native')->exists('normalized.wav'));
+    }
+
+    #[Test]
     public function export_pipeline_publishes_results_and_cleans_failure_and_callback_cancellation(): void
     {
         $this->fixture();

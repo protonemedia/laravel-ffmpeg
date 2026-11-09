@@ -124,7 +124,7 @@ class PendingLoudness extends PendingExport
         $measure = [$command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1', '-i', $prepared, '-af',
             $this->loudnorm('loudness-measure.json'), '-f', 'null', '-'];
         $analyze($measure, 'Loudness analysis failed.');
-        $this->measurement = $this->readStats($workspace->path.'/loudness-measure.json');
+        $this->measurement = $this->readStats($workspace->path.'/loudness-measure.json', Progress::ANALYSIS);
         $normalizer = $this->loudnorm('loudness-final.json');
 
         if ($this->measurement->usableMeasurements()) {
@@ -166,13 +166,13 @@ class PendingLoudness extends PendingExport
         return json_encode($number, JSON_THROW_ON_ERROR);
     }
 
-    private function readStats(string $path): LoudnessStats
+    private function readStats(string $path, string $phase = 'validation'): LoudnessStats
     {
         if (! is_file($path) || filesize($path) > 65536 || ($json = file_get_contents($path)) === false) {
-            throw new MediaException('Loudness statistics are missing or oversized.', 'validation', 'analysis');
+            throw new MediaException('Loudness statistics are missing or oversized.', $phase, 'analysis');
         }
 
-        return LoudnessStats::fromJson($json);
+        return LoudnessStats::fromJson($json, $phase);
     }
 
     protected function validateArtifact(string $path, string $role = 'media'): int

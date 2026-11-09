@@ -234,8 +234,8 @@ readonly class Media
         return $this->withInput(function (string $path, Workspace $workspace) use ($audioFilter, $audio) {
             $runner = $workspace->runner;
             $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
-            $runner->version($binary, 'ffmpeg', $workspace->path);
-            $workspace->requireProtocols($binary, $this->protocolWhitelist());
+            $runner->version($binary, 'ffmpeg', $workspace->path, Progress::ANALYSIS);
+            $workspace->requireProtocols($binary, $this->protocolWhitelist(), Progress::ANALYSIS);
 
             return $runner->run([
                 $binary, '-hide_banner', '-nostdin', '-nostats', '-xerror', '-loglevel', 'info',

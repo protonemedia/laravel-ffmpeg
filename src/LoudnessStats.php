@@ -20,7 +20,7 @@ readonly class LoudnessStats
         public string $mode,
     ) {}
 
-    public static function fromJson(string $json): self
+    public static function fromJson(string $json, string $phase = 'validation'): self
     {
         $data = json_decode($json, true);
         $values = [];
@@ -33,14 +33,14 @@ readonly class LoudnessStats
             } elseif ((is_string($value) || is_int($value) || is_float($value)) && is_numeric($value) && is_finite((float) $value)) {
                 $values[] = (float) $value;
             } else {
-                throw new MediaException('Invalid loudness statistics.', 'validation', 'analysis');
+                throw new MediaException('Invalid loudness statistics.', $phase, 'analysis');
             }
         }
 
         $mode = $data['normalization_type'] ?? null;
 
         if (! in_array($mode, ['linear', 'dynamic'], true)) {
-            throw new MediaException('Invalid loudness normalization mode.', 'validation', 'analysis');
+            throw new MediaException('Invalid loudness normalization mode.', $phase, 'analysis');
         }
 
         return new self(...[...$values, $mode]);

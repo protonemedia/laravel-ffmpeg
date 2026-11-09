@@ -31,12 +31,12 @@ class ProcessRunner
         }
     }
 
-    public function version(string $binary, string $tool, string $directory): string
+    public function version(string $binary, string $tool, string $directory, string $phase = 'probing'): string
     {
-        $result = $this->run([$binary, '-version'], $directory, outputLimit: 65536);
+        $result = $this->run([$binary, '-version'], $directory, outputLimit: 65536, phase: $phase);
 
         if ($result->exitCode !== 0 || ! preg_match('/^'.preg_quote($tool, '/').' version (?:n)?(9\.0\.\d+)(?:\s|-|$)/', $result->output, $matches)) {
-            throw new MediaException(($tool === 'ffprobe' ? 'FFprobe' : 'FFmpeg').' 9.0.x is required.', 'probing', 'version');
+            throw new MediaException(($tool === 'ffprobe' ? 'FFprobe' : 'FFmpeg').' 9.0.x is required.', $phase, 'version');
         }
 
         return $matches[1];

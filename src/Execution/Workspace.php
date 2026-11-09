@@ -74,20 +74,20 @@ class Workspace
         return $this->metadata[$identity];
     }
 
-    public function requireProtocols(string $binary, string $protocols): void
+    public function requireProtocols(string $binary, string $protocols, string $phase = 'probing'): void
     {
         if ($protocols === 'file') {
             return;
         }
 
         if (! isset($this->protocols[$binary])) {
-            $result = $this->runner->run([$binary, '-hide_banner', '-protocols'], $this->path, outputLimit: 65536);
+            $result = $this->runner->run([$binary, '-hide_banner', '-protocols'], $this->path, outputLimit: 65536, phase: $phase);
             $this->protocols[$binary] = $result->exitCode === 0 && preg_match('/Input:\s*(.*?)\s*Output:/s', $result->output, $matches)
                 ? preg_split('/\s+/', trim($matches[1])) : [];
         }
 
         if (array_diff(explode(',', $protocols), $this->protocols[$binary]) !== []) {
-            throw new MediaException('The media binary lacks required URL input protocols.', 'probing', 'capability');
+            throw new MediaException('The media binary lacks required URL input protocols.', $phase, 'capability');
         }
     }
 

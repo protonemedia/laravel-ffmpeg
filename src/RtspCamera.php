@@ -77,7 +77,7 @@ readonly class RtspCamera implements InputSource
         }
         $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
         $runner = $workspace->runner;
-        $runner->version($binary, 'ffmpeg', $workspace->path);
+        $runner->version($binary, 'ffmpeg', $workspace->path, 'staging');
         $path = $workspace->path.'/'.$name;
         $result = $runner->run([
             $binary, '-hide_banner', '-nostdin', '-y', '-xerror', '-loglevel', 'error',
