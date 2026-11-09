@@ -641,7 +641,7 @@ class NativeCompositionTest extends TestCase
             fn (Watermark $watermark) => $watermark->size(width: 0),
             fn (Watermark $watermark) => $watermark->opacity(1.5),
             fn (Watermark $watermark) => $watermark->blur(101),
-            fn (Watermark $watermark) => $watermark->crop(0, 10),
+            fn (Watermark $watermark) => $watermark->crop(0, 10, 0, 0),
             fn (Watermark $watermark) => $watermark->rotate(INF),
         ] as $invalid) {
             try {

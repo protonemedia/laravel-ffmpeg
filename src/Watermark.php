@@ -134,8 +134,12 @@ final class Watermark
         return $this->edit(new Rotate($angle, $background));
     }
 
-    /** Crop the image itself, in the image's own pixels. */
-    public function crop(int $width, int $height, int $x = 0, int $y = 0): self
+    /**
+     * Crop the image itself, in the image's own pixels, from the given top-left offset.
+     *
+     * The offset is required: a video crop() without offsets centers, while Laravel Image starts at the top-left corner.
+     */
+    public function crop(int $width, int $height, int $x, int $y): self
     {
         if ($width < 1 || $height < 1 || $x < 0 || $y < 0) {
             throw new InvalidArgumentException('A watermark crop requires positive dimensions and a nonnegative offset.');

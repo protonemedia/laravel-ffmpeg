@@ -690,7 +690,7 @@ Without a closure, the mark is drawn at its original size in the bottom-right co
 
 #### Editing the watermark image
 
-The `Watermark` instance also edits the image itself using [Laravel's image manipulation](https://laravel.com/docs/13.x/images), with the same method names and arguments: `grayscale`, `blur`, `sharpen`, `rotate`, `crop`, `flipHorizontally`, and `flipVertically`. Edits require `intervention/image` and run in call order on a private copy of the image, just before FFmpeg reads it. The original file never changes:
+The `Watermark` instance also edits the image itself using [Laravel's image manipulation](https://laravel.com/docs/13.x/images), with the same method names and arguments: `grayscale`, `blur`, `sharpen`, `rotate`, `crop`, `flipHorizontally`, and `flipVertically`. Unlike Laravel's, `crop` requires its `x` and `y` offsets, because the video `crop` method centers when you omit them. Edits require `intervention/image` and run in call order on a private copy of the image, just before FFmpeg reads it. The original file never changes:
 
 ```php
 $media->export()
