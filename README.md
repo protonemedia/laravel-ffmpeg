@@ -47,6 +47,7 @@ You can run an export immediately or [dispatch it to a queue](#queue-conversions
   - [Adaptive HLS and encryption](#adaptive-hls-and-encryption)
   - [fMP4 and alternate tracks](#fmp4-and-alternate-hls-groups)
   - [DASH and shared segments](#dash-and-shared-hls-segments)
+  - [Combined HLS presentations](#combine-completed-hls-presentations)
   - [Continuous HLS](#publish-continuous-hls)
   - [Protected playback](#serve-protected-hls-with-laravel)
   - [Custom playlist responses](#customize-raw-hls-responses)
@@ -58,7 +59,6 @@ You can run an export immediately or [dispatch it to a queue](#queue-conversions
   - [Completion inventories](#retain-queue-results)
 - [Deployment and development](#deployment-and-development)
 - [Application integration recipes](docs/integrations.md)
-- [API reference and acceptance contract](REWRITE.md)
 
 ## Getting started
 
@@ -234,7 +234,7 @@ $private = FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer '.$token],
 Storage paths are disk-relative keys, not URLs or local absolute paths. Descriptor construction and `inspect()` do no I/O. Local inputs can be read in place; other filesystems stream into a private operation workspace. Scoped and read-only input adapters retain their boundaries. Read-only destinations fail publication.
 
 > [!WARNING]
-> Authenticated HTTP inputs require `download: true`. Downloads stream to private disk with deadlines and reject redirects. Direct public or signed URLs enter FFmpeg arguments. Never put reusable credentials in them. HTTPS verification stays enabled. See the [HTTP input reference](REWRITE.md#http-inputs) for transport details.
+> Authenticated HTTP inputs require `download: true`. Downloads stream to private disk with deadlines and reject redirects. Direct public or signed URLs enter FFmpeg arguments. Never put reusable credentials in them. HTTPS verification stays enabled. Exports from URL inputs publish to `filesystems.default` unless you call `toDisk()`.
 
 #### Inspecting media
 
@@ -282,7 +282,7 @@ $gpuInput->export()
     ->save('gpu.mp4');
 ```
 
-GPU flags configure input options. They do not select hardware automatically or provide a CPU fallback. This example requires a CUDA-capable FFmpeg build, an NVIDIA device, and a compatible decoder and encoder. Hardware execution has not been validated in this checkout. Filters that consume CPU frames can require an explicit hardware download and format conversion.
+`-hwaccel` accepts `cuda`, `vaapi`, `qsv`, `vulkan`, `videotoolbox`, `d3d11va`, or `dxva2`, not `auto`. GPU flags configure input options. They do not select hardware automatically or provide a CPU fallback. This example requires a CUDA-capable FFmpeg build, an NVIDIA device, and a compatible decoder and encoder. Hardware execution has not been validated in this checkout. Filters that consume CPU frames can require an explicit hardware download and format conversion.
 
 #### Capturing camera snapshots
 
@@ -296,7 +296,7 @@ FFMpeg::openRtsp($cameraUrl, transport: 'tcp', timeout: 10)
     ->save('camera.jpg');
 ```
 
-`openRtsp()` returns an `RtspCamera` for bounded snapshots, not a live-export descriptor. `frame()` captures one frame into a private PNG before ordinary image processing and publication. TCP and UDP fixture captures pass. Transport accepts `tcp` or `udp`; timeout is positive and at most 300 seconds. Camera URLs are trusted application configuration. Restrict reachable hosts and protect credentials, which can appear in process arguments. See the [input reference](REWRITE.md#cached-probing-and-hardware-inputs).
+`openRtsp()` returns an `RtspCamera` for bounded snapshots, not a live-export descriptor. `frame()` captures one frame into a private PNG before ordinary image processing and publication. TCP and UDP fixture captures pass. Transport accepts `tcp` or `udp`; timeout is positive and at most 300 seconds. Camera URLs are trusted application configuration. Restrict reachable hosts and protect credentials, which can appear in process arguments.
 
 #### Query frames and packets
 
@@ -608,7 +608,7 @@ The mix is stereo at 48000 Hz and requires audio encoding. Video copy is allowed
 
 Gains are finite nonnegative amplitude multipliers. The default `normalize: false` adds the signals and can clip. With original audio present, `normalize: true` divides both weighted branches equally by two. Silence padding keeps the gain constant when either track ends. This is not loudness normalization.
 
-Both sources need finite positive durations, and the added source must contain audio. A primary with video requires zero container and video timestamp origins and a known nonnegative original-audio origin. To loop URL audio, open it with `FFMpeg::openUrl($url, download: true)` first. Mixing supports one output and owns the graph and maps. Custom maps, graphs, watermarks, clips, and two-pass encoding are unsupported. Save a clip first if you need to mix only part of a source. See the [audio mixing reference](REWRITE.md#audio-mixing) for the method signatures and timing policy.
+Both sources need finite positive durations, and the added source must contain audio. A primary with video requires zero container and video timestamp origins and a known nonnegative original-audio origin. To loop URL audio, open it with `FFMpeg::openUrl($url, download: true)` first. Mixing supports one output and owns the graph and maps. Custom maps, graphs, watermarks, clips, and two-pass encoding are unsupported. Save a clip first if you need to mix only part of a source.
 
 ### Waveform-peaks data
 
@@ -733,9 +733,9 @@ $first->concat($second)
     ->save('joined.mkv');
 ```
 
-`concatTranscoded()` requires a video policy and either `conformAudio()` or `withoutAudio()`. `contain` adds black bars; `cover` crops; `stretch` changes the aspect ratio. It selects each source's first motion-video and audio streams and preserves delayed audio through silence. Sources must be finite with zero container/video origins. Audio normalization requires audio in every source; it does not invent a track for a silent clip. The helper owns one output and its graph, so it has no filter, map, or graph methods, and stream copy is rejected. See the [concat reference](REWRITE.md#concatenation) for limits and raw graphs.
+`concatTranscoded()` requires a video policy and either `conformAudio()` or `withoutAudio()`. `contain` adds black bars; `cover` crops; `stretch` changes the aspect ratio. It selects each source's first motion-video and audio streams and preserves delayed audio through silence. Sources must be finite with zero container/video origins. Audio normalization requires audio in every source; it does not invent a track for a silent clip. The helper owns one output and its graph, so it has no filter, map, or graph methods, and stream copy is rejected. For other conformance policies, build a [custom filter graph](#custom-filter-graphs).
 
-Copy concatenation requires compatible streams and never falls back to transcoding. Transcoded concatenation decodes and encodes every clip. Neither method combines source chapters. Both publish to the first input's output disk unless you call `toDisk()`.
+Copy concatenation requires compatible streams and never falls back to transcoding. Open URL inputs with `download: true` before passing them to `concat()`. Transcoded concatenation decodes and encodes every clip. Neither method combines source chapters. Both publish to the first input's output disk unless you call `toDisk()`.
 
 ### Compose multiple inputs and outputs
 
@@ -762,7 +762,7 @@ $media->export()
     ->save();
 ```
 
-`lut3d(Media $look)` uses private staging and preserves filter call order. It rejects media input options on the LUT descriptor. Each output runs its filters independently. There is no shared LUT or automatic `split` optimization. To process the LUT once before splitting, keep the raw `resource()` and `filterComplex()` graph shown in the [composition reference](REWRITE.md#composition-and-resources).
+`lut3d(Media $look)` uses private staging and preserves filter call order. It rejects media input options on the LUT descriptor. Each output runs its filters independently. There is no shared LUT or automatic `split` optimization. To process the LUT once before splitting, use `resource()` in a [custom filter graph](#custom-filter-graphs) with `split`.
 
 #### Custom filter graphs
 
@@ -863,7 +863,7 @@ HLS watermark inputs accept static PNG and JPEG or animated GIF. By default, an 
 
 `playbackForVariants()` returns a playback inventory for a nonempty set of unique variant names. It retains required audio, subtitle, initialization, and key dependencies. Protected playback renders a filtered master without modifying published playlists. Persist this selected inventory instead of the full `playback()` inventory when a viewer may access only those variants.
 
-To combine completed presentations for the same timeline without copying media, see [`PendingHlsMerge`](REWRITE.md#compose-completed-hls-presentations). It requires compatible completed v9 inventories and publishes only a new version-suffixed master. The result owns that master and borrows existing media. Keep the source inventories and application reference counts before deleting any shared files.
+To combine completed presentations for the same timeline without copying media, see [Combine completed HLS presentations](#combine-completed-hls-presentations).
 
 #### Encryption and publication
 
@@ -962,6 +962,29 @@ DASH supports finite, clear H.264/AAC presentations. Each representation maps ex
 One encoding invocation creates the representations. With `sharedHls()`, both formats reference the same initialization files and media segments. The package validates bounded XML and the complete owned inventory before publication. Segments publish before playlists, with the MPD last. Publication across objects is not atomic. Results report `dash-init`, `dash-segment`, `dash-manifest`, and optional HLS roles. Ordinary queued exports, execution limits, cancellation, progress, and completion events apply.
 
 With `sharedHls()`, `playback()` returns an `HlsPresentation` for the [protected HLS routes](#serve-protected-hls-with-laravel) and the queued completion event carries it. The inventory contains the HLS master, its playlists, and the shared media, but not the MPD. Each master entry is a variant named after its representation, so `playbackForVariants(['low'])` keeps that video representation with every audio rendition. The MPD itself has no protected route, and `mergeHls()` does not accept DASH output.
+
+### Combine completed HLS presentations
+
+Use the `mergeHls` method to combine completed HLS presentations of the same timeline into one master playlist. It does not transcode or copy media:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+
+$merged = FFMpeg::mergeHls(['main' => $firstResult, 'alternate' => $secondResult])
+    ->toDisk('streams')
+    ->save('combined/master.m3u8');
+
+$publishedPath = $merged->playlist()
+    ->path; // Includes a generated version suffix.
+$lesson->hls_playback = $merged->playback()
+    ->toArray();
+```
+
+`mergeHls()` accepts two or more completed v9 `HlsExportResult` objects, `HlsPresentation` objects, or stored inventory arrays. Optional string keys, such as `main`, prefix each presentation's variant names. `toDisk()` selects the media disk and defaults to the first presentation's disk. `save()` publishes a new master with a version suffix, so store the path from `playlist()->path`, not the path you requested.
+
+The inputs must be completed VOD presentations with separate destinations and matching packaging, clips, and durations. Their media must share one disk; keys can stay on other disks.
+
+The result owns only the new master. Existing segments, playlists, and keys stay owned by the source inventories, and deleting an original breaks the combined presentation. Keep the source inventories and your reference counts until no presentation uses those files.
 
 ### Publish continuous HLS
 
@@ -1370,7 +1393,7 @@ FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by ran
     --fail-on-deprecation --fail-on-phpunit-deprecation
 ```
 
-Setup installs the toolchain and dependencies once; resume checks them without reinstalling. CI uses Ubuntu 26.04, PHP 8.4/8.5, and lowest/stable dependencies. Real-media acceptance requires the matching tested binary pair.
+Setup installs the toolchain and dependencies once; resume checks them without reinstalling. CI uses Ubuntu 26.04, PHP 8.4/8.5, and lowest/stable dependencies. Tests that use real media are skipped unless `FFMPEG_9_FFPROBE` points to an FFprobe 9.0.x binary with a matching `ffmpeg` in the same directory. Font tests also need `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`.
 
 ## Community
 

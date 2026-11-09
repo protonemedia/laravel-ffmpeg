@@ -41,7 +41,7 @@ $public = FFMpeg::openUrl('https://cdn.example.com/lesson.mp4');
 $private = FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer '.$token], download: true);
 ```
 
-`FFMpeg::openUrl()` uses the same HTTP rules as the disk selector. Headers require `download: true`. Downloads use Laravel Http with TLS verification and reject redirects. Direct URLs enter media process arguments, so do not include reusable credentials. See the [HTTP input reference](REWRITE.md#http-inputs) for transport limits and redaction rules.
+`FFMpeg::openUrl()` uses the same HTTP rules as the disk selector. Headers require `download: true`. Downloads use Laravel Http with TLS verification and reject redirects. Direct URLs enter media process arguments, so do not include reusable credentials. See [credential redaction](README.md#credential-redaction) for redaction rules.
 
 ```php
 $metadata = $media->probeCached(
@@ -60,7 +60,7 @@ Use `probeCached()` only with an application-owned source-version key and cache 
 
 `openRtsp()` returns `RtspCamera`, not a `Media` descriptor for live exports. Its `frame()` captures a private PNG, then uses the ordinary frame pipeline. Transport is `tcp` or `udp`, and timeout is positive and at most 300 seconds. Actual TCP and UDP fixtures pass, but arbitrary camera compatibility is not claimed. Camera URLs must be trusted configuration. Restrict network access and protect credentials visible in process arguments.
 
-For hardware decoding, pass validated input pairs such as `inputOptions: ['-hwaccel', 'cuda', '-hwaccel_device', '0', '-hwaccel_output_format', 'cuda']` to `open()`. These flags are input-scoped and are not passed to FFprobe. They do not select an output encoder, generate transfer filters, or provide a CPU fallback. Hardware execution has not been validated here. Test your deployed build and GPU separately. See the [hardware input contract](REWRITE.md#cached-probing-and-hardware-inputs).
+For hardware decoding, pass validated input pairs such as `inputOptions: ['-hwaccel', 'cuda', '-hwaccel_device', '0', '-hwaccel_output_format', 'cuda']` to `open()`. These flags are input-scoped and are not passed to FFprobe. They do not select an output encoder, generate transfer filters, or provide a CPU fallback. Hardware execution has not been validated here. Test your deployed build and GPU separately. See [hardware acceleration](README.md#hardware-acceleration).
 
 Builders do not forward methods to PHP-FFMpeg. Use explicit codecs, scoped `inputOptions:`, `globalOptions()`, `outputOptions()`, and filters. Bitrates accept positive integers in bits per second, such as `2500000`, or unit strings such as `'2500k'`. Floats and unitless strings are invalid. `inspect()` returns the argument plan without reading inputs or launching a process. `save()` returns a result, not the builder.
 
@@ -189,7 +189,7 @@ Mixing selects the first audio track from each input and the primary's first mot
 
 The default `normalize: false` adds the weighted signals and can clip. With original audio present, `normalize: true` divides both padded branches equally by two, without changing gain when a track ends. This is not loudness normalization.
 
-Both inputs require finite positive durations, and the added input requires audio. Video primaries require known zero container and video origins and a known nonnegative original-audio origin. Looping URL audio requires `openUrl($url, download: true)`. The builder supports one output and rejects maps, custom graphs, watermarks, clips, and two-pass encoding. Save a clip first if needed. See the [audio mixing reference](REWRITE.md#audio-mixing) for the complete contract.
+Both inputs require finite positive durations, and the added input requires audio. Video primaries require known zero container and video origins and a known nonnegative original-audio origin. Looping URL audio requires `openUrl($url, download: true)`. The builder supports one output and rejects maps, custom graphs, watermarks, clips, and two-pass encoding. Save a clip first if needed. See [audio mixing](README.md#mix-audio-and-add-background-music) for examples.
 
 ## Replace speed and GIF graphs
 
@@ -339,7 +339,7 @@ $lesson->hls_playback = $result->playbackForVariants(['360p'])
 
 An animated GIF plays once and then holds its final frame. Call `loop()` on the watermark to repeat it for the whole video, whatever loop count the GIF embeds. Watermark images reject input options such as `-ignore_loop`. All ordinary filters, including variant resizing, precede overlays. `playbackForVariants()` requires nonempty unique known variant names and retains their required rendition, initialization, and key dependencies. Protected responses filter master declarations without changing Storage files. Authorize the selected inventory before issuing URLs; public disk URLs bypass this selection.
 
-To combine completed presentations for the same timeline, see [`PendingHlsMerge`](REWRITE.md#compose-completed-hls-presentations). It writes only a fresh version-suffixed master, not new media. Inputs need trusted v9 inventories, disjoint destinations, compatible VOD clocks and packaging, and a common media disk. Its result owns only the new master. Borrowed media stays owned by the source inventories, so retain application reference counts before deletion.
+To combine completed presentations for the same timeline, see [`PendingHlsMerge`](README.md#combine-completed-hls-presentations). It writes only a fresh version-suffixed master, not new media. Inputs need trusted v9 inventories, disjoint destinations, compatible VOD clocks and packaging, and a common media disk. Its result owns only the new master. Borrowed media stays owned by the source inventories, so retain application reference counts before deletion.
 
 For protected Laravel playback, replace handwritten playlist and key routes with `Support\Hls`. Persist `$result->playback()->toArray()` from the root export result in the lesson's JSON column with an `array` cast for the full presentation. A variant's `playback()` also retains its needed private-key references internally, while its `files()` still excludes shared key files. Restore the inventory with `Http\HlsPresentation::fromArray($lesson->hls_playback)` in the definition's resolver.
 
@@ -432,4 +432,4 @@ Hard worker kills cannot run PHP cleanup. Configure safe retention for stale pri
 
 For independent HLS groups, `queued(parallel: true)` uses a Laravel batch and a final publication job. Shared rendition groups remain together. The versioned final master and borrowed-source ownership follow `mergeHls()`. Persist the event's actual playback inventory rather than constructing a filename. Keep part artifacts and batch records until finalization finishes. Use a chain rather than nesting a parallel workflow inside another batch. See [queue examples](README.md#queue-conversions) for retry, result, and retention details.
 
-See the [README](README.md) for executable API examples and the [reference](REWRITE.md) for detailed limits.
+See the [README](README.md) for executable API examples.
