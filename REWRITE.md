@@ -884,7 +884,7 @@ $first->concatTranscoded($second)
     ->save('silent.mp4');
 ```
 
-`concatTranscoded()` accepts at least one following source and returns a single-output export builder, not a media descriptor. `normalizeVideo()` is required and takes positive even dimensions, a positive numeric or rational frame rate, and `contain`, `cover`, or `stretch`. It produces square pixels. `contain` adds centered black padding; `cover` crops centrally; `stretch` uses the exact dimensions without preserving aspect ratio.
+`concatTranscoded()` accepts at least one following source and returns a single-output export builder, not a media descriptor. Publication defaults to the first input's output disk. `normalizeVideo()` is required and takes positive even dimensions, a positive numeric or rational frame rate, and `contain`, `cover`, or `stretch`. It produces square pixels. `contain` adds centered black padding; `cover` crops centrally; `stretch` uses the exact dimensions without preserving aspect ratio.
 
 Choose either `normalizeAudio()` or `withoutAudio()`. Audio normalization defaults to 48000 Hz and two channels. `channels` accepts one or two; optional `channel` selects a zero-based source channel before conversion. For example, `normalizeAudio(16000, channels: 1, channel: 0)` keeps the first channel instead of mixing channels. Every source must have a first audio stream when normalization is enabled. Resampling inserts silence for its original nonnegative delay relative to video. The helper does not create audio tracks for sources without audio.
 
@@ -901,7 +901,7 @@ $joined->export()
     ->save('joined.mp4');
 ```
 
-`concat()` returns a media descriptor and does no IO until probing or export. It requires at least one following input. Compatible finite files join through the concat demuxer. Local files and non-local Storage inputs can be mixed. URL inputs require `download: true`. Input-specific media options, nested concat inputs, manifest sources, unknown durations, and nonzero reported presentation origins are rejected. Nonzero origins require an explicit normalization graph rather than a guessed timestamp correction.
+`concat()` returns a media descriptor and does no IO until probing or export. It requires at least one following input. Its exports default to the first input's output disk. Compatible finite files join through the concat demuxer. Local files and non-local Storage inputs can be mixed. URL inputs require `download: true`. Input-specific media options, nested concat inputs, manifest sources, unknown durations, and nonzero reported presentation origins are rejected. Nonzero origins require an explicit normalization graph rather than a guessed timestamp correction.
 
 Stream order, codecs, profiles, time bases, geometry, pixel formats, sample rates, channel layouts, and other observable codec parameters must match. This comparison cannot prove bitstream compatibility. FFmpeg remains authoritative, and failures never trigger automatic transcoding. Codec choices remain explicit export settings. The ordinary first-video and first-audio selection defaults still apply unless maps replace them.
 

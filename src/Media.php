@@ -98,12 +98,12 @@ readonly class Media
 
     public function concat(Media ...$following): self
     {
-        return new self(config('filesystems.default'), new ConcatInput([$this, ...$following]));
+        return new self($this->defaultOutputDisk(), new ConcatInput([$this, ...$following]));
     }
 
     public function concatTranscoded(Media ...$following): PendingConcat
     {
-        return new PendingConcat([$this, ...$following], config('filesystems.default'));
+        return new PendingConcat([$this, ...$following], $this->defaultOutputDisk());
     }
 
     public function prepareImage(callable $prepare): self
@@ -150,8 +150,9 @@ readonly class Media
     /** @internal */
     public function defaultOutputDisk(): string|Filesystem
     {
+        // A concat descriptor is created on its first input's output disk.
         return is_string($this->source) || $this->source instanceof SequenceInput || $this->source instanceof PreparedImageInput
-            ? $this->disk : config('filesystems.default');
+            || $this->source instanceof ConcatInput ? $this->disk : config('filesystems.default');
     }
 
     /** @internal */

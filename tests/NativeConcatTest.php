@@ -78,7 +78,7 @@ class NativeConcatTest extends TestCase
             $this->assertNotContains('99', $command);
             $this->assertSame('-1', $command[array_search('-map_metadata', $command) + 1]);
             $this->assertSame('-1', $command[array_search('-map_chapters', $command) + 1]);
-            $this->assertSame(config('filesystems.default'), $export->outputConfiguration()['disk']);
+            $this->assertSame('missing', $export->outputConfiguration()['disk']);
         }
 
         $chosen = new \ProtoneMedia\LaravelFFMpeg\PendingConcat([$first, $second], 'chosen');
@@ -163,6 +163,12 @@ class NativeConcatTest extends TestCase
         $copy = FFMpeg::disk('memory')->open('copy.mp4');
         $this->assertSame('h264', $copy->probe()->video()->codec());
         $this->assertEqualsWithDelta(1.7, $copy->probe()->duration(), 0.001);
+
+        // Without toDisk(), both helpers publish to the first input's disk, not the application default.
+        $second->concat($first)->export()->video('copy')->save('copy-default.mp4');
+        $second->concatTranscoded($first)->normalizeVideo(64, 48, 10)->withoutAudio()->video('libx264')->save('transcoded-default.mp4');
+        $this->assertTrue(Storage::disk('memory')->exists('copy-default.mp4'));
+        $this->assertTrue(Storage::disk('memory')->exists('transcoded-default.mp4'));
 
         $different = FFMpeg::disk()->open(new File($this->root.'/2.mp4'));
         try {
