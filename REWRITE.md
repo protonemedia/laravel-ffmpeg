@@ -803,7 +803,7 @@ Looping requires a local or downloaded added input. URL music must use `FFMpeg::
 
 Looping first decodes the added track into a private lossless PCM file, then repeats those samples. This avoids repeating compressed encoder delay and padding. Preparation adds one FFmpeg invocation and disk use proportional to decoded music duration, sample rate, and channel count. The file is removed after success, failure, or cancellation. Result process summaries include preparation and encoding.
 
-The helper owns its graph and maps and accepts only the primary input and one added input. It rejects custom maps, custom graphs, output callbacks, watermarks, clips, audio omission, and two-pass encoding. To mix a clip, save the clip first. Publication defaults to the primary media's output disk. Progress percentage uses the primary duration only when no caller audio filters are present.
+The helper owns its graph and maps and accepts only the primary input and one added input. The builder has no map, graph, output-callback, watermark, clip, audio-omission, per-track audio, or two-pass methods. To mix a clip, save the clip first. Publication defaults to the primary media's output disk. Progress percentage uses the primary duration only when no caller audio filters are present.
 
 ### Playback speed
 

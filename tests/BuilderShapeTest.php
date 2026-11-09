@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ProtoneMedia\LaravelFFMpeg\PendingAudioMix;
 use ProtoneMedia\LaravelFFMpeg\PendingConcat;
 use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\PendingFrame;
@@ -29,6 +30,8 @@ class BuilderShapeTest extends TestCase
             'withoutAudio', 'withoutVideo', 'metadata', 'metadataFrom', 'withoutMetadata', 'streamMetadata', 'disposition', 'chaptersFrom'];
 
         return [
+            'mixAudio' => [PendingAudioMix::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
+                'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'audioStream']],
             'concatTranscoded' => [PendingConcat::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt',
                 'videoStream', 'audioStream', 'color', 'map', 'mapVideo', 'mapAudio', 'withoutVideo', 'videoFilter', 'resize', 'fit',
                 'audioFilter', 'volume', 'delayAudio', 'fadeIn', 'fadeOut', 'drawText', 'resource', 'metadataFrom', 'chaptersFrom', 'withoutMetadata']],

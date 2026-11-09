@@ -149,7 +149,6 @@ class NativeEncodingOptionsTest extends TestCase
         $media = FFMpeg::disk('absent')->open('unread.mp4');
         foreach ([
             $media->normalizeLoudness()->audioStream(0, fn ($audio) => $audio->filter('volume=0')),
-            $media->mixAudio($media)->audioStream(0, fn ($audio) => $audio->codec('copy')),
         ] as $export) {
             try {
                 $export->inspect();

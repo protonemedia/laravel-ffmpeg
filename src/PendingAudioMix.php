@@ -4,15 +4,36 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\RunsAnalysis;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 
 /** Mix the first audio tracks, retaining the primary media's presentation length. */
-class PendingAudioMix extends PendingExport
+final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysis, ShapesCommand, ShapesOutputs
 {
+    use Concerns\AudioFilters;
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\Metadata;
+    use Concerns\OutputOptions;
+    use Concerns\ResourceFilters;
+    use Concerns\Resources;
+    use Concerns\RunsExport;
+    use Concerns\VideoCodec;
+    use Concerns\VideoFilters;
+    use Conditionable;
+
+    private readonly PendingExport $export;
+
     private bool $loop = false;
 
     private float $offset = 0;
@@ -29,15 +50,16 @@ class PendingAudioMix extends PendingExport
             throw new InvalidArgumentException('Mix volumes require finite nonnegative amplitude multipliers.');
         }
 
-        parent::__construct($source, $disk);
-        parent::addInput($added);
-        $this->toDisk($disk);
+        $this->export = new PendingExport($source, $disk, $this);
+        $this->export->addInput($added);
+        // addInput() falls back to the default disk; keep the primary input's.
+        $this->export->toDisk($disk);
     }
 
     /** Start the added track at this nonnegative offset in the primary presentation. */
     public function at(float $seconds): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         if (! is_finite($seconds) || $seconds < 0) {
             throw new InvalidArgumentException('Audio mix offsets require finite nonnegative seconds.');
         }
@@ -49,44 +71,45 @@ class PendingAudioMix extends PendingExport
     /** Repeat the added track from its offset, without repeating the initial delay. */
     public function loopAudio(bool $loop = true): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         $this->loop = $loop;
 
         return $this;
     }
 
-    public function addInput(Media $media): int
+    public function audio(?string $codec = null, mixed $bitrate = null): self
     {
-        throw new InvalidArgumentException('Audio mixing supports exactly the primary media and one added input.');
+        $this->export->audio($codec, $bitrate);
+
+        return $this;
     }
 
-    public function output(string $path, callable $configure): self
+    public function audioOptions(array $tokens): self
     {
-        throw new InvalidArgumentException('Audio mixing supports one root-configured output.');
+        $this->export->audioOptions($tokens);
+
+        return $this;
     }
 
-    public function filterComplex(string $expression): self
+    public function withoutVideo(): self
     {
-        throw new InvalidArgumentException('Audio mixing owns its graph; use export()->filterComplex() for custom compositions.');
+        $this->export->withoutVideo();
+
+        return $this;
     }
 
-    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
+    public function save(?string $path = null): ExportResult
     {
-        throw new InvalidArgumentException('Audio mixing does not support additional watermark inputs.');
+        return $this->export->save($path);
     }
 
-    public function twoPass(): self
+    /** @internal */
+    public function outputs(array $default, ?string $path): array
     {
-        throw new InvalidArgumentException('Audio mixing does not support two-pass video encoding.');
-    }
+        $settings = $this->export->outputConfiguration();
 
-    protected function configuredOutputs(?string $path = null): array
-    {
-        $settings = $this->outputConfiguration();
-
-        if ($settings['maps'] !== [] || $settings['omitAudio'] || $settings['clip'] !== null
-            || $settings['audioStreams'] !== [] || ($settings['audio']['codec'] ?? null) === 'copy') {
-            throw new InvalidArgumentException('Audio mixing requires encoded audio, automatic maps, and an unclipped primary source.');
+        if (($settings['audio']['codec'] ?? null) === 'copy') {
+            throw new InvalidArgumentException('Audio mixing requires encoded audio.');
         }
         if ($this->loop && $this->added->protocolWhitelist() !== 'file') {
             throw new InvalidArgumentException('Looped audio requires a local or downloaded input. Use openUrl(download: true).');
@@ -94,7 +117,7 @@ class PendingAudioMix extends PendingExport
 
         $settings['maps'] = $settings['omitVideo'] ? [] : ['0:V:0?'];
         $settings['maps'][] = '[mixed_audio]';
-        $settings['omitAudio'] = $settings['omitVideo'] = false;
+        $settings['omitVideo'] = false;
         $settings['audioFilters'] = []; // Apply these after mixing, inside the owned graph.
         $settings['metadataSource'] ??= 0;
         $settings['chapterSource'] ??= 0;
@@ -102,7 +125,8 @@ class PendingAudioMix extends PendingExport
         return [(new ExportOutput($path ?? 'inspection.mp4', $settings['disk']))->configure($settings)];
     }
 
-    protected function filterGraph(): ?string
+    /** @internal */
+    public function graph(): string
     {
         return $this->mixGraph(true);
     }
@@ -125,15 +149,16 @@ class PendingAudioMix extends PendingExport
             $branches[] = '[added_audio]anull[audio_mix]';
         }
 
-        $filters = $this->outputConfiguration()['audioFilters'];
+        $filters = $this->export->outputConfiguration()['audioFilters'];
         $branches[] = '[audio_mix]'.($filters === [] ? 'anull' : implode(',', $filters)).'[mixed_audio]';
 
         return implode(';', $branches);
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    /** @internal */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
-        $command = parent::command($outputs, $paths, $outputPaths);
+        $command = $default;
         if ($this->loop) {
             $inputs = array_keys($command, '-i', true);
             array_splice($command, $inputs[1], 0, ['-stream_loop', '-1']);
@@ -145,7 +170,8 @@ class PendingAudioMix extends PendingExport
         return [...$command, '-t', '[source-duration]', $destination];
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** @internal */
+    public function duration(array $metadata, ?float $default): ?float
     {
         [$source, $added] = $metadata;
         $duration = $source->duration();
@@ -169,10 +195,11 @@ class PendingAudioMix extends PendingExport
             throw new MediaException('Added audio requires a finite duration.', 'probing', 'metadata');
         }
 
-        return $this->outputConfiguration()['audioFilters'] === [] ? $duration : null;
+        return $this->export->outputConfiguration()['audioFilters'] === [] ? $duration : null;
     }
 
-    protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
+    /** @internal */
+    public function analyze(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         if ($this->loop) {
             // Loop decoded samples, not compressed packets: encoder delay and

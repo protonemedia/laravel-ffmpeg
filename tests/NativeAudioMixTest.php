@@ -93,7 +93,6 @@ class NativeAudioMixTest extends TestCase
         $this->assertSame($operation->inspect(), $operation->inspect());
         $this->assertContains('-stream_loop', $operation->inspect());
         $this->assertContains('[source-duration]', $operation->inspect());
-        $this->assertSame('audio-mix', $operation->outputConfiguration()['disk']);
         $this->assertNotContains('-stream_loop', $source->mixAudio($music)->inspect());
         $this->assertNotContains('-stream_loop', $operation->loopAudio(false)->inspect());
         $delayed = $source->mixAudio($music);
@@ -109,14 +108,6 @@ class NativeAudioMixTest extends TestCase
             fn () => $source->mixAudio($music, originalVolume: -1),
             fn () => $source->mixAudio($music, volume: INF),
             fn () => $source->mixAudio($music)->audio('copy')->inspect(),
-            fn () => $source->mixAudio($music)->map('0:v')->inspect(),
-            fn () => $source->mixAudio($music)->clip(0, duration: 1)->inspect(),
-            fn () => $source->mixAudio($music)->withoutAudio()->inspect(),
-            fn () => $source->mixAudio($music)->filterComplex('[0:a]anull[a]'),
-            fn () => $source->mixAudio($music)->addInput($music),
-            fn () => $source->mixAudio($music)->output('second.mp4', fn () => null),
-            fn () => $source->mixAudio($music)->watermark($music),
-            fn () => $source->mixAudio($music)->twoPass(),
             fn () => $source->backgroundMusic(FFMpeg::disk()->openUrl('https://media.example/music.mp3'))->inspect(),
         ] as $invalid) {
             try {
