@@ -837,7 +837,7 @@ GIF stores frame delays in centiseconds, so requested frame rates can require ro
 
 Accurate clipping and timestamp reset precede resizing, frame-rate conversion, and palette generation. The helper first writes those processed frames to a private lossless intermediate, then generates a palette, then encodes with `paletteuse`. These are three FFmpeg invocations, not two-pass bitrate encoding. Caller filters run once. The intermediate avoids buffering the entire clip in memory, but private disk use grows with duration, dimensions, and frame rate. Short, reduced-resolution previews reduce processing time and disk use. Cleanup removes the intermediate and palette after success, failure, or cancellation.
 
-GIF owns its graph, maps, codec, muxer, and loop options. It supports one output and rejects additional inputs, custom graphs or maps, audio settings or filters, encoder overrides, raw output options, keyframe clips, and `twoPass()`. Ordinary string video filters can follow the initial resize and frame-rate filters; resource-backed filters are not supported by this builder.
+GIF owns its graph, maps, codec, muxer, and loop options. It supports one output and has no methods for additional inputs, custom graphs or maps, audio settings or filters, encoder overrides, raw output options, resource-backed filter helpers, fades, or `twoPass()`; keyframe clips are rejected. Ordinary string video filters can follow the initial resize and frame-rate filters.
 
 ### Text and subtitle shortcuts
 

@@ -557,7 +557,7 @@ $media->gif(width: 480, frameRate: 12, loop: 0)
 
 `speed()` changes video timing and audio tempo without changing audio pitch. It requires a finite positive factor, zero video origins, nonnegative audio origins, and a zero container origin when the source has video. An audio-only source that starts later is retimed from its first sample without its leading offset. It scales an existing audio delay with playback speed. Stream copy, clipping, input options, custom graphs, watermark inputs, and multiple outputs are not supported. Encode a clip first if you need to retime only part of a source.
 
-`gif()` selects the first motion-video stream and omits audio. Width defaults to 480 and frame rate to 12. `loop: 0` loops forever; `-1` disables looping. Accurate `clip()` runs before palette generation. The helper writes a private lossless intermediate, generates a palette, then encodes the GIF. This avoids buffering the entire clip in memory, but adds disk use and processing passes. Keep previews short and small. GIF output rejects custom maps, graphs, additional inputs or outputs, audio settings, and encoder overrides.
+`gif()` selects the first motion-video stream and omits audio. Width defaults to 480 and frame rate to 12. `loop: 0` loops forever; `-1` disables looping. Accurate `clip()` runs before palette generation. The helper writes a private lossless intermediate, generates a palette, then encodes the GIF. This avoids buffering the entire clip in memory, but adds disk use and processing passes. Keep previews short and small. The GIF builder offers video filters, resources, metadata, clipping, and publication; it has no map, graph, extra input or output, audio, encoder, or raw output option methods.
 
 ### Mix audio and add background music
 

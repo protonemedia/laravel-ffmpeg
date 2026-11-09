@@ -71,21 +71,7 @@ class NativeGifTest extends TestCase
             fn () => $media->gif(0), fn () => $media->gif(65536),
             fn () => $media->gif(frameRate: 0), fn () => $media->gif(frameRate: INF), fn () => $media->gif(frameRate: NAN),
             fn () => $media->gif(loop: -2), fn () => $media->gif(loop: 65536),
-            fn () => $media->gif()->addInput($media),
-            fn () => $media->gif()->filterComplex('[0:v]null[out]'),
-            fn () => $media->gif()->output('extra.gif', fn ($output) => null),
-            fn () => $media->gif()->twoPass(),
-            fn () => $media->gif()->withoutVideo()->inspect(),
-            fn () => $media->gif()->video('copy')->inspect(),
-            fn () => $media->gif()->video('libx264')->inspect(),
-            fn () => $media->gif()->video('gif', crf: 20)->inspect(),
-            fn () => $media->gif()->audio('aac')->inspect(),
-            fn () => $media->gif()->audioFilter('volume=0')->inspect(),
-            fn () => $media->gif()->map('0:v')->inspect(),
-            fn () => $media->gif()->outputOptions(['-f', 'mp4'])->inspect(),
             fn () => $media->gif()->clip(1.0, duration: 1.0, seek: 'keyframe')->inspect(),
-            fn () => $media->gif()->watermark($media),
-            fn () => $media->gif()->drawText('hello', $media)->inspect(),
         ] as $invalid) {
             try {
                 $invalid();
@@ -112,7 +98,7 @@ class NativeGifTest extends TestCase
 
         foreach ([0, -1, 3] as $loop) {
             $spoolBytes = 0;
-            $result = $media->gif(64, 10, $loop)->clip(0.5, duration: 1.0)->withoutAudio()->toDisk('memory')
+            $result = $media->gif(64, 10, $loop)->clip(0.5, duration: 1.0)->toDisk('memory')
                 ->onProgress(function ($progress) use (&$spoolBytes) {
                     if ($progress->phase === 'encoding') {
                         foreach (glob($this->root.'/workspaces/*/gif-prepared.nut') as $spool) {

@@ -4,62 +4,55 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\RunsAnalysis;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
+use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
-class PendingGif extends PendingExport
+/** An animated GIF encoded with a palette generated from the clip it shows. */
+final class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
 {
+    use Concerns\Clips;
+    use Concerns\GlobalOptions;
+    use Concerns\Metadata;
+    use Concerns\Resources;
+    use Concerns\RunsExport;
+    use Concerns\VideoFilters;
+    use Conditionable;
+
+    private readonly PendingExport $export;
+
     public function __construct(Media $media, string|Filesystem $disk, int $width = 480, int|float $frameRate = 12, private readonly int $loop = 0)
     {
         if ($width <= 0 || $width > 65535 || ! is_finite((float) $frameRate) || $frameRate <= 0 || $loop < -1 || $loop > 65535) {
             throw new InvalidArgumentException('GIF requires a width between 1 and 65535, a finite positive frame rate, and a loop count between -1 and 65535.');
         }
 
-        parent::__construct($media, $disk);
-        $this->resize($width)->frameRate($frameRate);
+        $this->export = new PendingExport($media, $disk, $this);
+        $this->export->resize($width)->frameRate($frameRate);
     }
 
-    public function addInput(Media $media): int
+    public function save(?string $path = null): ExportResult
     {
-        throw new InvalidArgumentException('GIF supports one video input.');
+        return $this->export->save($path);
     }
 
-    public function output(string $path, callable $configure): self
+    /** @internal */
+    public function outputs(array $default, ?string $path): array
     {
-        throw new InvalidArgumentException('GIF supports one root-configured output.');
-    }
+        $settings = $this->export->outputConfiguration();
 
-    public function filterComplex(string $expression): self
-    {
-        throw new InvalidArgumentException('GIF owns its palette graph; use export()->filterComplex() for custom graphs.');
-    }
-
-    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
-    {
-        throw new InvalidArgumentException('GIF owns its palette graph and does not support watermark inputs.');
-    }
-
-    public function twoPass(): self
-    {
-        throw new InvalidArgumentException('GIF owns its palette analysis, not two-pass video encoding.');
-    }
-
-    protected function configuredOutputs(?string $path = null): array
-    {
-        $settings = $this->outputConfiguration();
-
-        if ($settings['omitVideo'] || $settings['maps'] !== [] || $settings['audio'] !== [] || $settings['audioFilters'] !== []
-            || $settings['audioStreams'] !== [] || $settings['videoStreams'] !== []
-            || ($settings['video'] !== [] && $settings['video'] !== ['codec' => 'gif'])
-            || $settings['outputOptions'] !== [] || ($settings['clip']['seek'] ?? 'accurate') !== 'accurate'
-            || array_any($settings['videoFilters'], fn ($filter) => ! is_string($filter))) {
-            throw new InvalidArgumentException('GIF requires video, automatic maps, accurate clipping, string video filters, and no audio, encoder overrides, or raw output options.');
+        if (($settings['clip']['seek'] ?? 'accurate') !== 'accurate') {
+            throw new InvalidArgumentException('GIF clips require accurate seeking.');
         }
 
         $settings['maps'] = ['[gif_out]'];
         $settings['video'] = ['codec' => 'gif'];
-        $settings['omitAudio'] = $settings['omitVideo'] = false;
         $settings['videoFilters'] = [];
         $settings['chapterSource'] ??= $settings['clip'] === null ? 0 : -1;
         $settings['clip'] = null; // Trim before palette generation, not after it.
@@ -68,16 +61,16 @@ class PendingGif extends PendingExport
         return [(new ExportOutput($path ?? 'inspection.gif', $settings['disk']))->configure($settings)];
     }
 
-    protected function filterGraph(): ?string
+    /** @internal Inspection describes encoding; analyze() creates the palette and spool it references. */
+    public function graph(): string
     {
-        // Inspection describes encoding; prepareCommand creates these private files.
         return '[0:V:0]'.$this->preprocessing().'[gif_frames];'
             .'movie=gif-palette.png[gif_palette];[gif_frames][gif_palette]paletteuse[gif_out]';
     }
 
     private function preprocessing(): string
     {
-        $settings = $this->outputConfiguration();
+        $settings = $this->export->outputConfiguration();
         $filters = ['setpts=PTS-STARTPTS'];
 
         if (($clip = $settings['clip']) !== null) {
@@ -88,7 +81,8 @@ class PendingGif extends PendingExport
         return implode(',', [...$filters, ...$settings['videoFilters']]);
     }
 
-    protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
+    /** @internal */
+    public function analyze(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         $graphIndex = array_search('-filter_complex', $command, true);
         $inputEnd = array_search('-i', $command, true) + 2;
@@ -103,7 +97,7 @@ class PendingGif extends PendingExport
             '-pix_fmt', 'bgr0', '-fps_mode:v', 'passthrough', '-threads', '1', '-f', 'nut', $prepared], 'GIF palette preparation failed.');
         $analyze([$command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1',
             '-i', $prepared, '-vf', 'palettegen', '-frames:v', '1', '-threads', '1', '-update', '1', $palette], 'GIF palette preparation failed.');
-        $this->validateArtifact($workspace->path.'/'.$palette, 'image');
+        ImageOutput::validate($workspace->path.'/'.$palette, 'image');
 
         $prefix = array_slice($prefix, 0, array_search('-protocol_whitelist', $prefix, true));
         $prefix[$graphIndex + 1] = '[0:v:0][1:v:0]paletteuse[gif_out]';

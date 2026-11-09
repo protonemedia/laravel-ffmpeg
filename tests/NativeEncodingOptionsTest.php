@@ -148,7 +148,6 @@ class NativeEncodingOptionsTest extends TestCase
         Process::fake();
         $media = FFMpeg::disk('absent')->open('unread.mp4');
         foreach ([
-            $media->gif()->videoStream(0, fn ($video) => $video->codec('libx264')),
             $media->normalizeLoudness()->audioStream(0, fn ($audio) => $audio->filter('volume=0')),
             $media->mixAudio($media)->audioStream(0, fn ($audio) => $audio->codec('copy')),
             $media->concatTranscoded($media)->normalizeVideo(96, 64, 10)->normalizeAudio()
