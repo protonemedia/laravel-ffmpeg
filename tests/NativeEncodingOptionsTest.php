@@ -261,6 +261,13 @@ class NativeEncodingOptionsTest extends TestCase
     public function real_hardware_initialization_failure_is_reported_without_output(): void
     {
         $this->realFixture();
+        $binary = config('laravel-ffmpeg.ffmpeg.binaries');
+        $backends = Process::run([$binary, '-hide_banner', '-hwaccels']);
+        $encoders = Process::run([$binary, '-hide_banner', '-encoders']);
+        $this->assertTrue($backends->successful() && $encoders->successful(), $backends->errorOutput().$encoders->errorOutput());
+        if (preg_match('/^cuda$/m', $backends->output()) && preg_match('/\bh264_nvenc\b/', $encoders->output())) {
+            $this->markTestSkipped('This acceptance case requires a build without CUDA/NVENC support, not an assumption about GPU availability.');
+        }
         try {
             $this->media('source.mkv')->export()->globalOptions(['-init_hw_device', 'cuda=gpu:0', '-filter_hw_device', 'gpu'])
                 ->video('h264_nvenc')->save('hardware.mp4');
