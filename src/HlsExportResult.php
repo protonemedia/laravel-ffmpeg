@@ -5,11 +5,15 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Illuminate\Support\ItemNotFoundException;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 
-readonly class HlsExportResult extends ExportResult
+final readonly class HlsExportResult implements Result
 {
+    use Concerns\ExportResultFiles;
+
+    private ExportResult $export;
+
     public function __construct(array $files, array $summaries, private array $variants = [], private array $renditions = [], private array $keyReferences = [], private array $playbackKeys = [], private array $variantGroups = [], private array $provenance = [], private ?HlsPresentation $presentation = null)
     {
-        parent::__construct($files, $summaries);
+        $this->export = new ExportResult($files, $summaries);
     }
 
     public function playlist(): GeneratedFile

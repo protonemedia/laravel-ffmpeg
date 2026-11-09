@@ -29,7 +29,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\WritesManifest;
 use Throwable;
 
-class PendingExport implements Exportable
+final class PendingExport implements Exportable
 {
     use Conditionable;
     use ConfiguresOutput;
@@ -65,9 +65,9 @@ class PendingExport implements Exportable
 
     private ?float $idleTimeoutSeconds = null;
 
-    protected ?ProcessRunner $runner = null;
+    private ?ProcessRunner $runner = null;
 
-    protected string $outputRole = 'media';
+    private readonly string $outputRole;
 
     /**
      * @param  object|null  $operation  @internal A builder that holds this pipeline and implements Pipeline hooks.
@@ -82,7 +82,7 @@ class PendingExport implements Exportable
     ) {
         $this->inputs = [$media];
         $this->disk = $disk;
-        $this->outputRole = $role ?? $this->outputRole;
+        $this->outputRole = $role ?? 'media';
     }
 
     public function queued(
@@ -294,7 +294,7 @@ class PendingExport implements Exportable
         return $this;
     }
 
-    protected function configuredOutputs(?string $path = null): array
+    private function configuredOutputs(?string $path = null): array
     {
         if ($this->outputs !== []) {
             if ($path !== null) {
@@ -336,12 +336,12 @@ class PendingExport implements Exportable
         return $names;
     }
 
-    protected function filterGraph(): ?string
+    private function filterGraph(): ?string
     {
         return $this->operation instanceof OwnsGraph ? $this->operation->graph() : $this->graph;
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    private function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
         if ($this->operation instanceof WritesManifest) {
             $outputs = array_slice($outputs, 0, -1);
@@ -614,7 +614,6 @@ class PendingExport implements Exportable
                     $redactions[$outputPath] = '[output:'.$index.']';
                 }
 
-                // Overlay facts never depend on subclasses calling parent::prepareEncoding().
                 $this->prepareOverlays($metadata);
                 $duration = $this->prepareEncoding($metadata);
                 $durations = array_map(function ($output) use ($duration) {
@@ -792,32 +791,32 @@ class PendingExport implements Exportable
     }
 
     /**
-     * @internal Execution-only analyses may replace compiled command tokens.
+     * Execution-only analyses may replace compiled command tokens.
      *
      * @param  Closure(list<string>, string): ProcessResult  $analyze  Runs one analysis pass with progress, records
      *                                                               its summary before the encoding passes, and throws the given message on failure.
      */
-    protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
+    private function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         return $this->operation instanceof RunsAnalysis ? $this->operation->analyze($workspace, $command, $outputPaths, $analyze) : $command;
     }
 
-    /** @internal Validate resolved stream types before starting any encoder. */
-    protected function validateStreamSelections(array $expected): void
+    /** Validate resolved stream types before starting any encoder. */
+    private function validateStreamSelections(array $expected): void
     {
         if ($this->operation instanceof ValidatesSelections) {
             $this->operation->selections($expected);
         }
     }
 
-    /** @internal Outputs requiring encoder statistics; packaging-only outputs do not. */
-    protected function twoPassOutputIndexes(array $outputs): array
+    /** Outputs requiring encoder statistics; packaging-only outputs do not. */
+    private function twoPassOutputIndexes(array $outputs): array
     {
         return $this->operation instanceof SplitsTwoPass ? $this->operation->twoPassOutputs(array_keys($outputs), $outputs) : array_keys($outputs);
     }
 
-    /** @internal Keep analysis inside the private workspace, never at publication paths. */
-    protected function firstPassCommand(array $command, array $outputPaths, Workspace $workspace, array &$redactions): array
+    /** Keep analysis inside the private workspace, never at publication paths. */
+    private function firstPassCommand(array $command, array $outputPaths, Workspace $workspace, array &$redactions): array
     {
         if ($this->operation instanceof SplitsTwoPass) {
             $command = $this->operation->analysisCommand($command);
@@ -837,7 +836,7 @@ class PendingExport implements Exportable
         return $result;
     }
 
-    protected function outputPaths(array $outputs, Workspace $workspace): array
+    private function outputPaths(array $outputs, Workspace $workspace): array
     {
         $paths = array_map(function ($index) use ($outputs, $workspace) {
             $extension = pathinfo($outputs[$index]->destination()['path'], PATHINFO_EXTENSION);
@@ -848,7 +847,7 @@ class PendingExport implements Exportable
         return $this->operation instanceof PackagesArtifacts ? $this->operation->outputPaths($paths, $outputs, $workspace) : $paths;
     }
 
-    protected function artifacts(array $outputs, array $paths): array
+    private function artifacts(array $outputs, array $paths): array
     {
         $artifacts = array_map(fn ($index) => [
             'path' => $paths[$index], 'output' => $index, 'destination' => $outputs[$index]->destination(),
@@ -930,7 +929,7 @@ class PendingExport implements Exportable
         }
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    private function prepareEncoding(array $metadata): ?float
     {
         $duration = $this->defaultDuration($metadata);
 

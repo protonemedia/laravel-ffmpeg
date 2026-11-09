@@ -67,15 +67,12 @@ final class ExportPlan
         $id = count($objects);
         $objects[$value] = $id;
         $properties = [];
-        $class = new ReflectionClass($value);
-        do {
-            foreach ($class->getProperties() as $property) {
-                if ($property->isStatic() || $property->getDeclaringClass()->name !== $class->name || ! $property->isInitialized($value)) {
-                    continue;
-                }
-                $properties[] = [$class->name, $property->name, $this->encode($property->getValue($value), $objects)];
+        // Package classes are final and extend nothing, so their own properties are the whole state.
+        foreach ((new ReflectionClass($value))->getProperties() as $property) {
+            if (! $property->isStatic() && $property->isInitialized($value)) {
+                $properties[] = [$value::class, $property->name, $this->encode($property->getValue($value), $objects)];
             }
-        } while ($class = $class->getParentClass());
+        }
 
         return ['type' => 'object', 'class' => $value::class, 'id' => $id, 'properties' => $properties];
     }

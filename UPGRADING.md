@@ -62,7 +62,7 @@ Use `probeCached()` only with an application-owned source-version key and cache 
 
 For hardware decoding, pass validated input pairs such as `inputOptions: ['-hwaccel', 'cuda', '-hwaccel_device', '0', '-hwaccel_output_format', 'cuda']` to `open()`. These flags are input-scoped and are not passed to FFprobe. They do not select an output encoder, generate transfer filters, or provide a CPU fallback. Hardware execution has not been validated here. Test your deployed build and GPU separately. See the [hardware input contract](REWRITE.md#cached-probing-and-hardware-inputs).
 
-Builders do not forward methods to PHP-FFMpeg. Use explicit codecs, scoped `inputOptions:`, `globalOptions()`, `outputOptions()`, and filters. Bitrates accept positive integers in bits per second, such as `2500000`, or unit strings such as `'2500k'`. Floats and unitless strings are invalid. `inspect()` returns the argument plan without reading inputs or launching a process. `save()` returns `ExportResult`, not the builder.
+Builders do not forward methods to PHP-FFMpeg. Use explicit codecs, scoped `inputOptions:`, `globalOptions()`, `outputOptions()`, and filters. Bitrates accept positive integers in bits per second, such as `2500000`, or unit strings such as `'2500k'`. Floats and unitless strings are invalid. `inspect()` returns the argument plan without reading inputs or launching a process. `save()` returns a result, not the builder.
 
 ## Replace filters and clipping
 
@@ -352,6 +352,26 @@ foreach ($result->files() as $file) {
 ```
 
 Use the root HLS result's inventory for deletion, not a variant's partial view. `GeneratedFile::delete(): bool` deletes the exact stored destination through its captured filesystem. Borrowed files with `owned=false` return `false` without a filesystem call. Adapter failures return `false` or throw according to filesystem behavior. The application owns authorization, reference tracking, deletion order, and retries. There is no directory-wide or transactional delete.
+
+## Type builders and results by their class
+
+Each export builder is a final class with no parent class. For example, `export()` returns `PendingExport`, `hls()` returns `PendingHlsExport`, and `gif()` returns `PendingGif`. A parameter typed `PendingExport` accepts only `export()` builders, so type a profile for a specialized builder on that builder's class.
+
+Builders define only the methods that change their output. An unsupported call, such as `twoPass()` on `dash()` or `audio()` on `frame()`, is an undefined method and throws PHP's `Error`. Do not catch `InvalidArgumentException` to detect unsupported methods. `InvalidArgumentException` still reports invalid arguments to supported methods.
+
+Results are final classes too. `HlsExportResult`, `DashExportResult`, `LoudnessResult`, and `WaveformPeaksResult` are not `ExportResult` instances. Every export result implements `ProtoneMedia\LaravelFFMpeg\Result`, which provides `files()`, `file()`, and `processes()`. Type code that accepts any export result on `Result`:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Result;
+
+function inventory(Result $result): array
+{
+    return $result->files()
+        ->map
+        ->toArray()
+        ->all();
+}
+```
 
 ## Queue native exports
 

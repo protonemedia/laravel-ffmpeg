@@ -4,7 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Support\Collection;
 
-readonly class ExportResult
+final readonly class ExportResult implements Result
 {
     public function __construct(private array $generatedFiles, private array $summaries) {}
 

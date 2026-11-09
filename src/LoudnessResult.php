@@ -2,17 +2,17 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
-readonly class LoudnessResult extends ExportResult
+final readonly class LoudnessResult implements Result
 {
+    use Concerns\ExportResultFiles;
+
     public function __construct(
-        ExportResult $export,
+        private ExportResult $export,
         public LoudnessStats $measurement,
         public LoudnessStats $normalization,
         public string $requestedMode,
         public int $sampleRate,
-    ) {
-        parent::__construct($export->files()->all(), $export->processes()->all());
-    }
+    ) {}
 
     public function actualMode(): string
     {

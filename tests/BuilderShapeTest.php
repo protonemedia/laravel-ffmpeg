@@ -85,4 +85,24 @@ class BuilderShapeTest extends TestCase
                 $class.'::'.$method->getName().'() differs from PendingExport.');
         }
     }
+
+    #[Test]
+    public function no_package_class_extends_another(): void
+    {
+        $classes = 0;
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(dirname(__DIR__).'/src')) as $file) {
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+            $class = 'ProtoneMedia\\LaravelFFMpeg\\'.str_replace(['/', '.php'], ['\\', ''], substr($file->getPathname(), strlen(dirname(__DIR__).'/src/')));
+            if (! class_exists($class)) {
+                continue;
+            }
+            $classes++;
+            $parent = (new ReflectionClass($class))->getParentClass();
+            $this->assertFalse($parent !== false && str_starts_with($parent->name, 'ProtoneMedia\\LaravelFFMpeg\\'), $class.' extends '.($parent ? $parent->name : '').'.');
+        }
+        $this->assertGreaterThan(30, $classes);
+        $this->assertTrue((new ReflectionClass(PendingExport::class))->isFinal());
+    }
 }

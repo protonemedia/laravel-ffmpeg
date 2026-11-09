@@ -2,10 +2,9 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
-readonly class WaveformPeaksResult extends ExportResult
+final readonly class WaveformPeaksResult implements Result
 {
-    public function __construct(ExportResult $export, public WaveformPeaks $peaks)
-    {
-        parent::__construct($export->files()->all(), $export->processes()->all());
-    }
+    use Concerns\ExportResultFiles;
+
+    public function __construct(private ExportResult $export, public WaveformPeaks $peaks) {}
 }

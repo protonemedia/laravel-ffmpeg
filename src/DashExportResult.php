@@ -6,11 +6,15 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\ItemNotFoundException;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 
-readonly class DashExportResult extends ExportResult
+final readonly class DashExportResult implements Result
 {
+    use Concerns\ExportResultFiles;
+
+    private ExportResult $export;
+
     public function __construct(array $files, array $summaries, private array $representations = [], private array $sets = [])
     {
-        parent::__construct($files, $summaries);
+        $this->export = new ExportResult($files, $summaries);
     }
 
     public function manifest(): GeneratedFile

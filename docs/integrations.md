@@ -27,6 +27,8 @@ final class WebVideo
 }
 ```
 
+The profile types `PendingExport`, the builder that `export()` returns. Specialized builders are separate final classes, such as `PendingHlsExport` from `hls()`, so type a profile for one of them on that class.
+
 Use a fresh builder for each conversion. Configure named disks that every worker can access, and store each source revision at an immutable path.
 
 ```php
