@@ -113,20 +113,22 @@ class NativeExportTest extends TestCase
         $this->assertNotContains('hflip,scale=w=80:h=-2:reset_sar=1,vflip', $media->export()->inspect());
         $command = $media->export()
             ->output('wide.mkv', fn ($out) => $out->resize(height: 40))
-            ->output('square.mkv', fn ($out) => $out->fit(80, 80))->inspect();
+            ->output('square.mkv', fn ($out) => $out->contain(80, 80))->inspect();
         $boundary = array_search('[output:0]', $command);
         $this->assertContains('scale=w=-2:h=40:reset_sar=1', array_slice($command, 0, $boundary));
         $this->assertContains('scale=w=80:h=80:force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1,pad=w=80:h=80:x=(ow-iw)/2:y=(oh-ih)/2:color=black', array_slice($command, $boundary));
+        $this->assertContains('scale=w=80:h=80:force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1,pad=w=80:h=80:x=(ow-iw)/2:y=(oh-ih)/2:color=#ffffff',
+            $media->export()->contain(80, 80, background: '#ffffff')->inspect());
 
         foreach ([
             fn () => $media->export()->resize(),
             fn () => $media->export()->resize(width: 0),
             fn () => $media->export()->resize(height: -2),
-            fn () => $media->export()->fit(0, 80),
-            fn () => $media->export()->fit(81, 80),
-            fn () => $media->export()->fit(80, 80, mode: 'stretch'),
+            fn () => $media->export()->contain(0, 80),
+            fn () => $media->export()->cover(81, 80),
+            fn () => $media->export()->contain(80, 80, background: 'red:movie=/secret'),
             fn () => $media->export()->resize(width: 80)->video('copy')->inspect(),
-            fn () => $media->export()->fit(80, 80)->video('copy')->inspect(),
+            fn () => $media->export()->cover(80, 80)->video('copy')->inspect(),
             fn () => $media->export()->output('one.mkv', fn () => null)->resize(width: 80),
         ] as $attempt) {
             try {
@@ -161,8 +163,8 @@ class NativeExportTest extends TestCase
             ->output('width.mkv', fn ($out) => $out->map('0:v')->resize(width: 80)->video('ffv1')->toDisk('local'))
             ->output('height.mkv', fn ($out) => $out->map('0:v')->resize(height: 40)->video('ffv1')->toDisk('local'))
             ->output('stretch.mkv', fn ($out) => $out->map('0:v')->resize(80, 80)->video('ffv1')->toDisk('local'))
-            ->output('contain.mkv', fn ($out) => $out->map('0:v')->fit(80, 80)->video('ffv1')->toDisk('local'))
-            ->output('cover.mkv', fn ($out) => $out->map('0:v')->fit(80, 80, mode: 'cover')->video('ffv1')->toDisk('local'))
+            ->output('contain.mkv', fn ($out) => $out->map('0:v')->contain(80, 80)->video('ffv1')->toDisk('local'))
+            ->output('cover.mkv', fn ($out) => $out->map('0:v')->cover(80, 80)->video('ffv1')->toDisk('local'))
             ->save();
 
         foreach (['width' => [80, 20], 'height' => [160, 40], 'stretch' => [80, 80], 'contain' => [80, 80], 'cover' => [80, 80]] as $name => $size) {
@@ -457,7 +459,7 @@ class NativeExportTest extends TestCase
         $media = FFMpeg::disk('memory')->open('sparse.mkv');
 
         $phases = [];
-        $bytes = $media->frame(at: '00:00:01.100')->fit(32, 32)->toDisk('not-configured')
+        $bytes = $media->frame(at: '00:00:01.100')->contain(32, 32)->toDisk('not-configured')
             ->onProgress(function (Progress $progress) use (&$phases) {
                 $phases[] = $progress->phase;
                 $this->assertNull($progress->percentage);

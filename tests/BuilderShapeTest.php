@@ -36,7 +36,7 @@ class BuilderShapeTest extends TestCase
             'mixAudio' => [PendingAudioMix::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
                 'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'audioStream']],
             'concatTranscoded' => [PendingConcat::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt',
-                'videoStream', 'audioStream', 'color', 'map', 'mapVideo', 'mapAudio', 'withoutVideo', 'videoFilter', 'resize', 'fit',
+                'videoStream', 'audioStream', 'color', 'map', 'mapVideo', 'mapAudio', 'withoutVideo', 'videoFilter', 'resize', 'cover', 'contain',
                 'audioFilter', 'volume', 'delayAudio', 'fadeIn', 'fadeOut', 'drawText', 'resource', 'metadataFrom', 'chaptersFrom', 'withoutMetadata']],
             'frame' => [PendingFrame::class, [...$images, 'clip']],
             'frames' => [PendingFrames::class, $images],

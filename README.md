@@ -425,7 +425,7 @@ Transformations are configured on a new export builder. Ordinary filters run in 
 
 ### Geometry and filters
 
-Crop, rotate, pad, or fit a video to your output canvas:
+Crop, rotate, pad, or fit a video to your output canvas. The `contain` and `cover` methods work like their [Laravel image](https://laravel.com/docs/13.x/images) counterparts:
 
 ```php
 $media->export()
@@ -437,9 +437,9 @@ $media->export()
     ->save('portrait.mp4');
 
 $media->export()
-    ->fit(1280, 720, mode: 'contain'); // Black bars.
+    ->contain(1280, 720);              // Black bars.
 $media->export()
-    ->fit(1280, 720, mode: 'cover');   // Center crop.
+    ->cover(1280, 720);                // Center crop.
 $media->export()
     ->video('libx264')
     ->audio('aac')
@@ -454,7 +454,7 @@ $media->export()
     ->save('treated.mp4');
 ```
 
-Ordinary filters run in registration order. All output video filters run before generated `watermark()` overlays, even filters called after `watermark()`. One-dimension `resize()` preserves display aspect ratio; two dimensions stretch. `fit()` produces square pixels. Crop and pad use positive even dimensions and centered offsets by default. Rotation accepts clockwise quarter turns and negative equivalents, after input autorotation. FFmpeg validates source-dependent geometry.
+Ordinary filters run in registration order. All output video filters run before generated `watermark()` overlays, even filters called after `watermark()`. One-dimension `resize()` preserves display aspect ratio; two dimensions stretch. `contain()` and `cover()` produce square pixels; `contain()` accepts a `background` color for the bars. Crop and pad use positive even dimensions and centered offsets by default. Rotation accepts clockwise quarter turns and negative equivalents, after input autorotation. FFmpeg validates source-dependent geometry.
 
 ```php
 $media->export()
@@ -463,13 +463,13 @@ $media->export()
     ->audio('copy')
     ->save('portrait-height.mp4');
 $media->export()
-    ->fit(1080, 1920, mode: 'contain')
+    ->contain(1080, 1920)
     ->video('libx264')
     ->audio('copy')
     ->save('portrait-canvas.mp4');
 ```
 
-For portrait sizing, `resize(height: 1920)` preserves the autorotated display aspect ratio rather than forcing a landscape width. Use `fit(1080, 1920)` for an exact portrait canvas. Raw probe width and height remain encoded dimensions, before display rotation.
+For portrait sizing, `resize(height: 1920)` preserves the autorotated display aspect ratio rather than forcing a landscape width. Use `contain(1080, 1920)` for an exact portrait canvas. Raw probe width and height remain encoded dimensions, before display rotation.
 
 `frameRate()` drops or duplicates frames without changing playback speed. Deinterlace before resizing; the default `frame` mode preserves frame count, while `mode: 'field'` produces a frame per field. `flipVertically()` is also available. `volume()` takes a linear multiplier, where zero mutes. `delayAudio()` inserts silence on every channel and extends the audio. Fades affect both video and audio unless you pass `video: false` or `audio: false`; `fadeOut()` requires an explicit start in seconds. Filtered streams must be encoded, not copied. Use `videoFilter()` and `audioFilter()` for other trusted FFmpeg expressions.
 

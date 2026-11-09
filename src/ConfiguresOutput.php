@@ -259,20 +259,32 @@ trait ConfiguresOutput
         return $this;
     }
 
-    /** Fit display geometry into an exact square-pixel canvas. */
-    public function fit(int $width, int $height, string $mode = 'contain'): self
+    /** Scale to fill an exact square-pixel canvas, cropping the centered overflow. */
+    public function cover(int $width, int $height): self
+    {
+        return $this->canvas($width, $height, null);
+    }
+
+    /** Scale to fit inside an exact square-pixel canvas, padding the centered remainder with the background color. */
+    public function contain(int $width, int $height, string $background = 'black'): self
+    {
+        return $this->canvas($width, $height, $background);
+    }
+
+    private function canvas(int $width, int $height, ?string $background): self
     {
         $this->assertOutputMutable();
 
-        if ($width <= 0 || $height <= 0 || $width % 2 !== 0 || $height % 2 !== 0 || ! in_array($mode, ['contain', 'cover'], true)) {
-            throw new InvalidArgumentException('Fit requires positive even dimensions and contain or cover mode.');
+        if ($width <= 0 || $height <= 0 || $width % 2 !== 0 || $height % 2 !== 0
+            || ($background !== null && ! preg_match('/\A(?:[a-zA-Z]+|(?:#|0x)[a-fA-F0-9]{6}(?:[a-fA-F0-9]{2})?)\z/', $background))) {
+            throw new InvalidArgumentException('Cover and contain require positive even dimensions and a background color name or RGB/RGBA hexadecimal color.');
         }
 
-        $aspect = $mode === 'contain' ? 'decrease' : 'increase';
-        $canvas = $mode === 'contain'
-            ? 'pad=w='.$width.':h='.$height.':x=(ow-iw)/2:y=(oh-ih)/2:color=black'
-            : 'crop=w='.$width.':h='.$height.':x=(iw-ow)/2:y=(ih-oh)/2';
-        $this->videoFilters[] = 'scale=w='.$width.':h='.$height.':force_original_aspect_ratio='.$aspect.':force_divisible_by=2:reset_sar=1,'.$canvas;
+        $canvas = $background === null
+            ? 'crop=w='.$width.':h='.$height.':x=(iw-ow)/2:y=(ih-oh)/2'
+            : 'pad=w='.$width.':h='.$height.':x=(ow-iw)/2:y=(oh-ih)/2:color='.$background;
+        $this->videoFilters[] = 'scale=w='.$width.':h='.$height.':force_original_aspect_ratio='.($background === null ? 'increase' : 'decrease')
+            .':force_divisible_by=2:reset_sar=1,'.$canvas;
 
         return $this;
     }

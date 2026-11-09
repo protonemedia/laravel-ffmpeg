@@ -88,9 +88,9 @@ $media->export()
     ->save('copy.mkv');
 ```
 
-Ordinary filters run in registration order. All output video filters run before generated watermark overlays, even filters called after `watermark()`. One-dimension resize preserves display aspect ratio; two explicit dimensions stretch. Use `fit()` for a contain or cover policy. Stream copy rejects filters and accurate clipping. Keyframe cuts can begin before the requested time. Timeline changes omit chapters unless explicitly mapped.
+Ordinary filters run in registration order. All output video filters run before generated watermark overlays, even filters called after `watermark()`. One-dimension resize preserves display aspect ratio; two explicit dimensions stretch. Use `contain()` or `cover()` for an exact canvas, as in Laravel's image manipulation. Stream copy rejects filters and accurate clipping. Keyframe cuts can begin before the requested time. Timeline changes omit chapters unless explicitly mapped.
 
-For portrait sources, use `resize(height: 1920)` to preserve the autorotated display aspect ratio, or `fit(1080, 1920, mode: 'contain')` for an exact canvas. Probe width and height remain encoded dimensions, before display rotation.
+For portrait sources, use `resize(height: 1920)` to preserve the autorotated display aspect ratio, or `contain(1080, 1920)` for an exact canvas. Probe width and height remain encoded dimensions, before display rotation.
 
 Use `frameRate()`, `flipHorizontally()`, `flipVertically()`, `grayscale()`, and `deinterlace()` instead of filter-factory callbacks. Deinterlace before resizing. `volume()` takes a linear multiplier; `delayAudio()` inserts silence on all channels. `fadeIn()` and `fadeOut()` affect video and audio by default. Fade-out requires an explicit start in seconds. Disable either stream type with `video: false` or `audio: false`.
 

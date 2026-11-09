@@ -53,7 +53,11 @@ final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, Sh
         }
 
         $geometry = new ExportOutput('normalization.mp4', $this->export->outputConfiguration()['disk']);
-        $fit === 'stretch' ? $geometry->resize($width, $height) : $geometry->fit($width, $height, $fit);
+        match ($fit) {
+            'stretch' => $geometry->resize($width, $height),
+            'cover' => $geometry->cover($width, $height),
+            'contain' => $geometry->contain($width, $height),
+        };
         $geometry->frameRate($frameRate);
         $this->normalization = [...$geometry->outputConfiguration()['videoFilters'], 'setsar=1', 'setpts=PTS-STARTPTS'];
 

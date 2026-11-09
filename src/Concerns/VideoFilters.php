@@ -20,10 +20,18 @@ trait VideoFilters
         return $this;
     }
 
-    /** Fit display geometry into an exact square-pixel canvas. */
-    public function fit(int $width, int $height, string $mode = 'contain'): self
+    /** Scale to fill an exact square-pixel canvas, cropping the centered overflow. */
+    public function cover(int $width, int $height): self
     {
-        $this->export->fit($width, $height, $mode);
+        $this->export->cover($width, $height);
+
+        return $this;
+    }
+
+    /** Scale to fit inside an exact square-pixel canvas, padding the centered remainder with the background color. */
+    public function contain(int $width, int $height, string $background = 'black'): self
+    {
+        $this->export->contain($width, $height, $background);
 
         return $this;
     }

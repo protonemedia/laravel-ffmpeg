@@ -152,7 +152,7 @@ $result = $media->storyboard(every: 2, columns: 5, rows: 4, margin: 3, padding: 
     ->save('images/sheet-%03d.jpg');
 ```
 
-`storyboard()` samples decoded video at the declared interval and tiles thumbnails in row-major order. Intervals are positive whole milliseconds expressed in seconds. The default grid is five columns by five rows. Margin and padding are nonnegative pixel counts. `resize()` and `fit()` configure each thumbnail before tiling. JPEG quality remains an output option, such as `outputOptions(['-q:v', '2'])`.
+`storyboard()` samples decoded video at the declared interval and tiles thumbnails in row-major order. Intervals are positive whole milliseconds expressed in seconds. The default grid is five columns by five rows. Margin and padding are nonnegative pixel counts. `resize()`, `contain()`, and `cover()` configure each thumbnail before tiling. JPEG quality remains an output option, such as `outputOptions(['-q:v', '2'])`.
 
 The operation requires one input with a known, positive duration. Complex graphs and keyframe seeks are rejected. Accurate clips bound thumbnails before tiling, and cue times start at zero within the clip. Sampling uses the `fps` filter with nearest timestamp rounding and can repeat source frames. The final sheet contains black unused cells. Those cells have no cues.
 
@@ -705,7 +705,7 @@ A probed stream maps its absolute `index()` and retains its source identity. Its
 
 ### Geometry shortcuts
 
-For an autorotated portrait source, `resize(height: 1920)` preserves display aspect ratio. `fit(1080, 1920, mode: 'contain')` produces an exact portrait canvas with padding, while `mode: 'cover'` crops to that canvas. Two explicit resize dimensions stretch. Probe `width()` and `height()` remain encoded dimensions rather than rotation-adjusted display dimensions.
+For an autorotated portrait source, `resize(height: 1920)` preserves display aspect ratio. `contain(1080, 1920)` produces an exact portrait canvas with padding, while `cover(1080, 1920)` crops to that canvas. Two explicit resize dimensions stretch. Probe `width()` and `height()` remain encoded dimensions rather than rotation-adjusted display dimensions.
 
 ```php
 $media->export()
@@ -715,14 +715,14 @@ $media->export()
 $media->export()
     ->resize(1280, 720);            // Stretch to both dimensions.
 $media->export()
-    ->fit(1280, 720);               // Contain with centered black padding.
+    ->contain(1280, 720);           // Centered black padding.
 $media->export()
-    ->fit(1280, 720, mode: 'cover'); // Fill with a centered crop.
+    ->cover(1280, 720);             // Fill with a centered crop.
 ```
 
 These settings work inside `output()` callbacks too. They append to the video filter chain in call order and cannot accompany video stream copy. Graph-fed streams follow the same simple-versus-complex filter restrictions as `videoFilter()`.
 
-Both helpers produce square pixels and allow upscaling. A one-dimension resize uses display aspect ratio, including the input's sample aspect ratio, and rounds the inferred dimension to a multiple of two. Two explicit resize dimensions stretch the image. `fit()` preserves display aspect ratio within rounding, requires positive even dimensions, and returns that exact canvas size. `contain` preserves the image with black bars. `cover` removes the edges outside a centered crop.
+Both helpers produce square pixels and allow upscaling. A one-dimension resize uses display aspect ratio, including the input's sample aspect ratio, and rounds the inferred dimension to a multiple of two. Two explicit resize dimensions stretch the image. `contain()` and `cover()` preserve display aspect ratio within rounding, require positive even dimensions, and return that exact canvas size. `contain()` preserves the image with centered bars in its `background` color, black by default. `cover()` removes the edges outside a centered crop.
 
 ```php
 $media->export()

@@ -21,7 +21,7 @@ $result = FFMpeg::disk('uploads')
     ->toDisk('converted')
     ->video('libx264', crf: 23, preset: 'medium')
     ->audio('aac', bitrate: '128k')
-    ->fit(1280, 720)
+    ->contain(1280, 720)
     ->save('video.mp4');
 
 $file = $result->file();
@@ -82,12 +82,12 @@ $result = FFMpeg::disk('uploads')
     ->variant('720p', static function (HlsVariant $variant): void {
         $variant->video('libx264', bitrate: '2500k')
             ->audio('aac', bitrate: '128k')
-            ->fit(1280, 720);
+            ->contain(1280, 720);
     })
     ->variant('360p', static function (HlsVariant $variant): void {
         $variant->video('libx264', bitrate: '800k')
             ->audio('aac', bitrate: '96k')
-            ->fit(640, 360);
+            ->contain(640, 360);
     })
     ->save('video/master.m3u8');
 
