@@ -160,6 +160,7 @@ class NativeHlsTest extends TestCase
             $durations[$name] = array_map('floatval', $matches[1]);
             $this->assertCount(4, $durations[$name]);
             $files = $variant->files()->where('role', 'hls-segment')->values();
+            $this->assertCount(4, $files);
             $local = Storage::disk('local');
             foreach ($files as $index => $file) {
                 $this->assertStringContainsString("\n".basename($file->path)."\n", $playlist);
@@ -224,6 +225,7 @@ class NativeHlsTest extends TestCase
             $this->assertSame($type, $command[array_search('-hls_playlist_type', $command, true) + 1]);
         }
         $result = $export->save('typed/master.m3u8');
+        $this->assertCount(3, $result->files()->where('role', 'hls-playlist'));
         foreach ($result->files()->where('role', 'hls-playlist') as $file) {
             $playlist = $disk->get($file->path);
             if ($type === 'live') {

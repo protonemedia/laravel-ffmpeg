@@ -252,7 +252,7 @@ class NativeLiveHlsTest extends TestCase
         $pids = [];
         try {
             (new PendingLiveHls($source, $destination, 0.4, 2))
-                ->onPublish(function () use (&$pids): void { $pids = $this->children(); })
+                ->onPublish(function () use (&$pids): void { $pids = array_unique([...$pids, ...$this->children()]); })
                 ->run('failed-disk');
             $this->fail('Expected destination failure.');
         } catch (MediaException $exception) {
@@ -265,6 +265,7 @@ class NativeLiveHlsTest extends TestCase
                 $this->assertTrue($disk->exists('failed-disk/'.$line));
             }
         }
+        $this->assertNotEmpty($pids, 'Encoder must still be alive during publication.');
         foreach ($pids as $pid) {
             $this->assertDirectoryDoesNotExist('/proc/'.$pid);
         }
