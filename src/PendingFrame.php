@@ -20,6 +20,11 @@ class PendingFrame extends PendingImages
         }
     }
 
+    public function clip(float|string $start, float|string|null $duration = null, float|string|null $end = null, string $seek = 'accurate'): self
+    {
+        throw new InvalidArgumentException('Choose the frame timestamp with frame(at:) instead of clipping a single frame.');
+    }
+
     /** Return JPEG bytes without publishing a file. */
     public function get(): string
     {

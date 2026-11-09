@@ -118,7 +118,7 @@ $first = $media->frame()
     ->get();         // Timestamp zero, with fresh settings.
 ```
 
-`frame()` selects the first non-attached-picture video stream and decodes the first frame at or after the timestamp. Timestamps accept nonnegative numeric seconds or the same strict timecodes as `clip()`. There is no artificial sampling window, so sparse variable-frame-rate media can return a frame several seconds later. A timestamp beyond the final frame throws a `MediaException` instead of publishing an empty file.
+`frame()` selects the first non-attached-picture video stream and decodes the first frame at or after the timestamp. Timestamps accept nonnegative numeric seconds or the same strict timecodes as `clip()`. There is no artificial sampling window, so sparse variable-frame-rate media can return a frame several seconds later. A timestamp beyond the final frame throws a `MediaException` instead of publishing an empty file. `clip()` throws an `InvalidArgumentException`; choose the moment with `at` instead.
 
 `save()` accepts `.jpg`, `.jpeg`, or `.png` destinations and returns an `ExportResult` with an image-role file. Generated images must have positive dimensions and the requested image format before publication. Destination defaults, Storage write options, filters, callbacks, cancellation, and workspace cleanup use the export pipeline. A `%` in a destination remains literal; single-frame output is not an image sequence.
 

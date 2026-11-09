@@ -432,6 +432,14 @@ class NativeExportTest extends TestCase
         } catch (InvalidArgumentException) {
             $this->addToAssertionCount(1);
         }
+        foreach (['accurate', 'keyframe'] as $seek) {
+            try {
+                $media->frame(at: 2)->clip(10, duration: 3, seek: $seek);
+                $this->fail('A clipped single frame was accepted.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertStringContainsString('frame(at:)', $exception->getMessage());
+            }
+        }
     }
 
     #[Test]
