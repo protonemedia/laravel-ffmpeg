@@ -40,7 +40,7 @@ Before submitting a pull request:
 
 If the project maintainer has any additional requirements, you will find them listed here.
 
-- **Laravel coding style** - StyleCI checks pull requests with its `laravel` preset, as configured in `.styleci.yml`. [Laravel Pint](https://laravel.com/docs/pint) applies the same conventions locally.
+- **Laravel coding style and static analysis** - The PHP Quality and Style workflow runs Rector and [Laravel Pint](https://laravel.com/docs/pint), commits their changes, then runs Larastan. Run `composer refactor`, `composer format` and `composer analyse` locally before you open a pull request.
 
 - **Add tests!** - Your patch won't be accepted if it doesn't have tests.
 
