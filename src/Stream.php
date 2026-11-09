@@ -6,7 +6,7 @@ use Illuminate\Support\Arr;
 
 readonly class Stream
 {
-    public function __construct(private array $data, private ?string $sourceIdentity = null) {}
+    public function __construct(protected array $data, protected ?string $sourceIdentity = null) {}
 
     public function index(): ?int
     {
@@ -88,7 +88,7 @@ readonly class Stream
         return $this->positiveInteger('bit_rate');
     }
 
-    private function positiveInteger(string $key): ?int
+    protected function positiveInteger(string $key): ?int
     {
         $value = $this->get($key);
 

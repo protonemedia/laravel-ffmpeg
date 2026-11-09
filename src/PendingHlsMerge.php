@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Closure;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ItemNotFoundException;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPlaylist;
@@ -15,9 +16,11 @@ use Throwable;
 /** Compose trusted, completed v9 inventories. This never concatenates or rewrites media. */
 class PendingHlsMerge
 {
-    private ?string $disk = null;
+    use Macroable;
 
-    public function __construct(private readonly array $presentations)
+    protected ?string $disk = null;
+
+    public function __construct(protected readonly array $presentations)
     {
         if (count($presentations) < 2) {
             throw new InvalidArgumentException('HLS composition requires at least two completed presentations.');
@@ -232,7 +235,7 @@ class PendingHlsMerge
     }
 
     /** Report unowned references and invalid playlists as invalid composition input; storage failures stay MediaExceptions. */
-    private function owned(Closure $read): mixed
+    protected function owned(Closure $read): mixed
     {
         try {
             return $read();

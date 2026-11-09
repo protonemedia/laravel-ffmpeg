@@ -18,11 +18,11 @@ class HlsPlaylist implements Responsable
 {
     use Conditionable;
 
-    private string $path;
+    protected string $path;
 
-    private array $resolvers = [];
+    protected array $resolvers = [];
 
-    public function __construct(private readonly string|Filesystem $disk, string $path)
+    public function __construct(protected readonly string|Filesystem $disk, string $path)
     {
         if ($path === '' || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $path)) {
             throw new InvalidArgumentException('A playlist requires a disk-relative m3u8 key.');
@@ -116,7 +116,7 @@ class HlsPlaylist implements Responsable
         ]);
     }
 
-    private function render(bool $all, ?Closure $discover = null): array
+    protected function render(bool $all, ?Closure $discover = null): array
     {
         $pending = [$this->path];
         $queued = [$this->path => true];
@@ -227,7 +227,7 @@ class HlsPlaylist implements Responsable
         return $result;
     }
 
-    private function read(string $path, int $limit): string
+    protected function read(string $path, int $limit): string
     {
         $stream = null;
         try {
@@ -253,7 +253,7 @@ class HlsPlaylist implements Responsable
         return $content;
     }
 
-    private function validateUri(mixed $uri): void
+    protected function validateUri(mixed $uri): void
     {
         if (! is_string($uri) || $uri === '' || ! preg_match('//u', $uri) || preg_match('/[\s\x00-\x1F\x7F-\x9F"\\\\#]/u', $uri)
             || preg_match('/%(?![0-9a-f]{2})/i', $uri) || str_starts_with($uri, '//') || parse_url($uri) === false
@@ -288,7 +288,7 @@ class HlsPlaylist implements Responsable
     }
 
     /** Return the quoted URI's byte offset and length within a MAP or MEDIA line. */
-    private function resourceUri(string $line, bool $required): ?array
+    protected function resourceUri(string $line, bool $required): ?array
     {
         $start = strpos($line, ':') + 1;
         $values = self::attributes(substr($line, $start));
@@ -316,7 +316,7 @@ class HlsPlaylist implements Responsable
     }
 
     /** Return the URI's byte offset and length without changing other key attributes. */
-    private function keyUri(string $line): ?array
+    protected function keyUri(string $line): ?array
     {
         $values = self::attributes(substr($line, 11));
         $uri = null;

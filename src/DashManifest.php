@@ -8,7 +8,7 @@ use DOMXPath;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 
 /** @internal The deliberately narrow, finite FFmpeg SegmentTimeline dialect we own. */
-final class DashManifest
+class DashManifest
 {
     public const string NS = 'urn:mpeg:dash:schema:mpd:2011';
 
@@ -142,7 +142,7 @@ final class DashManifest
         return ['document' => $document, 'representation' => $representation, 'template' => $template, 'durations' => $durations, 'files' => $files];
     }
 
-    private static function integer(DOMElement $element, string $name, int $minimum): int
+    protected static function integer(DOMElement $element, string $name, int $minimum): int
     {
         $value = $element->getAttribute($name);
         if (! preg_match('/\A[0-9]{1,13}\z/', $value) || (int) $value < $minimum || (int) $value > 1000000000000) {

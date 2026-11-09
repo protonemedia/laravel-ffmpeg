@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
@@ -15,7 +16,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
 /** An animated GIF encoded with a palette generated from the clip it shows. */
-final readonly class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
+class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
 {
     use Concerns\Clips;
     use Concerns\GlobalOptions;
@@ -23,12 +24,12 @@ final readonly class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, 
     use Concerns\Resources;
     use Concerns\RunsExport;
     use Concerns\VideoFilters;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private PendingExport $export;
+    protected readonly PendingExport $export;
 
     /** FFmpeg's GIF loop count: -1 plays once, 0 loops forever. */
-    private int $loopCount;
+    protected readonly int $loopCount;
 
     public function __construct(Media $media, string|Filesystem $disk, int $width = 480, int|float $frameRate = 12, bool $loop = true, ?int $loops = null)
     {
@@ -74,7 +75,7 @@ final readonly class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, 
             .'movie=gif-palette.png[gif_palette];[gif_frames][gif_palette]paletteuse[gif_out]';
     }
 
-    private function preprocessing(): string
+    protected function preprocessing(): string
     {
         $settings = $this->export->outputConfiguration();
         $filters = ['setpts=PTS-STARTPTS'];

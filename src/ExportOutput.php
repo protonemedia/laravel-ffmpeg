@@ -13,9 +13,9 @@ class ExportOutput
     use Conditionable;
     use ConfiguresOutput;
 
-    private string $path;
+    protected string $path;
 
-    private bool $frozen = false;
+    protected bool $frozen = false;
 
     public function __construct(string $path, string|Filesystem $disk)
     {

@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
@@ -11,7 +12,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 
 /** A silent video that holds one image for a fixed duration. */
-final readonly class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
+class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
 {
     use Concerns\Fades;
     use Concerns\GlobalOptions;
@@ -22,11 +23,11 @@ final readonly class PendingStill implements Exportable, MeasuresDuration, Shape
     use Concerns\RunsExport;
     use Concerns\VideoCodec;
     use Concerns\VideoFilters;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private PendingExport $export;
+    protected readonly PendingExport $export;
 
-    public function __construct(Media $image, string|Filesystem $disk, private float $duration, int $frameRate)
+    public function __construct(Media $image, string|Filesystem $disk, protected readonly float $duration, int $frameRate)
     {
         if (! is_finite($duration) || $duration <= 0 || $frameRate < 1 || $frameRate > 240) {
             throw new InvalidArgumentException('Still video requires a finite positive duration and a frame rate between 1 and 240.');

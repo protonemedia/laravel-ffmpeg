@@ -9,7 +9,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 readonly class GeneratedFile
 {
     public function __construct(
-        private Filesystem $filesystem,
+        protected Filesystem $filesystem,
         public ?string $disk,
         public string $path,
         public int $size,

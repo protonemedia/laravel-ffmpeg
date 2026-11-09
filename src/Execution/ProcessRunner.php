@@ -11,9 +11,9 @@ use Throwable;
 /** @internal */
 class ProcessRunner
 {
-    private readonly int $startedAt;
+    protected readonly int $startedAt;
 
-    public function __construct(private readonly ?float $timeout = null, private readonly ?float $idleTimeout = null)
+    public function __construct(protected readonly ?float $timeout = null, protected readonly ?float $idleTimeout = null)
     {
         foreach ([$timeout, $idleTimeout] as $seconds) {
             if ($seconds !== null && (! is_finite($seconds) || $seconds <= 0)) {
@@ -196,7 +196,7 @@ class ProcessRunner
         }
     }
 
-    private function environment(string $directory): array
+    protected function environment(string $directory): array
     {
         $inherited = array_merge($_SERVER, $_ENV, getenv());
         $environment = array_fill_keys(array_keys($inherited), false);

@@ -12,7 +12,7 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 /** A fresh compiled-in capability snapshot; hardware/device usability is not tested. */
 readonly class Capabilities implements Arrayable, JsonSerializable
 {
-    private array $data;
+    protected array $data;
 
     public function __construct()
     {
@@ -112,7 +112,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         return $this;
     }
 
-    private function capture(Workspace $workspace, string $binary, string $option): string
+    protected function capture(Workspace $workspace, string $binary, string $option): string
     {
         $result = $workspace->runner->run([$binary, '-hide_banner', $option], $workspace->path,
             outputLimit: 2097152, timeout: 15);
@@ -125,7 +125,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
     }
 
     /** @param 'encoders'|'muxers'|'filters'|'bsfs'|'hwaccels' $kind */
-    private function parseList(string $kind, string $output): array
+    protected function parseList(string $kind, string $output): array
     {
         $header = match ($kind) {
             'encoders' => 'Encoders:', 'muxers' => 'Formats:', 'filters' => 'Filters:',
@@ -156,7 +156,7 @@ readonly class Capabilities implements Arrayable, JsonSerializable
         return $names;
     }
 
-    private function parseProtocols(string $output): array
+    protected function parseProtocols(string $output): array
     {
         if (! preg_match('/Input:\s*(.*?)\s*Output:\s*(.*)\z/s', $output, $matches)) {
             throw new MediaException('Invalid media protocol listing.', 'probing', 'capability');

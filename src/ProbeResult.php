@@ -10,7 +10,7 @@ use JsonSerializable;
 /** Raw FFprobe sections. Counts and timestamps describe the bounded interval, not the whole asset. */
 readonly class ProbeResult implements Arrayable, JsonSerializable
 {
-    public function __construct(private array $data, private array $bounds) {}
+    public function __construct(protected array $data, protected array $bounds) {}
 
     public function get(string $key, mixed $default = null): mixed
     {

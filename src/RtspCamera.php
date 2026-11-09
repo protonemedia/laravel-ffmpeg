@@ -10,7 +10,7 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 /** Capture one bounded snapshot. Camera URLs are trusted application configuration. */
 readonly class RtspCamera implements InputSource
 {
-    public function __construct(private string $url, private string $transport = 'tcp', private float $timeout = 15)
+    public function __construct(protected string $url, protected string $transport = 'tcp', protected float $timeout = 15)
     {
         $parts = parse_url($url);
         if ($parts === false || ($parts['scheme'] ?? null) !== 'rtsp' || empty($parts['host'])

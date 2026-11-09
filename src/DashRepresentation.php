@@ -17,7 +17,7 @@ class DashRepresentation
         inherit as public;
     }
 
-    private bool $frozen = false;
+    protected bool $frozen = false;
 
     public function __construct()
     {

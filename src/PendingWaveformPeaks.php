@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
@@ -13,7 +14,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\PackagesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 
 /** Audio data, not the separate waveform image operation. */
-final class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand
+class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand
 {
     use Concerns\AudioFilters;
     use Concerns\Clips;
@@ -21,29 +22,29 @@ final class PendingWaveformPeaks implements Exportable, MeasuresDuration, Packag
     use Concerns\GlobalOptions;
     use Concerns\OutputOptions;
     use Concerns\RunsExport;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private readonly PendingExport $export;
+    protected readonly PendingExport $export;
 
-    private int $track = 0;
+    protected int $track = 0;
 
-    private bool $mixMono = false;
+    protected bool $mixMono = false;
 
-    private ?int $targetBuckets = null;
+    protected ?int $targetBuckets = null;
 
-    private int $rate = 0;
+    protected int $rate = 0;
 
-    private int $inputChannels = 0;
+    protected int $inputChannels = 0;
 
-    private ?string $inputLayout = null;
+    protected ?string $inputLayout = null;
 
-    private ?WaveformPeaks $peaks = null;
+    protected ?WaveformPeaks $peaks = null;
 
     // Limits aggregate cells, not decoded input length. PCM is spooled to the
     // private operation workspace and read in bounded chunks, never stdout.
-    private const int MAX_CELLS = 100000;
+    protected const int MAX_CELLS = 100000;
 
-    public function __construct(Media $media, string|Filesystem $disk, private readonly int $samplesPerBucket = 256)
+    public function __construct(Media $media, string|Filesystem $disk, protected readonly int $samplesPerBucket = 256)
     {
         if ($samplesPerBucket < 1) {
             throw new InvalidArgumentException('Samples per bucket must be positive.');

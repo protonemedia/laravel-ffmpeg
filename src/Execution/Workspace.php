@@ -12,15 +12,15 @@ class Workspace
 {
     public readonly string $path;
 
-    private array $assets = [];
+    protected array $assets = [];
 
-    private array $metadata = [];
+    protected array $metadata = [];
 
-    private array $probeVersions = [];
+    protected array $probeVersions = [];
 
-    private array $protocols = [];
+    protected array $protocols = [];
 
-    private int $nextAsset = 0;
+    protected int $nextAsset = 0;
 
     public function __construct(public readonly ProcessRunner $runner = new ProcessRunner)
     {

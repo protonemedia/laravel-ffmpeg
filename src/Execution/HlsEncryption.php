@@ -13,19 +13,19 @@ use SensitiveParameter;
 /** @internal One execution's private keys and bounded-memory segment encryption. */
 class HlsEncryption
 {
-    private readonly Closure $keyUrl;
+    protected readonly Closure $keyUrl;
 
-    private readonly string $directory;
+    protected readonly string $directory;
 
-    private array $keys = [];
+    protected array $keys = [];
 
-    private array $urls = [];
+    protected array $urls = [];
 
     public function __construct(
-        private readonly string|Filesystem $keysDisk,
+        protected readonly string|Filesystem $keysDisk,
         callable $keyUrl,
-        #[SensitiveParameter] private readonly ?string $key,
-        private readonly ?int $rotateEvery,
+        #[SensitiveParameter] protected readonly ?string $key,
+        protected readonly ?int $rotateEvery,
         string $directory,
     ) {
         if (($key !== null && strlen($key) !== 16) || ($rotateEvery !== null && $rotateEvery < 1)

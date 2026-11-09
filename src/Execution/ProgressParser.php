@@ -9,21 +9,21 @@ use ProtoneMedia\LaravelFFMpeg\Progress;
 /** @internal */
 class ProgressParser
 {
-    private string $buffer = '';
+    protected string $buffer = '';
 
-    private array $record = [];
+    protected array $record = [];
 
-    private ?Progress $pending = null;
+    protected ?Progress $pending = null;
 
-    private int $notifiedAt = 0;
+    protected int $notifiedAt = 0;
 
-    private readonly ?Closure $notify;
+    protected readonly ?Closure $notify;
 
     public function __construct(
-        private readonly ?float $duration,
-        private readonly string $phase = Progress::ENCODING,
-        private readonly int $pass = 1,
-        private readonly int $totalPasses = 1,
+        protected readonly ?float $duration,
+        protected readonly string $phase = Progress::ENCODING,
+        protected readonly int $pass = 1,
+        protected readonly int $totalPasses = 1,
         ?callable $notify = null,
     ) {
         $this->notify = $notify === null ? null : $notify(...);
@@ -46,7 +46,7 @@ class ProgressParser
         }
     }
 
-    private function line(string $line): void
+    protected function line(string $line): void
     {
         [$key, $value] = array_pad(explode('=', $line, 2), 2, null);
 

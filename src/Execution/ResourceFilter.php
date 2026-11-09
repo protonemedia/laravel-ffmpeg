@@ -8,7 +8,7 @@ use ProtoneMedia\LaravelFFMpeg\Media;
 /** @internal A typed filter whose file arguments are resolved inside a workspace. */
 readonly class ResourceFilter
 {
-    private function __construct(public string $name, public array $resources, private string $template) {}
+    protected function __construct(public string $name, public array $resources, protected string $template) {}
 
     public static function drawText(string $text, Media $font, int $size, int $x, int $y, string $color): self
     {

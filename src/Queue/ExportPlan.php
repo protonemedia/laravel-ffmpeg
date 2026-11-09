@@ -19,9 +19,9 @@ use Throwable;
  *
  * @template T of Exportable
  */
-final readonly class ExportPlan
+readonly class ExportPlan
 {
-    private array $state;
+    protected array $state;
 
     /** @param T $export */
     public function __construct(Exportable $export)
@@ -37,7 +37,7 @@ final readonly class ExportPlan
         return $this->decode($this->state, $objects);
     }
 
-    private function encode(mixed $value, SplObjectStorage $objects): mixed
+    protected function encode(mixed $value, SplObjectStorage $objects): mixed
     {
         if (is_resource($value) || $value instanceof Filesystem || $value instanceof File || $value instanceof \Symfony\Component\HttpFoundation\File\File) {
             throw new InvalidArgumentException('Queued exports require durable named disks, not filesystem objects, uploads, local File inputs, or open streams.');
@@ -83,7 +83,7 @@ final readonly class ExportPlan
         $id = count($objects);
         $objects[$value] = $id;
         $properties = [];
-        // Package classes are final and extend nothing, so their own properties are the whole state.
+        // Package classes extend nothing, so their own properties are the whole state.
         foreach (new ReflectionClass($value)->getProperties() as $property) {
             if (! $property->isStatic() && $property->isInitialized($value)) {
                 $properties[] = [$value::class, $property->name, $this->encode($property->getValue($value), $objects)];
@@ -93,7 +93,7 @@ final readonly class ExportPlan
         return ['type' => 'object', 'class' => $value::class, 'id' => $id, 'properties' => $properties];
     }
 
-    private function decode(mixed $value, array &$objects): mixed
+    protected function decode(mixed $value, array &$objects): mixed
     {
         if (! is_array($value)) {
             return $value;

@@ -10,9 +10,9 @@ use SensitiveParameter;
  * URLs must be application-controlled: this is not an SSRF boundary. HTTP redirects
  * remain subject to the protocol allowlist. Manifest/dependency demuxers are excluded.
  */
-final readonly class LiveHlsSource
+readonly class LiveHlsSource
 {
-    public function __construct(#[SensitiveParameter] private string $url)
+    public function __construct(#[SensitiveParameter] protected string $url)
     {
         $parts = parse_url($url);
         if ($parts === false || ! in_array($parts['scheme'] ?? '', ['http', 'https', 'rtsp'], true)

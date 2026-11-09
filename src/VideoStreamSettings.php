@@ -8,7 +8,7 @@ use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 /** Encoding overrides for one zero-based output video track. */
 class VideoStreamSettings
 {
-    private array $settings = [];
+    protected array $settings = [];
 
     public function codec(string $codec): self
     {

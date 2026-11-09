@@ -11,43 +11,43 @@ use ProtoneMedia\LaravelFFMpeg\Execution\ResourceFilter;
 /** @internal */
 trait ConfiguresOutput
 {
-    private string|Filesystem $disk;
+    protected string|Filesystem $disk;
 
-    private bool $outputDiskExplicit = false;
+    protected bool $outputDiskExplicit = false;
 
-    private array $video = [];
+    protected array $video = [];
 
-    private array $videoStreams = [];
+    protected array $videoStreams = [];
 
-    private array $audio = [];
+    protected array $audio = [];
 
-    private array $audioStreams = [];
+    protected array $audioStreams = [];
 
-    private array $maps = [];
+    protected array $maps = [];
 
-    private array $videoFilters = [];
+    protected array $videoFilters = [];
 
-    private array $audioFilters = [];
+    protected array $audioFilters = [];
 
-    private array $outputOptions = [];
+    protected array $outputOptions = [];
 
-    private array $writeOptions = [];
+    protected array $writeOptions = [];
 
-    private array $metadata = [];
+    protected array $metadata = [];
 
-    private array $streamMetadata = [];
+    protected array $streamMetadata = [];
 
-    private array $dispositions = [];
+    protected array $dispositions = [];
 
-    private bool $omitAudio = false;
+    protected bool $omitAudio = false;
 
-    private bool $omitVideo = false;
+    protected bool $omitVideo = false;
 
-    private ?int $metadataSource = null;
+    protected ?int $metadataSource = null;
 
-    private ?int $chapterSource = null;
+    protected ?int $chapterSource = null;
 
-    private ?array $clip = null;
+    protected ?array $clip = null;
 
     abstract protected function assertOutputMutable(): void;
 
@@ -134,14 +134,14 @@ trait ConfiguresOutput
         return $this;
     }
 
-    private function codec(?string $codec): void
+    protected function codec(?string $codec): void
     {
         if ($codec !== null && ! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
             throw new InvalidArgumentException('Invalid FFmpeg encoder name.');
         }
     }
 
-    private function bitrate(mixed $bitrate): void
+    protected function bitrate(mixed $bitrate): void
     {
         if ($bitrate !== null && (! is_int($bitrate) || $bitrate <= 0)
             && (! is_string($bitrate) || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate) || (float) $bitrate <= 0)) {
@@ -209,7 +209,7 @@ trait ConfiguresOutput
             : $this->map(($input ?? 0).':a:'.$selector.($optional ? '?' : ''));
     }
 
-    private function mapProbedStream(Stream $stream, string $type, ?int $input, bool $optional): self
+    protected function mapProbedStream(Stream $stream, string $type, ?int $input, bool $optional): self
     {
         if ($stream->get('codec_type') !== $type || $stream->index() === null || $stream->sourceIdentity() === null) {
             throw new InvalidArgumentException('Mapping requires a probed '.$type.' stream.');
@@ -271,7 +271,7 @@ trait ConfiguresOutput
         return $this->canvas($width, $height, $background);
     }
 
-    private function canvas(int $width, int $height, ?string $background): self
+    protected function canvas(int $width, int $height, ?string $background): self
     {
         $this->assertOutputMutable();
 
@@ -442,7 +442,7 @@ trait ConfiguresOutput
         return $this->fade('out', $duration, $start, $video, $audio);
     }
 
-    private function fade(string $type, float $duration, float $start, bool $video, bool $audio): self
+    protected function fade(string $type, float $duration, float $start, bool $video, bool $audio): self
     {
         $this->assertOutputMutable();
 
@@ -540,14 +540,14 @@ trait ConfiguresOutput
         return $this;
     }
 
-    private function outputStream(string|int $stream): void
+    protected function outputStream(string|int $stream): void
     {
         if (! preg_match('/^(?:[0-9]+|[vasdt](?::[0-9]+)?)$/D', (string) $stream)) {
             throw new InvalidArgumentException('Select an output stream by absolute index, type, or type and track index.');
         }
     }
 
-    private function metadataTag(string $key, string $value): void
+    protected function metadataTag(string $key, string $value): void
     {
         if (! preg_match('/^[a-zA-Z0-9_.:-]+$/D', $key) || str_contains($value, "\0")) {
             throw new InvalidArgumentException('Invalid metadata tag.');
@@ -737,7 +737,7 @@ trait ConfiguresOutput
         return [...$options, ...$this->outputOptions];
     }
 
-    private function validateCopyOptions(): void
+    protected function validateCopyOptions(): void
     {
         $encoderOptions = ['preset', 'tune', 'profile', 'level', 'pix_fmt', 'maxrate', 'minrate', 'bufsize',
             'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'ar', 'ac', 'q', 'r', 'x264-params', 'x265-params',
@@ -827,7 +827,7 @@ trait ConfiguresOutput
      * @internal Resolve shared defaults at compilation, not declaration time.
      * HLS variants and DASH representations expose this; root and output settings do not.
      */
-    private function inherit(array $shared): array
+    protected function inherit(array $shared): array
     {
         foreach ($this->outputConfiguration() as $key => $value) {
             if (in_array($key, ['disk', 'outputDiskExplicit', 'writeOptions'], true)) {

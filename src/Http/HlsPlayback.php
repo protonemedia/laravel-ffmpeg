@@ -13,7 +13,7 @@ use InvalidArgumentException;
 
 class HlsPlayback
 {
-    private array $presentations = [];
+    protected array $presentations = [];
 
     /** Register in a service provider so definitions also exist with cached routes. */
     public function define(string $name, callable $resolve, callable $authorize): self

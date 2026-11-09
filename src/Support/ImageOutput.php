@@ -8,7 +8,7 @@ use ProtoneMedia\LaravelFFMpeg\ExportOutput;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 
 /** @internal Stateless image-output rules shared by frame, frames, storyboard and waveform builders. */
-final class ImageOutput
+class ImageOutput
 {
     /** The encoder for a destination's image extension. */
     public static function codec(?string $path): string

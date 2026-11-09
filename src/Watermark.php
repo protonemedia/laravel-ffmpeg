@@ -11,6 +11,7 @@ use Illuminate\Image\Transformations\Grayscale;
 use Illuminate\Image\Transformations\Rotate;
 use Illuminate\Image\Transformations\Sharpen;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use Intervention\Image\ImageManager;
 use InvalidArgumentException;
 
@@ -21,28 +22,28 @@ use InvalidArgumentException;
  * Image edits change the image itself before FFmpeg reads it, with Laravel's image manipulation.
  * They use the same names and arguments as Illuminate\Image\Image and run in call order.
  */
-final class Watermark
+class Watermark
 {
-    use Conditionable;
+    use Conditionable, Macroable;
 
     /** @var array{left?: int, right?: int} */
-    private array $horizontal = [];
+    protected array $horizontal = [];
 
     /** @var array{top?: int, bottom?: int} */
-    private array $vertical = [];
+    protected array $vertical = [];
 
-    private bool $centered = false;
+    protected bool $centered = false;
 
-    private ?int $width = null;
+    protected ?int $width = null;
 
-    private ?int $height = null;
+    protected ?int $height = null;
 
-    private float $opacity = 1;
+    protected float $opacity = 1;
 
-    private bool $loop = false;
+    protected bool $loop = false;
 
     /** @var list<Transformation> */
-    private array $edits = [];
+    protected array $edits = [];
 
     /** Keep the mark this many output pixels from the left edge. */
     public function left(int $margin = 0): self
@@ -180,7 +181,7 @@ final class Watermark
         ];
     }
 
-    private function pin(string $axis, string $edge, string $opposite, int $margin): self
+    protected function pin(string $axis, string $edge, string $opposite, int $margin): self
     {
         if ($margin < 0) {
             throw new InvalidArgumentException('Watermark margins must be nonnegative.');
@@ -195,7 +196,7 @@ final class Watermark
         return $this;
     }
 
-    private function amount(int $amount): int
+    protected function amount(int $amount): int
     {
         if ($amount < 0 || $amount > 100) {
             throw new InvalidArgumentException('Watermark blur and sharpen amounts must be between 0 and 100.');
@@ -204,7 +205,7 @@ final class Watermark
         return $amount;
     }
 
-    private function edit(Transformation $transformation): self
+    protected function edit(Transformation $transformation): self
     {
         if (! class_exists(ImageManager::class)) {
             throw new InvalidArgumentException('Watermark image edits require intervention/image ^4.2.');

@@ -7,6 +7,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -29,44 +30,44 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\WritesManifest;
 use Throwable;
 
-final class PendingExport implements Exportable
+class PendingExport implements Exportable
 {
-    use Conditionable;
+    use Conditionable, Macroable;
     use ConfiguresOutput;
 
-    private array $inputs;
+    protected array $inputs;
 
-    private array $outputs = [];
+    protected array $outputs = [];
 
-    private array $resources = [];
+    protected array $resources = [];
 
-    private array $globalOptions = [];
+    protected array $globalOptions = [];
 
-    private ?string $graph = null;
+    protected ?string $graph = null;
 
-    private array $watermarks = [];
+    protected array $watermarks = [];
 
-    private ?int $coverInput = null;
+    protected ?int $coverInput = null;
 
-    private ?int $coverVideoTrack = null;
+    protected ?int $coverVideoTrack = null;
 
-    private ?Closure $progress = null;
+    protected ?Closure $progress = null;
 
-    private ?Closure $cancellation = null;
+    protected ?Closure $cancellation = null;
 
-    private bool $rootConfigured = false;
+    protected bool $rootConfigured = false;
 
-    private bool $running = false;
+    protected bool $running = false;
 
-    private bool $twoPass = false;
+    protected bool $twoPass = false;
 
-    private ?float $timeoutSeconds = null;
+    protected ?float $timeoutSeconds = null;
 
-    private ?float $idleTimeoutSeconds = null;
+    protected ?float $idleTimeoutSeconds = null;
 
-    private ?ProcessRunner $runner = null;
+    protected ?ProcessRunner $runner = null;
 
-    private readonly string $outputRole;
+    protected readonly string $outputRole;
 
     /**
      * @param  object|null  $operation  @internal A builder that holds this pipeline and implements Pipeline hooks.
@@ -74,9 +75,9 @@ final class PendingExport implements Exportable
      * @param  string|null  $role  @internal The default generated-file role, such as image or hls-playlist.
      */
     public function __construct(
-        private readonly Media $media,
+        protected readonly Media $media,
         string|Filesystem $disk,
-        private readonly ?object $operation = null,
+        protected readonly ?object $operation = null,
         ?string $role = null,
     ) {
         $this->inputs = [$media];
@@ -143,7 +144,7 @@ final class PendingExport implements Exportable
         $this->rootConfigured = true;
     }
 
-    private function assertMutable(): void
+    protected function assertMutable(): void
     {
         if ($this->running) {
             throw new InvalidArgumentException('An executing export cannot be changed.');
@@ -186,7 +187,7 @@ final class PendingExport implements Exportable
         return $this->addResource($name, 'subtitle', $media);
     }
 
-    private function addResource(string $name, string $type, Media|string $source): self
+    protected function addResource(string $name, string $type, Media|string $source): self
     {
         $this->assertMutable();
 
@@ -303,7 +304,7 @@ final class PendingExport implements Exportable
         return $this;
     }
 
-    private function configuredOutputs(?string $path = null): array
+    protected function configuredOutputs(?string $path = null): array
     {
         if ($this->outputs !== []) {
             if ($path !== null) {
@@ -318,7 +319,7 @@ final class PendingExport implements Exportable
         return $this->operation instanceof ShapesOutputs ? $this->operation->outputs($outputs, $path) : $outputs;
     }
 
-    private function resourceNames(array $outputs): array
+    protected function resourceNames(array $outputs): array
     {
         $declared = $this->resources;
 
@@ -347,12 +348,12 @@ final class PendingExport implements Exportable
         return $names;
     }
 
-    private function filterGraph(): ?string
+    protected function filterGraph(): ?string
     {
         return $this->operation instanceof OwnsGraph ? $this->operation->graph() : $this->graph;
     }
 
-    private function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
         if ($this->operation instanceof WritesManifest) {
             $outputs = array_slice($outputs, 0, -1);
@@ -836,13 +837,13 @@ final class PendingExport implements Exportable
      * @param  Closure(list<string>, string): ProcessResult  $analyze  Runs one analysis pass with progress, records
      *                                                                 its summary before the encoding passes, and throws the given message on failure.
      */
-    private function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
+    protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         return $this->operation instanceof RunsAnalysis ? $this->operation->analyze($workspace, $command, $outputPaths, $analyze) : $command;
     }
 
     /** Validate resolved stream types before starting any encoder. */
-    private function validateStreamSelections(array $expected): void
+    protected function validateStreamSelections(array $expected): void
     {
         if ($this->operation instanceof ValidatesSelections) {
             $this->operation->selections($expected);
@@ -850,13 +851,13 @@ final class PendingExport implements Exportable
     }
 
     /** Outputs requiring encoder statistics; packaging-only outputs do not. */
-    private function twoPassOutputIndexes(array $outputs): array
+    protected function twoPassOutputIndexes(array $outputs): array
     {
         return $this->operation instanceof SplitsTwoPass ? $this->operation->twoPassOutputs(array_keys($outputs), $outputs) : array_keys($outputs);
     }
 
     /** Keep analysis inside the private workspace, never at publication paths. */
-    private function firstPassCommand(array $command, array $outputPaths, Workspace $workspace, array &$redactions): array
+    protected function firstPassCommand(array $command, array $outputPaths, Workspace $workspace, array &$redactions): array
     {
         if ($this->operation instanceof SplitsTwoPass) {
             $command = $this->operation->analysisCommand($command);
@@ -879,7 +880,7 @@ final class PendingExport implements Exportable
         return $result;
     }
 
-    private function outputPaths(array $outputs, Workspace $workspace): array
+    protected function outputPaths(array $outputs, Workspace $workspace): array
     {
         $paths = array_map(function (int|string $index) use ($outputs, $workspace): string {
             $extension = pathinfo($outputs[$index]->destination()['path'], PATHINFO_EXTENSION);
@@ -890,7 +891,7 @@ final class PendingExport implements Exportable
         return $this->operation instanceof PackagesArtifacts ? $this->operation->outputPaths($paths, $outputs, $workspace) : $paths;
     }
 
-    private function artifacts(array $outputs, array $paths): array
+    protected function artifacts(array $outputs, array $paths): array
     {
         $artifacts = array_map(fn (int|string $index): array => [
             'path' => $paths[$index], 'output' => $index, 'destination' => $outputs[$index]->destination(),
@@ -900,7 +901,7 @@ final class PendingExport implements Exportable
     }
 
     /** Validate cover-art and watermark inputs and resolve the facts command() needs for them. */
-    private function prepareOverlays(array $metadata): void
+    protected function prepareOverlays(array $metadata): void
     {
         if ($this->coverInput !== null) {
             $image = $metadata[$this->coverInput];
@@ -979,14 +980,14 @@ final class PendingExport implements Exportable
         }
     }
 
-    private function prepareEncoding(array $metadata): ?float
+    protected function prepareEncoding(array $metadata): ?float
     {
         $duration = $this->defaultDuration($metadata);
 
         return $this->operation instanceof MeasuresDuration ? $this->operation->duration($metadata, $duration) : $duration;
     }
 
-    private function defaultDuration(array $metadata): ?float
+    protected function defaultDuration(array $metadata): ?float
     {
         if ($this->coverInput !== null) {
             return $metadata[0]->duration();
@@ -1028,7 +1029,7 @@ final class PendingExport implements Exportable
         return $size;
     }
 
-    private function validateResources(Workspace $workspace, ProcessRunner $runner, array $resources): void
+    protected function validateResources(Workspace $workspace, ProcessRunner $runner, array $resources): void
     {
         $required = [];
 
@@ -1111,7 +1112,7 @@ final class PendingExport implements Exportable
         }
     }
 
-    private function resolveMaps(ExportOutput $output): array
+    protected function resolveMaps(ExportOutput $output): array
     {
         if ($this->coverInput !== null) {
             return ['0:V?', '0:a?', $this->coverInput.':v:0'];
@@ -1144,7 +1145,7 @@ final class PendingExport implements Exportable
     }
 
     /** Ordered expected stream types; null denotes a graph pad whose type FFmpeg resolves. */
-    private function selectedStreams(ExportOutput $output, Workspace $workspace, array $metadata): array
+    protected function selectedStreams(ExportOutput $output, Workspace $workspace, array $metadata): array
     {
         $selected = [];
 
@@ -1188,7 +1189,7 @@ final class PendingExport implements Exportable
         return array_column($selected, 'type');
     }
 
-    private function notify(Progress $progress, string $operationId, array $outputs): void
+    protected function notify(Progress $progress, string $operationId, array $outputs): void
     {
         if ($this->cancellation instanceof Closure && ($this->cancellation)()) {
             throw new ExportCancelled;

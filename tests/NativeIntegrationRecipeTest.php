@@ -200,7 +200,7 @@ class NativeIntegrationRecipeTest extends TestCase
 }
 
 // Ordinary application code: this class is applied, never stored in the export plan.
-final class RecipeWebVideo
+class RecipeWebVideo
 {
     public const VERSION = 'web-v2';
 
@@ -213,7 +213,7 @@ final class RecipeWebVideo
 }
 
 // Test application fixture, not a package persistence API.
-final class RecipeInventory
+class RecipeInventory
 {
     public function handle(QueuedExportCompleted $event): void
     {

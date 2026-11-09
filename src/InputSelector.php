@@ -11,7 +11,7 @@ use ProtoneMedia\LaravelFFMpeg\Http\HlsPlaylist;
 
 class InputSelector
 {
-    public function __construct(private readonly string|Filesystem $disk) {}
+    public function __construct(protected readonly string|Filesystem $disk) {}
 
     public function playlist(string $path): HlsPlaylist
     {

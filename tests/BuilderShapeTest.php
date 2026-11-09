@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Support\Traits\Macroable;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -62,11 +63,11 @@ class BuilderShapeTest extends TestCase
 
     #[Test]
     #[DataProvider('builders')]
-    public function builders_are_final_compositions_without_unsupported_methods(string $class, array $unsupported): void
+    public function builders_are_macroable_compositions_without_unsupported_methods(string $class, array $unsupported): void
     {
         $reflection = new ReflectionClass($class);
-        $this->assertTrue($reflection->isFinal());
         $this->assertFalse($reflection->getParentClass());
+        $this->assertContains(Macroable::class, $reflection->getTraitNames());
         foreach ($unsupported as $method) {
             $this->assertFalse($reflection->hasMethod($method), $class.' exposes '.$method.'().');
         }
@@ -103,6 +104,5 @@ class BuilderShapeTest extends TestCase
             $this->assertFalse($parent !== false && str_starts_with($parent->name, 'ProtoneMedia\\LaravelFFMpeg\\'), $class.' extends '.($parent ? $parent->name : '').'.');
         }
         $this->assertGreaterThan(30, $classes);
-        $this->assertTrue((new ReflectionClass(PendingExport::class))->isFinal());
     }
 }

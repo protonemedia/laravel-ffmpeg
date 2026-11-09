@@ -7,7 +7,7 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 /** Validated loudnorm JSON. Non-finite readings are represented by null, never zero. */
 readonly class LoudnessStats
 {
-    private function __construct(
+    protected function __construct(
         public ?float $inputIntegrated,
         public ?float $inputTruePeak,
         public ?float $inputRange,

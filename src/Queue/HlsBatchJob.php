@@ -22,7 +22,7 @@ class HlsBatchJob extends ChainedBatch implements ShouldBeEncrypted
 
     public $failOnTimeout = true;
 
-    public function __construct(PendingBatch $batch, private readonly ExportJob $finalizer)
+    public function __construct(PendingBatch $batch, protected readonly ExportJob $finalizer)
     {
         parent::__construct($batch);
     }

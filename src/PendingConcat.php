@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
@@ -12,22 +13,22 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 
 /** Joins sources end to end after conforming their geometry, frame rate and audio format. */
-final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOutputs
+class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOutputs
 {
     use Concerns\Clips;
     use Concerns\GlobalOptions;
     use Concerns\OutputOptions;
     use Concerns\RunsExport;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private readonly PendingExport $export;
+    protected readonly PendingExport $export;
 
-    private ?array $videoConformance = null;
+    protected ?array $videoConformance = null;
 
-    private ?array $audioConformance = null;
+    protected ?array $audioConformance = null;
 
     /** @param array<Media> $sources */
-    public function __construct(private readonly array $sources, string|Filesystem $disk)
+    public function __construct(protected readonly array $sources, string|Filesystem $disk)
     {
         if (! array_is_list($sources) || count($sources) < 2) {
             throw new InvalidArgumentException('Transcoded concat requires at least two media inputs.');

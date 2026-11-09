@@ -11,9 +11,9 @@ use Throwable;
 /** A trusted, persistable inventory. Never construct this from request input. */
 class HlsPresentation
 {
-    private array $files = [];
+    protected array $files = [];
 
-    public function __construct(array $files, private readonly string $playlist, private readonly array $keys = [], private readonly array $variants = [], private readonly bool $selected = false, private readonly array $provenance = [])
+    public function __construct(array $files, protected readonly string $playlist, protected readonly array $keys = [], protected readonly array $variants = [], protected readonly bool $selected = false, protected readonly array $provenance = [])
     {
         foreach ($files as $file) {
             try {

@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
@@ -14,7 +15,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
 /** A JPEG or PNG picture of the first audio track's waveform. */
-final readonly class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOutputs, ValidatesArtifacts
+class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOutputs, ValidatesArtifacts
 {
     use Concerns\AudioFilters;
     use Concerns\Clips;
@@ -26,11 +27,11 @@ final readonly class PendingWaveform implements Exportable, OwnsGraph, ShapesCom
     use Concerns\RunsExport;
     use Concerns\VideoCodec;
     use Concerns\VideoFilters;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private PendingExport $export;
+    protected readonly PendingExport $export;
 
-    private string $graph;
+    protected readonly string $graph;
 
     public function __construct(Media $media, string|Filesystem $disk, int $width, int $height, string|array $colors)
     {

@@ -15,23 +15,23 @@ use ProtoneMedia\LaravelFFMpeg\Queue\HlsBatchJob;
 
 class PendingQueuedExport
 {
-    private ?Closure $configure = null;
+    protected ?Closure $configure = null;
 
     public readonly string $id;
 
-    private readonly ExportPlan $plan;
+    protected readonly ExportPlan $plan;
 
-    private readonly ?string $connection;
+    protected readonly ?string $connection;
 
-    private readonly ?string $queue;
+    protected readonly ?string $queue;
 
     public function __construct(
         Exportable $export,
         ?string $connection = null,
         ?string $queue = null,
-        private readonly DateTimeInterface|DateInterval|int|null $delay = null,
-        private readonly bool $parallel = false,
-        private readonly ?float $timeout = null,
+        protected readonly DateTimeInterface|DateInterval|int|null $delay = null,
+        protected readonly bool $parallel = false,
+        protected readonly ?float $timeout = null,
     ) {
         $this->id = bin2hex(random_bytes(16));
         $this->connection = $connection ?? config('laravel-ffmpeg.queue.connection');
@@ -98,7 +98,7 @@ class PendingQueuedExport
         return new PendingDispatch($this->job($path));
     }
 
-    private function configure(ExportJob|HlsBatchJob $job, bool $initial = true): ExportJob|HlsBatchJob
+    protected function configure(ExportJob|HlsBatchJob $job, bool $initial = true): ExportJob|HlsBatchJob
     {
         $job->onConnection($this->connection)->onQueue($this->queue)->delay($initial ? $this->delay : null);
         $timeout = $this->timeout ?? config('laravel-ffmpeg.timeout', 3600);

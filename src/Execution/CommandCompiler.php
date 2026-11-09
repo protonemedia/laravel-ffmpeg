@@ -163,7 +163,7 @@ class CommandCompiler
         return $tokens;
     }
 
-    private static function encoderParameters(string $value, string $encoder): bool
+    protected static function encoderParameters(string $value, string $encoder): bool
     {
         // No filenames, stats, zones, arbitrary library options, or nested syntax.
         $allowed = ['keyint', 'min-keyint', 'scenecut', 'bframes', 'b-adapt', 'ref', 'rc-lookahead',

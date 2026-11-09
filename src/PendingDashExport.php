@@ -6,6 +6,7 @@ use DOMDocument;
 use DOMElement;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
@@ -19,7 +20,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\WritesManifest;
 
 /** Finite, clear H.264/AAC fragmented-MP4 packaging; no live or DRM claims. */
-final class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, ValidatesSelections, WritesManifest
+class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, ValidatesSelections, WritesManifest
 {
     use Concerns\Clips;
     use Concerns\Fades;
@@ -30,19 +31,19 @@ final class PendingDashExport implements Exportable, MeasuresDuration, PackagesA
     use Concerns\Resources;
     use Concerns\RunsExport;
     use Concerns\VideoFilters;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private readonly PendingExport $export;
+    protected readonly PendingExport $export;
 
-    private array $sets = [];
+    protected array $sets = [];
 
-    private array $representations = [];
+    protected array $representations = [];
 
-    private array $representationFiles = [];
+    protected array $representationFiles = [];
 
-    private bool $sharedHls = false;
+    protected bool $sharedHls = false;
 
-    public function __construct(Media $media, string|Filesystem $disk, private readonly float $segmentDuration)
+    public function __construct(Media $media, string|Filesystem $disk, protected readonly float $segmentDuration)
     {
         if (! is_finite($segmentDuration) || $segmentDuration < 0.001 || $segmentDuration > 86400) {
             throw new InvalidArgumentException('DASH segment duration must be between 0.001 and 86400 seconds.');
@@ -168,14 +169,14 @@ final class PendingDashExport implements Exportable, MeasuresDuration, PackagesA
         return $this;
     }
 
-    private function identifier(string $name): void
+    protected function identifier(string $name): void
     {
         if (! preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}\z/', $name)) {
             throw new InvalidArgumentException('DASH names must be simple path components of at most 64 characters.');
         }
     }
 
-    private function type(string $name): string
+    protected function type(string $name): string
     {
         foreach ($this->sets as $set) {
             if (in_array($name, $set['representations'], true)) {
@@ -485,7 +486,7 @@ final class PendingDashExport implements Exportable, MeasuresDuration, PackagesA
         return $artifacts;
     }
 
-    private function write(string $path, string $bytes): void
+    protected function write(string $path, string $bytes): void
     {
         if (strlen($bytes) > 16777216 || @file_put_contents($path, $bytes) !== strlen($bytes) || ! chmod($path, 0600)) {
             throw new MediaException('Cannot finalize a DASH presentation within the 16 MiB manifest limit.', Progress::VALIDATION, 'artifact');

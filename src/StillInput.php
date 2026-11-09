@@ -12,7 +12,7 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 /** @internal A validated single raster image held for a bounded output. */
 readonly class StillInput implements InputSource
 {
-    public function __construct(private Media $image, private int $frameRate)
+    public function __construct(protected Media $image, protected int $frameRate)
     {
         if ($image->inputOptions() !== [] || $image->transportOptions() !== [] || $image->protocolWhitelist() !== 'file') {
             throw new InvalidArgumentException('Still video requires a local or downloaded image without input options.');

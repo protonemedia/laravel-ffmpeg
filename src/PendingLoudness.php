@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
@@ -14,7 +15,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 
 /** Audio-only normalization. The held export pipeline owns staging, events, encoding and publication. */
-final class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, ValidatesArtifacts
+class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, ValidatesArtifacts
 {
     use Concerns\AudioFilters;
     use Concerns\Clips;
@@ -22,24 +23,24 @@ final class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, 
     use Concerns\Metadata;
     use Concerns\OutputOptions;
     use Concerns\RunsExport;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private readonly PendingExport $export;
+    protected readonly PendingExport $export;
 
-    private ?LoudnessStats $measurement = null;
+    protected ?LoudnessStats $measurement = null;
 
-    private ?LoudnessStats $normalization = null;
+    protected ?LoudnessStats $normalization = null;
 
-    private ?Workspace $workspace = null;
+    protected ?Workspace $workspace = null;
 
     public function __construct(
-        private readonly Media $source,
+        protected readonly Media $source,
         string|Filesystem $disk,
-        private readonly float $integrated = -23,
-        private readonly float $truePeak = -2,
-        private readonly float $range = 7,
-        private readonly bool $linear = true,
-        private readonly int $sampleRate = 48000,
+        protected readonly float $integrated = -23,
+        protected readonly float $truePeak = -2,
+        protected readonly float $range = 7,
+        protected readonly bool $linear = true,
+        protected readonly int $sampleRate = 48000,
         int $audio = 0,
     ) {
         foreach ([[$integrated, -70, -5], [$truePeak, -9, 0], [$range, 1, 50]] as [$value, $min, $max]) {
@@ -177,19 +178,19 @@ final class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, 
         return $final;
     }
 
-    private function loudnorm(string $statistics): string
+    protected function loudnorm(string $statistics): string
     {
         return 'loudnorm=I='.$this->number($this->integrated).':TP='.$this->number($this->truePeak)
             .':LRA='.$this->number($this->range).':linear='.($this->linear ? 'true' : 'false')
             .':print_format=json:stats_file='.$statistics;
     }
 
-    private function number(float $number): string
+    protected function number(float $number): string
     {
         return json_encode($number, JSON_THROW_ON_ERROR);
     }
 
-    private function readStats(string $path, string $phase = 'validation'): LoudnessStats
+    protected function readStats(string $path, string $phase = 'validation'): LoudnessStats
     {
         if (! is_file($path) || filesize($path) > 65536 || ($json = file_get_contents($path)) === false) {
             throw new MediaException('Loudness statistics are missing or oversized.', $phase, 'analysis');

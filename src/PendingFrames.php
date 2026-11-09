@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
@@ -16,7 +17,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
 /** A numbered JPEG or PNG sequence sampled at an interval or as a fixed count. */
-final class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ValidatesArtifacts
+class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ValidatesArtifacts
 {
     use Concerns\Clips;
     use Concerns\Fades;
@@ -27,13 +28,13 @@ final class PendingFrames implements Exportable, MeasuresDuration, PackagesArtif
     use Concerns\RunsExport;
     use Concerns\VideoCodec;
     use Concerns\VideoFilters;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private readonly PendingExport $export;
+    protected readonly PendingExport $export;
 
-    private ?float $duration = null;
+    protected ?float $duration = null;
 
-    public function __construct(Media $media, string|Filesystem $disk, private readonly ?float $every, private readonly ?int $count)
+    public function __construct(Media $media, string|Filesystem $disk, protected readonly ?float $every, protected readonly ?int $count)
     {
         if (($every === null) === ($count === null)
             || ($every !== null && (! is_finite($every) || $every < 0.000001))

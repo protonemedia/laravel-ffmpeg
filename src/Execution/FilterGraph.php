@@ -91,7 +91,7 @@ class FilterGraph
     }
 
     /** Resource-bearing filters use named, nonduplicate options only. */
-    private static function resourceOptions(string $filter): array
+    protected static function resourceOptions(string $filter): array
     {
         $arguments = substr($filter, strpos($filter, '=') + 1);
         $arguments = preg_replace('/(?:\[[a-zA-Z_][a-zA-Z0-9_]*\])+\s*$/', '', $arguments);
@@ -170,7 +170,7 @@ class FilterGraph
     }
 
     /** Split only outside FFmpeg quotes and backslash escapes. */
-    private static function split(string $expression, string $separators): array
+    protected static function split(string $expression, string $separators): array
     {
         $parts = [];
         $start = 0;

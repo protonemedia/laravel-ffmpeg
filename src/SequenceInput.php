@@ -14,11 +14,11 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 /** @internal */
 readonly class SequenceInput implements InputSource
 {
-    private array $images;
+    protected array $images;
 
-    private string $rate;
+    protected string $rate;
 
-    private string $suffix;
+    protected string $suffix;
 
     public function __construct(string|Filesystem $disk, string $pattern, int $count, float|string $framerate, int $start)
     {

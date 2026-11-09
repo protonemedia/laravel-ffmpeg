@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
@@ -16,7 +17,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
  * Sources require a zero container/video origin and nonnegative audio origins.
  * Trusted simple filters run first; their timing changes make progress indeterminate.
  */
-final readonly class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, ValidatesSelections
+class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, ValidatesSelections
 {
     use Concerns\AudioCodec;
     use Concerns\AudioFilters;
@@ -30,11 +31,11 @@ final readonly class PendingSpeed implements Exportable, MeasuresDuration, Shape
     use Concerns\RunsExport;
     use Concerns\VideoCodec;
     use Concerns\VideoFilters;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private PendingExport $export;
+    protected readonly PendingExport $export;
 
-    public function __construct(private Media $source, string|Filesystem $disk, private float $factor)
+    public function __construct(protected readonly Media $source, string|Filesystem $disk, protected readonly float $factor)
     {
         if (! is_finite($factor) || $factor <= 0) {
             throw new InvalidArgumentException('Speed requires a finite positive factor.');
@@ -135,7 +136,7 @@ final readonly class PendingSpeed implements Exportable, MeasuresDuration, Shape
         return $adjusted !== null && is_finite($adjusted) ? $adjusted : null;
     }
 
-    private function number(float $value): string
+    protected function number(float $value): string
     {
         return json_encode($value, JSON_THROW_ON_ERROR);
     }

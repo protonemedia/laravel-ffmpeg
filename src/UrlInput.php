@@ -12,7 +12,7 @@ use Throwable;
 /** @internal */
 readonly class UrlInput implements InputSource
 {
-    public function __construct(private string $url, private array $headers, public bool $download)
+    public function __construct(protected string $url, protected array $headers, public bool $download)
     {
         $parts = parse_url($url);
 

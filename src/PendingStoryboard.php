@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
@@ -19,7 +20,7 @@ use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 use Throwable;
 
 /** Tiled thumbnail sheets sampled at a fixed interval, with optional WebVTT cues. */
-final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, ValidatesArtifacts
+class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, ValidatesArtifacts
 {
     use Concerns\Clips;
     use Concerns\Fades;
@@ -30,21 +31,21 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
     use Concerns\RunsExport;
     use Concerns\VideoCodec;
     use Concerns\VideoFilters;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private readonly PendingExport $export;
+    protected readonly PendingExport $export;
 
-    private readonly int $interval;
+    protected readonly int $interval;
 
-    private ?int $duration = null;
+    protected ?int $duration = null;
 
-    private ?int $frames = null;
+    protected ?int $frames = null;
 
-    private ?string $vttPath = null;
+    protected ?string $vttPath = null;
 
-    private ?Closure $imageUrl = null;
+    protected ?Closure $imageUrl = null;
 
-    public function __construct(Media $media, string|Filesystem $disk, float $every, private readonly int $columns, private readonly int $rows, private readonly int $margin, private readonly int $padding)
+    public function __construct(Media $media, string|Filesystem $disk, float $every, protected readonly int $columns, protected readonly int $rows, protected readonly int $margin, protected readonly int $padding)
     {
         if (! is_finite($every) || $every < 0.001 || $every > intdiv(PHP_INT_MAX, 1000000)
             || abs($every * 1000 - round($every * 1000)) > 0.000001
@@ -225,7 +226,7 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
         ImageOutput::validate($path, $role);
     }
 
-    private function relativeUrl(string $key): string
+    protected function relativeUrl(string $key): string
     {
         $from = dirname($this->vttPath) === '.' ? [] : explode('/', dirname($this->vttPath));
         $to = explode('/', $key);
@@ -237,7 +238,7 @@ final class PendingStoryboard implements Exportable, MeasuresDuration, PackagesA
         return implode('/', [...array_fill(0, count($from), '..'), ...array_map(rawurlencode(...), $to)]);
     }
 
-    private function timestamp(int $milliseconds): string
+    protected function timestamp(int $milliseconds): string
     {
         return sprintf('%02d:%02d:%02d.%03d', intdiv($milliseconds, 3600000), intdiv($milliseconds, 60000) % 60,
             intdiv($milliseconds, 1000) % 60, $milliseconds % 1000);

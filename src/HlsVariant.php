@@ -16,11 +16,11 @@ class HlsVariant
         inherit as public;
     }
 
-    private bool $frozen = false;
+    protected bool $frozen = false;
 
-    private ?string $audioGroup = null;
+    protected ?string $audioGroup = null;
 
-    private ?string $subtitleGroup = null;
+    protected ?string $subtitleGroup = null;
 
     /** Reference reusable alternate renditions declared on PendingHlsExport. */
     public function audioGroup(string $group): self

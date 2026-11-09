@@ -7,7 +7,7 @@ use Illuminate\Support\Collection;
 
 readonly class Metadata
 {
-    public function __construct(private array $data, private ?string $sourceIdentity = null) {}
+    public function __construct(protected array $data, protected ?string $sourceIdentity = null) {}
 
     public function get(string $key, mixed $default = null): mixed
     {

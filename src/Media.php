@@ -27,11 +27,11 @@ readonly class Media
     /** @internal Manifest formats whose dependencies cannot be staged as a single file. */
     public const MANIFEST_EXTENSIONS = ['m3u8', 'm3u', 'mpd', 'ffconcat'];
 
-    private string|File|UploadedFile|InputSource $source;
+    protected string|File|UploadedFile|InputSource $source;
 
-    private array $options;
+    protected array $options;
 
-    public function __construct(private string|Filesystem $disk, string|File|UploadedFile|InputSource $source, array $inputOptions = [])
+    public function __construct(protected string|Filesystem $disk, string|File|UploadedFile|InputSource $source, array $inputOptions = [])
     {
         if (is_string($source)) {
             if ($source === '' || preg_match('/^(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $source)) {
@@ -333,7 +333,7 @@ readonly class Media
         return $data;
     }
 
-    private function runProbe(Workspace $workspace, string $path, string $label, string $protocols, array $options): array
+    protected function runProbe(Workspace $workspace, string $path, string $label, string $protocols, array $options): array
     {
         $redactions = [$path => $label] + $this->redactions();
         $result = $workspace->runner->run([
@@ -358,7 +358,7 @@ readonly class Media
         return self::redactProbeData($data, $redactions);
     }
 
-    private function isProbeData(mixed $data): bool
+    protected function isProbeData(mixed $data): bool
     {
         return is_array($data) && isset($data['format'], $data['streams']) && is_array($data['format'])
             && is_array($data['streams']) && array_is_list($data['streams'])
@@ -446,7 +446,7 @@ readonly class Media
         }
     }
 
-    private function absoluteLocalPath(string $path): string
+    protected function absoluteLocalPath(string $path): string
     {
         $absolute = realpath($path);
 

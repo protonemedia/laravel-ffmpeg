@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
@@ -22,7 +23,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\WritesManifest;
 use ProtoneMedia\LaravelFFMpeg\Queue\ExportPlan;
 use SensitiveParameter;
 
-final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, SplitsTwoPass, ValidatesSelections, WritesManifest
+class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, SplitsTwoPass, ValidatesSelections, WritesManifest
 {
     use Concerns\AudioCodec;
     use Concerns\AudioFilters;
@@ -37,35 +38,35 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
     use Concerns\RunsExport;
     use Concerns\VideoCodec;
     use Concerns\VideoFilters;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private readonly PendingExport $export;
+    protected readonly PendingExport $export;
 
-    private array $variants = [];
+    protected array $variants = [];
 
-    private array $variantPaths = [];
+    protected array $variantPaths = [];
 
-    private array $variantFiles = [];
+    protected array $variantFiles = [];
 
-    private ?Closure $playlistCallback = null;
+    protected ?Closure $playlistCallback = null;
 
-    private ?HlsEncryption $encryption = null;
+    protected ?HlsEncryption $encryption = null;
 
-    private array $keyReferences = [];
+    protected array $keyReferences = [];
 
-    private string $segmentType = 'mpegts';
+    protected string $segmentType = 'mpegts';
 
-    private string $playlistType = 'vod';
+    protected string $playlistType = 'vod';
 
-    private array $renditions = [];
+    protected array $renditions = [];
 
-    private ?float $presentationDuration = null;
+    protected ?float $presentationDuration = null;
 
-    private array $provenance = [];
+    protected array $provenance = [];
 
-    private ?Workspace $workspace = null;
+    protected ?Workspace $workspace = null;
 
-    public function __construct(private readonly Media $media, string|Filesystem $disk, private readonly float $segmentDuration)
+    public function __construct(protected readonly Media $media, string|Filesystem $disk, protected readonly float $segmentDuration)
     {
         if (! is_finite($segmentDuration) || $segmentDuration < 0.001 || $segmentDuration > 86400) {
             throw new InvalidArgumentException('HLS segment duration must be between 0.001 and 86400 seconds.');
@@ -212,7 +213,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
         return $this->rendition('SUBTITLES', $group, $name, $configure, $language, $default, $autoselect, $forced, null, $playlist, $segments, null);
     }
 
-    private function rendition(
+    protected function rendition(
         string $type,
         string $group,
         string $name,
@@ -553,7 +554,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
         return array_map(fn (int|string $index): string => $workspace->path.'/'.($this->isSubtitle($index) ? 'segment-'.$index.'-00000000.vtt' : 'playlist-'.$index.'.m3u8'), array_keys($outputs));
     }
 
-    private function isSubtitle(int $index): bool
+    protected function isSubtitle(int $index): bool
     {
         return ($this->renditions[array_keys($this->variants)[$index] ?? '']['type'] ?? null) === 'SUBTITLES';
     }
@@ -805,7 +806,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
         return $artifacts;
     }
 
-    private function timestampWebVtt(string $path, int $ticks): int
+    protected function timestampWebVtt(string $path, int $ticks): int
     {
         $input = @fopen($path, 'rb');
         $output = @fopen($path.'.timed', 'wb');
@@ -838,7 +839,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
         return strlen($header);
     }
 
-    private function playlistLines(string $path): array
+    protected function playlistLines(string $path): array
     {
         $bytes = @file_get_contents($path, length: 16777217);
         if ($bytes === false || trim($bytes) === '' || strlen($bytes) > 16777216 || str_contains($bytes, "\0")) {
@@ -848,7 +849,7 @@ final class PendingHlsExport implements Exportable, MeasuresDuration, PackagesAr
         return array_values(array_filter(explode("\n", str_replace("\r\n", "\n", rtrim($bytes, "\r\n"))), fn ($line): bool => $line !== ''));
     }
 
-    private function writePlaylist(string $path, array $lines, string $destination, ?string $variant, bool $hook = true): void
+    protected function writePlaylist(string $path, array $lines, string $destination, ?string $variant, bool $hook = true): void
     {
         $bytes = implode("\n", $lines)."\n";
         if (strlen($bytes) > 16777216) {

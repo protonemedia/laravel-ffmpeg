@@ -11,29 +11,29 @@ use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 /** A bounded query, separate from the ordinary Metadata snapshot. */
 class PendingProbe
 {
-    private ?string $selector = null;
+    protected ?string $selector = null;
 
-    private array $fields = [];
+    protected array $fields = [];
 
-    private string $mode = 'streams';
+    protected string $mode = 'streams';
 
-    private bool $onlyKeyframes = false;
+    protected bool $onlyKeyframes = false;
 
-    private bool $countFrames = false;
+    protected bool $countFrames = false;
 
-    private bool $countPackets = false;
+    protected bool $countPackets = false;
 
-    private float $start = 0;
+    protected float $start = 0;
 
-    private float $duration = 10;
+    protected float $duration = 10;
 
-    private ?int $packetLimit = null;
+    protected ?int $packetLimit = null;
 
-    private int $outputLimit = 4194304;
+    protected int $outputLimit = 4194304;
 
-    private float $timeout = 30;
+    protected float $timeout = 30;
 
-    public function __construct(private readonly Media $media) {}
+    public function __construct(protected readonly Media $media) {}
 
     /** Global stream index, or a type and optional zero-based type ordinal (v:0). */
     public function selectStreams(string $selector): self
@@ -234,7 +234,7 @@ class PendingProbe
         }, new ProcessRunner($this->timeout));
     }
 
-    private function interval(): string
+    protected function interval(): string
     {
         // FFprobe's duration parser does not accept scientific notation.
         $seconds = static fn (float $value): string => rtrim(rtrim(sprintf('%.6F', $value), '0'), '.');
@@ -243,7 +243,7 @@ class PendingProbe
             ? $seconds($this->duration) : '#'.$this->packetLimit);
     }
 
-    private function validateStart(float $start): void
+    protected function validateStart(float $start): void
     {
         if (! is_finite($start) || $start < 0 || $start > 315360000) {
             throw new InvalidArgumentException('Probe start must be finite and between 0 and 315360000 seconds.');

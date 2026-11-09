@@ -15,7 +15,7 @@ use Throwable;
 readonly class PreparedImageInput implements InputSource
 {
     /** @param  list<Transformation>  $edits */
-    public function __construct(private Media $image, private array $edits)
+    public function __construct(protected Media $image, protected array $edits)
     {
         if ($image->inputOptions() !== [] || ($image->protocolWhitelist() === 'file' && $image->transportOptions() !== [])) {
             throw new InvalidArgumentException('Image preparation requires a standalone image without input options.');
@@ -85,7 +85,7 @@ readonly class PreparedImageInput implements InputSource
         return $target;
     }
 
-    private function validate(string $path): void
+    protected function validate(string $path): void
     {
         $size = @getimagesize($path);
         if ($size === false || $size[0] < 1 || $size[1] < 1) {

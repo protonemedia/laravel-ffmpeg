@@ -390,11 +390,11 @@ Use the root HLS result's inventory for deletion, not a variant's partial view. 
 
 ## Type builders and results by their class
 
-Each export builder is a final class with no parent class. For example, `export()` returns `PendingExport`, `hls()` returns `PendingHlsExport`, and `gif()` returns `PendingGif`. A parameter typed `PendingExport` accepts only `export()` builders, so type a profile for a specialized builder on that builder's class.
+Each export builder is its own class with no parent class. For example, `export()` returns `PendingExport`, `hls()` returns `PendingHlsExport`, and `gif()` returns `PendingGif`. A parameter typed `PendingExport` accepts only `export()` builders, so type a profile for a specialized builder on that builder's class.
 
-Builders define only the methods that change their output. An unsupported call, such as `twoPass()` on `dash()` or `audio()` on `frame()`, is an undefined method and throws PHP's `Error`. Do not catch `InvalidArgumentException` to detect unsupported methods. `InvalidArgumentException` still reports invalid arguments to supported methods.
+Builders define only the methods that change their output. An unsupported call, such as `twoPass()` on `dash()` or `audio()` on `frame()`, is an undefined method and throws `BadMethodCallException`, because builders are `Macroable`. Register a macro to add your own methods. Do not catch `InvalidArgumentException` to detect unsupported methods. `InvalidArgumentException` still reports invalid arguments to supported methods.
 
-Results are final classes too. `HlsExportResult`, `DashExportResult`, `LoudnessResult`, and `WaveformPeaksResult` are not `ExportResult` instances. Every export result implements `ProtoneMedia\LaravelFFMpeg\Result`, which provides `files()`, `file()`, and `processes()`. Type code that accepts any export result on `Result`:
+Results do not extend each other either. `HlsExportResult`, `DashExportResult`, `LoudnessResult`, and `WaveformPeaksResult` are not `ExportResult` instances. Every export result implements `ProtoneMedia\LaravelFFMpeg\Result`, which provides `files()`, `file()`, and `processes()`. Type code that accepts any export result on `Result`:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Result;

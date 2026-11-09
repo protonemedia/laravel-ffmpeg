@@ -9,7 +9,7 @@ use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
 /** Encoding overrides for one zero-based output audio track. */
 class AudioStreamSettings
 {
-    private array $settings = [];
+    protected array $settings = [];
 
     public function codec(string $codec): self
     {

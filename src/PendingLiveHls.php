@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
@@ -22,29 +23,31 @@ use Throwable;
  * Retries reconnect failed encoders; reconnectOnEof also reconnects clean EOF.
  * Numbering/discontinuities survive those reconnects, not a new PHP worker/run().
  */
-final class PendingLiveHls
+class PendingLiveHls
 {
-    private ?Closure $publication = null;
+    use Macroable;
 
-    private ?Closure $cancellation = null;
+    protected ?Closure $publication = null;
 
-    private int $retries = 0;
+    protected ?Closure $cancellation = null;
 
-    private float $retryDelay = 1;
+    protected int $retries = 0;
 
-    private bool $reconnectOnEof = false;
+    protected float $retryDelay = 1;
 
-    private ?float $deadline = null;
+    protected bool $reconnectOnEof = false;
 
-    private bool $stopped = false;
+    protected ?float $deadline = null;
 
-    private bool $running = false;
+    protected bool $stopped = false;
+
+    protected bool $running = false;
 
     public function __construct(
-        private readonly Media|LiveHlsSource $source,
-        private string|Filesystem $disk,
-        private readonly float $segmentDuration = 6,
-        private readonly int $window = 6,
+        protected readonly Media|LiveHlsSource $source,
+        protected string|Filesystem $disk,
+        protected readonly float $segmentDuration = 6,
+        protected readonly int $window = 6,
     ) {
         if (! is_finite($segmentDuration) || $segmentDuration < 0.1 || $segmentDuration > 3600 || $window < 2 || $window > 1000) {
             throw new InvalidArgumentException('Live HLS requires a segment duration of 0.1–3600 seconds and a window of 2–1000.');
@@ -110,7 +113,7 @@ final class PendingLiveHls
         return $this;
     }
 
-    private function mutable(): void
+    protected function mutable(): void
     {
         if ($this->running) {
             throw new RuntimeException('A running live session cannot be reconfigured.');

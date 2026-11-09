@@ -6,13 +6,13 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\ItemNotFoundException;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 
-final readonly class DashExportResult implements Result
+readonly class DashExportResult implements Result
 {
     use Concerns\ExportResultFiles;
 
-    private ExportResult $export;
+    protected ExportResult $export;
 
-    public function __construct(array $files, array $summaries, private array $representations = [], private array $sets = [])
+    public function __construct(array $files, array $summaries, protected array $representations = [], protected array $sets = [])
     {
         $this->export = new ExportResult($files, $summaries);
     }

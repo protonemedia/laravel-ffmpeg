@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
@@ -18,7 +19,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 
 /** Mix the first audio tracks, retaining the primary media's presentation length. */
-final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysis, ShapesCommand, ShapesOutputs
+class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysis, ShapesCommand, ShapesOutputs
 {
     use Concerns\AudioFilters;
     use Concerns\Fades;
@@ -30,21 +31,21 @@ final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, 
     use Concerns\RunsExport;
     use Concerns\VideoCodec;
     use Concerns\VideoFilters;
-    use Conditionable;
+    use Conditionable, Macroable;
 
-    private readonly PendingExport $export;
+    protected readonly PendingExport $export;
 
-    private bool $loop = false;
+    protected bool $loop = false;
 
-    private float $offset = 0;
+    protected float $offset = 0;
 
     public function __construct(
-        private readonly Media $source,
-        private readonly Media $added,
+        protected readonly Media $source,
+        protected readonly Media $added,
         string|Filesystem $disk,
-        private readonly float $volume = 1,
-        private readonly float $originalVolume = 1,
-        private readonly bool $normalize = false,
+        protected readonly float $volume = 1,
+        protected readonly float $originalVolume = 1,
+        protected readonly bool $normalize = false,
     ) {
         if (! is_finite($volume) || $volume < 0 || ! is_finite($originalVolume) || $originalVolume < 0) {
             throw new InvalidArgumentException('Mix volumes require finite nonnegative amplitude multipliers.');
@@ -133,7 +134,7 @@ final class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, 
         return $this->mixGraph(true);
     }
 
-    private function mixGraph(bool $originalAudio, ?float $duration = null): string
+    protected function mixGraph(bool $originalAudio, ?float $duration = null): string
     {
         // Fill timestamp gaps and convert both tracks to a common format before
         // mixing. Padding keeps a short track from shortening the presentation.

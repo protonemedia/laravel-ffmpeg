@@ -5,13 +5,13 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Illuminate\Support\ItemNotFoundException;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 
-final readonly class HlsExportResult implements Result
+readonly class HlsExportResult implements Result
 {
     use Concerns\ExportResultFiles;
 
-    private ExportResult $export;
+    protected ExportResult $export;
 
-    public function __construct(array $files, array $summaries, private array $variants = [], private array $renditions = [], private array $keyReferences = [], private array $playbackKeys = [], private array $variantGroups = [], private array $provenance = [], private ?HlsPresentation $presentation = null)
+    public function __construct(array $files, array $summaries, protected array $variants = [], protected array $renditions = [], protected array $keyReferences = [], protected array $playbackKeys = [], protected array $variantGroups = [], protected array $provenance = [], protected ?HlsPresentation $presentation = null)
     {
         $this->export = new ExportResult($files, $summaries);
     }
@@ -87,7 +87,7 @@ final readonly class HlsExportResult implements Result
         return $this->rendition('SUBTITLES', $group, $name);
     }
 
-    private function rendition(string $type, string $group, string $name): self
+    protected function rendition(string $type, string $group, string $name): self
     {
         $id = $this->renditions[$type][$group][$name] ?? null;
         if ($id === null) {
