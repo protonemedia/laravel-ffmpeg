@@ -445,7 +445,7 @@ $media->export()
     ->audio('aac')
     ->deinterlace()
     ->frameRate('30000/1001')
-    ->flipHorizontal()
+    ->flipHorizontally()
     ->grayscale()
     ->volume(0.5)
     ->delayAudio(0.25)
@@ -471,7 +471,7 @@ $media->export()
 
 For portrait sizing, `resize(height: 1920)` preserves the autorotated display aspect ratio rather than forcing a landscape width. Use `fit(1080, 1920)` for an exact portrait canvas. Raw probe width and height remain encoded dimensions, before display rotation.
 
-`frameRate()` drops or duplicates frames without changing playback speed. Deinterlace before resizing; the default `frame` mode preserves frame count, while `mode: 'field'` produces a frame per field. `flipVertical()` is also available. `volume()` takes a linear multiplier, where zero mutes. `delayAudio()` inserts silence on every channel and extends the audio. Fades affect both video and audio unless you pass `video: false` or `audio: false`; `fadeOut()` requires an explicit start in seconds. Filtered streams must be encoded, not copied. Use `videoFilter()` and `audioFilter()` for other trusted FFmpeg expressions.
+`frameRate()` drops or duplicates frames without changing playback speed. Deinterlace before resizing; the default `frame` mode preserves frame count, while `mode: 'field'` produces a frame per field. `flipVertically()` is also available. `volume()` takes a linear multiplier, where zero mutes. `delayAudio()` inserts silence on every channel and extends the audio. Fades affect both video and audio unless you pass `video: false` or `audio: false`; `fadeOut()` requires an explicit start in seconds. Filtered streams must be encoded, not copied. Use `videoFilter()` and `audioFilter()` for other trusted FFmpeg expressions.
 
 ```php
 $media->export()

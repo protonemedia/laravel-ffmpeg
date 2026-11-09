@@ -58,16 +58,16 @@ trait VideoFilters
         return $this;
     }
 
-    public function flipHorizontal(): self
+    public function flipHorizontally(): self
     {
-        $this->export->flipHorizontal();
+        $this->export->flipHorizontally();
 
         return $this;
     }
 
-    public function flipVertical(): self
+    public function flipVertically(): self
     {
-        $this->export->flipVertical();
+        $this->export->flipVertically();
 
         return $this;
     }

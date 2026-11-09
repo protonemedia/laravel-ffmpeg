@@ -365,12 +365,12 @@ trait ConfiguresOutput
         return $this->videoFilter('fps=fps='.$rate);
     }
 
-    public function flipHorizontal(): self
+    public function flipHorizontally(): self
     {
         return $this->videoFilter('hflip');
     }
 
-    public function flipVertical(): self
+    public function flipVertically(): self
     {
         return $this->videoFilter('vflip');
     }

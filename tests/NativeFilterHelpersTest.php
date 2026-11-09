@@ -81,11 +81,11 @@ class NativeFilterHelpersTest extends TestCase
     public function flips_grayscale_and_low_level_filters_transform_asymmetric_pixels_in_call_order(): void
     {
         $this->fixture();
-        $this->export()->flipHorizontal()->save('horizontal.mkv');
-        $this->export()->flipVertical()->save('vertical.mkv');
-        $this->export()->flipHorizontal()->flipVertical()->grayscale()->save('gray.mkv');
-        $this->export()->flipHorizontal()->videoFilter('crop=16:16:0:0')->save('flip-first.mkv');
-        $this->export()->videoFilter('crop=16:16:0:0')->flipHorizontal()->save('crop-first.mkv');
+        $this->export()->flipHorizontally()->save('horizontal.mkv');
+        $this->export()->flipVertically()->save('vertical.mkv');
+        $this->export()->flipHorizontally()->flipVertically()->grayscale()->save('gray.mkv');
+        $this->export()->flipHorizontally()->videoFilter('crop=16:16:0:0')->save('flip-first.mkv');
+        $this->export()->videoFilter('crop=16:16:0:0')->flipHorizontally()->save('crop-first.mkv');
 
         $horizontal = $this->pixels('horizontal.mkv');
         $vertical = $this->pixels('vertical.mkv');
@@ -254,7 +254,7 @@ class NativeFilterHelpersTest extends TestCase
                 $attempts[] = fn () => $media->export()->{$method}(...$arguments);
             }
         }
-        foreach (['frameRate' => [25], 'flipHorizontal' => [], 'flipVertical' => [], 'grayscale' => [], 'deinterlace' => [], 'volume' => [0.5], 'delayAudio' => [0.5], 'fadeIn' => [1], 'fadeOut' => [1, 2]] as $method => $arguments) {
+        foreach (['frameRate' => [25], 'flipHorizontally' => [], 'flipVertically' => [], 'grayscale' => [], 'deinterlace' => [], 'volume' => [0.5], 'delayAudio' => [0.5], 'fadeIn' => [1], 'fadeOut' => [1, 2]] as $method => $arguments) {
             $attempts[] = fn () => $media->export()->{$method}(...$arguments)->video('copy')->audio('copy')->inspect();
             $attempts[] = fn () => $media->export()->output('one.mkv', fn () => null)->{$method}(...$arguments);
         }

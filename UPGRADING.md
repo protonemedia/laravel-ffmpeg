@@ -92,7 +92,7 @@ Ordinary filters run in registration order. All output video filters run before 
 
 For portrait sources, use `resize(height: 1920)` to preserve the autorotated display aspect ratio, or `fit(1080, 1920, mode: 'contain')` for an exact canvas. Probe width and height remain encoded dimensions, before display rotation.
 
-Use `frameRate()`, `flipHorizontal()`, `flipVertical()`, `grayscale()`, and `deinterlace()` instead of filter-factory callbacks. Deinterlace before resizing. `volume()` takes a linear multiplier; `delayAudio()` inserts silence on all channels. `fadeIn()` and `fadeOut()` affect video and audio by default. Fade-out requires an explicit start in seconds. Disable either stream type with `video: false` or `audio: false`.
+Use `frameRate()`, `flipHorizontally()`, `flipVertically()`, `grayscale()`, and `deinterlace()` instead of filter-factory callbacks. Deinterlace before resizing. `volume()` takes a linear multiplier; `delayAudio()` inserts silence on all channels. `fadeIn()` and `fadeOut()` affect video and audio by default. Fade-out requires an explicit start in seconds. Disable either stream type with `video: false` or `audio: false`.
 
 Use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Watermark images are edited inside the `watermark()` callback. `videoFilter()` and `audioFilter()` remain available for trusted expressions.
 

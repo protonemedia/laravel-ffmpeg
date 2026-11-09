@@ -742,8 +742,8 @@ $media->export()
     ->deinterlace(mode: 'frame', parity: 'auto', onlyInterlaced: true)
     ->resize(width: 1280)
     ->frameRate('30000/1001')
-    ->flipHorizontal()
-    ->flipVertical()
+    ->flipHorizontally()
+    ->flipVertically()
     ->grayscale()
     ->volume(0.5)
     ->delayAudio(0.25)
@@ -754,7 +754,7 @@ $media->export()
 
 These helpers append ordinary filters in call order and work in `output()` callbacks. They do not support stream copy for the affected type. `videoFilter()` and `audioFilter()` remain available for trusted expressions. Graph-fed streams retain the simple-versus-complex filter restrictions described below.
 
-`frameRate($rate)` accepts a positive numeric or rational rate and drops or duplicates frames without changing playback speed. `flipHorizontal()` and `flipVertical()` mirror the image. `grayscale()` removes color. `deinterlace()` uses `bwdif`; call it before geometry filters. Its default `frame` mode outputs one frame per input frame, while `field` outputs one per field. Parity accepts `auto`, `tff`, or `bff`. `onlyInterlaced: true` processes only frames marked interlaced; false processes all frames.
+`frameRate($rate)` accepts a positive numeric or rational rate and drops or duplicates frames without changing playback speed. `flipHorizontally()` and `flipVertically()` mirror the image. `grayscale()` removes color. `deinterlace()` uses `bwdif`; call it before geometry filters. Its default `frame` mode outputs one frame per input frame, while `field` outputs one per field. Parity accepts `auto`, `tff`, or `bff`. `onlyInterlaced: true` processes only frames marked interlaced; false processes all frames.
 
 `volume($multiplier)` scales amplitude with a finite nonnegative multiplier. Zero mutes; values above one can clip. `delayAudio($seconds)` inserts actual silence on every channel, extending audio rather than shifting its timestamps. It accepts finite nonnegative seconds. Exports with audio delay leave progress percentage unknown because the selected audio can outlast the video.
 
