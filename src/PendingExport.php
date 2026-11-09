@@ -659,7 +659,7 @@ class PendingExport
                     $configuredTracks = $settings['videoStreams'] !== [] || $settings['audioStreams'] !== [];
 
                     if (($artifact['probe'] ?? false)
-                        || (in_array($role, ['media', 'image'], true) && ($configuredTracks || count($outputs) > 1 || count($this->inputs) > 1 || $this->graph !== null))) {
+                        || (in_array($role, ['media', 'image'], true) && ($configuredTracks || count($outputs) > 1 || count($this->inputs) > 1 || $this->filterGraph() !== null))) {
                         try {
                             $actual = $this->media->probeArtifact($artifact['probePath'] ?? $outputPath, $workspace)->streams()->map(fn ($stream) => $stream->get('codec_type'))->all();
                         } catch (MediaException $exception) {
