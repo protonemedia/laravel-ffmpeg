@@ -186,12 +186,16 @@ class PendingAudioMix extends PendingExport
                 ...$options, '-map', '0:a:0', '-af', 'atrim=duration='.$this->clipTimestamp($workspace->probe($this->added)->duration()).',asetpts=PTS-STARTPTS',
                 '-c:a', 'pcm_f64le', '-f', 'wav', '-rf64', 'auto', $prepared,
             ], 'Audio loop preparation failed.');
-            $probe = $workspace->runner->run([
-                config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error',
-                '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', $prepared,
-            ], $workspace->path, outputLimit: 65536, phase: Progress::ANALYSIS);
-            if ($probe->exitCode !== 0 || ! is_numeric(trim($probe->output)) || (float) $probe->output <= 0) {
-                throw new MediaException('Looped audio must decode to nonempty samples.', Progress::ANALYSIS, 'artifact', $probe->diagnostics);
+            try {
+                $duration = $this->added->probeArtifact($workspace->path.'/'.$prepared, $workspace)->duration();
+            } catch (MediaException $exception) {
+                if ($exception->category === 'timeout') {
+                    throw $exception;
+                }
+                throw new MediaException('Looped audio must decode to nonempty samples.', Progress::ANALYSIS, 'artifact', $exception->diagnostics);
+            }
+            if (! $duration) {
+                throw new MediaException('Looped audio must decode to nonempty samples.', Progress::ANALYSIS, 'artifact');
             }
             array_splice($command, $protocols[1], $inputs[1] + 2 - $protocols[1], [
                 '-protocol_whitelist', 'file', '-stream_loop', '-1', '-i', $prepared,

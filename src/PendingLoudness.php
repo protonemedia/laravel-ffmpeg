@@ -15,10 +15,10 @@ class PendingLoudness extends PendingExport
 
     private ?LoudnessStats $normalization = null;
 
-    private ?string $statisticsPath = null;
+    private ?Workspace $workspace = null;
 
     public function __construct(
-        Media $media,
+        private readonly Media $source,
         string|Filesystem $disk,
         private readonly float $integrated = -23,
         private readonly float $truePeak = -2,
@@ -37,7 +37,7 @@ class PendingLoudness extends PendingExport
             throw new InvalidArgumentException('Choose a nonnegative audio track and a sample rate from 8000 to 192000.');
         }
 
-        parent::__construct($media, $disk);
+        parent::__construct($source, $disk);
         $this->map('0:a:'.$audio)->audio('aac');
     }
 
@@ -109,7 +109,7 @@ class PendingLoudness extends PendingExport
     protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         $this->measurement = $this->normalization = null;
-        $this->statisticsPath = $workspace->path.'/loudness-final.json';
+        $this->workspace = $workspace;
         $inputEnd = array_search('-i', $command, true) + 2;
         $prefix = array_slice($command, 0, $inputEnd);
         $mapIndex = array_search('-map', $command, true);
@@ -178,14 +178,16 @@ class PendingLoudness extends PendingExport
     protected function validateArtifact(string $path, string $role = 'media'): int
     {
         $size = parent::validateArtifact($path, $role);
-        $this->normalization = $this->readStats($this->statisticsPath ?? '');
-        $probe = $this->runner->run([
-            config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-of', 'json',
-            '-show_entries', 'stream=codec_type,sample_rate', $path,
-        ], dirname($path), [$path => '[output:0]'], phase: 'validation');
-        $streams = json_decode($probe->output, true)['streams'] ?? [];
-        if ($probe->exitCode !== 0 || count($streams) !== 1 || ($streams[0]['codec_type'] ?? null) !== 'audio'
-            || (int) ($streams[0]['sample_rate'] ?? 0) !== $this->sampleRate) {
+        $this->normalization = $this->readStats($this->workspace->path.'/loudness-final.json');
+        try {
+            $streams = $this->source->probeArtifact($path, $this->workspace)->streams();
+        } catch (MediaException $exception) {
+            if ($exception->category === 'timeout') {
+                throw $exception;
+            }
+            $streams = collect();
+        }
+        if ($streams->count() !== 1 || $streams->first()->get('codec_type') !== 'audio' || $streams->first()->sampleRate() !== $this->sampleRate) {
             throw new MediaException('Normalized output must contain one audio stream at the requested sample rate.', 'validation', 'artifact');
         }
 
