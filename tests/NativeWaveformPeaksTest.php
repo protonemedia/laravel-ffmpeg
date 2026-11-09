@@ -197,21 +197,13 @@ class NativeWaveformPeaksTest extends TestCase
     }
 
     #[Test]
-    public function per_track_audio_settings_are_rejected_before_io(): void
+    public function keyframe_clips_are_rejected_before_io(): void
     {
-        foreach ([fn ($a) => $a->filter('volume=2'), fn ($a) => $a->sampleRate(16000)] as $configure) {
-            try {
-                (new Media('peaks-fixtures', 'missing.wav'))->waveformPeaks()->mono()->audioStream(0, $configure)->inspect();
-                $this->fail('Per-track audio settings accepted.');
-            } catch (\InvalidArgumentException $exception) {
-                $this->assertStringContainsString('audioFilter()', $exception->getMessage());
-            }
-        }
         try {
-            (new Media('peaks-fixtures', 'missing.wav'))->waveformPeaks()->output('extra.json', fn ($output) => null);
-            $this->fail('A second peaks output was accepted.');
-        } catch (\InvalidArgumentException) {
-            $this->addToAssertionCount(1);
+            (new Media('peaks-fixtures', 'missing.wav'))->waveformPeaks()->clip(1, duration: 1, seek: 'keyframe')->inspect();
+            $this->fail('A keyframe clip was accepted.');
+        } catch (\InvalidArgumentException $exception) {
+            $this->assertStringContainsString('accurate clips', $exception->getMessage());
         }
     }
 

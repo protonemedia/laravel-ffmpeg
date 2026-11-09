@@ -3,14 +3,27 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\PackagesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
 
 /** Audio data, not the separate waveform image operation. */
-class PendingWaveformPeaks extends PendingExport
+final class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand
 {
-    protected string $outputRole = 'waveform-peaks';
+    use Concerns\AudioFilters;
+    use Concerns\Clips;
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\OutputOptions;
+    use Concerns\RunsExport;
+    use Conditionable;
+
+    private readonly PendingExport $export;
 
     private int $track = 0;
 
@@ -32,16 +45,16 @@ class PendingWaveformPeaks extends PendingExport
 
     public function __construct(Media $media, string|Filesystem $disk, private readonly int $samplesPerBucket = 256)
     {
-        parent::__construct($media, $disk);
         if ($samplesPerBucket < 1) {
             throw new InvalidArgumentException('Samples per bucket must be positive.');
         }
+        $this->export = new PendingExport($media, $disk, $this, 'waveform-peaks');
     }
 
     /** Zero-based audio stream ordinal, not the global stream index. */
     public function audioTrack(int $track): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         if ($track < 0) {
             throw new InvalidArgumentException('The audio track must be nonnegative.');
         }
@@ -53,7 +66,7 @@ class PendingWaveformPeaks extends PendingExport
     /** Equal-weight arithmetic downmix before reduction; otherwise retain channels. */
     public function mono(bool $enabled = true): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         $this->mixMono = $enabled;
 
         return $this;
@@ -62,7 +75,7 @@ class PendingWaveformPeaks extends PendingExport
     /** Request at most this many nonempty, evenly partitioned buckets. */
     public function buckets(int $count): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
         if ($count < 1 || $count > self::MAX_CELLS) {
             throw new InvalidArgumentException('Bucket count must be between 1 and 100000.');
         }
@@ -71,24 +84,20 @@ class PendingWaveformPeaks extends PendingExport
         return $this;
     }
 
-    public function output(string $path, callable $configure): self
-    {
-        throw new InvalidArgumentException('Peaks support one root-configured output.');
-    }
-
     public function get(): WaveformPeaks
     {
-        $this->execute('peaks.json', contents: true);
+        $this->export->execute('peaks.json', contents: true);
 
         return $this->peaks;
     }
 
     public function save(?string $path = null): WaveformPeaksResult
     {
-        return new WaveformPeaksResult(parent::save($path), $this->peaks);
+        return new WaveformPeaksResult($this->export->save($path), $this->peaks);
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** @internal Records the selected track's rate and layout for the PCM decode; progress keeps the default duration. */
+    public function duration(array $metadata, ?float $default): ?float
     {
         $stream = $metadata[0]->audioStreams()->get($this->track);
         $this->rate = (int) ($stream?->get('sample_rate') ?? 0);
@@ -103,22 +112,16 @@ class PendingWaveformPeaks extends PendingExport
         }
         $this->inputLayout = $layout !== 'unknown' && preg_match('/\A[A-Za-z0-9.+()]+\z/', $layout) ? $layout : null;
 
-        return parent::prepareEncoding($metadata);
+        return $default;
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    /** @internal */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
-        if (count($outputs) !== 1 || count($paths) !== 1 || $outputs[0]->hasMaps() || $outputs[0]->inputSeekOptions() !== []) {
-            throw new InvalidArgumentException('Peaks require one input/output, audioTrack() selection, and accurate clips.');
+        if ($outputs[0]->inputSeekOptions() !== []) {
+            throw new InvalidArgumentException('Peaks require accurate clips, not keyframe seek.');
         }
-        // A per-track filter would be lost by mono() and a per-track rate overridden by the PCM -ar below.
-        if ($outputs[0]->outputConfiguration()['audioStreams'] !== []) {
-            throw new InvalidArgumentException('Peaks accept audioFilter(), not per-track audio settings.');
-        }
-        $command = parent::command($outputs, $paths, $outputPaths);
-        if (in_array('-filter_complex', $command, true)) {
-            throw new InvalidArgumentException('Peaks accept audioFilter(), not a complex graph.');
-        }
+        $command = $default;
         // Replace the export pipeline's default optional video/audio maps with
         // exactly one required audio track (raw PCM supports one stream).
         while (($index = array_search('-map', $command, true)) !== false) {
@@ -146,12 +149,14 @@ class PendingWaveformPeaks extends PendingExport
         return $command;
     }
 
-    protected function outputPaths(array $outputs, Workspace $workspace): array
+    /** @internal */
+    public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
         return [$workspace->path.'/decoded.s16le'];
     }
 
-    protected function artifacts(array $outputs, array $paths): array
+    /** @internal Reduces the decoded PCM to bounded extrema and publishes them as version-1 JSON. */
+    public function artifacts(array $default, array $outputs, array $paths): array
     {
         $path = $paths[0];
         clearstatcache(true, $path);
