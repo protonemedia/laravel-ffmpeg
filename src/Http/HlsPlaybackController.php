@@ -135,12 +135,12 @@ class HlsPlaybackController
             if ($bounds === null) {
                 fclose($stream);
 
-                return response('', 416, [...$headers, 'Content-Range' => 'bytes */'.$size]);
+                return response('', 416, [...$headers, 'Content-Range' => "bytes */{$size}"]);
             }
 
             [$start, $end] = $bounds;
             $status = 206;
-            $headers['Content-Range'] = 'bytes '.$start.'-'.$end.'/'.$size;
+            $headers['Content-Range'] = "bytes {$start}-{$end}/{$size}";
         }
 
         $headers['Content-Length'] = (string) max(0, $end - $start + 1);

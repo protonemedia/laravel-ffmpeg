@@ -60,7 +60,7 @@ class ProcessResult
     {
         if ($this->failed()) {
             throw new MediaException(
-                'Media process failed (exit '.$this->exitCode.').',
+                "Media process failed (exit {$this->exitCode}).",
                 $this->phase,
                 'exit',
                 $this->diagnostics,

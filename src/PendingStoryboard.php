@@ -186,15 +186,15 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
         $start = $this->export->clipSettings()['start'] ?? 0;
         $end = $this->duration === null ? '[end]' : CommandCompiler::timestamp($start + $this->duration / 1000000);
-        $filter = 'trim=start='.CommandCompiler::timestamp($start).':end='.$end.',setpts=PTS-STARTPTS,'
+        $filter = 'trim=start='.CommandCompiler::timestamp($start).":end={$end},setpts=PTS-STARTPTS,"
             .'fps=fps=1/'.CommandCompiler::timestamp($this->interval / 1000).':start_time=0:round=near:eof_action=pass,'
-            .'tile=layout='.$this->columns.'x'.$this->rows.':nb_frames='.($this->columns * $this->rows)
-            .':margin='.$this->margin.':padding='.$this->padding.':color=black';
+            ."tile=layout={$this->columns}x{$this->rows}:nb_frames=".($this->columns * $this->rows)
+            .":margin={$this->margin}:padding={$this->padding}:color=black";
         $index = array_search('-filter:v', $command, true);
         if ($index === false) {
             array_splice($command, -1, 0, ['-filter:v', $filter]);
         } else {
-            $command[$index + 1] .= ','.$filter;
+            $command[$index + 1] .= ",{$filter}";
         }
 
         $sheets = $this->frames === null
@@ -212,7 +212,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
      */
     public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
-        return [$workspace->path.'/sheet-%08d.'.pathinfo($outputs[0]->destination()['path'], PATHINFO_EXTENSION)];
+        return ["{$workspace->path}/sheet-%08d.".pathinfo($outputs[0]->destination()['path'], PATHINFO_EXTENSION)];
     }
 
     /**
@@ -295,7 +295,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
                 $y = $this->margin + intdiv($cell, $this->columns) * ($height + $this->padding);
                 $start = $index * $this->interval;
                 $cue = $this->timestamp($start).' --> '.$this->timestamp(min($start + $this->interval, $end))."\n"
-                    .$urls[intdiv($index, $cells)]."#xywh=$x,$y,$width,$height\n\n";
+                    .$urls[intdiv($index, $cells)]."#xywh={$x},{$y},{$width},{$height}\n\n";
                 if (fwrite($file, $cue) !== strlen($cue)) {
                     throw MediaException::validation('Cannot write storyboard cues.', 'filesystem');
                 }

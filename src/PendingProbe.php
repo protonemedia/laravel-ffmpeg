@@ -265,7 +265,7 @@ class PendingProbe
         $result = $runner->run($command, $workspace->path, $redactions, $this->outputLimit, timeout: $this->timeout);
         if ($result->exitCode !== 0) {
             throw MediaException::probing(
-                'FFprobe query failed (exit '.$result->exitCode.').',
+                "FFprobe query failed (exit {$result->exitCode}).",
                 'exit',
                 $result->diagnostics,
             );
@@ -293,7 +293,7 @@ class PendingProbe
         }
 
         if ($this->mode !== 'streams') {
-            $command[] = '-show_'.$this->mode;
+            $command[] = "-show_{$this->mode}";
         }
 
         if ($this->onlyKeyframes) {
@@ -303,7 +303,7 @@ class PendingProbe
 
         foreach (['frames' => $this->countFrames, 'packets' => $this->countPackets] as $kind => $enabled) {
             if ($enabled) {
-                $command[] = '-count_'.$kind;
+                $command[] = "-count_{$kind}";
             }
         }
 
@@ -322,7 +322,7 @@ class PendingProbe
         $arguments = [];
         $entries = [];
         foreach ($this->fields as $section => $fields) {
-            $entries[] = $section.'='.implode(',', $fields);
+            $entries[] = "{$section}=".implode(',', $fields);
             if ($section === 'format' || $section === 'format_tags') {
                 $arguments[] = '-show_format';
             } elseif ($section === 'chapter' || $section === 'chapter_tags') {
@@ -371,7 +371,7 @@ class PendingProbe
         $seconds = static fn (float $value): string => rtrim(rtrim(sprintf('%.6F', $value), '0'), '.');
 
         return $seconds($this->start).'%+'.($this->packetLimit === null
-            ? $seconds($this->duration) : '#'.$this->packetLimit);
+            ? $seconds($this->duration) : "#{$this->packetLimit}");
     }
 
     /**

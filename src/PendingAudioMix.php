@@ -202,11 +202,11 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         // to that presentation, even for very large finite offsets.
         $offset = min($this->offset, $duration ?? PHP_INT_MAX / (self::SAMPLE_RATE * 2));
         $delay = $offset > 0 ? ',adelay=delays='.sprintf('%.0f', round($offset * self::SAMPLE_RATE)).'S:all=1' : '';
-        $branches = ['[1:a:0]asetpts=PTS-STARTPTS,'.$format.',volume='
-            .json_encode($this->volume, JSON_THROW_ON_ERROR).$delay.',apad[added_audio]'];
+        $branches = ["[1:a:0]asetpts=PTS-STARTPTS,{$format},volume="
+            .json_encode($this->volume, JSON_THROW_ON_ERROR)."{$delay},apad[added_audio]"];
 
         if ($originalAudio) {
-            $branches[] = '[0:a:0]'.$format.',volume='
+            $branches[] = "[0:a:0]{$format},volume="
                 .json_encode($this->originalVolume, JSON_THROW_ON_ERROR).',apad[original_audio]';
             $branches[] = '[original_audio][added_audio]amix=inputs=2:duration=first:dropout_transition=0:normalize='
                 .($this->normalize ? '1' : '0').'[audio_mix]';
@@ -305,7 +305,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
                 '-c:a', 'pcm_f64le', '-f', 'wav', '-rf64', 'auto', $prepared,
             ], 'Audio loop preparation failed.');
             try {
-                $duration = $this->added->probeArtifact($workspace->path.'/'.$prepared, $workspace)->duration();
+                $duration = $this->added->probeArtifact("{$workspace->path}/{$prepared}", $workspace)->duration();
             } catch (MediaException $exception) {
                 if ($exception->category === 'timeout') {
                     throw $exception;

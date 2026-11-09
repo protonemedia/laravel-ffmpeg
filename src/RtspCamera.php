@@ -128,7 +128,7 @@ class RtspCamera implements InputSource
         $runner = $workspace->runner;
         $runner->version($binary, 'ffmpeg', $workspace->path, 'staging');
 
-        $path = $workspace->path.'/'.$name;
+        $path = "{$workspace->path}/{$name}";
         $result = $runner->run([
             $binary, '-hide_banner', '-nostdin', '-y', '-xerror', '-loglevel', 'error',
             '-protocol_whitelist', $this->transport === 'tcp' ? 'tcp' : 'tcp,udp,rtp',

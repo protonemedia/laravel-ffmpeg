@@ -188,7 +188,7 @@ class UrlInput implements InputSource
             return $this->url;
         }
 
-        $path = $workspace->path.'/'.$name;
+        $path = "{$workspace->path}/{$name}";
         $output = @fopen($path, 'xb');
 
         if ($output === false) {

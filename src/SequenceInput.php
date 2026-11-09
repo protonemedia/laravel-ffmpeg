@@ -169,12 +169,12 @@ class SequenceInput implements InputSource
             }
 
             $dimensions = [$size[0], $size[1]];
-            $target = $workspace->path.'/'.$name.'-'.sprintf('%08d', $index).'.'.$this->suffix;
+            $target = "{$workspace->path}/{$name}-".sprintf('%08d', $index).".{$this->suffix}";
             if (! @symlink($source, $target) && (! @copy($source, $target) || ! chmod($target, 0600))) {
-                throw MediaException::staging('Cannot prepare sequence image '.$index.'.', 'filesystem');
+                throw MediaException::staging("Cannot prepare sequence image {$index}.", 'filesystem');
             }
         }
 
-        return $workspace->path.'/'.$name.'-%08d.'.$this->suffix;
+        return "{$workspace->path}/{$name}-%08d.{$this->suffix}";
     }
 }

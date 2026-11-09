@@ -148,19 +148,19 @@ class ConcatInput implements InputSource
 
             $layout = $streams;
             $source = $workspace->stage($input);
-            $alias = $name.'-part-'.$index.($input->extension() === '' ? '' : '.'.$input->extension());
-            $target = $workspace->path.'/'.$alias;
+            $alias = "{$name}-part-{$index}".($input->extension() === '' ? '' : ".{$input->extension()}");
+            $target = "{$workspace->path}/{$alias}";
 
             // We link each input under a safe relative name, which avoids FFconcat's quoting
             // rules for caller filenames. Cleanup deletes the links, never their source files.
             if (! @symlink($source, $target) && (! @copy($source, $target) || ! chmod($target, 0600))) {
-                throw MediaException::staging('Cannot prepare concat input '.$index.'.', 'filesystem');
+                throw MediaException::staging("Cannot prepare concat input {$index}.", 'filesystem');
             }
 
-            $manifest .= "file '$alias'\nduration ".sprintf('%.6F', $duration)."\n";
+            $manifest .= "file '{$alias}'\nduration ".sprintf('%.6F', $duration)."\n";
         }
 
-        $path = $workspace->path.'/'.$name;
+        $path = "{$workspace->path}/{$name}";
 
         if (@file_put_contents($path, $manifest) !== strlen($manifest) || ! chmod($path, 0600)) {
             throw MediaException::staging('Cannot write the concat manifest.', 'filesystem');

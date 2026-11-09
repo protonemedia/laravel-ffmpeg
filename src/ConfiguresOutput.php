@@ -352,7 +352,7 @@ trait ConfiguresOutput
             throw new InvalidArgumentException("The language tag [{$language}] is invalid.");
         }
 
-        $selector = $language === null ? (string) ($track ?? 0) : 'm:language:'.$language;
+        $selector = $language === null ? (string) ($track ?? 0) : "m:language:{$language}";
 
         return $stream instanceof Stream ? $this->mapProbedStream($stream, 'audio', $input, $optional)
             : $this->map(($input ?? 0).':a:'.$selector.($optional ? '?' : ''));
@@ -473,11 +473,11 @@ trait ConfiguresOutput
         }
 
         $canvas = $background === null
-            ? 'crop=w='.$width.':h='.$height.':x=(iw-ow)/2:y=(ih-oh)/2'
-            : 'pad=w='.$width.':h='.$height.':x=(ow-iw)/2:y=(oh-ih)/2:color='.$background;
-        $this->videoFilters[] = 'scale=w='.$width.':h='.$height
+            ? "crop=w={$width}:h={$height}:x=(iw-ow)/2:y=(ih-oh)/2"
+            : "pad=w={$width}:h={$height}:x=(ow-iw)/2:y=(oh-ih)/2:color={$background}";
+        $this->videoFilters[] = "scale=w={$width}:h={$height}"
             .':force_original_aspect_ratio='.($background === null ? 'increase' : 'decrease')
-            .':force_divisible_by=2:reset_sar=1,'.$canvas;
+            .":force_divisible_by=2:reset_sar=1,{$canvas}";
 
         return $this;
     }
@@ -508,7 +508,7 @@ trait ConfiguresOutput
         $this->ensureOffsetIsNotNegative($x, $y);
 
         return $this->videoFilter(
-            'crop=w='.$width.':h='.$height.':x='.($x ?? '(iw-ow)/2').':y='.($y ?? '(ih-oh)/2').':exact=1',
+            "crop=w={$width}:h={$height}:x=".($x ?? '(iw-ow)/2').':y='.($y ?? '(ih-oh)/2').':exact=1',
         );
     }
 
@@ -522,7 +522,7 @@ trait ConfiguresOutput
         CommandCompiler::color($background);
 
         return $this->videoFilter(
-            'pad=w='.$width.':h='.$height.':x='.($x ?? '(ow-iw)/2').':y='.($y ?? '(oh-ih)/2').':color='.$background,
+            "pad=w={$width}:h={$height}:x=".($x ?? '(ow-iw)/2').':y='.($y ?? '(oh-ih)/2').":color={$background}",
         );
     }
 
@@ -632,7 +632,7 @@ trait ConfiguresOutput
             throw new InvalidArgumentException('Frame rate requires a finite positive number or positive rational.');
         }
 
-        return $this->videoFilter('fps=fps='.$rate);
+        return $this->videoFilter("fps=fps={$rate}");
     }
 
     /**
@@ -675,7 +675,7 @@ trait ConfiguresOutput
         }
 
         return $this->videoFilter(
-            'bwdif=mode=send_'.$mode.':parity='.$parity.':deint='.($onlyInterlaced ? 'interlaced' : 'all'),
+            "bwdif=mode=send_{$mode}:parity={$parity}:deint=".($onlyInterlaced ? 'interlaced' : 'all'),
         );
     }
 
@@ -690,7 +690,7 @@ trait ConfiguresOutput
             throw new InvalidArgumentException('Volume requires a finite nonnegative multiplier.');
         }
 
-        return $this->audioFilter('volume='.$multiplier);
+        return $this->audioFilter("volume={$multiplier}");
     }
 
     /**
@@ -710,7 +710,7 @@ trait ConfiguresOutput
             ? sprintf('%.0F', $seconds).'s'
             : rtrim(rtrim(sprintf('%.17F', $seconds * 1000), '0'), '.');
 
-        return $this->audioFilter('adelay=delays='.$delay.':all=1');
+        return $this->audioFilter("adelay=delays={$delay}:all=1");
     }
 
     /**
@@ -748,16 +748,16 @@ trait ConfiguresOutput
             throw new InvalidArgumentException('A fade must apply to video, audio, or both.');
         }
 
-        $timing = 't='.$type
+        $timing = "t={$type}"
             .':st='.rtrim(rtrim(sprintf('%.17F', $start), '0'), '.')
             .':d='.rtrim(rtrim(sprintf('%.17F', $duration), '0'), '.');
 
         if ($video) {
-            $this->videoFilter('fade='.$timing);
+            $this->videoFilter("fade={$timing}");
         }
 
         if ($audio) {
-            $this->audioFilter('afade='.$timing);
+            $this->audioFilter("afade={$timing}");
         }
 
         return $this;
@@ -1086,12 +1086,12 @@ trait ConfiguresOutput
                 $option = match ($name) {
                     'codec' => 'c', 'bitrate' => 'b', default => $name
                 };
-                $options[] = '-'.$option.':'.$type;
+                $options[] = "-{$option}:{$type}";
                 $options[] = (string) $value;
             }
 
             if ($filters !== []) {
-                $options[] = '-filter:'.$type;
+                $options[] = "-filter:{$type}";
                 $options[] = implode(',', array_map($compileFilter, $filters));
             }
         }
@@ -1113,7 +1113,7 @@ trait ConfiguresOutput
             foreach ($streams as $track => $encoding) {
                 foreach ($encoding as $name => $value) {
                     if ($name === 'filters') {
-                        $options[] = '-filter:'.$type.':'.$track;
+                        $options[] = "-filter:{$type}:{$track}";
                         $options[] = implode(',', array_map($compileFilter, [...$baseFilters, ...$value]));
 
                         continue;
@@ -1122,7 +1122,7 @@ trait ConfiguresOutput
                     $option = match ($name) {
                         'codec' => 'c', 'bitrate' => 'b', default => $name
                     };
-                    $options[] = '-'.$option.':'.$type.':'.$track;
+                    $options[] = "-{$option}:{$type}:{$track}";
                     $options[] = (string) $value;
                 }
             }
@@ -1140,16 +1140,16 @@ trait ConfiguresOutput
 
         foreach ($this->metadata as $key => $value) {
             $options[] = '-metadata';
-            $options[] = $key.'='.$value;
+            $options[] = "{$key}={$value}";
         }
 
         foreach ($this->streamMetadata as [$stream, $key, $value]) {
-            $options[] = '-metadata:s:'.$stream;
-            $options[] = $key.'='.$value;
+            $options[] = "-metadata:s:{$stream}";
+            $options[] = "{$key}={$value}";
         }
 
         foreach ($this->dispositions as [$stream, $flags]) {
-            $options[] = '-disposition:'.$stream;
+            $options[] = "-disposition:{$stream}";
             $options[] = $flags;
         }
 

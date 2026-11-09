@@ -61,7 +61,7 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
         // We will validate every color now, so a bad color fails before the export runs.
         array_map(CommandCompiler::color(...), $colors);
 
-        $this->graph = '[0:a:0]showwavespic=s='.$width.'x'.$height.':colors='.implode('|', $colors).'[waveform]';
+        $this->graph = "[0:a:0]showwavespic=s={$width}x{$height}:colors=".implode('|', $colors).'[waveform]';
         $this->export = new PendingExport($media, $disk, $this, 'image');
         $this->export->map('[waveform]')->withoutMetadata(chapters: true)->video('mjpeg');
     }
@@ -132,11 +132,11 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
         }
 
         $index = array_search('-filter_complex', $command, true) + 1;
-        $command[$index] = str_replace('[0:a:0]', '[0:a:0]'.($audio === '' ? '' : $audio.','), $command[$index]);
+        $command[$index] = str_replace('[0:a:0]', '[0:a:0]'.($audio === '' ? '' : "{$audio},"), $command[$index]);
 
         if (isset($filters['-filter:v'])) {
             $command[$index] = substr($command[$index], 0, -strlen('[waveform]'))
-                .','.$filters['-filter:v'].'[waveform]';
+                .",{$filters['-filter:v']}[waveform]";
         }
 
         array_splice($command, -1, 0, ['-frames:v', '1', '-update', '1', '-f', 'image2']);

@@ -88,7 +88,7 @@ class PreparedImageInput implements InputSource
         // selected direct input, and the edits never touch an original file.
         $source = $workspace->stage($this->image, resource: true);
         $this->validate($source);
-        $target = $workspace->path.'/'.$name;
+        $target = "{$workspace->path}/{$name}";
         if (! @copy($source, $target) || ! chmod($target, 0600)) {
             throw MediaException::staging('Cannot prepare a private image copy.', 'filesystem');
         }

@@ -270,7 +270,7 @@ class PendingHlsMerge
             throw new InvalidArgumentException('Composition requires retained v9 VOD clock provenance.');
         }
 
-        $text = $this->owned(fn (): string => $presentation->render($file, fn ($id): string => 'owned/'.$id));
+        $text = $this->owned(fn (): string => $presentation->render($file, fn ($id): string => "owned/{$id}"));
         preg_match_all('/^#EXTINF:([0-9]+(?:\.[0-9]+)?),/m', $text, $durations);
         if (substr_count($text, '#EXT-X-ENDLIST') !== 1 || substr_count($text, '#EXT-X-PLAYLIST-TYPE:VOD') !== 1
             || str_contains($text, '#EXT-X-DISCONTINUITY') || str_contains($text, '#EXT-X-BYTERANGE')
@@ -399,7 +399,7 @@ class PendingHlsMerge
             array_flip(['GROUP-ID', 'AUDIO', 'SUBTITLES']),
         )) as [$value, $offset]) {
             if (str_starts_with($value, '"')) {
-                $line = substr_replace($line, '"p'.$index.'-', $start + $offset, 1);
+                $line = substr_replace($line, "\"p{$index}-", $start + $offset, 1);
             }
         }
 
@@ -445,7 +445,7 @@ class PendingHlsMerge
      */
     protected function renderMaster(): string
     {
-        $text = implode("\n", ['#EXTM3U', '#EXT-X-VERSION:'.$this->version, ...$this->lines, '']);
+        $text = implode("\n", ['#EXTM3U', "#EXT-X-VERSION:{$this->version}", ...$this->lines, '']);
         if (strlen($text) > Media::MAX_MANIFEST_BYTES) {
             throw new InvalidArgumentException('The composition master must fit within the 16 MiB limit.');
         }
@@ -528,7 +528,7 @@ class PendingHlsMerge
             }
 
             throw new InvalidArgumentException(
-                'Composition requires valid HLS playlists: '.$exception->getMessage(),
+                "Composition requires valid HLS playlists: {$exception->getMessage()}",
                 $exception->getCode(),
                 previous: $exception,
             );

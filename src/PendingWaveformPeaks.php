@@ -209,7 +209,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $channels = $this->mixMono ? 1 : ($this->inputChannels ?: 1);
         if ($this->mixMono && $this->inputChannels > 0) {
             $terms = array_map(
-                fn ($i): string => sprintf('%.17g', 1 / $this->inputChannels).'*c'.$i,
+                fn ($i): string => sprintf('%.17g', 1 / $this->inputChannels)."*c{$i}",
                 range(0, $this->inputChannels - 1),
             );
             $pan = 'pan=mono|c0='.implode('+', $terms);
@@ -217,11 +217,11 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
             if ($index === false) {
                 array_splice($command, -1, 0, ['-filter:a', $pan]);
             } else {
-                $command[$index + 1] .= ','.$pan;
+                $command[$index + 1] .= ",{$pan}";
             }
         }
 
-        array_splice($command, -1, 0, ['-map', '0:a:'.$this->track, '-vn', '-sn', '-dn', '-c:a', 'pcm_s16le',
+        array_splice($command, -1, 0, ['-map', "0:a:{$this->track}", '-vn', '-sn', '-dn', '-c:a', 'pcm_s16le',
             '-ar', (string) ($this->rate ?: 48000),
             ...($this->mixMono || $this->inputLayout === null
                 ? ['-ac', (string) $channels]
@@ -238,7 +238,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
      */
     public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
-        return [$workspace->path.'/decoded.s16le'];
+        return ["{$workspace->path}/decoded.s16le"];
     }
 
     /**

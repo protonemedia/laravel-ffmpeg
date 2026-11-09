@@ -81,7 +81,7 @@ class HlsPresentation
      */
     public static function id(string $disk, string $path): string
     {
-        return hash('sha256', $disk."\0".$path);
+        return hash('sha256', "{$disk}\0{$path}");
     }
 
     /**
@@ -177,7 +177,7 @@ class HlsPresentation
                         break;
                     }
                 }
-            } elseif (str_starts_with($line, '#EXT-X-MEDIA:') && str_contains($line, 'URI="'.$excluded.'"')) {
+            } elseif (str_starts_with($line, '#EXT-X-MEDIA:') && str_contains($line, "URI=\"{$excluded}\"")) {
                 unset($lines[$index]);
             }
         }
@@ -214,7 +214,7 @@ class HlsPresentation
             default => ['hls-segment', 'hls-init', 'dash-segment', 'dash-init'],
         };
         if ($file === null || ! in_array($file['role'], $roles, true)) {
-            throw new HlsResourceNotFoundException('The HLS reference is not an owned '.$kind.' resource.');
+            throw new HlsResourceNotFoundException("The HLS reference is not an owned {$kind} resource.");
         }
 
         return $id;

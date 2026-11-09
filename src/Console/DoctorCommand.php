@@ -52,14 +52,14 @@ class DoctorCommand extends Command
                 ));
             } else {
                 foreach ($capabilities->versions() as $tool => $version) {
-                    $this->line($tool.': '.$version);
+                    $this->line("{$tool}: {$version}");
                 }
 
                 foreach ([
                     'encoders', 'muxers', 'filters', 'input_protocols', 'output_protocols',
                     'bitstream_filters', 'hardware_accelerators',
                 ] as $category) {
-                    $this->line($category.': '.count($capabilities->available($category)));
+                    $this->line("{$category}: ".count($capabilities->available($category)));
                 }
 
                 $this->info('Temporary root: writable');

@@ -275,7 +275,7 @@ class Watermark
 
         if (isset($this->{$axis}[$opposite])) {
             throw new InvalidArgumentException(
-                'A watermark cannot be pinned to both the '.$opposite.' and the '.$edge.' edge.',
+                "A watermark cannot be pinned to both the {$opposite} and the {$edge} edge.",
             );
         }
 

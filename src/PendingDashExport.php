@@ -368,7 +368,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             $settings[$type === 'video' ? 'audio' : 'video'] = [];
             $settings[$type === 'video' ? 'audioStreams' : 'videoStreams'] = [];
             $settings[$type === 'video' ? 'audioFilters' : 'videoFilters'] = [];
-            $outputs[] = new ExportOutput($prefix.$name.'/index.mpd', $this->export->filesystem())
+            $outputs[] = new ExportOutput("{$prefix}{$name}/index.mpd", $this->export->filesystem())
                 ->configure($settings);
         }
 
@@ -385,7 +385,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         $result = [];
-        $targets = $outputPaths ?? array_map(fn (int|string $i): string => '[output:'.$i.']', array_keys($outputs));
+        $targets = $outputPaths ?? array_map(fn (int|string $i): string => "[output:{$i}]", array_keys($outputs));
         foreach ($default as $token) {
             $index = array_search($token, $targets, true);
             if ($index !== false) {
@@ -466,15 +466,15 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $paths = [];
         foreach (array_keys($this->representations) as $name) {
-            $directory = $workspace->path.'/dash-'.$name;
+            $directory = "{$workspace->path}/dash-{$name}";
             if (! mkdir($directory, 0700)) {
                 throw MediaException::encoding('Cannot create the private DASH workspace.', 'filesystem');
             }
 
-            $paths[] = $directory.'/index.mpd';
+            $paths[] = "{$directory}/index.mpd";
         }
 
-        $paths[] = $workspace->path.'/manifest.mpd';
+        $paths[] = "{$workspace->path}/manifest.mpd";
 
         return $paths;
     }
@@ -661,7 +661,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             DashManifest::fail();
         }
 
-        $template->setAttribute('initialization', $name.'/init.mp4');
+        $template->setAttribute('initialization', "{$name}/init.mp4");
         $template->setAttribute('media', $name.'/segment-$Number%08d$.m4s');
 
         return $representation;
@@ -685,7 +685,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $peak = 0;
         $bytes = 0;
         foreach ($parsed['files'] as $fileIndex => $filename) {
-            $local = dirname($path).'/'.$filename;
+            $local = dirname($path)."/{$filename}";
             if ($fileIndex > 0) {
                 $size = $this->export->validateArtifact($local, 'dash-segment');
                 $bytes += $size;
@@ -693,7 +693,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             }
 
             $target = $destination;
-            $target['path'] = $prefix.$filename;
+            $target['path'] = "{$prefix}{$filename}";
             $this->representationFiles[$name][$target['path']] = true;
             $artifact = [
                 'path' => $local,
@@ -706,9 +706,9 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
                 $artifact += [
                     'probe' => true,
                     'probePath' => PendingExport::fragmentProbe(
-                        $directory.'/init.mp4',
+                        "{$directory}/init.mp4",
                         $local,
-                        $directory.'/probe.mp4',
+                        "{$directory}/probe.mp4",
                     ),
                 ];
             }
@@ -758,9 +758,9 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $lines = ['#EXTM3U', '#EXT-X-VERSION:7'];
         $audio = array_filter($info, fn (array $item): bool => $item['type'] === 'audio');
         foreach ($audio as $name => $item) {
-            $lines[] = '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="'.$name
-                .'",DEFAULT='.(array_key_first($audio) === $name ? 'YES' : 'NO')
-                .',AUTOSELECT=YES,URI="'.$name.'/index.m3u8"';
+            $lines[] = "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"{$name}\""
+                .',DEFAULT='.(array_key_first($audio) === $name ? 'YES' : 'NO')
+                .",AUTOSELECT=YES,URI=\"{$name}/index.m3u8\"";
         }
 
         foreach ($info as $name => $item) {
@@ -776,12 +776,12 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
                 $item['codecs'],
                 ...($item['type'] === 'video' ? array_column($audio, 'codecs') : []),
             ]);
-            $lines[] = '#EXT-X-STREAM-INF:BANDWIDTH='.$bandwidth.',AVERAGE-BANDWIDTH='.$average
+            $lines[] = "#EXT-X-STREAM-INF:BANDWIDTH={$bandwidth},AVERAGE-BANDWIDTH={$average}"
                 .',CODECS="'.implode(',', $codecs).'"'
                 .($item['type'] === 'video'
-                    ? ',RESOLUTION='.$item['width'].'x'.$item['height'].($audio !== [] ? ',AUDIO="audio"' : '')
+                    ? ",RESOLUTION={$item['width']}x{$item['height']}".($audio !== [] ? ',AUDIO="audio"' : '')
                     : '');
-            $lines[] = $name.'/index.m3u8';
+            $lines[] = "{$name}/index.m3u8";
         }
 
         $local = dirname($path).'/master.m3u8';

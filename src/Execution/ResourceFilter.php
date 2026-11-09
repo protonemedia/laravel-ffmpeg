@@ -39,8 +39,8 @@ class ResourceFilter
         return new self('drawText', [
             'font' => ['type' => 'file', 'source' => $font],
             'textfile' => ['type' => 'text', 'source' => $text],
-        ], 'drawtext=fontfile=%s:textfile=%s:expansion=none:reload=0:fontsize='.$size.':x='.$x.':y='.$y
-            .':fontcolor='.$color);
+        ], "drawtext=fontfile=%s:textfile=%s:expansion=none:reload=0:fontsize={$size}:x={$x}:y={$y}"
+            .":fontcolor={$color}");
     }
 
     /**

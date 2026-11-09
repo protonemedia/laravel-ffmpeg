@@ -119,12 +119,12 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
     {
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
         $rate = $this->every !== null ? '1/'.CommandCompiler::timestamp($this->every)
-            : $this->count.'/'.($this->duration === null ? '[duration]' : CommandCompiler::timestamp($this->duration));
+            : "{$this->count}/".($this->duration === null ? '[duration]' : CommandCompiler::timestamp($this->duration));
         $start = $this->export->inputSeekOptions() === [] ? ($this->export->clipSettings()['start'] ?? 0) : 0;
-        $filter = 'fps=fps='.$rate.':start_time='.CommandCompiler::timestamp($start).':round=near:eof_action=pass';
+        $filter = "fps=fps={$rate}:start_time=".CommandCompiler::timestamp($start).':round=near:eof_action=pass';
 
         if ($this->count !== null) {
-            $filter .= ',tpad=stop_mode=clone:stop='.$this->count;
+            $filter .= ",tpad=stop_mode=clone:stop={$this->count}";
         }
 
         $index = array_search('-filter:v', $default, true);
@@ -132,7 +132,7 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
         if ($index === false) {
             array_splice($default, -1, 0, ['-filter:v', $filter]);
         } else {
-            $default[$index + 1] .= ','.$filter;
+            $default[$index + 1] .= ",{$filter}";
         }
 
         $options = ['-f', 'image2', '-start_number', '1'];
@@ -156,7 +156,7 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
     {
         $extension = pathinfo($outputs[0]->destination()['path'], PATHINFO_EXTENSION);
 
-        return [$workspace->path.'/frame-%08d.'.$extension];
+        return ["{$workspace->path}/frame-%08d.{$extension}"];
     }
 
     /**

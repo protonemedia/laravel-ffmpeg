@@ -409,7 +409,7 @@ class Media
                     $binary, '-hide_banner', '-nostdin', '-nostats', '-xerror', '-loglevel', 'info',
                     '-protocol_whitelist', $this->protocolWhitelist(), ...$this->transportOptions(),
                     ...$this->inputOptions(), '-i', $path,
-                    '-map', '0:a:'.$audio, '-vn', '-sn', '-dn', '-af', $audioFilter, '-f', 'null', '-',
+                    '-map', "0:a:{$audio}", '-vn', '-sn', '-dn', '-af', $audioFilter, '-f', 'null', '-',
                 ],
                 $workspace->path,
                 [$path => '[input]'] + $this->redactions(),
@@ -541,7 +541,7 @@ class Media
         ], $workspace->path, $redactions);
 
         if ($result->exitCode !== 0) {
-            throw MediaException::probing('FFprobe failed (exit '.$result->exitCode.').', 'exit', $result->diagnostics);
+            throw MediaException::probing("FFprobe failed (exit {$result->exitCode}).", 'exit', $result->diagnostics);
         }
 
         try {

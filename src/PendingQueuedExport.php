@@ -95,7 +95,7 @@ class PendingQueuedExport
 
         // An export that splits into a single part has nothing to run in parallel, so we
         // will dispatch it as one ordinary job instead of a batch.
-        $prefix = 'laravel-ffmpeg/queued/'.$this->id;
+        $prefix = "laravel-ffmpeg/queued/{$this->id}";
         $partExports = $export->queueParts($path, $prefix);
         if (count($partExports) === 1) {
             return $this->configure(new ExportJob($this->id, $this->plan, $path));
@@ -107,7 +107,7 @@ class PendingQueuedExport
         $parts = [];
         $jobs = [];
         foreach ($partExports as $index => [$part, $destination]) {
-            $parts[] = $manifest = $prefix.'/inventories/'.$index.'.json';
+            $parts[] = $manifest = "{$prefix}/inventories/{$index}.json";
             $jobs[] = $this->configure(
                 new ExportJob($this->id, new ExportPlan($part), $destination, $disk, $manifest),
                 initial: false,
@@ -115,7 +115,7 @@ class PendingQueuedExport
         }
 
         $finalizer = $this->configure(new ExportJob($this->id, null, $path, $disk, parts: $parts), initial: false);
-        $batch = Bus::batch($jobs)->name('FFmpeg '.$this->id);
+        $batch = Bus::batch($jobs)->name("FFmpeg {$this->id}");
         if ($this->connection !== null) {
             $batch->onConnection($this->connection);
         }

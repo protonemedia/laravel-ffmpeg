@@ -261,7 +261,7 @@ class PendingLiveHls
         $this->ensureNamespaceIsDedicated($directory);
 
         $disk = is_string($this->disk) ? Storage::disk($this->disk) : $this->disk;
-        $playlist = $directory.'/index.m3u8';
+        $playlist = "{$directory}/index.m3u8";
         $workspace = null;
         $failed = false;
         $this->beginSession();
@@ -391,7 +391,7 @@ class PendingLiveHls
             $this->interruptIfNecessary();
             $this->attempts++;
             $start = $this->next;
-            $local = $workspace->path.'/live.m3u8';
+            $local = "{$workspace->path}/live.m3u8";
             @unlink($local);
 
             // We will suppress diagnostics that mention the source entirely. Reconnect failures
@@ -421,7 +421,7 @@ class PendingLiveHls
 
             if ($this->attempts > $this->retries) {
                 throw MediaException::live(
-                    'Live source exhausted its reconnect policy after '.$this->attempts.' attempts.',
+                    "Live source exhausted its reconnect policy after {$this->attempts} attempts.",
                     'source',
                 );
             }
@@ -470,11 +470,11 @@ class PendingLiveHls
             '-i', $input['path'],
             '-map', '0:v:0?', '-map', '0:a:0?', '-sn', '-dn',
             '-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-threads', '1', '-c:a', 'aac',
-            '-force_key_frames', 'expr:gte(t,n_forced*'.$this->segmentDuration.')',
+            '-force_key_frames', "expr:gte(t,n_forced*{$this->segmentDuration})",
             '-flags:v', '+cgop', '-f', 'hls', '-hls_time', (string) $this->segmentDuration,
             '-hls_list_size', (string) $this->window, '-hls_delete_threshold', (string) $this->window,
             '-hls_flags', 'delete_segments+temp_file', '-start_number', (string) $start,
-            '-hls_segment_filename', $prefix.'%012d.ts', $local,
+            '-hls_segment_filename', "{$prefix}%012d.ts", $local,
         ];
     }
 
@@ -490,7 +490,7 @@ class PendingLiveHls
         int $start,
         bool $finished = false,
     ): void {
-        $local = $workspace->path.'/live.m3u8';
+        $local = "{$workspace->path}/live.m3u8";
         if (! is_file($local)) {
             return;
         }
@@ -574,8 +574,8 @@ class PendingLiveHls
                 }
 
                 if ($number >= $this->next) {
-                    $key = $directory.'/'.$name;
-                    $this->uploadSegment($disk, $workspace->path.'/'.$name, $key);
+                    $key = "{$directory}/{$name}";
+                    $this->uploadSegment($disk, "{$workspace->path}/{$name}", $key);
                     $this->owned[$key] = $number;
                     $this->entries[] = [
                         'number' => $number,
@@ -632,8 +632,8 @@ class PendingLiveHls
         // The target duration of a playlist cannot change while it is live, so we will add one
         // second of headroom to cover the ordinary rounding of audio and video frames.
         $text = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:".((int) ceil($this->segmentDuration) + 1)
-            ."\n#EXT-X-MEDIA-SEQUENCE:".$this->entries[0]['number']
-            ."\n#EXT-X-DISCONTINUITY-SEQUENCE:".$this->discontinuities."\n";
+            ."\n#EXT-X-MEDIA-SEQUENCE:{$this->entries[0]['number']}"
+            ."\n#EXT-X-DISCONTINUITY-SEQUENCE:{$this->discontinuities}\n";
         foreach ($this->entries as $entry) {
             $text .= ($entry['discontinuity'] ? "#EXT-X-DISCONTINUITY\n" : '')
                 .'#EXTINF:'.sprintf('%.6F', $entry['duration']).",\n".basename($entry['key'])."\n";
@@ -680,7 +680,7 @@ class PendingLiveHls
      */
     protected function pruneLocalSegments(Workspace $workspace, string $prefix): void
     {
-        foreach (glob($workspace->path.'/'.$prefix.'*') ?: [] as $file) {
+        foreach (glob("{$workspace->path}/{$prefix}*") ?: [] as $file) {
             if (! @unlink($file)) {
                 throw MediaException::cleanup('Cannot prune local live segments.', 'filesystem');
             }

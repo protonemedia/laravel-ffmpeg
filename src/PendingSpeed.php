@@ -88,13 +88,13 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
 
         $factor = $this->number($this->factor);
         if (! $settings['omitVideo']) {
-            $settings['videoFilters'][] = 'setpts=PTS/'.$factor;
+            $settings['videoFilters'][] = "setpts=PTS/{$factor}";
         }
 
         if (! $settings['omitAudio']) {
             // The atempo filter keeps its first timestamp and then generates timestamps at the
             // new sample rate, so we will scale only that initial offset beforehand.
-            $settings['audioFilters'][] = 'asetpts=PTS-STARTPTS+STARTPTS/'.$factor;
+            $settings['audioFilters'][] = "asetpts=PTS-STARTPTS+STARTPTS/{$factor}";
             $remaining = $this->factor;
             while ($remaining > 2) {
                 $settings['audioFilters'][] = 'atempo=2';
@@ -106,7 +106,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
                 $remaining *= 2;
             }
 
-            $settings['audioFilters'][] = 'atempo='.$this->number($remaining);
+            $settings['audioFilters'][] = "atempo={$this->number($remaining)}";
         }
 
         // Source chapter timestamps cannot describe a retimed presentation.

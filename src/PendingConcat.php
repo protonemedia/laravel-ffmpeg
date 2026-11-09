@@ -280,16 +280,16 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         $branches = [];
         $pads = [];
         foreach ($this->sources as $index => $source) {
-            $branches[] = '['.$index.':V:0]'.implode(',', $this->videoConformance ?? []).'[concat_v'.$index.']';
-            $pads[] = '[concat_v'.$index.']';
+            $branches[] = "[{$index}:V:0]".implode(',', $this->videoConformance ?? [])."[concat_v{$index}]";
+            $pads[] = "[concat_v{$index}]";
 
             if ($this->audioConformance !== null) {
                 ['sampleRate' => $rate, 'channels' => $channels, 'channel' => $channel] = $this->audioConformance;
-                $pan = $channel === null ? '' : 'pan=mono|c0=c'.$channel.',';
-                $branches[] = '['.$index.':a:0]'.$pan.'aresample='.$rate
-                    .':async=1:first_pts=0,aformat=sample_rates='.$rate
-                    .':channel_layouts='.($channels === 1 ? 'mono' : 'stereo').'[concat_a'.$index.']';
-                $pads[] = '[concat_a'.$index.']';
+                $pan = $channel === null ? '' : "pan=mono|c0=c{$channel},";
+                $branches[] = "[{$index}:a:0]{$pan}aresample={$rate}"
+                    .":async=1:first_pts=0,aformat=sample_rates={$rate}"
+                    .':channel_layouts='.($channels === 1 ? 'mono' : 'stereo')."[concat_a{$index}]";
+                $pads[] = "[concat_a{$index}]";
             }
         }
 

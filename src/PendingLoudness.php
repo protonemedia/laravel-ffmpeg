@@ -82,7 +82,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         }
 
         $this->export = new PendingExport($source, $disk, $this);
-        $this->export->map('0:a:'.$audio)->audio('aac');
+        $this->export->map("0:a:{$audio}")->audio('aac');
     }
 
     /**
@@ -172,14 +172,14 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         // We trim before preprocessing and measurement, instead of seeking the output after loudnorm.
         $clip = $outputs[0]->clipSettings();
         $filters = $clip === null ? [] : [
-            'atrim=start='.$this->number($clip['start']).':duration='.$this->number($clip['duration']),
+            "atrim=start={$this->number($clip['start'])}:duration={$this->number($clip['duration'])}",
             'asetpts=PTS-STARTPTS',
         ];
         if ($filter !== '') {
             $filters[] = $filter;
         }
 
-        $filters[] = 'aresample='.$this->sampleRate;
+        $filters[] = "aresample={$this->sampleRate}";
         $filters[] = $this->loudnorm('loudness-final.json');
         $destination = array_pop($result);
 
@@ -215,18 +215,18 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             '-af', $this->loudnorm('loudness-measure.json'), '-f', 'null', '-',
         ];
         $analyze($measure, 'Loudness analysis failed.');
-        $this->measurement = $this->readStats($workspace->path.'/loudness-measure.json', Progress::ANALYSIS);
+        $this->measurement = $this->readStats("{$workspace->path}/loudness-measure.json", Progress::ANALYSIS);
         $normalizer = $this->loudnorm('loudness-final.json');
 
         // Linear normalization needs the measured values, so we will pass them to the final
         // pass whenever they fit the ranges that loudnorm's measured options accept.
         if ($this->measurement->usableMeasurements()) {
             $stats = $this->measurement;
-            $normalizer .= ':measured_I='.$this->number($stats->inputIntegrated)
-                .':measured_TP='.$this->number($stats->inputTruePeak)
-                .':measured_LRA='.$this->number($stats->inputRange)
-                .':measured_thresh='.$this->number($stats->inputThreshold)
-                .':offset='.$this->number($stats->targetOffset);
+            $normalizer .= ":measured_I={$this->number($stats->inputIntegrated)}"
+                .":measured_TP={$this->number($stats->inputTruePeak)}"
+                .":measured_LRA={$this->number($stats->inputRange)}"
+                .":measured_thresh={$this->number($stats->inputThreshold)}"
+                .":offset={$this->number($stats->targetOffset)}";
         }
 
         // The final pass reads the prepared file but keeps the encoder, container, metadata
@@ -258,9 +258,9 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
      */
     protected function loudnorm(string $statistics): string
     {
-        return 'loudnorm=I='.$this->number($this->integrated).':TP='.$this->number($this->truePeak)
-            .':LRA='.$this->number($this->range).':linear='.($this->linear ? 'true' : 'false')
-            .':print_format=json:stats_file='.$statistics;
+        return "loudnorm=I={$this->number($this->integrated)}:TP={$this->number($this->truePeak)}"
+            .":LRA={$this->number($this->range)}:linear=".($this->linear ? 'true' : 'false')
+            .":print_format=json:stats_file={$statistics}";
     }
 
     /**
@@ -298,7 +298,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
      */
     public function artifact(string $path, string $role, int $size): void
     {
-        $this->normalization = $this->readStats($this->workspace->path.'/loudness-final.json');
+        $this->normalization = $this->readStats("{$this->workspace->path}/loudness-final.json");
         try {
             $streams = $this->source->probeArtifact($path, $this->workspace)->streams();
         } catch (MediaException $mediaException) {

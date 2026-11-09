@@ -114,7 +114,7 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
      */
     public function graph(): string
     {
-        return '[0:V:0]'.$this->preprocessing().'[gif_frames];'
+        return "[0:V:0]{$this->preprocessing()}[gif_frames];"
             .'movie=gif-palette.png[gif_palette];[gif_frames][gif_palette]paletteuse[gif_out]';
     }
 
@@ -165,7 +165,7 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
             $command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1',
             '-i', $prepared, '-vf', 'palettegen', '-frames:v', '1', '-threads', '1', '-update', '1', $palette,
         ], 'GIF palette preparation failed.');
-        ImageOutput::validate($workspace->path.'/'.$palette, 'image');
+        ImageOutput::validate("{$workspace->path}/{$palette}", 'image');
 
         $prefix = array_slice($prefix, 0, array_search('-protocol_whitelist', $prefix, true));
         $prefix[$graphIndex + 1] = '[0:v:0][1:v:0]paletteuse[gif_out]';

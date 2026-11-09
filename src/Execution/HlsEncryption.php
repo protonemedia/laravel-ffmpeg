@@ -80,7 +80,7 @@ class HlsEncryption
         if (! isset($this->keys[$index])) {
             $bytes = $this->key ?? random_bytes(16);
             $filename = bin2hex(random_bytes(16)).'.key';
-            $local = dirname($path).'/'.$filename;
+            $local = dirname($path)."/{$filename}";
             if (@file_put_contents($local, $bytes) !== 16 || ! chmod($local, 0600)) {
                 throw MediaException::validation('Cannot prepare the private HLS key.', 'filesystem');
             }
@@ -121,7 +121,7 @@ class HlsEncryption
         }
 
         $iv = random_bytes(16);
-        $encrypted = $path.'.aes';
+        $encrypted = "{$path}.aes";
         $source = null;
         $destination = null;
         try {
@@ -175,7 +175,7 @@ class HlsEncryption
 
         return [
             'path' => $encrypted,
-            'tag' => '#EXT-X-KEY:METHOD=AES-128,URI="'.$this->urls[$playlist][$index].'",IV=0x'.bin2hex($iv),
+            'tag' => "#EXT-X-KEY:METHOD=AES-128,URI=\"{$this->urls[$playlist][$index]}\",IV=0x".bin2hex($iv),
         ];
     }
 

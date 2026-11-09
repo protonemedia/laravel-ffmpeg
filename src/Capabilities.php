@@ -33,7 +33,7 @@ class Capabilities implements Arrayable, JsonSerializable
             $version = $workspace->runner->pairVersion($ffmpeg, $ffprobe, $workspace->path);
             $data = ['versions' => ['ffmpeg' => $version, 'ffprobe' => $version]];
             foreach (['encoders', 'muxers', 'filters', 'bsfs', 'hwaccels'] as $kind) {
-                $output = $this->capture($workspace, $ffmpeg, '-'.$kind);
+                $output = $this->capture($workspace, $ffmpeg, "-{$kind}");
                 $data[match ($kind) {
                     'bsfs' => 'bitstream_filters', 'hwaccels' => 'hardware_accelerators', default => $kind,
                 }] = $this->parseList($kind, $output);
@@ -42,7 +42,7 @@ class Capabilities implements Arrayable, JsonSerializable
             $data['protocols'] = $this->parseProtocols($this->capture($workspace, $ffmpeg, '-protocols'));
             $data['ffprobe_protocols'] = $this->parseProtocols($this->capture($workspace, $ffprobe, '-protocols'));
             // We verify an actual write instead of predicting one from the permission bits.
-            $file = $workspace->path.'/write-check';
+            $file = "{$workspace->path}/write-check";
             if (@file_put_contents($file, 'ok') !== 2 || ! @unlink($file)) {
                 throw MediaException::staging('The temporary media root is not writable.', 'filesystem');
             }

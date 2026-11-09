@@ -136,7 +136,7 @@ class VideoStreamSettings
             'tv' => 'limited', 'pc' => 'full', 'unspecified' => 'unknown', default => $range
         };
 
-        return 'setparams=color_primaries='.$primaries.':color_trc='.$transfer.':colorspace='.$space.':range='.$range;
+        return "setparams=color_primaries={$primaries}:color_trc={$transfer}:colorspace={$space}:range={$range}";
     }
 
     /**
