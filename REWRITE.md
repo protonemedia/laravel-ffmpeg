@@ -992,7 +992,7 @@ $media->hls()
     ->save('branded/master.m3u8');
 ```
 
-`-ignore_loop 0` honors the GIF's embedded loop instructions. It does not force infinite repetition when the image specifies a finite loop. `-ignore_loop 1` ignores the loop instructions. At EOF the overlay repeats its final frame. All ordinary video filters, including HLS variant geometry, run before overlays regardless of registration order.
+`-ignore_loop 0` honors the GIF's embedded loop instructions. It does not force infinite repetition when the image specifies a finite loop. `-ignore_loop 1` ignores the loop instructions. At EOF the overlay repeats its final frame. A looping overlay ends with the main video, and audio or other streams keep their own length. All ordinary video filters, including HLS variant geometry, run before overlays regardless of registration order.
 
 ```php
 $export = FFMpeg::disk('videos')

@@ -35,7 +35,6 @@ class PendingExport
 
     private array $watermarks = [];
 
-    private ?float $watermarkDuration = null;
 
     private ?int $coverInput = null;
 
@@ -435,18 +434,12 @@ class PendingExport
                     $horizontal = str_ends_with($position, 'right') ? 'main_w-overlay_w-'.$x : ($position === 'center' ? '(main_w-overlay_w)/2+'.$x : (string) $x);
                     $vertical = str_starts_with($position, 'bottom') ? 'main_h-overlay_h-'.$y : ($position === 'center' ? '(main_h-overlay_h)/2+'.$y : (string) $y);
                     $out = $n === count($this->watermarks) - 1 ? 'watermark_out'.$index : 'watermark_base'.$index.'_'.($n + 1);
-                    $branches[] = '[watermark_base'.$index.'_'.$n.']['.$label.']overlay=x='.$horizontal.':y='.$vertical.':eof_action=repeat:repeatlast=1:shortest=0['.$out.']';
+                    // A looping GIF never ends, so the main video bounds it; other streams keep their own length.
+                    $shortest = $this->inputs[$input]->inputOptions() === ['-ignore_loop', '0'] ? 1 : 0;
+                    $branches[] = '[watermark_base'.$index.'_'.$n.']['.$label.']overlay=x='.$horizontal.':y='.$vertical.':eof_action=repeat:repeatlast=1:shortest='.$shortest.'['.$out.']';
                 }
                 $graph = ($graph === null ? '' : $graph.';').implode(';', $branches);
                 $mappedLabels[] = 'watermark_out'.$index;
-                if (array_any($this->watermarks, fn ($mark) => $this->inputs[$mark['input']]->inputOptions() === ['-ignore_loop', '0'])) {
-                    $clip = $output->clipSettings();
-                    $duration = $this->watermarkDuration === null ? null : max(0, $this->watermarkDuration - ($clip['start'] ?? 0));
-                    if ($duration !== null && $clip !== null) {
-                        $duration = min($duration, $clip['duration']);
-                    }
-                    array_push($options, '-t', $duration === null ? '[source-duration]' : $this->clipTimestamp($duration));
-                }
             }
 
             if ($this->twoPass && in_array($index, $this->twoPassOutputIndexes($outputs), true)) {
@@ -848,12 +841,6 @@ class PendingExport
             if ((! $gif && ! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true))
                 || $image->streams()->count() !== 1 || (! $gif && $this->inputs[$mark['input']]->inputOptions() !== [])) {
                 throw new MediaException('Watermarks require a standalone PNG, JPEG, or GIF image; ignore_loop is GIF-only.', 'probing', 'watermark');
-            }
-            if ($this->inputs[$mark['input']]->inputOptions() === ['-ignore_loop', '0']) {
-                $this->watermarkDuration = $metadata[0]->duration();
-                if ($this->watermarkDuration === null || $this->watermarkDuration <= 0) {
-                    throw new MediaException('Looping GIF overlays require a finite primary duration.', 'probing', 'watermark');
-                }
             }
         }
     }

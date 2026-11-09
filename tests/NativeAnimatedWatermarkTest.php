@@ -57,6 +57,29 @@ class NativeAnimatedWatermarkTest extends TestCase
                     }
                 }
             }
+            // The looping overlay ends with the main video without cutting longer streams or clips.
+            $tone = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=black:s=80x48:r=10:d=1',
+                '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1', '-c:v', 'libx264', '-c:a', 'aac', '-shortest', $root.'/tone.mp4']);
+            $this->assertTrue($tone->successful(), $tone->errorOutput());
+            $durations = function (string $path) use ($probe): array {
+                $result = Process::run([$probe, '-v', 'error', '-show_entries', 'stream=codec_type,duration', '-of', 'json', $path]);
+                $this->assertTrue($result->successful(), $result->errorOutput());
+
+                return array_column(array_map(fn ($stream) => [$stream['codec_type'], round((float) $stream['duration'], 1)],
+                    json_decode($result->output(), true)['streams']), 1, 0);
+            };
+            FFMpeg::open(new File($root.'/tone.mp4'))->export()->watermark($logo)->delayAudio(0.5)
+                ->video('libx264')->audio('aac')->toDisk('animated')->save('delayed.mp4');
+            $this->assertEqualsWithDelta(1.5, $durations($root.'/output/delayed.mp4')['audio'], 0.1);
+            $this->assertEqualsWithDelta(1.0, $durations($root.'/output/delayed.mp4')['video'], 0.1);
+            $media->export()->watermark($logo)->clip(0.4, duration: 0.6)->video('libx264')->toDisk('animated')->save('clipped.mp4');
+            $this->assertEqualsWithDelta(0.6, $durations($root.'/output/clipped.mp4')['video'], 0.1);
+            // A raw stream has no container duration; the overlay still ends with it.
+            $raw = Process::run([$binary, '-v', 'error', '-i', $root.'/source.mp4', '-c:v', 'copy', '-bsf:v', 'h264_mp4toannexb', '-f', 'h264', $root.'/source.h264']);
+            $this->assertTrue($raw->successful(), $raw->errorOutput());
+            FFMpeg::open(new File($root.'/source.h264'))->export()->watermark($logo)->video('libx264')->toDisk('animated')->save('raw.mp4');
+            $this->assertEqualsWithDelta(1.6, $durations($root.'/output/raw.mp4')['video'], 0.1);
+
             // Overlay setup must not depend on a subclass calling parent::prepareEncoding().
             $custom = new class($media, 'animated') extends PendingExport
             {
