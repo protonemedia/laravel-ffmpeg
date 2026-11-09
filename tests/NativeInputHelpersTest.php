@@ -127,7 +127,6 @@ class NativeInputHelpersTest extends TestCase
     #[Test]
     public function hardware_and_gif_options_are_input_scoped_and_never_passed_to_ffprobe(): void
     {
-        $this->native();
         $binary = $this->root.'/probe';
         file_put_contents($binary, "#!/bin/sh\nprintf '%s\\n' \"\$@\" >> '".$this->root."/args'\ncase \"\$1\" in -version) echo 'ffprobe version 9.0.2';; *) echo '{\"format\":{},\"streams\":[]}' ;; esac\n");
         chmod($binary, 0700);

@@ -298,7 +298,6 @@ class NativeHlsPackagingTest extends TestCase
     #[DataProvider('corruptFragments')]
     public function invalid_fragment_inventories_and_map_hook_tampering_prevent_every_write(string $case): void
     {
-        $this->native();
         $disk = Storage::disk('hls-packaging');
         $disk->put('source.mp4', 'source');
         Process::preventStrayProcesses();

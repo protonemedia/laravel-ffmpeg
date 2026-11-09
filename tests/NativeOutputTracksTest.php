@@ -24,10 +24,6 @@ class NativeOutputTracksTest extends TestCase
             'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
             'filesystems.disks.output-tracks' => ['driver' => 'local', 'root' => $this->root.'/files'],
         ]);
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real output-track acceptance.');
-        }
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
     }
 
     protected function tearDown(): void
@@ -48,6 +44,10 @@ class NativeOutputTracksTest extends TestCase
 
     private function ffmpeg(array $arguments): string
     {
+        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real output-track acceptance.');
+        }
+        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
         $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-y', ...$arguments]);
         $this->assertTrue($result->successful(), $result->errorOutput());
 
