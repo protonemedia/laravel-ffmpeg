@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\HlsEncryption;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use SensitiveParameter;
 
 class PendingHlsExport extends PendingExport
@@ -519,7 +520,7 @@ class PendingHlsExport extends PendingExport
                     $this->validateArtifact($init, 'hls-init');
                     $destination = $output->destination();
                     $destination['path'] = $this->variantPaths[$name]['init'] ?? (dirname($destination['path']) === '.' ? '' : dirname($destination['path']).'/').'init.mp4';
-                    $line = '#EXT-X-MAP:URI="'.$this->relativeUrl($destination['path'], $output->destination()['path']).'"';
+                    $line = '#EXT-X-MAP:URI="'.HlsPresentation::relativeUrl($destination['path'], $output->destination()['path']).'"';
                     $this->variantFiles[$name][$destination['path']] = true;
                     $segments[] = ['path' => $init, 'output' => $index, 'role' => 'hls-init', 'destination' => $destination];
                 } elseif (str_starts_with($line, '#')) {
@@ -545,9 +546,9 @@ class PendingHlsExport extends PendingExport
                     $longest = max($longest, $duration);
                     $destination = $output->destination();
                     $destination['path'] = ($directory === '.' ? '' : $directory.'/').sprintf(basename($pattern), $count++);
-                    $line = $this->relativeUrl($destination['path'], $output->destination()['path']);
+                    $line = HlsPresentation::relativeUrl($destination['path'], $output->destination()['path']);
                     $this->variantFiles[$name][$destination['path']] = true;
-                    $probePath = $count === 1 && $init !== null ? $this->fragmentProbe($init, $local) : $local;
+                    $probePath = $count === 1 && $init !== null ? $this->fragmentProbe($init, $local, $local.'.probe.mp4') : $local;
                     if ($this->isSubtitle($index)) {
                         $subtitlePath = $local;
                     } elseif ($count === 1) {
@@ -625,7 +626,7 @@ class PendingHlsExport extends PendingExport
             } elseif ($rendition['channels'] !== null) {
                 $tag .= ',CHANNELS="'.$rendition['channels'].'"';
             }
-            $masterLines[] = $tag.',URI="'.$this->relativeUrl($streamInfo[$name]['path'], $outputs[$master]->destination()['path']).'"';
+            $masterLines[] = $tag.',URI="'.HlsPresentation::relativeUrl($streamInfo[$name]['path'], $outputs[$master]->destination()['path']).'"';
         }
         foreach ($this->variants as $name => $variant) {
             if (isset($this->renditions[$name])) {
@@ -656,7 +657,7 @@ class PendingHlsExport extends PendingExport
             }
             $masterLines[] = '#EXT-X-STREAM-INF:BANDWIDTH='.$info['peak'].',AVERAGE-BANDWIDTH='.$info['average']
                 .($info['attributes'] === '' ? '' : ','.$info['attributes']).$groups;
-            $masterLines[] = $this->relativeUrl($info['path'], $outputs[$master]->destination()['path']);
+            $masterLines[] = HlsPresentation::relativeUrl($info['path'], $outputs[$master]->destination()['path']);
         }
         $this->writePlaylist($paths[$master], $masterLines, $outputs[$master]->destination()['path'], null);
         $this->keyReferences = $encryption?->references() ?? [];
@@ -698,47 +699,6 @@ class PendingHlsExport extends PendingExport
         }
 
         return strlen($header);
-    }
-
-    private function fragmentProbe(string $init, string $segment): string
-    {
-        $path = $segment.'.probe.mp4';
-        $stream = @fopen($path, 'wb');
-        if ($stream === false) {
-            throw new MediaException('Cannot prepare fragment validation.', Progress::VALIDATION, 'filesystem');
-        }
-        try {
-            foreach ([$init, $segment] as $source) {
-                $input = @fopen($source, 'rb');
-                if ($input === false) {
-                    throw new MediaException('Cannot read fragment validation input.', Progress::VALIDATION, 'filesystem');
-                }
-                try {
-                    if (stream_copy_to_stream($input, $stream) !== filesize($source)) {
-                        throw new MediaException('Cannot prepare fragment validation.', Progress::VALIDATION, 'filesystem');
-                    }
-                } finally {
-                    fclose($input);
-                }
-            }
-        } finally {
-            fclose($stream);
-        }
-        chmod($path, 0600);
-
-        return $path;
-    }
-
-    private function relativeUrl(string $target, string $playlist): string
-    {
-        $from = dirname($playlist) === '.' ? [] : explode('/', dirname($playlist));
-        $to = explode('/', $target);
-        while ($from !== [] && $to !== [] && $from[0] === $to[0]) {
-            array_shift($from);
-            array_shift($to);
-        }
-
-        return implode('/', [...array_fill(0, count($from), '..'), ...array_map('rawurlencode', $to)]);
     }
 
     private function playlistLines(string $path): array

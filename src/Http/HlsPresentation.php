@@ -141,4 +141,17 @@ class HlsPresentation
 
         return $id;
     }
+
+    /** @internal The URL-encoded path from a playlist's directory to a target key on the same disk. */
+    public static function relativeUrl(string $target, string $playlist): string
+    {
+        $from = dirname($playlist) === '.' ? [] : explode('/', dirname($playlist));
+        $to = explode('/', $target);
+        while ($from !== [] && $to !== [] && $from[0] === $to[0]) {
+            array_shift($from);
+            array_shift($to);
+        }
+
+        return implode('/', [...array_fill(0, count($from), '..'), ...array_map('rawurlencode', $to)]);
+    }
 }

@@ -840,6 +840,37 @@ class PendingExport
         }
     }
 
+    /** @internal Concatenate an initialization file and its first fragment into a private, probeable MP4. */
+    protected function fragmentProbe(string $init, string $segment, string $target): string
+    {
+        $stream = @fopen($target, 'wb');
+        if ($stream === false) {
+            throw new MediaException('Cannot prepare fragment validation.', Progress::VALIDATION, 'filesystem');
+        }
+        try {
+            foreach ([$init, $segment] as $source) {
+                $input = @fopen($source, 'rb');
+                if ($input === false) {
+                    throw new MediaException('Cannot read fragment validation input.', Progress::VALIDATION, 'filesystem');
+                }
+                try {
+                    if (stream_copy_to_stream($input, $stream) !== filesize($source)) {
+                        throw new MediaException('Cannot prepare fragment validation.', Progress::VALIDATION, 'filesystem');
+                    }
+                } finally {
+                    fclose($input);
+                }
+            }
+        } finally {
+            fclose($stream);
+        }
+        if (! chmod($target, 0600)) {
+            throw new MediaException('Cannot secure fragment validation.', Progress::VALIDATION, 'filesystem');
+        }
+
+        return $target;
+    }
+
     /**
      * @internal Require a zero container origin and zero origins on every motion video track. With
      * $audioOnlyOffset, a source without motion video may start later; its filters keep that offset.

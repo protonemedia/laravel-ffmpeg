@@ -133,7 +133,7 @@ class PendingHlsMerge
             $provenance += $inventory['provenance'];
             // The response parser validates every master reference before anything is published.
             $masterText = $this->owned(fn () => $presentation->render($master, function ($id) use ($presentation, $path) {
-                return $this->relativeUrl($presentation->file($id)['path'], $path);
+                return HlsPresentation::relativeUrl($presentation->file($id)['path'], $path);
             }));
             foreach (explode("\n", $masterText) as $line) {
                 if (str_starts_with($line, '#EXT-X-VERSION:')) {
@@ -215,17 +215,5 @@ class PendingHlsMerge
             }
             throw new InvalidArgumentException('Composition requires valid HLS playlists: '.$exception->getMessage(), previous: $exception);
         }
-    }
-
-    private function relativeUrl(string $target, string $playlist): string
-    {
-        $from = dirname($playlist) === '.' ? [] : explode('/', dirname($playlist));
-        $to = explode('/', $target);
-        while ($from !== [] && $to !== [] && $from[0] === $to[0]) {
-            array_shift($from);
-            array_shift($to);
-        }
-
-        return implode('/', [...array_fill(0, count($from), '..'), ...array_map('rawurlencode', $to)]);
     }
 }

@@ -270,32 +270,8 @@ class PendingDashExport extends PendingExport
                 $this->representationFiles[$name][$target['path']] = true;
                 $artifact = ['path' => $local, 'output' => $index, 'role' => $fileIndex === 0 ? 'dash-init' : 'dash-segment', 'destination' => $target];
                 if ($fileIndex === 1) {
-                    $probe = dirname($paths[$index]).'/probe.mp4';
-                    $stream = @fopen($probe, 'wb');
-                    if ($stream === false) {
-                        throw new MediaException('Cannot prepare DASH fragment validation.', Progress::VALIDATION, 'filesystem');
-                    }
-                    try {
-                        foreach (['init.mp4', $filename] as $part) {
-                            $input = @fopen(dirname($paths[$index]).'/'.$part, 'rb');
-                            if ($input === false) {
-                                throw new MediaException('Cannot read a DASH fragment.', Progress::VALIDATION, 'filesystem');
-                            }
-                            try {
-                                if (stream_copy_to_stream($input, $stream) !== filesize(dirname($paths[$index]).'/'.$part)) {
-                                    DashManifest::fail();
-                                }
-                            } finally {
-                                fclose($input);
-                            }
-                        }
-                    } finally {
-                        fclose($stream);
-                    }
-                    if (! chmod($probe, 0600)) {
-                        throw new MediaException('Cannot secure DASH fragment validation.', Progress::VALIDATION, 'filesystem');
-                    }
-                    $artifact += ['probe' => true, 'probePath' => $probe];
+                    $directory = dirname($paths[$index]);
+                    $artifact += ['probe' => true, 'probePath' => $this->fragmentProbe($directory.'/init.mp4', $local, $directory.'/probe.mp4')];
                 }
                 $segments[] = $artifact;
             }
