@@ -6,7 +6,6 @@ use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
-use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
@@ -22,11 +21,6 @@ class NativeHlsSelectionTest extends TestCase
 
     private bool $allowed = true;
 
-    protected function getPackageProviders($app): array
-    {
-        return [\ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider::class];
-    }
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -34,7 +28,7 @@ class NativeHlsSelectionTest extends TestCase
         mkdir($this->root, 0700);
         mkdir($this->root.'/work', 0700);
         config(['app.key' => 'base64:'.base64_encode(random_bytes(32)),
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/work', 'laravel-ffmpeg.ffmpeg.threads' => 1,
+            'laravel-ffmpeg.temporary_files_root' => $this->root.'/work',
             'filesystems.disks.selection' => ['driver' => 'local', 'root' => $this->root.'/storage'],
             'filesystems.disks.selection-keys' => ['driver' => 'local', 'root' => $this->root.'/keys']]);
     }

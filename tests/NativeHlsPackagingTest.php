@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Mockery;
-use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
@@ -19,18 +18,13 @@ class NativeHlsPackagingTest extends TestCase
 {
     private string $root;
 
-    protected function getPackageProviders($app): array
-    {
-        return [\ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider::class];
-    }
-
     protected function setUp(): void
     {
         parent::setUp();
         $this->root = sys_get_temp_dir().'/native-hls-packaging-'.bin2hex(random_bytes(8));
         mkdir($this->root, 0700);
         mkdir($this->root.'/work', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/work', 'laravel-ffmpeg.ffmpeg.threads' => 1,
+        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/work',
             'filesystems.disks.hls-packaging' => ['driver' => 'local', 'root' => $this->root.'/storage'],
             'filesystems.disks.hls-packaging-keys' => ['driver' => 'local', 'root' => $this->root.'/keys']]);
     }
