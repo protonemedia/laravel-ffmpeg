@@ -28,7 +28,7 @@ return [
 
     /*
      * Opt in to replace credentials in exception diagnostics, process summaries and
-     * commands, analyze() output and probeQuery() results:
+     * commands, analyze() output, and probe() and probeQuery() results:
      *
      * - the whole openUrl() URL with [url], and the whole RTSP URL with [rtsp];
      * - the whole query string with [query];

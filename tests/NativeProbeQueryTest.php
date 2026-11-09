@@ -171,12 +171,15 @@ class NativeProbeQueryTest extends TestCase
             $this->assertContains('-tls_verify', $command);
 
             return Process::result(output: json_encode(['format' => ['filename' => $url,
-                'tags' => ['comment' => 'private-value']]]));
+                'tags' => ['comment' => 'private-value', 'purl' => $url]], 'streams' => []]));
         });
-        $result = FFMpeg::openUrl($url)->probeQuery()->entries(['format' => ['filename'], 'format_tags' => ['comment']])->get();
+        $result = FFMpeg::openUrl($url)->probeQuery()->entries(['format' => ['filename'], 'format_tags' => ['comment', 'purl']])->get();
         $this->assertSame('[input]', $result->get('format.filename'));
         $this->assertSame('[redacted]', $result->get('format.tags.comment'));
         $this->assertStringNotContainsString('private-value', json_encode($result));
+        // probe() applies the same rules to its decoded data.
+        $metadata = FFMpeg::openUrl($url)->probe();
+        $this->assertSame(['comment' => '[redacted]', 'purl' => '[input]'], $metadata->get('format.tags'));
         $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 

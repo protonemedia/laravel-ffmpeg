@@ -204,12 +204,7 @@ class PendingProbe
                     throw new MediaException('FFprobe query returned invalid sections.', 'probing', 'metadata');
                 }
             }
-            // Redact after JSON decoding so escaped URLs and paths are covered.
-            array_walk_recursive($data, static function (&$value) use ($redactions) {
-                if (is_string($value)) {
-                    $value = strtr($value, $redactions);
-                }
-            });
+            $data = Media::redactProbeData($data, $redactions);
 
             return new ProbeResult($data, [
                 'start' => $this->start, 'duration' => $this->packetLimit === null ? $this->duration : null,

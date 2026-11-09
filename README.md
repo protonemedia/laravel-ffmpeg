@@ -1313,7 +1313,7 @@ Credential redaction is disabled by default. To enable it, set `FFMPEG_REDACT_CR
 'redact_credentials' => env('FFMPEG_REDACT_CREDENTIALS', false),
 ```
 
-When redaction is enabled, the package replaces the following strings in `MediaException` diagnostics, process summaries and commands, `analyze()` output, and `probeQuery()` results:
+When redaction is enabled, the package replaces the following strings in `MediaException` diagnostics, process summaries and commands, `analyze()` output, and `probe()` and `probeQuery()` results:
 
 | String | Replacement |
 | --- | --- |

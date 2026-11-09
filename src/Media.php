@@ -312,12 +312,25 @@ readonly class Media
         return new Metadata($data);
     }
 
+    /** @internal Apply process redactions to every decoded probe string, after JSON decoding so escaped values are covered. */
+    public static function redactProbeData(array $data, array $redactions): array
+    {
+        array_walk_recursive($data, static function (&$value) use ($redactions) {
+            if (is_string($value)) {
+                $value = strtr($value, $redactions);
+            }
+        });
+
+        return $data;
+    }
+
     private function runProbe(Workspace $workspace, string $path, string $label, string $protocols, array $options): array
     {
+        $redactions = [$path => $label] + $this->redactions();
         $result = $workspace->runner->run([
             config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-print_format', 'json',
             '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', $protocols, ...$options, $path,
-        ], $workspace->path, [$path => $label] + $this->redactions());
+        ], $workspace->path, $redactions);
 
         if ($result->exitCode !== 0) {
             throw new MediaException('FFprobe failed (exit '.$result->exitCode.').', 'probing', 'exit', $result->diagnostics);
@@ -333,16 +346,7 @@ readonly class Media
             throw new MediaException('FFprobe returned invalid metadata.', 'probing', 'metadata');
         }
 
-        if ($this->source instanceof UrlInput) {
-            $url = $this->source->url();
-            array_walk_recursive($data, static function (&$value) use ($url) {
-                if (is_string($value)) {
-                    $value = str_replace($url, '[url]', $value);
-                }
-            });
-        }
-
-        return $data;
+        return self::redactProbeData($data, $redactions);
     }
 
     private static function isProbeData(mixed $data): bool
