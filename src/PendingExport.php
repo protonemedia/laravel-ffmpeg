@@ -511,7 +511,8 @@ class PendingExport implements Exportable
         return $this->execute($path);
     }
 
-    protected function execute(?string $path, bool $contents = false): ExportResult|string
+    /** @internal With $contents, validate one generated file and return its bytes instead of publishing it. */
+    public function execute(?string $path, bool $contents = false): ExportResult|string
     {
         $this->assertMutable();
 

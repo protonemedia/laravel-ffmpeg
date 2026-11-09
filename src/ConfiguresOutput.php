@@ -556,9 +556,9 @@ trait ConfiguresOutput
     public function clip(float|string $start, float|string|null $duration = null, float|string|null $end = null, string $seek = 'accurate'): self
     {
         $this->assertOutputMutable();
-        $start = $this->clipSeconds($start);
-        $duration = $duration === null ? null : $this->clipSeconds($duration);
-        $end = $end === null ? null : $this->clipSeconds($end);
+        $start = CommandCompiler::seconds($start);
+        $duration = $duration === null ? null : CommandCompiler::seconds($duration);
+        $end = $end === null ? null : CommandCompiler::seconds($end);
 
         if (! is_finite($start) || $start < 0 || ($duration === null) === ($end === null)
             || ($duration !== null && (! is_finite($duration) || $duration <= 0))
@@ -570,19 +570,6 @@ trait ConfiguresOutput
         $this->clip = ['start' => $start, 'duration' => $duration ?? $end - $start, 'seek' => $seek];
 
         return $this;
-    }
-
-    protected function clipSeconds(float|string $value): float
-    {
-        if (is_float($value)) {
-            return $value;
-        }
-
-        if (! preg_match('/\A([0-9]{2,}):([0-5][0-9]):([0-5][0-9](?:\.[0-9]{1,6})?)\z/', $value, $parts)) {
-            throw new InvalidArgumentException('Clip times must be numeric seconds or HH:MM:SS with up to six fractional digits.');
-        }
-
-        return (float) $parts[1] * 3600 + (int) $parts[2] * 60 + (float) $parts[3];
     }
 
     public function toDisk(string|Filesystem $disk, array $options = []): self

@@ -23,6 +23,20 @@ class CommandCompiler
         return $command;
     }
 
+    /** Parse numeric seconds or HH:MM:SS with up to six fractional digits. */
+    public static function seconds(float|string $value): float
+    {
+        if (is_float($value)) {
+            return $value;
+        }
+
+        if (! preg_match('/\A([0-9]{2,}):([0-5][0-9]):([0-5][0-9](?:\.[0-9]{1,6})?)\z/', $value, $parts)) {
+            throw new InvalidArgumentException('Clip times must be numeric seconds or HH:MM:SS with up to six fractional digits.');
+        }
+
+        return (float) $parts[1] * 3600 + (int) $parts[2] * 60 + (float) $parts[3];
+    }
+
     /** Format seconds as an FFmpeg duration with microsecond precision and no trailing zeros. */
     public static function timestamp(float $seconds): string
     {

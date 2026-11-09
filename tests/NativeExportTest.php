@@ -432,15 +432,7 @@ class NativeExportTest extends TestCase
         } catch (InvalidArgumentException) {
             $this->addToAssertionCount(1);
         }
-        foreach (['accurate', 'keyframe'] as $seek) {
-            try {
-                $media->frame(at: 2)->clip(10, duration: 3, seek: $seek);
-                $this->fail('A clipped single frame was accepted.');
-            } catch (InvalidArgumentException $exception) {
-                $this->assertStringContainsString('frame(at:)', $exception->getMessage());
-            }
-        }
-        foreach ([$media->frame(), $media->frames(count: 2), $media->waveform()] as $images) {
+        foreach ([$media->frames(count: 2), $media->waveform()] as $images) {
             try {
                 $images->addInput($media);
                 $this->fail('An unused image input was accepted.');
@@ -674,7 +666,6 @@ class NativeExportTest extends TestCase
             fn () => $media->export()->video(bitrate: '150k')->twoPass()->inspect(),
             fn () => $media->export()->video('copy', bitrate: '150k')->twoPass()->inspect(),
             fn () => $media->export()->video('libx264', bitrate: '150k')->withoutVideo()->twoPass()->inspect(),
-            fn () => $media->frame()->twoPass(),
         ] as $invalid) {
             try {
                 $invalid();

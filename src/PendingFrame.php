@@ -3,47 +3,76 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 
-class PendingFrame extends PendingImages
+/** One JPEG or PNG frame at a timestamp, returned as bytes or published. */
+final class PendingFrame implements Exportable, MeasuresDuration, ShapesCommand, ValidatesArtifacts
 {
-    private float $at;
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\OutputOptions;
+    use Concerns\ResourceFilters;
+    use Concerns\Resources;
+    use Concerns\RunsExport;
+    use Concerns\VideoCodec;
+    use Concerns\VideoFilters;
+    use Conditionable;
+
+    private readonly PendingExport $export;
+
+    private readonly float $at;
 
     public function __construct(Media $media, string|Filesystem $disk, float|string $at)
     {
-        parent::__construct($media, $disk);
-
-        $this->at = $this->clipSeconds($at);
+        $this->at = CommandCompiler::seconds($at);
 
         if (! is_finite($this->at) || $this->at < 0) {
             throw new InvalidArgumentException('A frame timestamp must be finite and nonnegative.');
         }
-    }
 
-    public function clip(float|string $start, float|string|null $duration = null, float|string|null $end = null, string $seek = 'accurate'): self
-    {
-        throw new InvalidArgumentException('Choose the frame timestamp with frame(at:) instead of clipping a single frame.');
+        $this->export = new PendingExport($media, $disk, $this, 'image');
+        $this->export->map('0:V:0')->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
     /** Return JPEG bytes without publishing a file. */
     public function get(): string
     {
-        $this->video('mjpeg');
+        $this->export->video('mjpeg');
 
-        return $this->execute('frame.jpg', contents: true);
+        return $this->export->execute('frame.jpg', contents: true);
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    public function save(?string $path = null): ExportResult
     {
-        $command = parent::command($outputs, $paths, $outputPaths);
-        array_splice($command, -1, 0, ['-ss', CommandCompiler::timestamp($this->at), '-frames:v', '1', '-update', '1', '-f', 'image2']);
+        $this->export->video(ImageOutput::codec($path));
 
-        return $command;
+        return $this->export->save($path);
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** @internal */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
+    {
+        array_splice($default, -1, 0, ['-ss', CommandCompiler::timestamp($this->at), '-frames:v', '1', '-update', '1', '-f', 'image2']);
+
+        return $default;
+    }
+
+    /** @internal Seeking makes encoded time unrelated to the source duration. */
+    public function duration(array $metadata, ?float $default): ?float
     {
         return null;
+    }
+
+    /** @internal */
+    public function artifact(string $path, string $role, int $size): void
+    {
+        ImageOutput::validate($path, $role);
     }
 }
