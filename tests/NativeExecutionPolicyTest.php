@@ -153,6 +153,22 @@ class NativeExecutionPolicyTest extends TestCase
     }
 
     #[Test]
+    public function cancellation_during_analysis_reports_the_analysis_phase(): void
+    {
+        $this->binaries();
+        try {
+            FFMpeg::disk('memory')->open('source.mp4')->gif()->onProgress(function ($progress) {
+                if ($progress->phase === 'analysis') {
+                    throw new \ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
+                }
+            })->save('out.gif');
+            $this->fail('The analysis callback must cancel the export.');
+        } catch (\ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled) {
+            Event::assertDispatched(\ProtoneMedia\LaravelFFMpeg\Events\ExportCancelled::class, fn ($event) => $event->phase === 'analysis');
+        }
+    }
+
+    #[Test]
     public function invalid_progress_during_analysis_reports_the_analysis_phase(): void
     {
         $this->binaries('if (in_array("gif-prepared.nut", $argv, true)) { echo str_repeat("x", 9000); exit; }');

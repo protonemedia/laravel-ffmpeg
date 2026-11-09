@@ -605,8 +605,9 @@ class PendingExport
                 $phase = Progress::ENCODING;
                 $command = $this->command($outputs, $paths, $outputPaths);
                 $summaries = [];
-                $analyze = function (array $command, string $failure) use ($runner, $workspace, $redactions, $onProgress, &$summaries): ProcessResult {
-                    $onProgress(new Progress(Progress::ANALYSIS));
+                $analyze = function (array $command, string $failure) use ($runner, $workspace, $redactions, $onProgress, &$summaries, &$phase): ProcessResult {
+                    $phase = Progress::ANALYSIS;
+                    $onProgress(new Progress($phase));
                     $process = $runner->run($command, $workspace->path, $redactions, phase: Progress::ANALYSIS, progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress));
 
                     if ($process->exitCode !== 0) {
@@ -618,6 +619,7 @@ class PendingExport
                     return $process;
                 };
                 $command = $this->prepareCommand($workspace, $command, $outputPaths, $analyze);
+                $phase = Progress::ENCODING;
                 $totalPasses = $this->twoPass ? 2 : 1;
 
                 for ($pass = 1; $pass <= $totalPasses; $pass++) {
