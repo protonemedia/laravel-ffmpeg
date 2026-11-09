@@ -130,6 +130,18 @@ class NativeQueueTest extends TestCase
     }
 
     #[Test]
+    public function a_saved_hls_builder_can_still_be_queued(): void
+    {
+        $export = $this->source()->hls(segmentDuration: 0.5)->video(bitrate: '100k', preset: 'ultrafast')->audio(bitrate: '48k')
+            ->variant('small', fn ($variant) => $variant->resize(width: 48));
+        $export->save('direct/master.m3u8');
+        $export->queued(connection: 'database', queue: 'media')->save('queued/master.m3u8');
+        $this->work();
+        $this->assertSame([], $this->errors);
+        $this->assertTrue(Storage::disk('queued')->exists('queued/master.m3u8'));
+    }
+
+    #[Test]
     public function parallel_hls_publishes_only_after_all_conversions_and_then_releases_the_chain(): void
     {
         $queued = $this->source()->hls(segmentDuration: 0.5)->video(bitrate: '100k', preset: 'ultrafast')->audio(bitrate: '48k')->fmp4()

@@ -350,7 +350,12 @@ class PendingHlsExport extends PendingExport
         $this->variantFiles = [];
         $this->keyReferences = [];
         $this->provenance = [];
-        $result = parent::save($path);
+        try {
+            $result = parent::save($path);
+        } finally {
+            // The workspace belongs to one execution; a saved builder may still be queued.
+            $this->workspace = null;
+        }
         [$keys, $files] = $result->files()->partition(fn ($file) => $file->role === 'hls-key');
 
         $renditions = [];
