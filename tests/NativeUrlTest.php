@@ -73,7 +73,6 @@ class NativeUrlTest extends TestCase
         Http::preventStrayRequests();
         Process::fake();
         $url = 'https://media.example/audio.m4a?signature=private-signed-value';
-        FFMpeg::disk('other');
         $media = FFMpeg::openUrl($url, inputOptions: ['-probesize', '2048']);
         $command = $media->export()->audio('copy')->inspect();
         $this->assertContains('2048', $command);
