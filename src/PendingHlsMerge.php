@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Http\HlsPlaylist;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use RuntimeException;
 use Throwable;
@@ -136,8 +137,16 @@ class PendingHlsMerge
                 if (str_starts_with($line, '#EXT-X-VERSION:')) {
                     $version = max($version, (int) substr($line, 15));
                 } elseif (str_starts_with($line, '#EXT-X-MEDIA:') || str_starts_with($line, '#EXT-X-STREAM-INF:')) {
-                    $lines[] = preg_replace_callback('/(?:GROUP-ID|AUDIO|SUBTITLES)="([^"]+)"/',
-                        fn ($match) => str_replace('"'.$match[1].'"', '"p'.$index.'-'.$match[1].'"', $match[0]), $line);
+                    $start = strpos($line, ':') + 1;
+                    $attributes = HlsPlaylist::attributes(substr($line, $start))
+                        ?? throw new InvalidArgumentException('Composition cannot safely combine this master directive.');
+                    // Prefix only the group attribute values, from the end so earlier offsets stay valid.
+                    foreach (array_reverse(array_intersect_key($attributes, array_flip(['GROUP-ID', 'AUDIO', 'SUBTITLES']))) as [$value, $offset]) {
+                        if (str_starts_with($value, '"')) {
+                            $line = substr_replace($line, '"p'.$index.'-', $start + $offset, 1);
+                        }
+                    }
+                    $lines[] = $line;
                 } elseif ($line !== '' && $line[0] !== '#') {
                     $lines[] = $line;
                 } elseif (str_starts_with($line, '#EXT') && $line !== '#EXTM3U') {

@@ -246,32 +246,48 @@ class HlsPlaylist implements Responsable
         }
     }
 
-    /** Parse quoted URI attributes without treating commas inside NAME as separators. */
+    /**
+     * Split an attribute list into name => [value, offset] without treating commas inside quotes as separators.
+     *
+     * @internal
+     *
+     * @return array<string, array{string, int}>|null null when the list has gaps or duplicate names
+     */
+    public static function attributes(string $list): ?array
+    {
+        preg_match_all('/(?:\A|,)([A-Z0-9-]+)=("[^"\r\n]*"|[^,"\r\n]+)/', $list, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+        $end = 0;
+        $values = [];
+        foreach ($matches as $match) {
+            if ($match[0][1] !== $end || isset($values[$match[1][0]])) {
+                return null;
+            }
+            $end += strlen($match[0][0]);
+            $values[$match[1][0]] = [$match[2][0], $match[2][1]];
+        }
+
+        return $end === strlen($list) ? $values : null;
+    }
+
+    /** Return the quoted URI's byte offset and length within a MAP or MEDIA line. */
     private function resourceUri(string $line, bool $required): ?array
     {
         $start = strpos($line, ':') + 1;
-        $attributes = substr($line, $start);
-        preg_match_all('/(?:\A|,)([A-Z0-9-]+)=("[^"\r\n]*"|[^,"\r\n]+)/', $attributes, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
-        $end = 0;
-        $values = [];
-        $uri = null;
-        foreach ($matches as $match) {
-            [$name, $value] = [$match[1][0], $match[2][0]];
-            if ($match[0][1] !== $end || isset($values[$name])) {
-                throw new MediaException('Invalid HLS resource attributes.', 'response', 'artifact');
-            }
-            $end += strlen($match[0][0]);
-            $values[$name] = $value;
-            if ($name === 'URI') {
-                if (! str_starts_with($value, '"') || ! str_ends_with($value, '"')) {
-                    throw new MediaException('HLS resource URIs must be quoted.', 'response', 'artifact');
-                }
-                $uri = [$start + $match[2][1] + 1, strlen($value) - 2];
-            }
+        $values = self::attributes(substr($line, $start));
+        if ($values === null) {
+            throw new MediaException('Invalid HLS resource attributes.', 'response', 'artifact');
         }
-        if ($end !== strlen($attributes) || ($required && $uri === null)
+        $uri = null;
+        if (isset($values['URI'])) {
+            [$value, $offset] = $values['URI'];
+            if (! str_starts_with($value, '"') || ! str_ends_with($value, '"')) {
+                throw new MediaException('HLS resource URIs must be quoted.', 'response', 'artifact');
+            }
+            $uri = [$start + $offset + 1, strlen($value) - 2];
+        }
+        if (($required && $uri === null)
             || (! $required && (! isset($values['TYPE'], $values['GROUP-ID'], $values['NAME'])
-                || ($values['TYPE'] === 'SUBTITLES' && $uri === null)))) {
+                || ($values['TYPE'][0] === 'SUBTITLES' && $uri === null)))) {
             throw new MediaException('Invalid HLS resource attributes.', 'response', 'artifact');
         }
 
@@ -281,24 +297,13 @@ class HlsPlaylist implements Responsable
     /** Return the URI's byte offset and length without changing other key attributes. */
     private function keyUri(string $line): ?array
     {
-        $attributes = substr($line, 11);
-        preg_match_all('/(?:\A|,)([A-Z0-9-]+)=("[^"\r\n]*"|[^,"\r\n]+)/', $attributes, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
-        $end = 0;
-        $values = [];
+        $values = self::attributes(substr($line, 11));
         $uri = null;
-        foreach ($matches as $match) {
-            [$name, $value] = [$match[1][0], $match[2][0]];
-            if ($match[0][1] !== $end || isset($values[$name])) {
-                throw new MediaException('Invalid HLS key attributes.', 'response', 'artifact');
-            }
-            $end += strlen($match[0][0]);
-            $values[$name] = $value;
-            if ($name === 'URI' && str_starts_with($value, '"') && str_ends_with($value, '"')) {
-                $uri = [11 + $match[2][1] + 1, strlen($value) - 2];
-            }
+        if (isset($values['URI']) && str_starts_with($values['URI'][0], '"') && str_ends_with($values['URI'][0], '"')) {
+            $uri = [11 + $values['URI'][1] + 1, strlen($values['URI'][0]) - 2];
         }
-        if ($end !== strlen($attributes) || ! isset($values['METHOD'])
-            || ($values['METHOD'] === 'NONE' ? isset($values['URI']) : $uri === null)) {
+        if (! isset($values['METHOD'])
+            || ($values['METHOD'][0] === 'NONE' ? isset($values['URI']) : $uri === null)) {
             throw new MediaException('Invalid HLS key attributes.', 'response', 'artifact');
         }
 

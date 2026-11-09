@@ -83,7 +83,7 @@ class NativeHlsSelectionTest extends TestCase
             ->variant('large', fn ($v) => $v->audioGroup('sound'))
             ->variant('premium', fn ($v) => $v->audioGroup('exclusive'))
             ->audioRendition('sound', 'English, shared', fn ($v) => $v->map('0:a:0'), language: 'en', default: true)
-            ->audioRendition('exclusive', 'Exclusive', fn ($v) => $v->map('0:a:0'), default: true);
+            ->audioRendition('exclusive', 'Exclusive SUBTITLES=', fn ($v) => $v->map('0:a:0'), default: true);
         if ($encrypted) {
             $export->encrypt('selection-keys', fn ($id) => 'https://keys.invalid/'.$id, rotateEvery: 1);
         } else {
@@ -205,6 +205,7 @@ class NativeHlsSelectionTest extends TestCase
         $this->assertSame(6, substr_count($master, '#EXT-X-STREAM-INF:'));
         $this->assertStringContainsString('GROUP-ID="p0-sound"', $master);
         $this->assertStringContainsString('AUDIO="p1-sound"', $master);
+        $this->assertStringContainsString('GROUP-ID="p1-exclusive",NAME="Exclusive SUBTITLES=",DEFAULT=YES', $master);
         $this->assertCount(1, $merged->files()->filter(fn ($f) => $f->owned));
         foreach ($before as $name => $paths) {
             foreach ($paths as $path => $hash) {
@@ -216,6 +217,7 @@ class NativeHlsSelectionTest extends TestCase
         $this->decode($presentation);
         $this->decode($merged->playbackForVariants(['two-small']));
         $this->decode($merged->playbackForVariants(['one-large']));
+        $this->decode($merged->playbackForVariants(['two-premium']));
         $this->decode($first->playbackForVariants(['small']));
         $this->decode($second->playbackForVariants(['small']));
     }
