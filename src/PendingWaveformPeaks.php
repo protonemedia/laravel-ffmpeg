@@ -71,6 +71,11 @@ class PendingWaveformPeaks extends PendingExport
         return $this;
     }
 
+    public function output(string $path, callable $configure): self
+    {
+        throw new InvalidArgumentException('Peaks support one root-configured output.');
+    }
+
     public function get(): WaveformPeaks
     {
         $this->execute('peaks.json', contents: true);

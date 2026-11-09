@@ -41,6 +41,11 @@ class PendingLoudness extends PendingExport
         $this->map('0:a:'.$audio)->audio('aac');
     }
 
+    public function twoPass(): self
+    {
+        throw new InvalidArgumentException('Loudness normalization owns its analysis passes, not two-pass video encoding.');
+    }
+
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
         if (count($outputs) !== 1 || count($paths) !== 1) {
@@ -63,8 +68,8 @@ class PendingLoudness extends PendingExport
         for ($i = 0; $i < count($command); $i++) {
             $token = $command[$i];
 
-            if (in_array($token, ['-filter_complex', '-pass:v'], true)) {
-                throw new InvalidArgumentException('Loudness normalization does not support graphs or video passes.');
+            if ($token === '-filter_complex') {
+                throw new InvalidArgumentException('Loudness normalization does not support graphs.');
             }
 
             if (preg_match('/^-(?:ar|ac)(?::|$)/', $token)) {

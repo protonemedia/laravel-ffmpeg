@@ -91,6 +91,12 @@ class NativeLoudnessTest extends TestCase
                 $this->assertTrue(true);
             }
         }
+        try {
+            $this->operation()->twoPass();
+            $this->fail('Two-pass loudness encoding was accepted.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertStringContainsString('analysis passes', $exception->getMessage());
+        }
     }
 
     #[Test]

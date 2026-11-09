@@ -18,6 +18,11 @@ abstract class PendingImages extends PendingExport
         $this->map($map)->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
+    public function addInput(Media $media): int
+    {
+        throw new InvalidArgumentException('Image exports read one input; use export() for compositions.');
+    }
+
     public function save(?string $path = null): ExportResult
     {
         $codec = match (strtolower(pathinfo($path ?? '', PATHINFO_EXTENSION))) {

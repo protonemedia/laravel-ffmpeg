@@ -206,6 +206,12 @@ class NativeWaveformPeaksTest extends TestCase
                 $this->assertStringContainsString('audioFilter()', $exception->getMessage());
             }
         }
+        try {
+            (new Media('peaks-fixtures', 'missing.wav'))->waveformPeaks()->output('extra.json', fn ($output) => null);
+            $this->fail('A second peaks output was accepted.');
+        } catch (\InvalidArgumentException) {
+            $this->addToAssertionCount(1);
+        }
     }
 
     #[Test]

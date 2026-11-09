@@ -84,7 +84,7 @@ class NativeGifTest extends TestCase
             fn () => $media->gif()->map('0:v')->inspect(),
             fn () => $media->gif()->outputOptions(['-f', 'mp4'])->inspect(),
             fn () => $media->gif()->clip(1.0, duration: 1.0, seek: 'keyframe')->inspect(),
-            fn () => $media->gif()->watermark($media)->inspect(),
+            fn () => $media->gif()->watermark($media),
             fn () => $media->gif()->drawText('hello', $media)->inspect(),
         ] as $invalid) {
             try {

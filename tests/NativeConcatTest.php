@@ -115,7 +115,7 @@ class NativeConcatTest extends TestCase
             fn () => $ready()->addInput($first),
             fn () => $ready()->output('extra.mp4', fn ($output) => $output->video('libx264')),
             fn () => $ready()->filterComplex('[0:v]null[out]'),
-            fn () => $ready()->watermark($first)->inspect(),
+            fn () => $ready()->watermark($first),
             fn () => $ready()->map('0:v')->inspect(),
             fn () => $ready()->metadataFrom(0)->inspect(),
             fn () => $ready()->chaptersFrom(0)->inspect(),

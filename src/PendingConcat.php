@@ -74,6 +74,11 @@ class PendingConcat extends PendingExport
         throw new InvalidArgumentException('Transcoded concat owns its graph; use export()->filterComplex() for custom graphs.');
     }
 
+    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
+    {
+        throw new InvalidArgumentException('Transcoded concat owns its graph and does not support watermark inputs.');
+    }
+
     protected function configuredOutputs(?string $path = null): array
     {
         $settings = $this->outputConfiguration();

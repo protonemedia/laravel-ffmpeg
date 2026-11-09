@@ -440,6 +440,14 @@ class NativeExportTest extends TestCase
                 $this->assertStringContainsString('frame(at:)', $exception->getMessage());
             }
         }
+        foreach ([$media->frame(), $media->frames(count: 2), $media->waveform()] as $images) {
+            try {
+                $images->addInput($media);
+                $this->fail('An unused image input was accepted.');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
     }
 
     #[Test]

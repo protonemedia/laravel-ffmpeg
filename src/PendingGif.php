@@ -34,6 +34,11 @@ class PendingGif extends PendingExport
         throw new InvalidArgumentException('GIF owns its palette graph; use export()->filterComplex() for custom graphs.');
     }
 
+    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
+    {
+        throw new InvalidArgumentException('GIF owns its palette graph and does not support watermark inputs.');
+    }
+
     public function twoPass(): self
     {
         throw new InvalidArgumentException('GIF owns its palette analysis, not two-pass video encoding.');
