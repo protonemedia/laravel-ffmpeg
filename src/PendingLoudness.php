@@ -4,13 +4,28 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\RunsAnalysis;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 
-/** Audio-only normalization. The normal export owns staging, events, encoding and publication. */
-class PendingLoudness extends PendingExport
+/** Audio-only normalization. The held export pipeline owns staging, events, encoding and publication. */
+final class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, ValidatesArtifacts
 {
+    use Concerns\AudioFilters;
+    use Concerns\Clips;
+    use Concerns\Fades;
+    use Concerns\Metadata;
+    use Concerns\OutputOptions;
+    use Concerns\RunsExport;
+    use Conditionable;
+
+    private readonly PendingExport $export;
+
     private ?LoudnessStats $measurement = null;
 
     private ?LoudnessStats $normalization = null;
@@ -37,47 +52,48 @@ class PendingLoudness extends PendingExport
             throw new InvalidArgumentException('Choose a nonnegative audio track and a sample rate from 8000 to 192000.');
         }
 
-        parent::__construct($source, $disk);
-        $this->map('0:a:'.$audio)->audio('aac');
+        $this->export = new PendingExport($source, $disk, $this);
+        $this->export->map('0:a:'.$audio)->audio('aac');
     }
 
-    public function twoPass(): self
+    public function audio(?string $codec = null, mixed $bitrate = null): self
     {
-        throw new InvalidArgumentException('Loudness normalization owns its analysis passes, not two-pass video encoding.');
+        $this->export->audio($codec, $bitrate);
+
+        return $this;
     }
 
-    protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
+    public function audioOptions(array $tokens): self
     {
-        if (count($outputs) !== 1 || count($paths) !== 1) {
-            throw new InvalidArgumentException('Loudness normalization requires one input and one output.');
-        }
+        $this->export->audioOptions($tokens);
 
+        return $this;
+    }
+
+    public function save(?string $path = null): LoudnessResult
+    {
+        return new LoudnessResult($this->export->save($path), $this->measurement, $this->normalization, $this->linear ? 'linear' : 'dynamic', $this->sampleRate);
+    }
+
+    /** @internal */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
+    {
         $settings = $outputs[0]->outputConfiguration();
 
-        if (($settings['audio']['codec'] ?? null) === 'copy' || $settings['videoFilters'] !== []
-            || $settings['videoStreams'] !== [] || $settings['audioStreams'] !== []
-            || $settings['video'] !== [] || $outputs[0]->inputSeekOptions() !== []) {
+        // Video fades are the only way to reach video settings on this builder.
+        if (($settings['audio']['codec'] ?? null) === 'copy' || $settings['videoFilters'] !== [] || $outputs[0]->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Loudness normalization requires audio encoding without video or keyframe seeking.');
         }
 
-        $command = parent::command($outputs, $paths, $outputPaths);
-        $maps = [];
+        $command = $default;
         $filter = '';
         $result = [];
 
         for ($i = 0; $i < count($command); $i++) {
             $token = $command[$i];
 
-            if ($token === '-filter_complex') {
-                throw new InvalidArgumentException('Loudness normalization does not support graphs.');
-            }
-
             if (preg_match('/^-(?:ar|ac)(?::|$)/', $token)) {
                 throw new InvalidArgumentException('Use audioFilter() for channel preprocessing; sampleRate is owned by normalizeLoudness().');
-            }
-
-            if ($token === '-map') {
-                $maps[] = $command[$i + 1];
             }
 
             if ($token === '-filter:a') {
@@ -93,10 +109,6 @@ class PendingLoudness extends PendingExport
             $result[] = $token;
         }
 
-        if (count($maps) !== 1 || ! preg_match('/^0:a:\d+$/D', $maps[0])) {
-            throw new InvalidArgumentException('Loudness normalization requires exactly one nonoptional audio track map.');
-        }
-
         // Trim before preprocessing and measurement, not as an output seek after loudnorm.
         $clip = $outputs[0]->clipSettings();
         $filters = $clip === null ? [] : ['atrim=start='.$this->number($clip['start']).':duration='.$this->number($clip['duration']), 'asetpts=PTS-STARTPTS'];
@@ -110,8 +122,8 @@ class PendingLoudness extends PendingExport
         return [...$result, '-vn', '-filter:a', implode(',', $filters), '-ar', (string) $this->sampleRate, $destination];
     }
 
-    /** Called by PendingExport after staging/probing and before its final encoding loop. */
-    protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
+    /** @internal Called after staging and probing, before the final encoding pass. */
+    public function analyze(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
         $this->measurement = $this->normalization = null;
         $this->workspace = $workspace;
@@ -180,9 +192,9 @@ class PendingLoudness extends PendingExport
         return LoudnessStats::fromJson($json, $phase);
     }
 
-    protected function validateArtifact(string $path, string $role = 'media'): int
+    /** @internal */
+    public function artifact(string $path, string $role, int $size): void
     {
-        $size = parent::validateArtifact($path, $role);
         $this->normalization = $this->readStats($this->workspace->path.'/loudness-final.json');
         try {
             $streams = $this->source->probeArtifact($path, $this->workspace)->streams();
@@ -195,12 +207,5 @@ class PendingLoudness extends PendingExport
         if ($streams->count() !== 1 || $streams->first()->get('codec_type') !== 'audio' || $streams->first()->sampleRate() !== $this->sampleRate) {
             throw new MediaException('Normalized output must contain one audio stream at the requested sample rate.', 'validation', 'artifact');
         }
-
-        return $size;
-    }
-
-    public function save(?string $path = null): LoudnessResult
-    {
-        return new LoudnessResult(parent::save($path), $this->measurement, $this->normalization, $this->linear ? 'linear' : 'dynamic', $this->sampleRate);
     }
 }

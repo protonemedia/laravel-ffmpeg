@@ -79,10 +79,8 @@ class NativeLoudnessTest extends TestCase
 
         foreach ([
             $this->operation()->audio('copy'),
-            $this->operation()->map('0:a:0'),
             $this->operation()->outputOptions(['-ac', '1']),
             $this->operation()->clip(0, duration: 1, seek: 'keyframe'),
-            $this->operation()->filterComplex('[0:a]anull[a]'),
         ] as $invalid) {
             try {
                 $invalid->inspect();
@@ -90,12 +88,6 @@ class NativeLoudnessTest extends TestCase
             } catch (InvalidArgumentException) {
                 $this->assertTrue(true);
             }
-        }
-        try {
-            $this->operation()->twoPass();
-            $this->fail('Two-pass loudness encoding was accepted.');
-        } catch (InvalidArgumentException $exception) {
-            $this->assertStringContainsString('analysis passes', $exception->getMessage());
         }
     }
 

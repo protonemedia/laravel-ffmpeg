@@ -10,6 +10,7 @@ use ProtoneMedia\LaravelFFMpeg\PendingConcat;
 use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\PendingFrame;
 use ProtoneMedia\LaravelFFMpeg\PendingGif;
+use ProtoneMedia\LaravelFFMpeg\PendingLoudness;
 use ProtoneMedia\LaravelFFMpeg\PendingFrames;
 use ProtoneMedia\LaravelFFMpeg\PendingSpeed;
 use ProtoneMedia\LaravelFFMpeg\PendingStill;
@@ -46,6 +47,9 @@ class BuilderShapeTest extends TestCase
                 'video', 'videoOptions', 'videoStream', 'color', 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio',
                 'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo', 'outputOptions', 'drawText', 'burnSubtitles', 'lut3d', 'fadeIn', 'fadeOut']],
             'speed' => [PendingSpeed::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'clip']],
+            'normalizeLoudness' => [PendingLoudness::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
+                'globalOptions', 'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo', 'audioStream', 'video', 'videoOptions',
+                'videoStream', 'videoFilter', 'resize', 'drawText', 'resource', 'textResource', 'subtitleResource']],
             'still' => [PendingStill::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
                 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'mapAudio', 'withoutAudio', 'withoutVideo']],
         ];

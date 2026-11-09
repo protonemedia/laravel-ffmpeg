@@ -143,24 +143,6 @@ class NativeEncodingOptionsTest extends TestCase
     }
 
     #[Test]
-    public function owned_processing_graphs_reject_per_track_overrides_before_execution(): void
-    {
-        Process::fake();
-        $media = FFMpeg::disk('absent')->open('unread.mp4');
-        foreach ([
-            $media->normalizeLoudness()->audioStream(0, fn ($audio) => $audio->filter('volume=0')),
-        ] as $export) {
-            try {
-                $export->inspect();
-                $this->fail('Accepted an override of an owned processing graph.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
-        Process::assertNothingRan();
-    }
-
-    #[Test]
     public function named_hardware_is_global_and_precedes_inputs(): void
     {
         $global = ['-init_hw_device', 'vaapi=base:/dev/dri/renderD128', '-init_hw_device', 'qsv=derived@base', '-filter_hw_device', 'derived'];
