@@ -28,6 +28,16 @@ use SensitiveParameter;
  */
 class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand, ShapesOutputs, SplitsTwoPass, ValidatesSelections, WritesManifest
 {
+    /**
+     * The MPEG-TS clock rate in ticks per second.
+     */
+    protected const int MPEG_CLOCK_RATE = 90000;
+
+    /**
+     * The number of ticks after which the 33-bit MPEG-TS clock wraps.
+     */
+    protected const int MPEG_CLOCK_WRAP = 8589934592;
+
     use Concerns\AudioCodec;
     use Concerns\AudioFilters;
     use Concerns\Clips;
@@ -1376,7 +1386,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                     );
                 }
 
-                $starts[] = (int) round((float) $start * 90000);
+                $starts[] = (int) round((float) $start * self::MPEG_CLOCK_RATE);
             }
         }
 
@@ -1488,7 +1498,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
 
             // HLS clocks are unsigned 33-bit MPEG timestamps, even with fragmented MP4, so we
             // will wrap the ticks into that range before writing the timestamp map.
-            $ticks = (($ticks % 8589934592) + 8589934592) % 8589934592;
+            $ticks = (($ticks % self::MPEG_CLOCK_WRAP) + self::MPEG_CLOCK_WRAP) % self::MPEG_CLOCK_WRAP;
             $header = 'X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:'.$ticks."\n";
             if (fwrite($output, "WEBVTT\n".$header) !== 7 + strlen($header)
                 || stream_copy_to_stream($input, $output) !== filesize($path) - 7) {
@@ -1518,8 +1528,8 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
      */
     protected function playlistLines(string $path): array
     {
-        $bytes = @file_get_contents($path, length: 16777217);
-        if ($bytes === false || trim($bytes) === '' || strlen($bytes) > 16777216 || str_contains($bytes, "\0")) {
+        $bytes = @file_get_contents($path, length: Media::MAX_MANIFEST_BYTES + 1);
+        if ($bytes === false || trim($bytes) === '' || strlen($bytes) > Media::MAX_MANIFEST_BYTES || str_contains($bytes, "\0")) {
             throw MediaException::validation(
                 'Cannot read the generated HLS playlist within its 16 MiB limit.',
                 'artifact',
@@ -1543,13 +1553,13 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         bool $hook = true,
     ): void {
         $bytes = implode("\n", $lines)."\n";
-        if (strlen($bytes) > 16777216) {
+        if (strlen($bytes) > Media::MAX_MANIFEST_BYTES) {
             throw MediaException::validation('Finalized HLS playlists must fit within the 16 MiB limit.', 'artifact');
         }
 
         if ($hook && $this->playlistCallback instanceof Closure) {
             $modified = ($this->playlistCallback)($bytes, $destination, $variant);
-            if (! is_string($modified) || strlen($modified) > 16777216) {
+            if (! is_string($modified) || strlen($modified) > Media::MAX_MANIFEST_BYTES) {
                 throw MediaException::validation(
                     'Playlist hooks must return text within the 16 MiB limit.',
                     'artifact',

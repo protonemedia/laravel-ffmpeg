@@ -27,6 +27,11 @@ use Throwable;
  */
 class PendingLiveHls
 {
+    /**
+     * The maximum size in bytes of the encoder's local playlist.
+     */
+    protected const int MAX_ENCODER_PLAYLIST_BYTES = 1048576;
+
     use Macroable;
 
     /**
@@ -522,8 +527,8 @@ class PendingLiveHls
      */
     protected function readEncoderPlaylist(string $local, int $start): array
     {
-        $bytes = file_get_contents($local, length: 1048577);
-        if ($bytes === false || strlen($bytes) > 1048576
+        $bytes = file_get_contents($local, length: self::MAX_ENCODER_PLAYLIST_BYTES + 1);
+        if ($bytes === false || strlen($bytes) > self::MAX_ENCODER_PLAYLIST_BYTES
             || ! preg_match('/^#EXT-X-MEDIA-SEQUENCE:([0-9]+)$/m', $bytes, $sequence)) {
             throw MediaException::publication('Invalid live encoder playlist.', 'artifact');
         }

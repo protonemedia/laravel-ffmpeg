@@ -78,8 +78,8 @@ readonly class LiveHlsSource
     public function options(): array
     {
         return parse_url($this->url, PHP_URL_SCHEME) === 'rtsp'
-            ? ['-rtsp_transport', 'tcp', '-timeout', '15000000', '-format_whitelist', 'rtsp']
-            : ['-rw_timeout', '15000000', '-format_whitelist', 'mpegts,matroska,webm,mov,flv',
+            ? ['-rtsp_transport', 'tcp', '-timeout', (string) UrlInput::NETWORK_TIMEOUT, '-format_whitelist', 'rtsp']
+            : ['-rw_timeout', (string) UrlInput::NETWORK_TIMEOUT, '-format_whitelist', 'mpegts,matroska,webm,mov,flv',
                 ...(str_starts_with($this->url, 'https:') ? ['-tls_verify', '1'] : [])];
     }
 }

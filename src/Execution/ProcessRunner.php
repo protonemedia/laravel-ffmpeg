@@ -17,6 +17,16 @@ use Throwable;
 class ProcessRunner
 {
     /**
+     * The default maximum size in bytes of captured process output.
+     */
+    public const int MAX_OUTPUT_BYTES = 16777216;
+
+    /**
+     * The number of trailing diagnostic bytes we keep from standard error.
+     */
+    protected const int MAX_DIAGNOSTIC_BYTES = 65536;
+
+    /**
      * The high-resolution time the operation started, in nanoseconds.
      */
     protected readonly int $startedAt;
@@ -105,7 +115,7 @@ class ProcessRunner
         array $command,
         string $directory,
         array $redactions = [],
-        int $outputLimit = 16777216,
+        int $outputLimit = self::MAX_OUTPUT_BYTES,
         string $phase = 'probing',
         ?ProgressParser $progress = null,
         bool $redactOutput = false,
@@ -187,7 +197,10 @@ class ProcessRunner
         $this->capture['lastOutput'] = hrtime(true);
 
         if ($type === 'err') {
-            $this->capture['diagnostics'] = substr($this->capture['diagnostics'].substr($buffer, -65536), -65536);
+            $this->capture['diagnostics'] = substr(
+                $this->capture['diagnostics'].substr($buffer, -self::MAX_DIAGNOSTIC_BYTES),
+                -self::MAX_DIAGNOSTIC_BYTES,
+            );
         } elseif ($progress instanceof ProgressParser) {
             try {
                 $progress->push($buffer);

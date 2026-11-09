@@ -16,6 +16,11 @@ use Throwable;
 class HlsPlaybackController
 {
     /**
+     * The number of bytes read from storage at a time.
+     */
+    protected const int CHUNK_SIZE = 1048576;
+
+    /**
      * Handle the incoming playback request.
      */
     public function __invoke(Request $request, HlsPlayback $playback): Response
@@ -181,7 +186,7 @@ class HlsPlaybackController
             if ($start > 0 && @fseek($stream, $start) !== 0) {
                 $remaining = $start;
                 while ($remaining > 0 && ! feof($stream)) {
-                    $bytes = fread($stream, min(1048576, $remaining));
+                    $bytes = fread($stream, min(self::CHUNK_SIZE, $remaining));
                     if ($bytes === false || $bytes === '') {
                         break;
                     }
@@ -192,7 +197,7 @@ class HlsPlaybackController
 
             $remaining = $end - $start + 1;
             while ($remaining > 0 && ! feof($stream)) {
-                $bytes = fread($stream, min(1048576, $remaining));
+                $bytes = fread($stream, min(self::CHUNK_SIZE, $remaining));
                 if ($bytes === false || $bytes === '') {
                     break;
                 }

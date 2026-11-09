@@ -58,8 +58,8 @@ class DashManifest
      */
     protected static function load(string $path): DOMDocument
     {
-        $bytes = @file_get_contents($path, length: 16777217);
-        if ($bytes === false || strlen($bytes) > 16777216 || str_contains($bytes, "\0")
+        $bytes = @file_get_contents($path, length: Media::MAX_MANIFEST_BYTES + 1);
+        if ($bytes === false || strlen($bytes) > Media::MAX_MANIFEST_BYTES || str_contains($bytes, "\0")
             || preg_match('/<!|<\?(?!xml\s)/i', $bytes) || ! class_exists(DOMDocument::class)) {
             self::fail();
         }

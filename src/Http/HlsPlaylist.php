@@ -11,6 +11,7 @@ use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use League\Flysystem\WhitespacePathNormalizer;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Media;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
@@ -161,8 +162,8 @@ class HlsPlaylist implements Responsable
         $queued = [$this->path => true];
         $result = [];
         $resolvers = $discover instanceof Closure ? [] : $this->resolvers;
-        $inputBudget = 16777216;
-        $outputBudget = 16777216;
+        $inputBudget = Media::MAX_MANIFEST_BYTES;
+        $outputBudget = Media::MAX_MANIFEST_BYTES;
         for ($index = 0; $index < count($pending); $index++) {
             $path = $pending[$index];
             $content = $this->read($path, $inputBudget);

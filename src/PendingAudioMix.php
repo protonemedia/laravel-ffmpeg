@@ -23,6 +23,11 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
  */
 class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysis, ShapesCommand, ShapesOutputs
 {
+    /**
+     * The sample rate in hertz both tracks are converted to before mixing.
+     */
+    protected const int SAMPLE_RATE = 48000;
+
     use Concerns\AudioFilters;
     use Concerns\Fades;
     use Concerns\GlobalOptions;
@@ -191,12 +196,12 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     {
         // We will fill timestamp gaps and convert both tracks to a common format before
         // mixing them. Padding keeps a short track from shortening the presentation.
-        $format = 'aresample=48000:async=1:first_pts=0,aformat=sample_rates=48000:channel_layouts=stereo';
+        $format = 'aresample='.self::SAMPLE_RATE.':async=1:first_pts=0,aformat=sample_rates='.self::SAMPLE_RATE.':channel_layouts=stereo';
 
         // Nothing beyond the primary presentation is audible, so we bound the delay buffer
         // to that presentation, even for very large finite offsets.
-        $offset = min($this->offset, $duration ?? PHP_INT_MAX / 96000);
-        $delay = $offset > 0 ? ',adelay=delays='.sprintf('%.0f', round($offset * 48000)).'S:all=1' : '';
+        $offset = min($this->offset, $duration ?? PHP_INT_MAX / (self::SAMPLE_RATE * 2));
+        $delay = $offset > 0 ? ',adelay=delays='.sprintf('%.0f', round($offset * self::SAMPLE_RATE)).'S:all=1' : '';
         $branches = ['[1:a:0]asetpts=PTS-STARTPTS,'.$format.',volume='
             .json_encode($this->volume, JSON_THROW_ON_ERROR).$delay.',apad[added_audio]'];
 

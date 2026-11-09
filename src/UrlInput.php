@@ -17,6 +17,13 @@ use Throwable;
 readonly class UrlInput implements InputSource
 {
     /**
+     * The network read timeout in microseconds.
+     *
+     * @internal
+     */
+    public const int NETWORK_TIMEOUT = 15000000;
+
+    /**
      * Create a new URL input instance.
      */
     public function __construct(protected string $url, protected array $headers, public bool $download)
@@ -115,7 +122,7 @@ readonly class UrlInput implements InputSource
             return [];
         }
 
-        $options = ['-rw_timeout', '15000000'];
+        $options = ['-rw_timeout', (string) self::NETWORK_TIMEOUT];
 
         if (str_starts_with($this->url, 'https:')) {
             $options[] = '-tls_verify';

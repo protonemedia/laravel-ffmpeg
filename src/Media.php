@@ -35,6 +35,13 @@ readonly class Media
     public const MANIFEST_EXTENSIONS = ['m3u8', 'm3u', 'mpd', 'ffconcat'];
 
     /**
+     * The maximum size in bytes of a playlist or manifest we read or write.
+     *
+     * @internal
+     */
+    public const int MAX_MANIFEST_BYTES = 16777216;
+
+    /**
      * The disk key, local file, or input source the media reads from.
      */
     protected string|File|UploadedFile|InputSource $source;

@@ -798,7 +798,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
      */
     protected function write(string $path, string $bytes): void
     {
-        if (strlen($bytes) > 16777216
+        if (strlen($bytes) > Media::MAX_MANIFEST_BYTES
             || @file_put_contents($path, $bytes) !== strlen($bytes)
             || ! chmod($path, 0600)) {
             throw MediaException::validation(

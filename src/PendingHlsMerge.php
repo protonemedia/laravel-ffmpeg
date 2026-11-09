@@ -446,7 +446,7 @@ class PendingHlsMerge
     protected function renderMaster(): string
     {
         $text = implode("\n", ['#EXTM3U', '#EXT-X-VERSION:'.$this->version, ...$this->lines, '']);
-        if (strlen($text) > 16777216) {
+        if (strlen($text) > Media::MAX_MANIFEST_BYTES) {
             throw new InvalidArgumentException('The composition master must fit within the 16 MiB limit.');
         }
 

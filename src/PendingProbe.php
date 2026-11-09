@@ -218,7 +218,7 @@ class PendingProbe
      */
     public function limits(int $outputBytes = 4194304, float $timeout = 30): self
     {
-        if ($outputBytes < 1 || $outputBytes > 16777216) {
+        if ($outputBytes < 1 || $outputBytes > ProcessRunner::MAX_OUTPUT_BYTES) {
             throw new InvalidArgumentException(
                 "The probe output limit [{$outputBytes}] must be between 1 and 16777216 bytes."
             );
