@@ -20,7 +20,7 @@ class HlsVariant
 
     private ?string $audioGroup = null;
 
-    private ?string $subtitlesGroup = null;
+    private ?string $subtitleGroup = null;
 
     /** Reference reusable alternate renditions declared on PendingHlsExport. */
     public function audioGroup(string $group): self
@@ -31,10 +31,10 @@ class HlsVariant
         return $this;
     }
 
-    public function subtitlesGroup(string $group): self
+    public function subtitleGroup(string $group): self
     {
         $this->assertOutputMutable();
-        $this->subtitlesGroup = $group;
+        $this->subtitleGroup = $group;
 
         return $this;
     }
@@ -42,7 +42,7 @@ class HlsVariant
     /** @internal */
     public function groups(): array
     {
-        return ['AUDIO' => $this->audioGroup, 'SUBTITLES' => $this->subtitlesGroup];
+        return ['AUDIO' => $this->audioGroup, 'SUBTITLES' => $this->subtitleGroup];
     }
 
     public function __construct()

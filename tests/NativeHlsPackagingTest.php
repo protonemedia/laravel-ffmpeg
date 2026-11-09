@@ -181,8 +181,8 @@ class NativeHlsPackagingTest extends TestCase
     {
         $media = $this->source();
         $export = $media->hls(segmentDuration: 0.7)->video(bitrate: '180k')->audio(bitrate: '48k')
-            ->variant('small', fn (HlsVariant $v) => $v->resize(width: 80)->audioGroup('sound')->subtitlesGroup('captions'), playlist: 'video/small/index.m3u8')
-            ->variant('large', fn (HlsVariant $v) => $v->audioGroup('sound')->subtitlesGroup('captions'), playlist: 'video/large/index.m3u8')
+            ->variant('small', fn (HlsVariant $v) => $v->resize(width: 80)->audioGroup('sound')->subtitleGroup('captions'), playlist: 'video/small/index.m3u8')
+            ->variant('large', fn (HlsVariant $v) => $v->audioGroup('sound')->subtitleGroup('captions'), playlist: 'video/large/index.m3u8')
             ->audioRendition('sound', 'English', fn ($v) => $v->map('0:a:0'), language: 'en', default: true, channels: '1', playlist: 'audio/en/index.m3u8')
             ->audioRendition('sound', 'Español, stereo name', fn ($v) => $v->map('0:a:1'), language: 'es', playlist: 'audio/es/index.m3u8')
             ->subtitleRendition('captions', 'English', fn ($v) => $v->map('0:s:0'), language: 'en', default: true, forced: false, playlist: 'text/en/index.m3u8');
@@ -269,7 +269,7 @@ class NativeHlsPackagingTest extends TestCase
             fn () => $media->hls()->subtitleRendition('s', 'bad"name', fn () => null),
             fn () => $media->hls()->variant('v', fn () => null)->audioRendition('a', 'one', fn () => null)->inspect(),
             fn () => $media->hls()->variant('v', fn () => null)->twoPass()->inspect(),
-            fn () => $media->hls()->variant('v', fn ($v) => $v->subtitlesGroup('s'))
+            fn () => $media->hls()->variant('v', fn ($v) => $v->subtitleGroup('s'))
                 ->subtitleRendition('s', 'one', fn ($v) => $v->map('0:s:0'))->encrypt('absent', fn () => '/key')->inspect(),
             fn () => $media->hls()->variant('v', fn ($v) => $v->audioGroup('a'))->clip(0, duration: 1)
                 ->audioRendition('a', 'one', fn ($v) => $v->map('0:a:0')->clip(0, duration: 2))->inspect(),

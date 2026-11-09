@@ -273,7 +273,7 @@ $result = $media->hls()
     ->variant('720p', fn (HlsVariant $variant) => $variant
         ->resize(height: 720)
         ->audioGroup('sound')
-        ->subtitlesGroup('captions'))
+        ->subtitleGroup('captions'))
     ->audioRendition('sound', 'English', fn (HlsVariant $rendition) => $rendition
         ->map('0:a:0')
         ->audio('aac', bitrate: '128k'), language: 'en', default: true)
@@ -285,7 +285,7 @@ $result = $media->hls()
 
 `fmp4()` changes segment extensions to `.m4s` and owns a validated `hls-init` file per audio/video playlist. Optional `variant(init:)` selects its disk-relative `.mp4` key. AES-128 encryption is rejected for fMP4 in either configuration order. Init files publish before playlists and remain in the variant inventory. Private combined probe files are never published.
 
-`audioRendition()` and `subtitleRendition()` declare reusable groups, referenced through `HlsVariant::audioGroup()` and `subtitlesGroup()`. Renditions require exactly one explicit stream map of the declared type. Group names are simple identifiers. Display names and defaults are unique within each type/group; `default: true` requires autoselection. Optional language, channels, and forced-subtitle attributes appear in `EXT-X-MEDIA`. Variants with alternate audio cannot also map muxed audio. Result lookups use `audioRendition($group, $name)` and `subtitleRendition($group, $name)`.
+`audioRendition()` and `subtitleRendition()` declare reusable groups, referenced through `HlsVariant::audioGroup()` and `subtitleGroup()`. Renditions require exactly one explicit stream map of the declared type. Group names are simple identifiers. Display names and defaults are unique within each type/group; `default: true` requires autoselection. Optional language, channels, and forced-subtitle attributes appear in `EXT-X-MEDIA`. Variants with alternate audio cannot also map muxed audio. Result lookups use `audioRendition($group, $name)` and `subtitleRendition($group, $name)`.
 
 Audio encodes once per rendition, not once per referencing variant. Subtitles use a full-presentation WebVTT segment with a timestamp map tied to aligned referencing variant clocks. They require a known presentation duration without a complex timing graph. Referencing variants and renditions require matching clips. Encryption with alternate subtitles is rejected rather than publishing plaintext captions under an encrypted-media configuration. Custom `.vtt` patterns, playlist paths, hooks, and publication use the same owned-inventory rules. Dynamic responses recognize `EXT-X-MAP` as media and `EXT-X-MEDIA` as playlist references.
 

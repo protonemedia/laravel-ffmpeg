@@ -76,7 +76,7 @@ class NativeHlsSelectionTest extends TestCase
             ->variant('small', function ($v) use ($encrypted) {
                 $v->resize(width: 80)->audioGroup('sound');
                 if (! $encrypted) {
-                    $v->subtitlesGroup('captions');
+                    $v->subtitleGroup('captions');
                 }
             })
             ->variant('large', fn ($v) => $v->audioGroup('sound'))

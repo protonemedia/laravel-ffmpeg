@@ -213,7 +213,7 @@ class NativeHlsTest extends TestCase
         $media = FFMpeg::disk('local')->open('captioned.mkv');
         $export = $media->hls(segmentDuration: 0.7)->playlistType(strtoupper($type))
             ->variant('main', fn (HlsVariant $variant) => $variant->video('libx264', preset: 'ultrafast')
-                ->map('0:v:0')->audioGroup('sound')->subtitlesGroup('text'))
+                ->map('0:v:0')->audioGroup('sound')->subtitleGroup('text'))
             ->audioRendition('sound', 'Music', fn ($variant) => $variant->map('0:a:0'))
             ->subtitleRendition('text', 'Captions', fn ($variant) => $variant->map('0:s:0'));
         if ($fragmented) {

@@ -897,11 +897,11 @@ $result = $media->hls(segmentDuration: 6)
         ->resize(height: 360)
         ->video(bitrate: '800k')
         ->audioGroup('sound')
-        ->subtitlesGroup('captions'))
+        ->subtitleGroup('captions'))
     ->variant('720p', fn (HlsVariant $variant) => $variant
         ->resize(height: 720)
         ->audioGroup('sound')
-        ->subtitlesGroup('captions'),
+        ->subtitleGroup('captions'),
         playlist: 'video/720p/index.m3u8', segments: 'video/720p/part-%03d.m4s',
         init: 'video/720p/start.mp4')
     ->audioRendition('sound', 'English', fn (HlsVariant $rendition) => $rendition
