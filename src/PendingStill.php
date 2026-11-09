@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 
 class PendingStill extends PendingExport
 {
@@ -29,7 +30,7 @@ class PendingStill extends PendingExport
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
         $command = parent::command($outputs, $paths, $outputPaths);
-        array_splice($command, -1, 0, ['-t', $this->clipTimestamp($this->duration)]);
+        array_splice($command, -1, 0, ['-t', CommandCompiler::timestamp($this->duration)]);
 
         return $command;
     }

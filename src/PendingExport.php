@@ -875,7 +875,7 @@ class PendingExport
     }
 
     /** @internal Concatenate an initialization file and its first fragment into a private, probeable MP4. */
-    protected function fragmentProbe(string $init, string $segment, string $target): string
+    public static function fragmentProbe(string $init, string $segment, string $target): string
     {
         $stream = @fopen($target, 'wb');
         if ($stream === false) {
@@ -909,7 +909,7 @@ class PendingExport
      * @internal Require a zero container origin and zero origins on every motion video track. With
      * $audioOnlyOffset, a source without motion video may start later; its filters keep that offset.
      */
-    protected function assertZeroOrigins(Metadata $item, string $operation, bool $audioOnlyOffset = false): void
+    public static function assertZeroOrigins(Metadata $item, string $operation, bool $audioOnlyOffset = false): void
     {
         $origin = $item->get('format.start_time');
         if ((! ($audioOnlyOffset && ! $item->hasVideo())

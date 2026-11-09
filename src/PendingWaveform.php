@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 
 class PendingWaveform extends PendingImages
 {
@@ -53,8 +54,8 @@ class PendingWaveform extends PendingImages
         $clip = $this->clipSettings();
 
         if ($clip !== null) {
-            $audio .= ($audio === '' ? '' : ',').'atrim=start='.$this->clipTimestamp($clip['start'])
-                .':duration='.$this->clipTimestamp($clip['duration']).',asetpts=PTS-STARTPTS';
+            $audio .= ($audio === '' ? '' : ',').'atrim=start='.CommandCompiler::timestamp($clip['start'])
+                .':duration='.CommandCompiler::timestamp($clip['duration']).',asetpts=PTS-STARTPTS';
         }
 
         $index = array_search('-filter_complex', $command, true) + 1;

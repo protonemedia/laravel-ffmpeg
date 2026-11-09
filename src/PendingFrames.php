@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
 class PendingFrames extends PendingImages
@@ -40,7 +41,7 @@ class PendingFrames extends PendingImages
             $this->duration = max(0, min($clip['duration'], $this->duration - $clip['start']));
         }
 
-        if ($this->count !== null && ($this->duration === null || $this->clipTimestamp($this->duration) === '0')) {
+        if ($this->count !== null && ($this->duration === null || CommandCompiler::timestamp($this->duration) === '0')) {
             throw new MediaException('Count-based frame extraction requires a known, positive media duration.', Progress::PROBING, 'metadata');
         }
 
@@ -51,10 +52,10 @@ class PendingFrames extends PendingImages
     {
         $this->assertNoTrackVideoFilters($outputs[0]);
         $command = parent::command($outputs, $paths, $outputPaths);
-        $rate = $this->every !== null ? '1/'.$this->clipTimestamp($this->every)
-            : $this->count.'/'.($this->duration === null ? '[duration]' : $this->clipTimestamp($this->duration));
+        $rate = $this->every !== null ? '1/'.CommandCompiler::timestamp($this->every)
+            : $this->count.'/'.($this->duration === null ? '[duration]' : CommandCompiler::timestamp($this->duration));
         $start = $this->inputSeekOptions() === [] ? ($this->clipSettings()['start'] ?? 0) : 0;
-        $filter = 'fps=fps='.$rate.':start_time='.$this->clipTimestamp($start).':round=near:eof_action=pass';
+        $filter = 'fps=fps='.$rate.':start_time='.CommandCompiler::timestamp($start).':round=near:eof_action=pass';
 
         if ($this->count !== null) {
             $filter .= ',tpad=stop_mode=clone:stop='.$this->count;

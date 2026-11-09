@@ -87,7 +87,7 @@ class PendingSpeed extends PendingExport
     {
         $item = $metadata[0];
         // The audio filter scales an initial offset, so audio-only sources may start later.
-        $this->assertZeroOrigins($item, 'Speed', audioOnlyOffset: true);
+        PendingExport::assertZeroOrigins($item, 'Speed', audioOnlyOffset: true);
 
         // Conservatively validate every source audio track, including unselected
         // tracks, rather than guessing how arbitrary stream selectors resolve.

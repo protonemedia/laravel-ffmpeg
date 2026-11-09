@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\HlsEncryption;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
@@ -390,9 +391,9 @@ class PendingHlsExport extends PendingExport
                 $settings = $encoding[$index]->outputConfiguration();
                 if (! isset($this->renditions[array_keys($this->variants)[$index]])
                     && ! $settings['omitVideo'] && ($settings['video']['codec'] ?? null) !== 'copy') {
-                    array_push($result, '-force_key_frames:v', 'expr:gte(t,n_forced*'.$this->clipTimestamp($this->segmentDuration).')', '-flags:v', '+cgop');
+                    array_push($result, '-force_key_frames:v', 'expr:gte(t,n_forced*'.CommandCompiler::timestamp($this->segmentDuration).')', '-flags:v', '+cgop');
                 }
-                array_push($result, '-f', 'hls', '-hls_time', $this->clipTimestamp($this->segmentDuration),
+                array_push($result, '-f', 'hls', '-hls_time', CommandCompiler::timestamp($this->segmentDuration),
                     '-hls_list_size', '0', '-hls_segment_type', $this->segmentType, '-start_number', '0',
                     '-hls_segment_filename', 'segment-'.$index.'-%08d.'.($this->segmentType === 'fmp4' ? 'm4s' : 'ts'), '-master_pl_name', 'master-'.$index.'.m3u8');
                 if ($this->playlistType !== 'live') {
@@ -548,7 +549,7 @@ class PendingHlsExport extends PendingExport
                     $destination['path'] = ($directory === '.' ? '' : $directory.'/').sprintf(basename($pattern), $count++);
                     $line = HlsPresentation::relativeUrl($destination['path'], $output->destination()['path']);
                     $this->variantFiles[$name][$destination['path']] = true;
-                    $probePath = $count === 1 && $init !== null ? $this->fragmentProbe($init, $local, $local.'.probe.mp4') : $local;
+                    $probePath = $count === 1 && $init !== null ? PendingExport::fragmentProbe($init, $local, $local.'.probe.mp4') : $local;
                     if ($this->isSubtitle($index)) {
                         $subtitlePath = $local;
                     } elseif ($count === 1) {

@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use Throwable;
 
@@ -87,9 +88,9 @@ class PendingStoryboard extends PendingImages
         }
         $this->assertNoTrackVideoFilters($outputs[0]);
         $start = $this->clipSettings()['start'] ?? 0;
-        $end = $this->duration === null ? '[end]' : $this->clipTimestamp($start + $this->duration / 1000000);
-        $filter = 'trim=start='.$this->clipTimestamp($start).':end='.$end.',setpts=PTS-STARTPTS,'
-            .'fps=fps=1/'.$this->clipTimestamp($this->interval / 1000).':start_time=0:round=near:eof_action=pass,'
+        $end = $this->duration === null ? '[end]' : CommandCompiler::timestamp($start + $this->duration / 1000000);
+        $filter = 'trim=start='.CommandCompiler::timestamp($start).':end='.$end.',setpts=PTS-STARTPTS,'
+            .'fps=fps=1/'.CommandCompiler::timestamp($this->interval / 1000).':start_time=0:round=near:eof_action=pass,'
             .'tile=layout='.$this->columns.'x'.$this->rows.':nb_frames='.($this->columns * $this->rows)
             .':margin='.$this->margin.':padding='.$this->padding.':color=black';
         $index = array_search('-filter:v', $command, true);

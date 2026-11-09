@@ -141,7 +141,7 @@ class PendingConcat extends PendingExport
             if ($item->duration() === null || $item->duration() <= 0) {
                 throw new MediaException('Transcoded concat requires finite sources.', 'probing', 'metadata');
             }
-            $this->assertZeroOrigins($item, 'Transcoded concat');
+            PendingExport::assertZeroOrigins($item, 'Transcoded concat');
 
             if ($this->audioNormalization !== null) {
                 $audio = $item->audio();

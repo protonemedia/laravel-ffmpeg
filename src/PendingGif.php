@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
 class PendingGif extends PendingExport
@@ -80,7 +81,7 @@ class PendingGif extends PendingExport
         $filters = ['setpts=PTS-STARTPTS'];
 
         if (($clip = $settings['clip']) !== null) {
-            $filters[] = 'trim=start='.$this->clipTimestamp($clip['start']).':duration='.$this->clipTimestamp($clip['duration']);
+            $filters[] = 'trim=start='.CommandCompiler::timestamp($clip['start']).':duration='.CommandCompiler::timestamp($clip['duration']);
             $filters[] = 'setpts=PTS-STARTPTS';
         }
 

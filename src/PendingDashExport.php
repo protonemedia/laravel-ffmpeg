@@ -6,6 +6,7 @@ use DOMDocument;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
 /** Finite, clear H.264/AAC fragmented-MP4 packaging; no live or DRM claims. */
@@ -143,10 +144,10 @@ class PendingDashExport extends PendingExport
             $index = array_search($token, $targets, true);
             if ($index !== false) {
                 if ($this->type(array_keys($this->representations)[$index]) === 'video') {
-                    array_push($result, '-force_key_frames:v', 'expr:gte(t,n_forced*'.$this->clipTimestamp($this->segmentDuration).')',
+                    array_push($result, '-force_key_frames:v', 'expr:gte(t,n_forced*'.CommandCompiler::timestamp($this->segmentDuration).')',
                         '-flags:v', '+cgop', '-sc_threshold:v', '0');
                 }
-                array_push($result, '-f', 'dash', '-seg_duration', $this->clipTimestamp($this->segmentDuration),
+                array_push($result, '-f', 'dash', '-seg_duration', CommandCompiler::timestamp($this->segmentDuration),
                     '-use_template', '1', '-use_timeline', '1', '-window_size', '0', '-extra_window_size', '0',
                     '-init_seg_name', 'init.mp4', '-media_seg_name', 'segment-$Number%08d$.m4s');
             }
@@ -214,7 +215,7 @@ class PendingDashExport extends PendingExport
         $document->appendChild($root);
         $root->setAttribute('type', 'static');
         $root->setAttribute('profiles', 'urn:mpeg:dash:profile:isoff-live:2011');
-        $root->setAttribute('minBufferTime', 'PT'.$this->clipTimestamp($this->segmentDuration * 2).'S');
+        $root->setAttribute('minBufferTime', 'PT'.CommandCompiler::timestamp($this->segmentDuration * 2).'S');
         $period = $root->appendChild($document->createElementNS(DashManifest::NS, 'Period'));
         $period->setAttribute('start', 'PT0S');
         $sets = [];
@@ -271,7 +272,7 @@ class PendingDashExport extends PendingExport
                 $artifact = ['path' => $local, 'output' => $index, 'role' => $fileIndex === 0 ? 'dash-init' : 'dash-segment', 'destination' => $target];
                 if ($fileIndex === 1) {
                     $directory = dirname($paths[$index]);
-                    $artifact += ['probe' => true, 'probePath' => $this->fragmentProbe($directory.'/init.mp4', $local, $directory.'/probe.mp4')];
+                    $artifact += ['probe' => true, 'probePath' => PendingExport::fragmentProbe($directory.'/init.mp4', $local, $directory.'/probe.mp4')];
                 }
                 $segments[] = $artifact;
             }
@@ -292,8 +293,8 @@ class PendingDashExport extends PendingExport
                 $playlists[] = ['path' => $local, 'output' => $index, 'role' => 'hls-playlist', 'destination' => $destination];
             }
         }
-        $root->setAttribute('mediaPresentationDuration', 'PT'.$this->clipTimestamp($longest).'S');
-        $root->setAttribute('maxSegmentDuration', 'PT'.$this->clipTimestamp(max(array_map('max', $clocks))).'S');
+        $root->setAttribute('mediaPresentationDuration', 'PT'.CommandCompiler::timestamp($longest).'S');
+        $root->setAttribute('maxSegmentDuration', 'PT'.CommandCompiler::timestamp(max(array_map('max', $clocks))).'S');
         $master = array_key_last($outputs);
         if ($this->sharedHls) {
             $lines = ['#EXTM3U', '#EXT-X-VERSION:7'];

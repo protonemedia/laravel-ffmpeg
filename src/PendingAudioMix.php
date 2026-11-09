@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 
@@ -155,7 +156,7 @@ class PendingAudioMix extends PendingExport
         if ($duration === null || $duration <= 0) {
             throw new MediaException('Audio mixing requires finite primary media.', 'probing', 'metadata');
         }
-        $this->assertZeroOrigins($source, 'Audio mixing', audioOnlyOffset: true);
+        PendingExport::assertZeroOrigins($source, 'Audio mixing', audioOnlyOffset: true);
         $audio = $source->audio();
         if ($source->hasVideo() && $audio !== null
             && (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0)) {
@@ -183,7 +184,7 @@ class PendingAudioMix extends PendingExport
             $prepared = 'audio-mix-loop.wav';
             $analyze([
                 $command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1',
-                ...$options, '-map', '0:a:0', '-af', 'atrim=duration='.$this->clipTimestamp($workspace->probe($this->added)->duration()).',asetpts=PTS-STARTPTS',
+                ...$options, '-map', '0:a:0', '-af', 'atrim=duration='.CommandCompiler::timestamp($workspace->probe($this->added)->duration()).',asetpts=PTS-STARTPTS',
                 '-c:a', 'pcm_f64le', '-f', 'wav', '-rf64', 'auto', $prepared,
             ], 'Audio loop preparation failed.');
             try {
@@ -205,7 +206,7 @@ class PendingAudioMix extends PendingExport
         $graph = $this->mixGraph($source->hasAudio(), $source->duration());
         FilterGraph::validate($graph, 2, ['mixed_audio']);
         $command[array_search('-filter_complex', $command, true) + 1] = $graph;
-        $command[array_search('-t', $command, true) + 1] = $this->clipTimestamp($source->duration());
+        $command[array_search('-t', $command, true) + 1] = CommandCompiler::timestamp($source->duration());
 
         return $command;
     }

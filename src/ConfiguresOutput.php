@@ -585,11 +585,6 @@ trait ConfiguresOutput
         return (float) $parts[1] * 3600 + (int) $parts[2] * 60 + (float) $parts[3];
     }
 
-    protected function clipTimestamp(float $seconds): string
-    {
-        return rtrim(rtrim(number_format($seconds, 6, '.', ''), '0'), '.');
-    }
-
     public function toDisk(string|Filesystem $disk, array $options = []): self
     {
         $this->assertOutputMutable();
@@ -652,10 +647,10 @@ trait ConfiguresOutput
 
         if ($this->clip !== null) {
             if ($this->clip['seek'] === 'accurate') {
-                array_push($options, '-ss', $this->clipTimestamp($this->clip['start']));
+                array_push($options, '-ss', CommandCompiler::timestamp($this->clip['start']));
             }
 
-            array_push($options, '-t', $this->clipTimestamp($this->clip['duration']));
+            array_push($options, '-t', CommandCompiler::timestamp($this->clip['duration']));
         }
 
         foreach ($maps as $map) {
@@ -747,7 +742,7 @@ trait ConfiguresOutput
     public function inputSeekOptions(): array
     {
         return $this->clip !== null && $this->clip['seek'] === 'keyframe'
-            ? ['-ss', $this->clipTimestamp($this->clip['start']), '-noaccurate_seek']
+            ? ['-ss', CommandCompiler::timestamp($this->clip['start']), '-noaccurate_seek']
             : [];
     }
 

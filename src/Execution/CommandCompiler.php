@@ -23,6 +23,12 @@ class CommandCompiler
         return $command;
     }
 
+    /** Format seconds as an FFmpeg duration with microsecond precision and no trailing zeros. */
+    public static function timestamp(float $seconds): string
+    {
+        return rtrim(rtrim(number_format($seconds, 6, '.', ''), '0'), '.');
+    }
+
     /** Validate flat tokens without allowing caller-defined option arity. */
     public static function options(array $tokens, string $scope): array
     {

@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 
 class PendingFrame extends PendingImages
 {
@@ -36,7 +37,7 @@ class PendingFrame extends PendingImages
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
     {
         $command = parent::command($outputs, $paths, $outputPaths);
-        array_splice($command, -1, 0, ['-ss', $this->clipTimestamp($this->at), '-frames:v', '1', '-update', '1', '-f', 'image2']);
+        array_splice($command, -1, 0, ['-ss', CommandCompiler::timestamp($this->at), '-frames:v', '1', '-update', '1', '-f', 'image2']);
 
         return $command;
     }
