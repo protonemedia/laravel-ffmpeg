@@ -113,7 +113,7 @@ readonly class UrlInput implements InputSource
 
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
-        if (! $resource && in_array(strtolower($this->extension()), ['m3u8', 'm3u', 'mpd', 'ffconcat'])) {
+        if (! $resource && in_array(strtolower($this->extension()), Media::MANIFEST_EXTENSIONS, true)) {
             throw new MediaException('URL manifest inputs require an explicit dependency policy.', 'staging', 'manifest');
         }
 
@@ -151,10 +151,8 @@ readonly class UrlInput implements InputSource
                 throw new MediaException('The HTTP media download did not complete.', 'staging', 'transfer');
             }
 
-            $prefix = file_get_contents($path, false, null, 0, 4096);
-
-            if (! $resource && preg_match('/^(?:\xEF\xBB\xBF)?\s*(?:#EXTM3U|ffconcat\s)|<(?:\w+:)?MPD(?:\s|>)/i', $prefix)) {
-                throw new MediaException('Remote manifest dependencies cannot be staged as a single file.', 'staging', 'manifest');
+            if (! $resource) {
+                Media::rejectManifestContent($path);
             }
 
             return $path;

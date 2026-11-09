@@ -24,6 +24,9 @@ use Throwable;
 
 readonly class Media
 {
+    /** @internal Manifest formats whose dependencies cannot be staged as a single file. */
+    public const MANIFEST_EXTENSIONS = ['m3u8', 'm3u', 'mpd', 'ffconcat'];
+
     private string|File|UploadedFile|InputSource $source;
 
     private array $options;
@@ -381,7 +384,7 @@ readonly class Media
                 return $this->absoluteLocalPath($disk->path($this->source));
             }
 
-            if (! $resource && in_array($this->extension(), ['m3u8', 'm3u', 'mpd', 'ffconcat'])) {
+            if (! $resource && in_array($this->extension(), self::MANIFEST_EXTENSIONS, true)) {
                 throw new MediaException('Remote manifest dependencies cannot be staged as a single file.', 'staging', 'manifest');
             }
 
@@ -406,7 +409,7 @@ readonly class Media
             }
 
             if (! $resource) {
-                $this->validateStagedContent($path);
+                self::rejectManifestContent($path);
             }
 
             return $path;
@@ -427,7 +430,8 @@ readonly class Media
         }
     }
 
-    private function validateStagedContent(string $path): void
+    /** @internal Reject a staged file whose content is a manifest, whatever its extension. */
+    public static function rejectManifestContent(string $path): void
     {
         $prefix = file_get_contents($path, false, null, 0, 4096);
 
