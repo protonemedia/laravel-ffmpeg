@@ -150,8 +150,6 @@ class NativeEncodingOptionsTest extends TestCase
         foreach ([
             $media->normalizeLoudness()->audioStream(0, fn ($audio) => $audio->filter('volume=0')),
             $media->mixAudio($media)->audioStream(0, fn ($audio) => $audio->codec('copy')),
-            $media->concatTranscoded($media)->normalizeVideo(96, 64, 10)->normalizeAudio()
-                ->audioStream(0, fn ($audio) => $audio->codec('copy')),
         ] as $export) {
             try {
                 $export->inspect();

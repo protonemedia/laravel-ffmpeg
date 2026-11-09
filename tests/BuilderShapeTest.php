@@ -5,6 +5,8 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ProtoneMedia\LaravelFFMpeg\PendingConcat;
+use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\PendingFrame;
 use ProtoneMedia\LaravelFFMpeg\PendingGif;
 use ProtoneMedia\LaravelFFMpeg\PendingFrames;
@@ -14,6 +16,8 @@ use ProtoneMedia\LaravelFFMpeg\PendingStoryboard;
 use ProtoneMedia\LaravelFFMpeg\PendingWaveform;
 use ProtoneMedia\LaravelFFMpeg\PendingWaveformPeaks;
 use ReflectionClass;
+use ReflectionMethod;
+use ReflectionParameter;
 
 class BuilderShapeTest extends TestCase
 {
@@ -25,6 +29,9 @@ class BuilderShapeTest extends TestCase
             'withoutAudio', 'withoutVideo', 'metadata', 'metadataFrom', 'withoutMetadata', 'streamMetadata', 'disposition', 'chaptersFrom'];
 
         return [
+            'concatTranscoded' => [PendingConcat::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt',
+                'videoStream', 'audioStream', 'color', 'map', 'mapVideo', 'mapAudio', 'withoutVideo', 'videoFilter', 'resize', 'fit',
+                'audioFilter', 'volume', 'delayAudio', 'fadeIn', 'fadeOut', 'drawText', 'resource', 'metadataFrom', 'chaptersFrom', 'withoutMetadata']],
             'frame' => [PendingFrame::class, [...$images, 'clip']],
             'frames' => [PendingFrames::class, $images],
             'storyboard' => [PendingStoryboard::class, $images],
@@ -50,6 +57,20 @@ class BuilderShapeTest extends TestCase
         $this->assertFalse($reflection->getParentClass());
         foreach ($unsupported as $method) {
             $this->assertFalse($reflection->hasMethod($method), $class.' exposes '.$method.'().');
+        }
+
+        // Forwarders must accept exactly what the pipeline accepts.
+        $describe = fn (ReflectionMethod $method) => array_map(fn (ReflectionParameter $parameter) => [
+            $parameter->getName(), (string) $parameter->getType(), $parameter->isVariadic(),
+            $parameter->isDefaultValueAvailable() ? var_export($parameter->getDefaultValue(), true) : null,
+        ], $method->getParameters());
+        foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+            if ($method->isConstructor() || ! method_exists(PendingExport::class, $method->getName())
+                || ! (new ReflectionMethod(PendingExport::class, $method->getName()))->isPublic()) {
+                continue;
+            }
+            $this->assertSame($describe(new ReflectionMethod(PendingExport::class, $method->getName())), $describe($method),
+                $class.'::'.$method->getName().'() differs from PendingExport.');
         }
     }
 }

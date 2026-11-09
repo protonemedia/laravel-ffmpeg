@@ -3,11 +3,25 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
 
-class PendingConcat extends PendingExport
+/** Joins sources end to end after normalizing their geometry, frame rate and audio format. */
+final class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOutputs
 {
+    use Concerns\Clips;
+    use Concerns\GlobalOptions;
+    use Concerns\OutputOptions;
+    use Concerns\RunsExport;
+    use Conditionable;
+
+    private readonly PendingExport $export;
+
     private ?array $normalization = null;
 
     private ?array $audioNormalization = null;
@@ -20,25 +34,26 @@ class PendingConcat extends PendingExport
             throw new InvalidArgumentException('Transcoded concat requires at least two media inputs.');
         }
 
-        parent::__construct($sources[0], $disk);
+        $this->export = new PendingExport($sources[0], $disk, $this);
 
         foreach (array_slice($sources, 1) as $source) {
-            parent::addInput($source);
+            $this->export->addInput($source);
         }
 
-        $this->toDisk($disk);
+        // addInput() falls back to the default disk; keep the first input's.
+        $this->export->toDisk($disk);
     }
 
     public function normalizeVideo(int $width, int $height, int|float|string $frameRate, string $fit = 'contain'): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
 
         if ($width <= 0 || $height <= 0 || $width % 2 || $height % 2
             || ! in_array($fit, ['contain', 'cover', 'stretch'], true)) {
             throw new InvalidArgumentException('Normalization requires positive even dimensions, a positive frame rate, and contain, cover, or stretch.');
         }
 
-        $geometry = new ExportOutput('normalization.mp4', $this->outputConfiguration()['disk']);
+        $geometry = new ExportOutput('normalization.mp4', $this->export->outputConfiguration()['disk']);
         $fit === 'stretch' ? $geometry->resize($width, $height) : $geometry->fit($width, $height, $fit);
         $geometry->frameRate($frameRate);
         $this->normalization = [...$geometry->outputConfiguration()['videoFilters'], 'setsar=1', 'setpts=PTS-STARTPTS'];
@@ -48,7 +63,7 @@ class PendingConcat extends PendingExport
 
     public function normalizeAudio(int $sampleRate = 48000, int $channels = 2, ?int $channel = null): self
     {
-        $this->assertOutputMutable();
+        $this->export->assertOutputMutable();
 
         if ($sampleRate <= 0 || ! in_array($channels, [1, 2], true) || ($channel !== null && $channel < 0)) {
             throw new InvalidArgumentException('Audio normalization requires a positive sample rate, mono or stereo, and a nonnegative channel index.');
@@ -59,40 +74,86 @@ class PendingConcat extends PendingExport
         return $this;
     }
 
-    public function addInput(Media $media): int
+    public function video(?string $codec = null, mixed $bitrate = null, ?float $crf = null, ?string $preset = null): self
     {
-        throw new InvalidArgumentException('Declare all concat inputs in concatTranscoded().');
+        $this->export->video($codec, $bitrate, $crf, $preset);
+
+        return $this;
     }
 
-    public function output(string $path, callable $configure): self
+    public function videoOptions(array $tokens): self
     {
-        throw new InvalidArgumentException('Transcoded concat supports one root-configured output.');
+        $this->export->videoOptions($tokens);
+
+        return $this;
     }
 
-    public function filterComplex(string $expression): self
+    public function audio(?string $codec = null, mixed $bitrate = null): self
     {
-        throw new InvalidArgumentException('Transcoded concat owns its graph; use export()->filterComplex() for custom graphs.');
+        $this->export->audio($codec, $bitrate);
+
+        return $this;
     }
 
-    public function watermark(Media $image, string $position = 'bottom-right', int $x = 0, int $y = 0, ?int $width = null, ?int $height = null, float $opacity = 1): self
+    public function audioOptions(array $tokens): self
     {
-        throw new InvalidArgumentException('Transcoded concat owns its graph and does not support watermark inputs.');
+        $this->export->audioOptions($tokens);
+
+        return $this;
     }
 
-    protected function configuredOutputs(?string $path = null): array
+    public function withoutAudio(): self
     {
-        $settings = $this->outputConfiguration();
+        $this->export->withoutAudio();
+
+        return $this;
+    }
+
+    public function metadata(string $key, string $value): self
+    {
+        $this->export->metadata($key, $value);
+
+        return $this;
+    }
+
+    public function streamMetadata(string|int $stream, string $key, string $value): self
+    {
+        $this->export->streamMetadata($stream, $key, $value);
+
+        return $this;
+    }
+
+    public function disposition(string|int $stream, string|array $flags): self
+    {
+        $this->export->disposition($stream, $flags);
+
+        return $this;
+    }
+
+    public function twoPass(): self
+    {
+        $this->export->twoPass();
+
+        return $this;
+    }
+
+    public function save(?string $path = null): ExportResult
+    {
+        return $this->export->save($path);
+    }
+
+    /** @internal */
+    public function outputs(array $default, ?string $path): array
+    {
+        $settings = $this->export->outputConfiguration();
 
         if ($this->normalization === null || ($this->audioNormalization === null && ! $settings['omitAudio'])) {
             throw new InvalidArgumentException('Choose normalizeVideo() and either normalizeAudio() or withoutAudio().');
         }
 
-        if ($settings['omitVideo'] || ($settings['omitAudio'] && $this->audioNormalization !== null)
-            || $settings['videoFilters'] !== [] || $settings['audioFilters'] !== []
-            || $settings['videoStreams'] !== [] || $settings['audioStreams'] !== []
-            || $settings['maps'] !== [] || ($settings['metadataSource'] ?? -1) >= 0 || ($settings['chapterSource'] ?? -1) >= 0
+        if (($settings['omitAudio'] && $this->audioNormalization !== null)
             || ($settings['video']['codec'] ?? null) === 'copy' || ($settings['audio']['codec'] ?? null) === 'copy') {
-            throw new InvalidArgumentException('Transcoded concat owns its maps and source metadata policy, and requires transcoded video without root filters or conflicting audio policy.');
+            throw new InvalidArgumentException('Transcoded concat requires transcoded video and audio, and either normalizeAudio() or withoutAudio(), not both.');
         }
 
         if (array_any($this->sources, fn ($source) => $source->inputOptions() !== [])) {
@@ -105,13 +166,14 @@ class PendingConcat extends PendingExport
             $settings['maps'][] = '[concat_audio]';
         }
 
-        $settings['omitAudio'] = $settings['omitVideo'] = false;
+        $settings['omitAudio'] = false;
         $settings['metadataSource'] = $settings['chapterSource'] = -1;
 
         return [(new ExportOutput($path ?? 'inspection.mp4', $settings['disk']))->configure($settings)];
     }
 
-    protected function filterGraph(): ?string
+    /** @internal */
+    public function graph(): string
     {
         $branches = $pads = [];
 
@@ -132,7 +194,8 @@ class PendingConcat extends PendingExport
         return implode(';', $branches);
     }
 
-    protected function prepareEncoding(array $metadata): ?float
+    /** @internal Validates every source; filter frame rounding and audio tails keep progress indeterminate. */
+    public function duration(array $metadata, ?float $default): ?float
     {
         foreach ($metadata as $item) {
             if ($item->video() === null) {
