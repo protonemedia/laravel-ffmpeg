@@ -546,7 +546,7 @@ class PendingHlsExport extends PendingExport
                     if ($this->isSubtitle($index)) {
                         $subtitlePath = $local;
                     } elseif ($count === 1) {
-                        $metadata = $this->source->probePath($probePath, $this->workspace);
+                        $metadata = $this->source->probeArtifact($probePath, $this->workspace);
                         $stream = $metadata->video() ?? $metadata->audio();
                         $start = $stream?->get('start_time');
                     }

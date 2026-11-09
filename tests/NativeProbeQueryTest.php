@@ -51,6 +51,21 @@ class NativeProbeQueryTest extends TestCase
     }
 
     #[Test]
+    public function unsupported_ffprobe_versions_are_rejected_before_querying(): void
+    {
+        Process::preventStrayProcesses();
+        Process::fake(fn (PendingProcess $process) => in_array('-version', $process->command, true)
+            ? Process::result(output: 'ffprobe version 5.1.9') : throw new \LogicException('Only the version check may run.'));
+        try {
+            $this->pendingQuery()->get();
+            $this->fail('An unsupported FFprobe must be rejected.');
+        } catch (MediaException $exception) {
+            $this->assertSame(['probing', 'version'], [$exception->phase, $exception->category]);
+        }
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
     public function public_query_is_lazy_bounded_and_returns_separate_raw_sections(): void
     {
         $this->fakeProbe(function (PendingProcess $process) {

@@ -68,7 +68,7 @@ class Workspace
                 $this->probeVersions[$binary] = true;
             }
 
-            $this->metadata[$identity] = $media->probePath($path, $this, $selector);
+            $this->metadata[$identity] = $media->probeInput($path, $this, $selector);
         }
 
         return $this->metadata[$identity];

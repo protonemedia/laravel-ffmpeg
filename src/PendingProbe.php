@@ -150,29 +150,14 @@ class PendingProbe
         return $this->media->withInput(function (string $path, Workspace $workspace) {
             $runner = $workspace->runner;
             $binary = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
-            $version = $runner->run([$binary, '-version'], $workspace->path, outputLimit: 65536, timeout: $this->timeout);
-            if ($version->exitCode !== 0 || ! preg_match('/^ffprobe version (?:n)?9\.0\.\d+(?:\s|-|$)/', $version->output)) {
-                throw new MediaException('FFprobe 9.0.x is required.', 'probing', 'version');
-            }
+            // The runner's operation budget is this query's timeout.
+            $runner->version($binary, 'ffprobe', $workspace->path);
 
-            // This is the same staged source used by Media::probe(), with its
-            // protocol allowlist and validated transport/probing options.
+            // This is the same staged source and probe arguments used by Media::probe().
             $protocols = $this->media->protocolWhitelist();
             $workspace->requireProtocols($binary, $protocols);
-            $transport = $this->media->transportOptions();
-            // StillInput's infinite image loop is an encoding policy, not a probe policy.
-            if (($loop = array_search('-loop', $transport, true)) !== false) {
-                array_splice($transport, $loop, 2);
-            }
-            $options = [];
-            $input = $this->media->inputOptions();
-            for ($i = 0; $i < count($input); $i += 2) {
-                if (in_array($input[$i], ['-probesize', '-analyzeduration'], true)) {
-                    array_push($options, $input[$i], $input[$i + 1]);
-                }
-            }
             $command = [$binary, '-v', 'error', '-print_format', 'json', '-protocol_whitelist', $protocols,
-                ...$transport, ...$options, '-read_intervals', $this->interval(), '-show_streams'];
+                ...$this->media->probeOptions(), '-read_intervals', $this->interval(), '-show_streams'];
             if ($this->selector !== null) {
                 array_push($command, '-select_streams', $this->selector);
             }

@@ -216,9 +216,7 @@ readonly class Media
             $this->identity(), $versionedKey, config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'),
         ]));
         $data = $cache->get($key);
-        if (! is_array($data) || ! isset($data['format'], $data['streams']) || ! is_array($data['format'])
-            || ! is_array($data['streams']) || ! array_is_list($data['streams'])
-            || array_any($data['streams'], fn ($stream) => ! is_array($stream))) {
+        if (! self::isProbeData($data)) {
             $data = $this->probe()->toArray();
             $cache->put($key, $data, $ttl);
         }
@@ -272,10 +270,11 @@ readonly class Media
         }
     }
 
-    /** @internal */
-    public function probePath(string $path, Workspace $workspace, ?string $selector = null): Metadata
+    /** @internal FFprobe arguments for this input: its transport options and the input options that affect probing. */
+    public function probeOptions(): array
     {
-        $options = [];
+        // A still image's loop and frame rate describe the generated video, not the image.
+        $options = $this->source instanceof StillInput ? [] : $this->transportOptions();
 
         for ($i = 0; $i < count($this->options); $i += 2) {
             if (in_array($this->options[$i], ['-probesize', '-analyzeduration'], true)) {
@@ -283,22 +282,42 @@ readonly class Media
             }
         }
 
-        if ($selector !== null) {
-            array_push($options, '-select_streams', $selector);
-        }
+        return $options;
+    }
 
-        $customInput = $this->source instanceof InputSource && $path === $workspace->stage($this);
-        $protocols = $customInput ? $this->protocolWhitelist() : 'file';
+    /** @internal Probe this input at the path the workspace staged it to. */
+    public function probeInput(string $path, Workspace $workspace, ?string $selector = null): Metadata
+    {
+        $protocols = $this->protocolWhitelist();
+        $workspace->requireProtocols(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), $protocols);
+        $data = $this->runProbe($workspace, $path, '[input]', $protocols,
+            [...$this->probeOptions(), ...($selector === null ? [] : ['-select_streams', $selector])]);
 
-        if ($customInput) {
-            $workspace->requireProtocols(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), $protocols);
-            $options = [...($this->source instanceof StillInput ? [] : $this->transportOptions()), ...$options];
-        }
+        // Do not return temporary paths or credential-bearing URLs.
+        $data['format']['filename'] = $this->source instanceof InputSource ? $this->source->label()
+            : (is_string($this->source) ? $this->source : $this->source->getPathname());
 
+        return new Metadata($data, $this->identity());
+    }
+
+    /**
+     * @internal Probe a file generated from this input. It is always a local file read
+     * without the input's transport options, and its streams carry no source identity.
+     */
+    public function probeArtifact(string $path, Workspace $workspace): Metadata
+    {
+        $data = $this->runProbe($workspace, $path, '[output]', 'file', []);
+        $data['format']['filename'] = basename($path);
+
+        return new Metadata($data);
+    }
+
+    private function runProbe(Workspace $workspace, string $path, string $label, string $protocols, array $options): array
+    {
         $result = $workspace->runner->run([
             config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-print_format', 'json',
             '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', $protocols, ...$options, $path,
-        ], $workspace->path, [$path => '[input]'] + $this->redactions());
+        ], $workspace->path, [$path => $label] + $this->redactions());
 
         if ($result->exitCode !== 0) {
             throw new MediaException('FFprobe failed (exit '.$result->exitCode.').', 'probing', 'exit', $result->diagnostics);
@@ -310,15 +329,9 @@ readonly class Media
             throw new MediaException('FFprobe returned invalid JSON.', 'probing', 'metadata');
         }
 
-        if (! is_array($data) || ! isset($data['format'], $data['streams'])
-            || ! is_array($data['format']) || ! is_array($data['streams']) || ! array_is_list($data['streams'])
-            || array_any($data['streams'], fn ($stream) => ! is_array($stream))) {
+        if (! self::isProbeData($data)) {
             throw new MediaException('FFprobe returned invalid metadata.', 'probing', 'metadata');
         }
-
-        // Do not return temporary paths or credential-bearing URLs.
-        $data['format']['filename'] = $this->source instanceof InputSource ? $this->source->label()
-            : (is_string($this->source) ? $this->source : $this->source->getPathname());
 
         if ($this->source instanceof UrlInput) {
             $url = $this->source->url();
@@ -329,7 +342,14 @@ readonly class Media
             });
         }
 
-        return new Metadata($data, $this->identity());
+        return $data;
+    }
+
+    private static function isProbeData(mixed $data): bool
+    {
+        return is_array($data) && isset($data['format'], $data['streams']) && is_array($data['format'])
+            && is_array($data['streams']) && array_is_list($data['streams'])
+            && ! array_any($data['streams'], fn ($stream) => ! is_array($stream));
     }
 
     /** @internal */
