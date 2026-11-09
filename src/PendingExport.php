@@ -16,6 +16,15 @@ use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProgressParser;
 use ProtoneMedia\LaravelFFMpeg\Execution\ResourceFilter;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\PackagesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\RunsAnalysis;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\SplitsTwoPass;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
 use Throwable;
 
 class PendingExport
@@ -58,10 +67,20 @@ class PendingExport
 
     protected string $outputRole = 'media';
 
-    public function __construct(private readonly Media $media, string|Filesystem $disk)
-    {
+    /**
+     * @param  object|null  $operation  @internal A builder that holds this pipeline and implements Pipeline hooks.
+     *                                  Each hook receives the value this class computes and returns the one to use.
+     * @param  string|null  $role  @internal The default generated-file role, such as image or hls-playlist.
+     */
+    public function __construct(
+        private readonly Media $media,
+        string|Filesystem $disk,
+        private readonly ?object $operation = null,
+        ?string $role = null,
+    ) {
         $this->inputs = [$media];
         $this->disk = $disk;
+        $this->outputRole = $role ?? $this->outputRole;
     }
 
     public function queued(
@@ -275,11 +294,12 @@ class PendingExport
             if ($path !== null) {
                 throw new InvalidArgumentException('Use save() without a path after output().');
             }
-
-            return $this->outputs;
+            $outputs = $this->outputs;
+        } else {
+            $outputs = [(new ExportOutput($path ?? 'inspection.mp4', $this->disk))->configure($this->outputConfiguration())];
         }
 
-        return [(new ExportOutput($path ?? 'inspection.mp4', $this->disk))->configure($this->outputConfiguration())];
+        return $this->operation instanceof ShapesOutputs ? $this->operation->outputs($outputs, $path) : $outputs;
     }
 
     private function resourceNames(array $outputs): array
@@ -312,7 +332,7 @@ class PendingExport
 
     protected function filterGraph(): ?string
     {
-        return $this->graph;
+        return $this->operation instanceof OwnsGraph ? $this->operation->graph() : $this->graph;
     }
 
     protected function command(array $outputs, array $paths, ?array $outputPaths = null): array
@@ -477,7 +497,9 @@ class PendingExport
             ];
         }
 
-        return CommandCompiler::compile(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $compiledInputs, $compiledOutputs, $globals);
+        $command = CommandCompiler::compile(config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), $compiledInputs, $compiledOutputs, $globals);
+
+        return $this->operation instanceof ShapesCommand ? $this->operation->command($command, $outputs, $paths, $outputPaths) : $command;
     }
 
     public function save(?string $path = null): ExportResult
@@ -767,21 +789,29 @@ class PendingExport
      */
     protected function prepareCommand(Workspace $workspace, array $command, array $outputPaths, Closure $analyze): array
     {
-        return $command;
+        return $this->operation instanceof RunsAnalysis ? $this->operation->analyze($workspace, $command, $outputPaths, $analyze) : $command;
     }
 
     /** @internal Validate resolved stream types before starting any encoder. */
-    protected function validateStreamSelections(array $expected): void {}
+    protected function validateStreamSelections(array $expected): void
+    {
+        if ($this->operation instanceof ValidatesSelections) {
+            $this->operation->selections($expected);
+        }
+    }
 
     /** @internal Outputs requiring encoder statistics; packaging-only outputs do not. */
     protected function twoPassOutputIndexes(array $outputs): array
     {
-        return array_keys($outputs);
+        return $this->operation instanceof SplitsTwoPass ? $this->operation->twoPassOutputs(array_keys($outputs), $outputs) : array_keys($outputs);
     }
 
     /** @internal Keep analysis inside the private workspace, never at publication paths. */
     protected function firstPassCommand(array $command, array $outputPaths, Workspace $workspace, array &$redactions): array
     {
+        if ($this->operation instanceof SplitsTwoPass) {
+            $command = $this->operation->analysisCommand($command);
+        }
         $result = [];
         foreach ($command as $index => $token) {
             $output = array_search($token, $outputPaths, true);
@@ -799,18 +829,22 @@ class PendingExport
 
     protected function outputPaths(array $outputs, Workspace $workspace): array
     {
-        return array_map(function ($index) use ($outputs, $workspace) {
+        $paths = array_map(function ($index) use ($outputs, $workspace) {
             $extension = pathinfo($outputs[$index]->destination()['path'], PATHINFO_EXTENSION);
 
             return $workspace->path.'/output-'.$index.($extension === '' ? '' : '.'.$extension);
         }, array_keys($outputs));
+
+        return $this->operation instanceof PackagesArtifacts ? $this->operation->outputPaths($paths, $outputs, $workspace) : $paths;
     }
 
     protected function artifacts(array $outputs, array $paths): array
     {
-        return array_map(fn ($index) => [
+        $artifacts = array_map(fn ($index) => [
             'path' => $paths[$index], 'output' => $index, 'destination' => $outputs[$index]->destination(),
         ], array_keys($outputs));
+
+        return $this->operation instanceof PackagesArtifacts ? $this->operation->artifacts($artifacts, $outputs, $paths) : $artifacts;
     }
 
     /** Validate cover-art and watermark inputs and resolve the facts command() needs for them. */
@@ -888,6 +922,13 @@ class PendingExport
 
     protected function prepareEncoding(array $metadata): ?float
     {
+        $duration = $this->defaultDuration($metadata);
+
+        return $this->operation instanceof MeasuresDuration ? $this->operation->duration($metadata, $duration) : $duration;
+    }
+
+    private function defaultDuration(array $metadata): ?float
+    {
         if ($this->coverInput !== null) {
             return $metadata[0]->duration();
         }
@@ -915,6 +956,9 @@ class PendingExport
         }
         if ($role === 'hls-key' && $size !== 16) {
             throw new MediaException('An AES-128 HLS key must contain exactly 16 bytes.', Progress::VALIDATION, 'artifact');
+        }
+        if ($this->operation instanceof ValidatesArtifacts) {
+            $this->operation->artifact($path, $role, $size);
         }
 
         return $size;
