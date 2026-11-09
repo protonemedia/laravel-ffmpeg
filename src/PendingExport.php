@@ -16,6 +16,7 @@ use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProgressParser;
 use ProtoneMedia\LaravelFFMpeg\Execution\ResourceFilter;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\PackagesArtifacts;
@@ -27,7 +28,7 @@ use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesArtifacts;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ValidatesSelections;
 use Throwable;
 
-class PendingExport
+class PendingExport implements Exportable
 {
     use Conditionable;
     use ConfiguresOutput;
@@ -91,7 +92,10 @@ class PendingExport
     ): PendingQueuedExport {
         $this->assertMutable();
 
-        return new PendingQueuedExport($this, $connection, $queue, $delay, $parallel, $this->timeoutSeconds);
+        // Queue the builder that holds this pipeline, so the worker restores and saves the same builder.
+        $export = $this->operation instanceof Exportable ? $this->operation : $this;
+
+        return new PendingQueuedExport($export, $connection, $queue, $delay, $parallel, $this->timeoutSeconds);
     }
 
     /** A cumulative budget for this execution; null restores the configured process limits. */

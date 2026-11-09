@@ -7,7 +7,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use InvalidArgumentException;
 use Laravel\SerializableClosure\SerializableClosure;
-use ProtoneMedia\LaravelFFMpeg\PendingExport;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
 use ReflectionClass;
 use ReflectionFunction;
 use SplObjectStorage;
@@ -18,12 +18,12 @@ final class ExportPlan
 {
     private array $state;
 
-    public function __construct(PendingExport $export)
+    public function __construct(Exportable $export)
     {
         $this->state = $this->encode($export, new SplObjectStorage);
     }
 
-    public function restore(): PendingExport
+    public function restore(): Exportable
     {
         $objects = [];
 

@@ -8,6 +8,7 @@ use DateTimeInterface;
 use Illuminate\Foundation\Bus\PendingDispatch;
 use Illuminate\Support\Facades\Bus;
 use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
 use ProtoneMedia\LaravelFFMpeg\Queue\ExportJob;
 use ProtoneMedia\LaravelFFMpeg\Queue\ExportPlan;
 use ProtoneMedia\LaravelFFMpeg\Queue\HlsBatchJob;
@@ -25,7 +26,7 @@ class PendingQueuedExport
     private readonly ?string $queue;
 
     public function __construct(
-        PendingExport $export,
+        Exportable $export,
         ?string $connection = null,
         ?string $queue = null,
         private readonly DateTimeInterface|DateInterval|int|null $delay = null,
