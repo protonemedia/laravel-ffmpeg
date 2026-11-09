@@ -624,11 +624,15 @@ $peaks->channels; // Channel-major signed 16-bit [min, max] pairs.
 $peaks->bucketFrames;
 $peaks->toArray();
 
-$media->waveformPeaks()
+$result = $media->waveformPeaks()
     ->buckets(2000)
     ->toDisk('waveforms')
     ->save('lesson.json');
+
+$result->peaks; // The same WaveformPeaks that get() returns.
 ```
+
+`get()` returns the peaks without publishing a file. `save()` publishes the version-1 JSON and returns a result with the computed `peaks`, so you do not need a second run to read them.
 
 Separate channels are the default. `mono()` mixes channels with equal weights before reduction. `buckets(n)` produces at most `n` nonempty buckets; otherwise each bucket contains up to `samplesPerBucket` decoded frames. Partial final buckets have no padding. Version-1 JSON includes the selected sample rate, channel mode, frame count, and bucket timing. Reduction uses bounded reads and caps results at 100,000 channel-buckets. Private PCM disk usage grows with decoded duration and is cleaned after the operation.
 

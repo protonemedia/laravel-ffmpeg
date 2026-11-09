@@ -83,6 +83,11 @@ class PendingWaveformPeaks extends PendingExport
         return $this->peaks;
     }
 
+    public function save(?string $path = null): WaveformPeaksResult
+    {
+        return new WaveformPeaksResult(parent::save($path), $this->peaks);
+    }
+
     protected function prepareEncoding(array $metadata): ?float
     {
         $stream = $metadata[0]->audioStreams()->get($this->track);

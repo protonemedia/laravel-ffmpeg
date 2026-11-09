@@ -79,6 +79,7 @@ class NativeWaveformPeaksTest extends TestCase
         $this->assertSame(11 / 8000, $peaks->duration());
         $result = $this->pending($media)->save('peaks.json');
         $this->assertSame('waveform-peaks', $result->file()->role);
+        $this->assertSame($peaks->toArray(), $result->peaks->toArray());
         $this->assertSame($peaks->toArray(), json_decode(Storage::disk('peaks-fixtures')->get('peaks.json'), true));
         $this->assertCount(1, $result->processes());
         $this->assertSame($original, Storage::disk('peaks-fixtures')->get('asymmetric.wav'));

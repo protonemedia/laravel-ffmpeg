@@ -306,14 +306,15 @@ $peaks = $media->waveformPeaks(samplesPerBucket: 256)
     ->buckets(1000)
     ->get();
 $peaks->toArray();
-$media->waveformPeaks()
+$saved = $media->waveformPeaks()
     ->buckets(2000)
     ->save('peaks.json');
+$saved->peaks;
 ```
 
 Loudness normalization produces one audio-only output. It prepares one private lossless sample snapshot after trim, channel preprocessing, and resampling. Both loudnorm passes read that snapshot. Results retain validated measurement/final statistics, requested and actual normalization modes, and output rate. Nonfinite statistics become null, never zero; silence uses dynamic fallback. Graphs, multiple inputs/outputs, copied audio, video settings, keyframe seeking, and raw rate/channel overrides are rejected.
 
-Peaks decode the selected audio track to signed little-endian 16-bit PCM at that track's rate. Separate channels are the default; `mono()` mixes channels equally before reduction. Fixed-size buckets retain partial tails without zero padding. `buckets(n)` partitions frames into at most n nonempty buckets, with remainder frames in the earlier buckets. Version-1 JSON records rate, source channels, track, mode, frame count, durations, bucket lengths, and channel-major extrema. Empty selections have no buckets. Reads use at most 2,048 frames per chunk; results are capped at 100,000 channel-buckets. Private PCM disk usage remains proportional to duration. Both operations use ordinary staging, publication, cancellation, and workspace cleanup.
+Peaks decode the selected audio track to signed little-endian 16-bit PCM at that track's rate. Separate channels are the default; `mono()` mixes channels equally before reduction. Fixed-size buckets retain partial tails without zero padding. `buckets(n)` partitions frames into at most n nonempty buckets, with remainder frames in the earlier buckets. Version-1 JSON records rate, source channels, track, mode, frame count, durations, bucket lengths, and channel-major extrema. Empty selections have no buckets. `save()` returns a `WaveformPeaksResult`, an export result that also carries the computed `peaks`. Reads use at most 2,048 frames per chunk; results are capped at 100,000 channel-buckets. Private PCM disk usage remains proportional to duration. Both operations use ordinary staging, publication, cancellation, and workspace cleanup.
 
 ### Playlist hooks
 
