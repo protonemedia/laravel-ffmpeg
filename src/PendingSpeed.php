@@ -86,21 +86,15 @@ class PendingSpeed extends PendingExport
     protected function prepareEncoding(array $metadata): ?float
     {
         $item = $metadata[0];
-        $origin = $item->get('format.start_time');
-        if (! is_numeric($origin) || ! is_finite((float) $origin) || abs((float) $origin) > 0.000001) {
-            throw new MediaException('Speed requires a zero source presentation origin.', 'probing', 'metadata');
-        }
+        // The audio filter scales an initial offset, so audio-only sources may start later.
+        $this->assertZeroOrigins($item, 'Speed', audioOnlyOffset: true);
 
-        // Conservatively validate every source A/V track, including unselected
+        // Conservatively validate every source audio track, including unselected
         // tracks, rather than guessing how arbitrary stream selectors resolve.
-        foreach ($item->streams() as $stream) {
-            if (! in_array($stream->type(), ['video', 'audio'], true)) {
-                continue;
-            }
+        foreach ($item->audioStreams() as $stream) {
             $start = $stream->get('start_time');
-            if (! is_numeric($start) || ! is_finite((float) $start) || (float) $start < 0
-                || ($stream->type() === 'video' && abs((float) $start) > 0.000001)) {
-                throw new MediaException('Speed requires zero video origins and nonnegative audio origins on all source tracks.', 'probing', 'metadata');
+            if (! is_numeric($start) || ! is_finite((float) $start) || (float) $start < 0) {
+                throw new MediaException('Speed requires nonnegative audio origins on all source tracks.', 'probing', 'metadata');
             }
         }
 

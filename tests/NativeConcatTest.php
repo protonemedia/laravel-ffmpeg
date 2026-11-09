@@ -369,6 +369,19 @@ class NativeConcatTest extends TestCase
             $this->assertFalse(Storage::disk('memory')->exists('late-normalized.mov'));
         }
 
+        // Every video track is checked, not only the first.
+        $tracks = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=64x48:rate=10:duration=1',
+            '-itsoffset', '1', '-f', 'lavfi', '-i', 'color=blue:size=64x48:rate=10:duration=1', '-f', 'lavfi', '-i', 'sine=sample_rate=48000:duration=1',
+            '-map', '0:v', '-map', '1:v', '-map', '2:a', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $this->root.'/late-second-track.mkv']);
+        $this->assertTrue($tracks->successful(), $tracks->errorOutput());
+        try {
+            $first->concatTranscoded(FFMpeg::disk()->open(new File($this->root.'/late-second-track.mkv')))
+                ->normalizeVideo(128, 96, 10)->normalizeAudio()->toDisk('memory')->save('late-track.mov');
+            $this->fail('Transcoded concat accepted a late second video track.');
+        } catch (MediaException $exception) {
+            $this->assertSame('metadata', $exception->category);
+        }
+
         $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 }

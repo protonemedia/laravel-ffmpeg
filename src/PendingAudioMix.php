@@ -148,20 +148,14 @@ class PendingAudioMix extends PendingExport
     {
         [$source, $added] = $metadata;
         $duration = $source->duration();
-        $origin = $source->get('format.start_time');
         // Categories name the condition: metadata for durations and origins, mapping for missing tracks.
         if (! $source->hasVideo() && ! $source->hasAudio()) {
             throw new MediaException('Audio mixing requires primary media with video or audio.', 'probing', 'mapping');
         }
-        if ($duration === null || $duration <= 0
-            || ($source->hasVideo() && (! is_numeric($origin) || abs((float) $origin) > 0.000001))) {
-            throw new MediaException('Audio mixing requires finite primary media and zero video presentation origins.', 'probing', 'metadata');
+        if ($duration === null || $duration <= 0) {
+            throw new MediaException('Audio mixing requires finite primary media.', 'probing', 'metadata');
         }
-        foreach ($source->videoStreams() as $stream) {
-            if (! is_numeric($stream->get('start_time')) || abs((float) $stream->get('start_time')) > 0.000001) {
-                throw new MediaException('Audio mixing requires zero video origins.', 'probing', 'metadata');
-            }
-        }
+        $this->assertZeroOrigins($source, 'Audio mixing', audioOnlyOffset: true);
         $audio = $source->audio();
         if ($source->hasVideo() && $audio !== null
             && (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0)) {

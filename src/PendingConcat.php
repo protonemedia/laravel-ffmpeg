@@ -130,17 +130,13 @@ class PendingConcat extends PendingExport
     protected function prepareEncoding(array $metadata): ?float
     {
         foreach ($metadata as $item) {
-            $video = $item->video();
-            $origin = $item->get('format.start_time');
-
-            if ($video === null) {
+            if ($item->video() === null) {
                 throw new MediaException('Transcoded concat requires a video stream in every source.', 'probing', 'mapping');
             }
-            if ($item->duration() === null || $item->duration() <= 0
-                || ! is_numeric($origin) || abs((float) $origin) > 0.000001
-                || ! is_numeric($video->get('start_time')) || abs((float) $video->get('start_time')) > 0.000001) {
-                throw new MediaException('Transcoded concat requires finite sources with zero presentation and video origins.', 'probing', 'metadata');
+            if ($item->duration() === null || $item->duration() <= 0) {
+                throw new MediaException('Transcoded concat requires finite sources.', 'probing', 'metadata');
             }
+            $this->assertZeroOrigins($item, 'Transcoded concat');
 
             if ($this->audioNormalization !== null) {
                 $audio = $item->audio();

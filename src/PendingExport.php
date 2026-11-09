@@ -845,6 +845,21 @@ class PendingExport
         }
     }
 
+    /**
+     * @internal Require a zero container origin and zero origins on every motion video track. With
+     * $audioOnlyOffset, a source without motion video may start later; its filters keep that offset.
+     */
+    protected function assertZeroOrigins(Metadata $item, string $operation, bool $audioOnlyOffset = false): void
+    {
+        $origin = $item->get('format.start_time');
+        if ((! ($audioOnlyOffset && ! $item->hasVideo())
+                && (! is_numeric($origin) || ! is_finite((float) $origin) || abs((float) $origin) > 0.000001))
+            || $item->videoStreams()->contains(fn (Stream $stream) => ! is_numeric($stream->get('start_time'))
+                || abs((float) $stream->get('start_time')) > 0.000001)) {
+            throw new MediaException($operation.' requires a zero presentation origin and zero video origins.', 'probing', 'metadata');
+        }
+    }
+
     protected function prepareEncoding(array $metadata): ?float
     {
         if ($this->coverInput !== null) {

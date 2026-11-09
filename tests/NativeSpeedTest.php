@@ -194,6 +194,21 @@ class NativeSpeedTest extends TestCase
     }
 
     #[Test]
+    public function audio_only_sources_with_a_later_start_are_retimed_from_their_first_sample(): void
+    {
+        $this->fixture(delay: 0.5, kind: 'audio');
+        $this->assertEqualsWithDelta(0.5, (float) $this->media()->probe()->get('format.start_time'), 0.01);
+        $this->media()->speed(1.5)->audio('pcm_s16le')->save('offset.mkv');
+        $path = Storage::disk('speed-native')->path('offset.mkv');
+        $frames = $this->frames($path);
+        $last = end($frames);
+        // As in any export, FFmpeg drops an audio-only source's leading offset; 5.5 s of audio becomes 3.67 s.
+        $this->assertEqualsWithDelta(0, (float) $frames[0]['pts_time'], 0.001);
+        $this->assertEqualsWithDelta(5.5 / 1.5, (float) $last['pts_time'] + (float) $last['duration_time'], 0.01);
+        $this->assertPitch($path);
+    }
+
+    #[Test]
     public function failure_and_unsupported_timeline_leave_source_and_workspace_intact(): void
     {
         $source = $this->fixture();
