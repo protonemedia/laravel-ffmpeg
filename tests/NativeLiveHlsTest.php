@@ -225,7 +225,7 @@ class NativeLiveHlsTest extends TestCase
             $this->fail('Expected destination failure.');
         } catch (MediaException $exception) {
             $this->assertSame('transfer', $exception->category);
-            $this->assertContains('failed-disk/index.m3u8', $exception->published);
+            $this->assertContains(['disk' => null, 'path' => 'failed-disk/index.m3u8'], $exception->published);
         }
         $playlist = $disk->get('failed-disk/index.m3u8');
         foreach (explode("\n", trim($playlist)) as $line) {

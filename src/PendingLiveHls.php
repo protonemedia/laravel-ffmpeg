@@ -327,7 +327,8 @@ final class PendingLiveHls
             throw new MediaException($exception instanceof MediaException ? $exception->getMessage() : 'Live publication failed.',
                 $exception instanceof MediaException ? $exception->phase : 'publication',
                 $exception instanceof MediaException ? $exception->category : 'transfer',
-                published: [...array_keys($owned), ...($playlistPublished ? [$playlist] : [])]);
+                published: array_map(fn (string $key) => ['disk' => is_string($this->disk) ? $this->disk : null, 'path' => $key],
+                    [...array_keys($owned), ...($playlistPublished ? [$playlist] : [])]));
         } finally {
             // A stop() request ends this session, not later runs of the same builder.
             $this->running = $this->stopped = false;

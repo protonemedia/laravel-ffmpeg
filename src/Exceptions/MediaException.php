@@ -6,6 +6,10 @@ use RuntimeException;
 
 class MediaException extends RuntimeException
 {
+    /**
+     * @param  list<array{disk: ?string, path: string}>  $published  Objects whose writes succeeded; null disk for filesystem objects.
+     * @param  array{disk?: ?string, path?: string}  $destination  The destination that failed, when known.
+     */
     public function __construct(
         string $message,
         public readonly string $phase,
