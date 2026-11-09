@@ -66,7 +66,7 @@ You can run an export immediately or [dispatch it to a queue](#queue-conversions
 
 Laravel FFmpeg requires:
 
-- PHP 8.4 or later, with the DOM extension.
+- PHP 8.4 or later.
 - Laravel 12 or 13.
 - Matching FFmpeg and FFprobe 9.0.x binaries. Setup and CI use 9.0.2.
 
