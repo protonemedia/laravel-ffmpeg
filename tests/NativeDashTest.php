@@ -339,7 +339,8 @@ class NativeDashTest extends TestCase
             'unbounded' => str_replace('d="1000"', 'd="1000" r="-1"', $xml),
             'gap' => str_replace('t="0"', 't="1000"', $xml),
             'dynamic' => str_replace('type="static"', 'type="dynamic"', $xml),
-            'oversize' => str_repeat(' ', 16777217),
+            // One byte over the limit: a longer file is truncated on read, and one long whitespace run trips libxml's own limit.
+            'oversize' => str_pad(str_replace('><', '>'.str_repeat(' ', intdiv(16777217 - strlen($xml), substr_count($xml, '><'))).'<', $xml), 16777217),
             'malformed' => '<MPD>',
             default => $xml,
         };
