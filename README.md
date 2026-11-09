@@ -67,7 +67,7 @@ You can run an export immediately or [dispatch it to a queue](#queue-conversions
 Laravel FFmpeg requires:
 
 - PHP 8.4 or later.
-- Laravel 12 or 13.
+- Laravel 13.20 or later.
 - Matching FFmpeg and FFprobe 9.0.x binaries. Setup and CI use 9.0.2.
 
 Install the development branch with Composer:
@@ -76,7 +76,11 @@ Install the development branch with Composer:
 composer require pbmedia/laravel-ffmpeg:9.x-dev
 ```
 
-Laravel discovers the service provider and facade automatically.
+Laravel discovers the service provider and facade automatically. To prepare images with `prepareImage()`, also install [Intervention Image](https://image.intervention.io), which drives [Laravel's image manipulation](https://laravel.com/docs/13.x/images):
+
+```bash
+composer require intervention/image:^4.2
+```
 
 #### Publishing the configuration
 
@@ -676,18 +680,14 @@ $media->export()
 
 `watermark()` adds the image input and maps for you. It accepts PNG, JPEG, and GIF images from local or non-local Storage. Marks render after all output video filters, regardless of where you call `watermark()`. Offsets are inward margins from the chosen corner. Anchors also include `top-left`, `top-right`, `bottom-left`, and `center`. Call the helper again to add another mark.
 
-Watermarks work with ordinary single or multiple media outputs, HLS variants, and copied audio, but require video encoding. Custom maps, custom graphs, and additional media inputs require an explicit overlay graph instead. For image preprocessing, call `prepareImage()` with a callback that rewrites the private writable copy it receives. On Laravel 13.20 or later, Laravel's [image manipulation](https://laravel.com/docs/13.x/images) can do this:
+Watermarks work with ordinary single or multiple media outputs, HLS variants, and copied audio, but require video encoding. Custom maps, custom graphs, and additional media inputs require an explicit overlay graph instead. To edit the image first, call `prepareImage()`. Its callback receives a Laravel [`Image`](https://laravel.com/docs/13.x/images) of a private copy and returns the image to use:
 
 ```php
-use Illuminate\Support\Facades\Image;
+use Illuminate\Image\Image;
 
 $logo = FFMpeg::disk('assets')
     ->open('logo.png')
-    ->prepareImage(function (string $privatePath) {
-        file_put_contents($privatePath, Image::fromPath($privatePath)
-            ->scale(width: 160)
-            ->toBytes());
-    });
+    ->prepareImage(fn (Image $image) => $image->scale(width: 160));
 ```
 
 ### Join clips
@@ -1350,7 +1350,7 @@ FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by ran
     --fail-on-deprecation --fail-on-phpunit-deprecation
 ```
 
-Setup installs the toolchain and dependencies once; resume checks them without reinstalling. CI uses Ubuntu 26.04, PHP 8.4/8.5, Laravel 12/13, and lowest/stable dependencies. Real-media acceptance requires the matching tested binary pair.
+Setup installs the toolchain and dependencies once; resume checks them without reinstalling. CI uses Ubuntu 26.04, PHP 8.4/8.5, and lowest/stable dependencies. Real-media acceptance requires the matching tested binary pair.
 
 ## Community
 

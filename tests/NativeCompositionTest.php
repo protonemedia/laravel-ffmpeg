@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\File;
+use Illuminate\Image\Image;
 use Illuminate\Process\Factory;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
@@ -587,7 +588,8 @@ class NativeCompositionTest extends TestCase
         $local = $this->fakeLocalDisk();
         $this->addTestFile('logo.png');
         $hash = hash_file('sha256', $local->path('logo.png'));
-        foreach ([fn ($path) => throw new \RuntimeException('application-secret'), fn ($path) => file_put_contents($path, '')] as $prepare) {
+        foreach ([fn ($image) => throw new \RuntimeException('application-secret'), fn ($image) => $image->toBytes(),
+            fn ($image) => \Illuminate\Support\Facades\Image::fromBytes('not an image')->grayscale()] as $prepare) {
             $image = FFMpeg::disk('local')->open('logo.png')->prepareImage($prepare);
             $this->assertContains('[input:0]', $image->export()->video('ffv1')->inspect());
             Process::assertNothingRan();
@@ -631,18 +633,13 @@ class NativeCompositionTest extends TestCase
         foreach (['local', 'memory'] as $disk) {
             Storage::disk($disk)->put($key, $bytes);
             foreach ([false, true] as $preprocess) {
-                $paths = $prepared = [];
+                $prepared = [];
                 $logo = FFMpeg::disk($disk)->open($key);
                 if ($preprocess) {
-                    $logo = $logo->prepareImage(function (string $path) use (&$paths, &$prepared) {
-                        $paths[] = $path;
-                        $mode = fileperms($path) & 0777;
-                        $source = imagecreatefrompng($path);
-                        $scaled = imagescale($source, 24);
-                        imagealphablending($scaled, false);
-                        imagesavealpha($scaled, true);
-                        imagepng($scaled, $path);
-                        $prepared[] = [$mode, array_slice(getimagesize($path), 0, 2)];
+                    $logo = $logo->prepareImage(function (Image $image) use (&$prepared) {
+                        $prepared[] = $image->dimensions();
+
+                        return $image->scale(width: 24);
                     });
                 }
                 $export = FFMpeg::disk('local')->open('source.mkv')->export();
@@ -650,13 +647,7 @@ class NativeCompositionTest extends TestCase
                     ->watermark($logo, position: 'bottom-right', x: 7, y: 5, width: 16, height: 8)
                     ->video('ffv1')->audio('copy')->withoutMetadata(chapters: true)
                     ->toDisk('memory')->save('watermarked.mkv');
-                $this->assertCount($preprocess ? 1 : 0, $paths);
-                $this->assertSame(array_fill(0, count($paths), [0600, [24, 12]]), $prepared);
-                foreach ($paths as $path) {
-                    $this->assertStringStartsWith($this->root.'/workspaces/', $path);
-                    $this->assertNotSame($local->path($key), $path);
-                    $this->assertFileDoesNotExist($path);
-                }
+                $this->assertSame($preprocess ? [[32, 16]] : [], $prepared);
                 $output = FFMpeg::disk('memory')->open('watermarked.mkv');
                 $this->assertEqualsWithDelta(2, $output->probe()->duration(), 0.001);
                 foreach ([0.2, 1.7] as $at) {
@@ -677,8 +668,7 @@ class NativeCompositionTest extends TestCase
                 if ($preprocess) {
                     $logo->frame()->save('prepared.png');
                     $this->assertSame(24, getimagesizefromstring(Storage::disk($disk)->get('prepared.png'))[0]);
-                    $this->assertCount(2, $paths);
-                    $this->assertNotSame($paths[0], $paths[1]);
+                    $this->assertSame([[32, 16], [32, 16]], $prepared);
                 }
                 $this->assertSame($bytes, Storage::disk($disk)->get($key));
                 $this->assertSame([], glob($this->root.'/workspaces/*'));

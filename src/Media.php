@@ -10,6 +10,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Filesystem\LocalFilesystemAdapter;
 use Illuminate\Http\File;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Image\Image;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use JsonException;
@@ -109,6 +110,11 @@ readonly class Media
         return new PendingConcat([$this, ...$following], $this->defaultOutputDisk());
     }
 
+    /**
+     * Prepare a private copy of this image before FFmpeg reads it.
+     *
+     * @param  callable(Image): Image  $prepare
+     */
     public function prepareImage(callable $prepare): self
     {
         return new self($this->defaultOutputDisk(), new PreparedImageInput($this, Closure::fromCallable($prepare)));

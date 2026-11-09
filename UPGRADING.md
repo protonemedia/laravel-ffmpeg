@@ -6,7 +6,7 @@ This guide describes the `9.x` development branch, not a published release.
 
 ## Update the runtime
 
-Use PHP 8.4 or later, Laravel 12 or 13, and matching FFmpeg and FFprobe 9.0.x binaries. The tested patch is 9.0.2. Install the codecs, filters, fonts, and HTTPS support that your application needs.
+Use PHP 8.4 or later, Laravel 13.20 or later, and matching FFmpeg and FFprobe 9.0.x binaries. The tested patch is 9.0.2. Install the codecs, filters, fonts, and HTTPS support that your application needs.
 
 Republish the configuration and review your application's values. Keep `ffmpeg.binaries`, `ffprobe.binaries`, `ffmpeg.threads`, `timeout`, and `temporary_files_root`. `idle_timeout` is separate from the total deadline. The legacy log channel and encrypted-HLS temporary root no longer apply. Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to the matching pair. Set `FFMPEG_REDACT_CREDENTIALS=true` to redact signed URLs and credentials from diagnostics and process summaries.
 
@@ -94,7 +94,7 @@ For portrait sources, use `resize(height: 1920)` to preserve the autorotated dis
 
 Use `frameRate()`, `flipHorizontal()`, `flipVertical()`, `grayscale()`, and `deinterlace()` instead of filter-factory callbacks. Deinterlace before resizing. `volume()` takes a linear multiplier; `delayAudio()` inserts silence on all channels. `fadeIn()` and `fadeOut()` affect video and audio by default. Fade-out requires an explicit start in seconds. Disable either stream type with `video: false` or `audio: false`.
 
-Use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Image preprocessing is an explicit `prepareImage()` callback on a private copy, with your own image-library dependency. `videoFilter()` and `audioFilter()` remain available for trusted expressions.
+Use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Image preprocessing is an explicit `prepareImage()` callback that receives and returns a Laravel `Image`. `videoFilter()` and `audioFilter()` remain available for trusted expressions.
 
 Use `lut3d($look)` with a `Media` descriptor for a privately staged LUT. In each `output()` callback, call `lut3d($look)->resize(...)` to configure that output independently. The helper does not share LUT processing or generate a `split`. Keep raw `resource()` and `filterComplex()` graphs when you need to apply a LUT once before splitting into outputs. See the [composition example](README.md#compose-multiple-inputs-and-outputs).
 
@@ -128,10 +128,10 @@ $media->concat($second)
 
 `watermark()` adds inputs and maps automatically for PNG, JPEG, or GIF images. The default anchor is bottom-right; offsets are inward margins. Marks run after all output video filters, regardless of call order. Repeated marks, multiple ordinary outputs, and HLS variants are supported. Custom maps, graphs, additional media inputs, and video copy require another composition policy. Use `addInput()` and `filterComplex()` for custom graphs.
 
-Version 8 forwarded unknown `WatermarkFactory` methods, such as `width()` or `greyscale()`, to Spatie Image. Version 9 has no image-library integration. Size and position the mark with `watermark()` arguments, and edit the image itself in a `prepareImage()` callback. The callback receives a private copy of the image and must rewrite that file. On Laravel 13.20 or later, Laravel's [image manipulation](https://laravel.com/docs/13.x/images) can do this:
+Version 8 forwarded unknown `WatermarkFactory` methods, such as `width()` or `greyscale()`, to Spatie Image. Version 9 uses Laravel's [image manipulation](https://laravel.com/docs/13.x/images) instead. Install `intervention/image:^4.2`, size and position the mark with `watermark()` arguments, and edit the image itself in a `prepareImage()` callback. The callback receives an `Image` of a private copy and returns the image to use:
 
 ```php
-use Illuminate\Support\Facades\Image;
+use Illuminate\Image\Image;
 
 // Before:
 $media->addWatermark(function (WatermarkFactory $watermark) {
@@ -144,18 +144,12 @@ $media->addWatermark(function (WatermarkFactory $watermark) {
 // After:
 $logo = FFMpeg::disk('assets')
     ->open('logo.png')
-    ->prepareImage(function (string $path) {
-        file_put_contents($path, Image::fromPath($path)
-            ->grayscale()
-            ->toBytes());
-    });
+    ->prepareImage(fn (Image $image) => $image->grayscale());
 $media->export()
     ->watermark($logo, position: 'bottom-right', x: 25, y: 25)
     ->video('libx264')
     ->save('branded.mp4');
 ```
-
-On Laravel 12, call any image library from the callback.
 
 `concat()` joins compatible streams without silently transcoding. `concatTranscoded()` returns an export builder with one output. Choose `normalizeVideo()` and either `normalizeAudio()` or `withoutAudio()` before saving. Normalization selects each input's first motion-video and audio streams, preserves audio delays, and requires finite sources with zero container/video origins. It rejects root filters, custom graphs, and stream copy. Sources without audio require `withoutAudio()` or a custom graph; the helper does not create missing audio tracks. Source chapters are not combined.
 

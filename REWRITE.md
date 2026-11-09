@@ -101,7 +101,7 @@ Camera URLs are trusted application configuration. The application owns endpoint
 FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by random
 ```
 
-CI uses Ubuntu 26.04 and the same installer throughout the PHP 8.4/8.5 and Laravel 12/13 matrix. The compiled pair is cached by Ubuntu version, architecture, and installer contents. A cold installation compiles from source; warm setup and cache hits reuse the binaries. No distribution FFmpeg or legacy backend is required.
+CI uses Ubuntu 26.04 and the same installer throughout the PHP 8.4/8.5 matrix. The compiled pair is cached by Ubuntu version, architecture, and installer contents. A cold installation compiles from source; warm setup and cache hits reuse the binaries. No distribution FFmpeg or legacy backend is required.
 
 ### Single-frame extraction
 
@@ -1017,24 +1017,20 @@ $export->filterComplex(
 
 Local and non-local Storage images use the same API. A downloaded URL image uses `openUrl($url, headers: $headers, download: true)`. No filename is embedded in the filter graph.
 
-`Media::prepareImage(callable $prepare)` optionally preprocesses an image before FFmpeg reads it. The callback receives the path of a private writable copy, not the original. It must write the prepared image to that same path. The package does not depend on an image library or forward unknown methods to one. For example, on Laravel 13.20 or later with `intervention/image` installed, Laravel's `Image` facade can supply:
+`Media::prepareImage(callable(Illuminate\Image\Image): Illuminate\Image\Image $prepare)` optionally preprocesses an image before FFmpeg reads it. The callback receives a Laravel `Image` of a private copy, never the original file or its path, and returns the image to use. The package encodes the returned image and replaces the private copy with it. The format stays the same unless the callback converts it. Laravel's GD and Imagick image drivers require `intervention/image:^4.2`, which the package suggests but does not require:
 
 ```php
-use Illuminate\Support\Facades\Image;
+use Illuminate\Image\Image;
 
 $logo = FFMpeg::disk('assets')
     ->open('brand/logo.png')
-    ->prepareImage(function (string $path) {
-        file_put_contents($path, Image::fromPath($path)
-            ->scale(width: 320)
-            ->toBytes());
-    });
+    ->prepareImage(fn (Image $image) => $image->scale(width: 320));
 // Pass $logo to watermark(), or addInput() for a custom overlay graph.
 ```
 
 Preparation returns an immutable media descriptor. Construction and inspection do no IO and do not call the callback. The callback runs during staging once per media identity and staging purpose in each execution. Reusing the descriptor in a later execution creates a new private copy and reruns preparation. Callback results do not persist across executions. Input options and multi-file sources are rejected.
 
-URL images always download through Laravel Http before preparation, even when the source descriptor selects direct input. Callbacks and FFmpeg receive local filenames, never URLs or headers. Input and prepared output must have readable raster image headers. Callback errors and invalid prepared images fail with phase `staging` and category `resource`, without publication or an exception chain that could expose private paths or credentials. FFmpeg still validates image decoding. The callback is trusted application code, not a sandbox.
+URL images always download through Laravel Http before preparation, even when the source descriptor selects direct input. Callbacks receive images of local private copies, and FFmpeg receives local filenames, never URLs or headers. Input and prepared output must have readable raster image headers. Callback errors, image-processing errors, a missing image driver, a return value that is not an `Image`, and invalid prepared images fail with phase `staging` and category `resource`, without publication or an exception chain that could expose private paths or credentials. FFmpeg still validates image decoding. The callback is trusted application code, not a sandbox.
 
 Ordinary exports are verified with transparent local and staged PNGs, scaled bottom-right offsets, persistent overlays, unchanged decoded audio, private-copy preprocessing, source retention, and repeated executions. Native HLS acceptance also verifies a shared overlay graph with two scaled branches, accurate clipping, and decoded watermark pixels.
 
@@ -1189,7 +1185,7 @@ Every row is required for 9.0. Existing tests are executable evidence of the old
 
 The native implementation replaces the legacy backend and dependency tree. [README.md](README.md) contains code-first examples, and [UPGRADING.md](UPGRADING.md) covers the breaking migration. Additional contracts include bounded frame/packet queries, capability diagnostics, operation deadlines, per-track audio encoding, finite clear DASH with shared HLS segments, and single-rendition continuous HLS. Their limits are documented in the README. [Laravel application integrations](docs/integrations.md) covers profiles and durable application-owned inventories without adding package-owned media models.
 
-Release verification uses randomized suites with deprecations treated as failures on PHP 8.4 and 8.5, Laravel 12 and 13, and matching FFmpeg/FFprobe 9.0.2. Hosted CI must verify Ubuntu 26.04 execution after pushing. No performance improvement, real-cloud integration, low-latency HLS, DRM, GPU usability, or cross-worker live-session recovery is claimed.
+Release verification uses randomized suites with deprecations treated as failures on PHP 8.4 and 8.5, Laravel 13.20 or later, and matching FFmpeg/FFprobe 9.0.2. Hosted CI must verify Ubuntu 26.04 execution after pushing. No performance improvement, real-cloud integration, low-latency HLS, DRM, GPU usability, or cross-worker live-session recovery is claimed.
 
 ## Test commands
 

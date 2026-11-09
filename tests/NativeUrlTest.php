@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Image\Image;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -179,10 +180,11 @@ class NativeUrlTest extends TestCase
             $calls = 0;
             $url = $base.($authenticated ? '/private' : '/public').'?signature=private-image-signature';
             $media = FFMpeg::openUrl($url, $authenticated ? ['Authorization' => 'Bearer first-secret'] : [], download: $authenticated)
-                ->prepareImage(function (string $path) use (&$calls) {
+                ->prepareImage(function (Image $image) use (&$calls) {
                     $calls++;
-                    $this->assertStringStartsWith($this->root.'/workspaces/', $path);
-                    $this->assertSame(hash_file('sha256', __DIR__.'/src/logo.png'), hash_file('sha256', $path));
+                    $this->assertSame(hash_file('sha256', __DIR__.'/src/logo.png'), hash('sha256', $image->toBytes()));
+
+                    return $image;
                 });
             $result = $media->export()->video('ffv1')->toDisk('memory')->save('logo.mkv');
             $this->assertSame(1, $calls);

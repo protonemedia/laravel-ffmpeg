@@ -3,6 +3,8 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
+use Illuminate\Image\Image;
+use Illuminate\Support\Facades\Image as Images;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\InputSource;
@@ -61,11 +63,21 @@ readonly class PreparedImageInput implements InputSource
         }
 
         try {
-            ($this->prepare)($target);
+            $prepared = ($this->prepare)(Images::fromPath($target));
+            // Transformations run lazily, so encoding failures surface here too.
+            $bytes = $prepared instanceof Image ? $prepared->toBytes() : null;
         } catch (Throwable) {
-            // Application image libraries can include private paths and URL
-            // credentials in their errors. Do not retain their exception chain.
+            // Image drivers can include private paths and URL credentials in
+            // their errors. Do not retain their exception chain.
             throw new MediaException('The image preparation callback failed.', 'staging', 'resource');
+        }
+
+        if ($bytes === null) {
+            throw new MediaException('The image preparation callback must return an Illuminate\\Image\\Image.', 'staging', 'resource');
+        }
+
+        if (@file_put_contents($target, $bytes) !== strlen($bytes)) {
+            throw new MediaException('Cannot write the prepared image.', 'staging', 'filesystem');
         }
 
         clearstatcache(true, $target);

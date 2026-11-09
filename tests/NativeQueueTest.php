@@ -6,6 +6,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Image\Image;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\WorkerOptions;
 use Illuminate\Support\Facades\Bus;
@@ -212,8 +213,10 @@ class NativeQueueTest extends TestCase
     {
         Storage::disk('queued')->put('logo.png', file_get_contents(__DIR__.'/src/logo.png'));
         $hash = hash('sha256', Storage::disk('queued')->get('logo.png'));
-        $image = FFMpeg::disk('queued')->open('logo.png')->prepareImage(static function ($path) {
-            Storage::disk('queued')->put('prepared', hash_file('sha256', $path));
+        $image = FFMpeg::disk('queued')->open('logo.png')->prepareImage(static function (Image $image) {
+            Storage::disk('queued')->put('prepared', hash('sha256', $image->toBytes()));
+
+            return $image;
         });
         Bus::batch([
             $this->source()->frame(0.5)->queued(connection: 'database', queue: 'media')->job('preview.jpg'),

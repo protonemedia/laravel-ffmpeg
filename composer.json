@@ -22,10 +22,11 @@
     "require": {
         "php": "^8.4",
         "ext-dom": "*",
-        "laravel/framework": "^12.0|^13.0",
+        "laravel/framework": "^13.20",
         "laravel/serializable-closure": "^2.0"
     },
     "require-dev": {
+        "intervention/image": "^4.2",
         "larastan/larastan": "^3.9",
         "laravel/pint": "^1.14",
         "league/flysystem-memory": "^3.10",
@@ -33,9 +34,12 @@
         "league/flysystem-read-only": "^3.0",
         "mockery/mockery": "^1.4.4",
         "nesbot/carbon": "^2.66|^3.0",
-        "orchestra/testbench": "^10.8|^11.0",
+        "orchestra/testbench": "^11.0",
         "phpunit/phpunit": "^11.5.3|^12.5.12",
         "rector/rector": "^2.3"
+    },
+    "suggest": {
+        "intervention/image": "Required to prepare images with prepareImage() (^4.2)."
     },
     "autoload": {
         "psr-4": {
