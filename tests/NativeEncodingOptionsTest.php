@@ -80,6 +80,9 @@ class NativeEncodingOptionsTest extends TestCase
             '-frag_duration', '1000000', '-min_frag_duration', '500000', '-flush_packets', '1',
             '-max_muxing_queue_size', '1024', '-cluster_time_limit', '1000', '-write_crc32', '1', '-muxdelay', '0.2'];
         $this->assertSame($tokens, CommandCompiler::options($tokens, 'output'));
+        $flags = ['-movflags', '+faststart', '-disposition:a:0', 'default+forced', '-preset', 'ultra-fast'];
+        $this->assertSame($flags, CommandCompiler::options($flags, 'output'));
+        $this->assertSame(['-hwaccel_device', '/dev/dri/render-D128'], CommandCompiler::options(['-hwaccel_device', '/dev/dri/render-D128'], 'input'));
         foreach ([
             ['output', ['-x264-params', 'stats=/tmp/stats']],
             ['output', ['-x265-params', 'csv=/tmp/stats']],
@@ -102,6 +105,11 @@ class NativeEncodingOptionsTest extends TestCase
             ['global', ['-init_hw_device', 'cuda=gpu:0', '-init_hw_device', 'cuda=gpu:1']],
             ['global', ['-init_hw_device', 'qsv=derived@missing']],
             ['global', ['-filter_hw_device', 'missing']],
+            // Option-shaped values would be found by later argv token searches.
+            ['input', ['-hwaccel_device', '-i']],
+            ['input', ['-hwaccel_output_format', '-t']],
+            ['output', ['-preset', '-ss']],
+            ['output', ['-disposition:a:0', '-filter_complex']],
         ] as [$scope, $invalid]) {
             try {
                 CommandCompiler::options($invalid, $scope);

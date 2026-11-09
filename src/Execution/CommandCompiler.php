@@ -108,9 +108,10 @@ class CommandCompiler
                     ? array_all(explode(',', $value), fn ($filter) => in_array($filter, ['aac_adtstoasc', 'h264_mp4toannexb', 'hevc_mp4toannexb', 'extract_extradata', 'remove_extra', 'vp9_superframe', 'av1_frame_merge', 'null'], true)) : false,
                 'negative-ts' => in_array($value, ['auto', 'disabled', 'make_non_negative', 'make_zero'], true),
                 'hardware' => in_array($value, ['cuda', 'vaapi', 'qsv', 'vulkan', 'videotoolbox', 'd3d11va', 'dxva2'], true),
-                'device' => (bool) preg_match('/\A[a-zA-Z0-9_\/.:\-]+\z/', $value),
+                // Device and word values may contain hyphens but never start with one, so no value can pass for an option token.
+                'device' => (bool) preg_match('/\A[a-zA-Z0-9_\/.:][a-zA-Z0-9_\/.:\-]*\z/', $value),
                 'rate' => (bool) preg_match('/^[0-9]+(?:\.[0-9]+)?(?:[kKmMgG]|\/[1-9][0-9]*)?$/D', $value) && (float) $value > 0,
-                'word' => (bool) preg_match('/^[a-zA-Z0-9_.,+\-]+$/D', $value),
+                'word' => (bool) preg_match('/^[a-zA-Z0-9_.,+][a-zA-Z0-9_.,+\-]*$/D', $value),
                 'fps' => in_array($value, ['passthrough', 'cfr', 'vfr', 'auto'], true),
                 'format' => ! isset($match[2]) && in_array($value, ['mp4', 'mov', 'matroska', 'webm', 'mpegts', 'mp3', 'adts', 'ogg', 'wav', 'flac', 'avi', 'nut'], true),
                 'subtitle-codec' => ($match[2] ?? null) === 's' && (bool) preg_match('/\A[a-zA-Z0-9_]+\z/', $value),
