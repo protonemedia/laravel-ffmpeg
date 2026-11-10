@@ -40,7 +40,7 @@ Before submitting a pull request:
 
 If the project maintainer has any additional requirements, you will find them listed here.
 
-- **Laravel coding style and static analysis** - The PHP Quality and Style workflow runs Rector and [Laravel Pint](https://laravel.com/docs/pint), commits their changes, then runs Larastan. Run `composer refactor`, `composer format` and `composer analyse` locally before you open a pull request.
+- **Laravel coding style and static analysis** - The PHP Quality and Style workflow runs Rector, [Laravel Pint](https://laravel.com/docs/pint) and a PHP CS Fixer rule that Pint lacks, commits their changes, then runs Larastan. Run `composer refactor`, `composer format` and `composer analyse` locally before you open a pull request.
 
 - **Add tests!** - Your patch won't be accepted if it doesn't have tests.
 

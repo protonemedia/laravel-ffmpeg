@@ -52,13 +52,13 @@ jobs:
               with:
                   commit_message: Refactor code with Rector
 
-            - name: Run Pint
+            - name: Run Pint and PHP CS Fixer
               run: composer format
 
             - name: Commit changes
               uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
               with:
-                  commit_message: Format code with Pint
+                  commit_message: Format code with Pint and PHP CS Fixer
 
             - name: Run PHPStan
               run: composer analyse

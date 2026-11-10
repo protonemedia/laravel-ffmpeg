@@ -26,6 +26,7 @@
         "laravel/serializable-closure": "^2.0"
     },
     "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
         "intervention/image": "^4.2",
         "larastan/larastan": "^3.9",
         "laravel/pint": "^1.14",
@@ -54,7 +55,10 @@
     },
     "scripts": {
         "analyse": "vendor/bin/phpstan analyse --memory-limit=512M",
-        "format": "vendor/bin/pint",
+        "format": [
+            "vendor/bin/pint",
+            "vendor/bin/php-cs-fixer fix"
+        ],
         "refactor": "vendor/bin/rector",
         "test": "vendor/bin/phpunit",
         "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
