@@ -269,7 +269,13 @@ class OutputTracksTest extends TestCase
     public function test_explicit_subtitle_map_extracts_webvtt_without_new_api(): void
     {
         $this->fixture();
-        Storage::disk('output-tracks')->put('captions.srt', "1\n00:00:00,200 --> 00:00:00,800\nHello portrait!\n\n");
+        Storage::disk('output-tracks')->put('captions.srt', <<<'SRT'
+            1
+            00:00:00,200 --> 00:00:00,800
+            Hello portrait!
+
+
+            SRT);
         $this->ffmpeg(['-i', $this->path('source.mp4'), '-i', $this->path('captions.srt'), '-map', '0', '-map', '1:s:0',
             '-c', 'copy', '-c:s', 'mov_text', $this->path('subtitled.mp4')]);
         $this->media('subtitled.mp4')->export()->map('0:s:0')->outputOptions(['-c:s', 'webvtt'])->save('captions.vtt');

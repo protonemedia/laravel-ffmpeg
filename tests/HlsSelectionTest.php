@@ -50,7 +50,12 @@ class HlsSelectionTest extends TestCase
         $binary = $this->useRealFFMpeg();
         $disk = Storage::disk('selection');
         if (! $disk->exists('source.mkv')) {
-            $disk->put('captions.srt', "1\n00:00:00,100 --> 00:00:01,000\nHello selection\n");
+            $disk->put('captions.srt', <<<'SRT'
+                1
+                00:00:00,100 --> 00:00:01,000
+                Hello selection
+
+                SRT);
             $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=2.4',
                 '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2.4', '-i', $disk->path('captions.srt'),
                 '-map', '0:v', '-map', '1:a', '-map', '2:s', '-c:v', 'libx264', '-preset', 'ultrafast',
@@ -352,7 +357,12 @@ class HlsSelectionTest extends TestCase
         // A master that references a file outside its inventory is invalid input, not an HTTP 404.
         $master = collect($first['files'])->firstWhere('role', 'hls-master')['path'];
         $original = $disk->get($master);
-        $disk->put($master, rtrim($original, "\n")."\n#EXT-X-STREAM-INF:BANDWIDTH=1\nmissing/index.m3u8\n");
+        $disk->put($master, sprintf(<<<'M3U8'
+            %s
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            missing/index.m3u8
+
+            M3U8, rtrim($original, "\n")));
         $this->assertThrows(function () use ($first, $second) {
             (new PendingHlsMerge(['one' => $first, 'two' => $second]))->save('catalog/master.m3u8');
         }, function (InvalidArgumentException $exception) {

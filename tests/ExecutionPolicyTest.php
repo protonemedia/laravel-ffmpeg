@@ -23,10 +23,14 @@ class ExecutionPolicyTest extends TestCase
 
     protected function binaries(string $encode = '', int $probeDelay = 0): void
     {
-        $body = '#!'.PHP_BINARY."\n<?php\n"
-            .'if (in_array("-version", $argv, true)) { usleep('.$probeDelay.'); echo basename($argv[0])." version 9.0.2"; exit; }'."\n"
-            .'if (basename($argv[0]) === "ffprobe") { usleep('.$probeDelay.'); echo \'{"format":{"duration":"1"},"streams":[{"index":0,"codec_type":"video"}],"chapters":[]}\'; exit; }'."\n"
-            .$encode."\n".'file_put_contents(end($argv), "encoded");';
+        $body = sprintf(<<<'PHP'
+            #!%1$s
+            <?php
+            if (in_array("-version", $argv, true)) { usleep(%2$d); echo basename($argv[0])." version 9.0.2"; exit; }
+            if (basename($argv[0]) === "ffprobe") { usleep(%2$d); echo '{"format":{"duration":"1"},"streams":[{"index":0,"codec_type":"video"}],"chapters":[]}'; exit; }
+            %3$s
+            file_put_contents(end($argv), "encoded");
+            PHP, PHP_BINARY, $probeDelay, $encode);
         foreach (['ffmpeg', 'ffprobe'] as $tool) {
             file_put_contents($this->root.'/'.$tool, $body);
             chmod($this->root.'/'.$tool, 0700);

@@ -273,8 +273,13 @@ class DashTest extends TestCase
         $source = $this->source();
         // The encoder succeeds, then a stray file appears beside its segments.
         $wrapper = $this->root.'/ffmpeg-plants-unowned-segment';
-        file_put_contents($wrapper, "#!/bin/sh\n".escapeshellarg(config('laravel-ffmpeg.ffmpeg.binaries')).' "$@" || exit $?'."\n"
-            .'for last; do :; done'."\n".'case "$last" in */index.mpd) printf not-owned > "$(dirname "$last")/unowned.m4s";; esac'."\n");
+        file_put_contents($wrapper, sprintf(<<<'SH'
+            #!/bin/sh
+            %s "$@" || exit $?
+            for last; do :; done
+            case "$last" in */index.mpd) printf not-owned > "$(dirname "$last")/unowned.m4s";; esac
+
+            SH, escapeshellarg(config('laravel-ffmpeg.ffmpeg.binaries'))));
         chmod($wrapper, 0700);
         config(['laravel-ffmpeg.ffmpeg.binaries' => $wrapper]);
         $export = (new PendingDashExport($source, 'local', 0.7))->adaptationSet('video', 'video')->representation('stream', 'video', fn ($r) => $r->map('0:v:0'));

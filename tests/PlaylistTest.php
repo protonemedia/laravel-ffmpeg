@@ -17,8 +17,25 @@ class PlaylistTest extends TestCase
     public function test_nested_playlists_resolve_original_references_without_reading_keys_or_media(): void
     {
         $disk = Storage::disk('memory');
-        $master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=250000\n../variants/low?token=old\n#EXT-X-STREAM-INF:BANDWIDTH=500000\n../variants/low?token=old\n";
-        $variant = "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"../keys/a%20b.key?old=1\",IV=0x0123456789abcdef0123456789abcdef\n#EXTINF:2,\n../segments/part%200.ts?old=2\n#EXTINF:1,\n../segments/part%200.ts?old=2\n#EXT-X-KEY:METHOD=NONE\n#EXT-X-ENDLIST\n";
+        $master = <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=250000
+            ../variants/low?token=old
+            #EXT-X-STREAM-INF:BANDWIDTH=500000
+            ../variants/low?token=old
+
+            M3U8;
+        $variant = <<<'M3U8'
+            #EXTM3U
+            #EXT-X-KEY:METHOD=AES-128,URI="../keys/a%20b.key?old=1",IV=0x0123456789abcdef0123456789abcdef
+            #EXTINF:2,
+            ../segments/part%200.ts?old=2
+            #EXTINF:1,
+            ../segments/part%200.ts?old=2
+            #EXT-X-KEY:METHOD=NONE
+            #EXT-X-ENDLIST
+
+            M3U8;
         $disk->put('shows/master/index.m3u8', $master);
         $disk->put('shows/variants/low', $variant);
         $calls = [];
@@ -50,7 +67,14 @@ class PlaylistTest extends TestCase
     public function test_external_playlist_urls_have_no_disk_target_and_are_never_followed(): void
     {
         $disk = Storage::disk('memory');
-        $master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhttps://cdn.example.test/variant?token=old\n#EXT-X-STREAM-INF:BANDWIDTH=2\n/streams/high\n";
+        $master = <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            https://cdn.example.test/variant?token=old
+            #EXT-X-STREAM-INF:BANDWIDTH=2
+            /streams/high
+
+            M3U8;
         $disk->put('master.m3u8', $master);
         $seen = [];
 
@@ -69,7 +93,13 @@ class PlaylistTest extends TestCase
 
     public function test_external_key_urls_have_no_disk_target(): void
     {
-        Storage::disk('memory')->put('encrypted.m3u8', "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"/private/key?id=1\",IV=0x01\n#EXTINF:1,\nhttps://cdn.example.test/segment\n");
+        Storage::disk('memory')->put('encrypted.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXT-X-KEY:METHOD=AES-128,URI="/private/key?id=1",IV=0x01
+            #EXTINF:1,
+            https://cdn.example.test/segment
+
+            M3U8);
 
         $output = FFMpeg::disk('memory')->playlist('encrypted.m3u8')->keyUrlsUsing(function ($target, $source, $uri) {
             $this->assertNull($target);
@@ -84,7 +114,12 @@ class PlaylistTest extends TestCase
 
     public function test_get_reads_only_its_source(): void
     {
-        Storage::disk('memory')->put('master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nchild.m3u8\n");
+        Storage::disk('memory')->put('master.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            child.m3u8
+
+            M3U8);
 
         $this->assertStringContainsString('child.m3u8', FFMpeg::disk('memory')->playlist('master.m3u8')->get());
     }
@@ -92,8 +127,18 @@ class PlaylistTest extends TestCase
     public function test_cycles_are_visited_once(): void
     {
         $disk = Storage::disk('memory');
-        $disk->put('master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nchild.m3u8\n");
-        $disk->put('child.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nmaster.m3u8\n");
+        $disk->put('master.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            child.m3u8
+
+            M3U8);
+        $disk->put('child.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            master.m3u8
+
+            M3U8);
 
         $this->assertSame(['master.m3u8', 'child.m3u8'], FFMpeg::disk('memory')->playlist('master.m3u8')->all()->keys()->all());
     }
@@ -102,8 +147,26 @@ class PlaylistTest extends TestCase
     {
         $disk = Storage::disk('memory');
         $files = [
-            'show/master.m3u8' => "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nvariants/low\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Audio, main\",URI=\"variants/low\"\n",
-            'show/variants/low' => "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"../keys/a%20b.key?token=old\",IV=0x01\n#EXT-X-MAP:URI=\"../init.mp4\"\n#EXTINF:1,\n../parts/0.m4s\n#EXTINF:1,\n../parts/0.m4s?again=1\n#EXT-X-KEY:METHOD=NONE\n#EXT-X-STREAM-INF:BANDWIDTH=1\n../master.m3u8\n",
+            'show/master.m3u8' => <<<'M3U8'
+                #EXTM3U
+                #EXT-X-STREAM-INF:BANDWIDTH=1
+                variants/low
+                #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio, main",URI="variants/low"
+
+                M3U8,
+            'show/variants/low' => <<<'M3U8'
+                #EXTM3U
+                #EXT-X-KEY:METHOD=AES-128,URI="../keys/a%20b.key?token=old",IV=0x01
+                #EXT-X-MAP:URI="../init.mp4"
+                #EXTINF:1,
+                ../parts/0.m4s
+                #EXTINF:1,
+                ../parts/0.m4s?again=1
+                #EXT-X-KEY:METHOD=NONE
+                #EXT-X-STREAM-INF:BANDWIDTH=1
+                ../master.m3u8
+
+                M3U8,
             'show/keys/a b.key' => '0123456789abcdef',
             'show/init.mp4' => 'initialization',
             'show/parts/0.m4s' => 'encrypted media',
@@ -196,8 +259,18 @@ class PlaylistTest extends TestCase
     protected function sharedFilePlaylist(): FilesystemAdapter
     {
         $disk = Storage::disk('memory');
-        $disk->put('show/master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nchild.m3u8\n");
-        $disk->put('show/child.m3u8', "#EXTM3U\n#EXTINF:1,\n../shared.ts\n");
+        $disk->put('show/master.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            child.m3u8
+
+            M3U8);
+        $disk->put('show/child.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            ../shared.ts
+
+            M3U8);
         $disk->put('shared.ts', 'shared with another export');
 
         return $disk;
@@ -205,18 +278,34 @@ class PlaylistTest extends TestCase
 
     public static function unsafeDeletionReferences(): array
     {
-        return array_map(fn ($uri) => [$uri], [
-            '../../outside.ts', '%2e%2e/%2e%2e/outside.ts', '/outside.ts', '//other.test/file',
-            'https://other.test/file', '%2Foutside.ts', '%5Coutside.ts', 'file:/outside.ts',
-            '%00outside.ts', '%ff.ts', 'part%zz.ts', '%68ttps%3Aoutside.ts',
-        ]);
+        return [
+            'parent traversal' => ['../../outside.ts'],
+            'encoded traversal' => ['%2e%2e/%2e%2e/outside.ts'],
+            'absolute path' => ['/outside.ts'],
+            'network path' => ['//other.test/file'],
+            'URL' => ['https://other.test/file'],
+            'encoded slash' => ['%2Foutside.ts'],
+            'encoded backslash' => ['%5Coutside.ts'],
+            'file scheme' => ['file:/outside.ts'],
+            'encoded null byte' => ['%00outside.ts'],
+            'encoded invalid UTF-8' => ['%ff.ts'],
+            'invalid percent encoding' => ['part%zz.ts'],
+            'encoded scheme' => ['%68ttps%3Aoutside.ts'],
+        ];
     }
 
     #[DataProvider('unsafeDeletionReferences')]
     public function test_unsafe_references_abort_discovery_before_approval_or_deletion(string $uri): void
     {
         $disk = Storage::disk('memory');
-        $disk->put('show/master.m3u8', "#EXTM3U\n#EXTINF:1,\nsafe.ts\n#EXTINF:1,\n{$uri}\n");
+        $disk->put('show/master.m3u8', sprintf(<<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            safe.ts
+            #EXTINF:1,
+            %s
+
+            M3U8, $uri));
         $disk->put('show/safe.ts', 'keep');
         $disk->put('outside.ts', 'keep');
         $this->assertThrows(
@@ -233,7 +322,14 @@ class PlaylistTest extends TestCase
     public function test_malformed_nested_playlists_abort_deletion_before_approval(string $contents): void
     {
         $disk = Storage::disk('memory');
-        $disk->put('master.m3u8', "#EXTM3U\n#EXTINF:1,\nsafe.ts\n#EXT-X-STREAM-INF:BANDWIDTH=1\nbad.m3u8\n");
+        $disk->put('master.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            safe.ts
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            bad.m3u8
+
+            M3U8);
         $disk->put('safe.ts', 'keep');
         $disk->put('bad.m3u8', $contents);
         $this->assertThrows(
@@ -253,7 +349,16 @@ class PlaylistTest extends TestCase
         $disk = \Mockery::mock(Filesystem::class);
         foreach (['master.m3u8' => 'child.m3u8', 'child.m3u8' => 'master.m3u8'] as $path => $child) {
             $stream = fopen('php://temp', 'w+');
-            fwrite($stream, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n{$child}\n#EXTINF:1,\npart.ts\n#EXTINF:1,\npart.ts\n");
+            fwrite($stream, sprintf(<<<'M3U8'
+                #EXTM3U
+                #EXT-X-STREAM-INF:BANDWIDTH=1
+                %s
+                #EXTINF:1,
+                part.ts
+                #EXTINF:1,
+                part.ts
+
+                M3U8, $child));
             rewind($stream);
             $disk->shouldReceive('readStream')->once()->with($path)->andReturn($stream);
         }
@@ -288,7 +393,14 @@ class PlaylistTest extends TestCase
     {
         $disk = \Mockery::mock(Filesystem::class);
         $stream = fopen('php://temp', 'w+');
-        fwrite($stream, "#EXTM3U\n#EXTINF:1,\nsafe.ts\n#EXT-X-STREAM-INF:BANDWIDTH=1\nmissing.m3u8\n");
+        fwrite($stream, <<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            safe.ts
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            missing.m3u8
+
+            M3U8);
         rewind($stream);
         $disk->shouldReceive('readStream')->once()->with('master.m3u8')->andReturn($stream);
         $disk->shouldReceive('readStream')->once()->with('missing.m3u8')->andReturn(false);
@@ -304,14 +416,36 @@ class PlaylistTest extends TestCase
     public function test_identical_relative_uris_in_different_variants_keep_their_own_context(): void
     {
         $disk = Storage::disk('memory');
-        $disk->put('master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlow/index.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2\nhigh/index.m3u8\n");
+        $disk->put('master.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            low/index.m3u8
+            #EXT-X-STREAM-INF:BANDWIDTH=2
+            high/index.m3u8
+
+            M3U8);
         foreach (['low', 'high'] as $variant) {
-            $disk->put($variant.'/index.m3u8', "#EXTM3U\n#EXTINF:1,\npart.ts\n");
+            $disk->put($variant.'/index.m3u8', <<<'M3U8'
+                #EXTM3U
+                #EXTINF:1,
+                part.ts
+
+                M3U8);
         }
         $all = FFMpeg::disk('memory')->playlist('master.m3u8')
             ->mediaUrlsUsing(fn ($target, $source) => '/signed/'.$target.'?source='.rawurlencode($source))->all();
-        $this->assertSame("#EXTM3U\n#EXTINF:1,\n/signed/low/part.ts?source=low%2Findex.m3u8\n", $all['low/index.m3u8']);
-        $this->assertSame("#EXTM3U\n#EXTINF:1,\n/signed/high/part.ts?source=high%2Findex.m3u8\n", $all['high/index.m3u8']);
+        $this->assertSame(<<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            /signed/low/part.ts?source=low%2Findex.m3u8
+
+            M3U8, $all['low/index.m3u8']);
+        $this->assertSame(<<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            /signed/high/part.ts?source=high%2Findex.m3u8
+
+            M3U8, $all['high/index.m3u8']);
     }
 
     public function test_routes_return_private_playlists_and_leave_authorization_to_the_application(): void
@@ -326,21 +460,36 @@ class PlaylistTest extends TestCase
         $this->get('/native-playlist')->assertForbidden();
         $response = $this->get('/native-playlist?token=allowed')->assertOk()
             ->assertHeader('Content-Type', 'application/vnd.apple.mpegurl');
-        $this->assertSame("#EXTM3U\n#EXTINF:1,\nhttps://cdn.example.test/part.ts?signature=ok\n", $response->getContent());
+        $this->assertSame(<<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            https://cdn.example.test/part.ts?signature=ok
+
+            M3U8, $response->getContent());
         $this->assertStringContainsString('private', $response->headers->get('Cache-Control'));
         $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
     }
 
     public static function invalidPlaylists(): array
     {
-        return array_map(fn ($contents) => [$contents], [
-            'not a playlist', "#EXTM3U\n# bad\rcomment\n", "#EXTM3U\n# \xFF\n", "#EXTM3U\n# \u{0085}\n",
-            "#EXTM3U\npart.ts\n", "#EXTM3U\n#EXTINF:1,\n", "#EXTM3U\n#EXTINF:1,\n#EXTINF:2,\npart.ts\n",
-            "#EXTM3U\n#EXTINF:1,\n%2e%2e/escape.ts\n", "#EXTM3U\n#EXTINF:1,\npart%zz.ts\n", "#EXTM3U\n#EXTINF:1,\npart%ff.ts\n",
-            "#EXTM3U\n#EXTINF:1,\nfile:/secret\n", "#EXTM3U\n#EXTINF:1,\n//other.test/part.ts\n",
-            "#EXTM3U\n#EXT-X-MAP:URI=init.mp4\n", "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=no-quotes\n",
-            "#EXTM3U\n#EXT-X-KEY:METHOD=NONE,URI=\"key\"\n", "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"key\",URI=\"other\"\n",
-        ]);
+        return [
+            'missing header' => ['not a playlist'],
+            'carriage return in a comment' => ["#EXTM3U\n# bad\rcomment\n"],
+            'invalid UTF-8' => ["#EXTM3U\n# \xFF\n"],
+            'next line character' => ["#EXTM3U\n# \u{0085}\n"],
+            'segment without a duration' => ["#EXTM3U\npart.ts\n"],
+            'duration without a segment' => ["#EXTM3U\n#EXTINF:1,\n"],
+            'two durations for one segment' => ["#EXTM3U\n#EXTINF:1,\n#EXTINF:2,\npart.ts\n"],
+            'encoded traversal' => ["#EXTM3U\n#EXTINF:1,\n%2e%2e/escape.ts\n"],
+            'invalid percent encoding' => ["#EXTM3U\n#EXTINF:1,\npart%zz.ts\n"],
+            'encoded invalid UTF-8' => ["#EXTM3U\n#EXTINF:1,\npart%ff.ts\n"],
+            'file scheme' => ["#EXTM3U\n#EXTINF:1,\nfile:/secret\n"],
+            'network path' => ["#EXTM3U\n#EXTINF:1,\n//other.test/part.ts\n"],
+            'unquoted map URI' => ["#EXTM3U\n#EXT-X-MAP:URI=init.mp4\n"],
+            'unquoted key URI' => ["#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=no-quotes\n"],
+            'key URI without encryption' => ["#EXTM3U\n#EXT-X-KEY:METHOD=NONE,URI=\"key\"\n"],
+            'duplicate key URI' => ["#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"key\",URI=\"other\"\n"],
+        ];
     }
 
     #[DataProvider('invalidPlaylists')]
@@ -354,7 +503,12 @@ class PlaylistTest extends TestCase
     #[DataProvider('invalidResolverResultProvider')]
     public function test_invalid_resolver_results_are_rejected(?string $url): void
     {
-        Storage::disk('memory')->put('index.m3u8', "#EXTM3U\n#EXTINF:1,\npart.ts\n");
+        Storage::disk('memory')->put('index.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            part.ts
+
+            M3U8);
 
         $this->assertThrows(
             fn () => FFMpeg::disk('memory')->playlist('index.m3u8')->mediaUrlsUsing(fn () => $url)->get(),
@@ -376,7 +530,12 @@ class PlaylistTest extends TestCase
 
     public function test_resolver_failures_propagate(): void
     {
-        Storage::disk('memory')->put('index.m3u8', "#EXTM3U\n#EXTINF:1,\npart.ts\n");
+        Storage::disk('memory')->put('index.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            part.ts
+
+            M3U8);
         $failure = new \RuntimeException('application failure');
 
         $this->assertThrows(
@@ -412,7 +571,12 @@ class PlaylistTest extends TestCase
 
     public function test_rewritten_output_is_bounded_at_sixteen_mib(): void
     {
-        Storage::disk('memory')->put('index.m3u8', "#EXTM3U\n#EXTINF:1,\npart.ts\n");
+        Storage::disk('memory')->put('index.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            part.ts
+
+            M3U8);
 
         $this->expectException(MediaException::class);
 
@@ -423,7 +587,12 @@ class PlaylistTest extends TestCase
     {
         $disk = Storage::disk('memory');
         for ($index = 0; $index < 1024; $index++) {
-            $disk->put($index.'.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n".($index + 1).".m3u8\n");
+            $disk->put($index.'.m3u8', sprintf(<<<'M3U8'
+                #EXTM3U
+                #EXT-X-STREAM-INF:BANDWIDTH=1
+                %d.m3u8
+
+                M3U8, $index + 1));
         }
 
         $this->assertThrows(
@@ -432,7 +601,11 @@ class PlaylistTest extends TestCase
                 && str_contains($exception->getMessage(), '1024'),
         );
 
-        $disk->put('1023.m3u8', "#EXTM3U\n# End\n");
+        $disk->put('1023.m3u8', <<<'M3U8'
+            #EXTM3U
+            # End
+
+            M3U8);
 
         $this->assertCount(1024, FFMpeg::disk('memory')->playlist('0.m3u8')->all());
     }
@@ -440,7 +613,12 @@ class PlaylistTest extends TestCase
     public function test_traversal_bounds_the_whole_collection_at_sixteen_mib(): void
     {
         $disk = Storage::disk('memory');
-        $disk->put('master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlarge.m3u8\n");
+        $disk->put('master.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            large.m3u8
+
+            M3U8);
         $disk->put('large.m3u8', "#EXTM3U\n#".str_repeat('x', 16777216 - 9));
 
         $this->expectException(MediaException::class);
@@ -450,14 +628,35 @@ class PlaylistTest extends TestCase
 
     public function test_resolver_configuration_is_snapshotted_for_each_render(): void
     {
-        Storage::disk('memory')->put('index.m3u8', "#EXTM3U\n#EXTINF:1,\na.ts\n#EXTINF:1,\nb.ts\n");
+        Storage::disk('memory')->put('index.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            a.ts
+            #EXTINF:1,
+            b.ts
+
+            M3U8);
         $playlist = FFMpeg::disk('memory')->playlist('index.m3u8');
         $playlist->mediaUrlsUsing(function ($target) use ($playlist) {
             $playlist->mediaUrlsUsing(fn ($path) => '/next/'.$path);
 
             return '/current/'.$target;
         });
-        $this->assertSame("#EXTM3U\n#EXTINF:1,\n/current/a.ts\n#EXTINF:1,\n/current/b.ts\n", $playlist->get());
-        $this->assertSame("#EXTM3U\n#EXTINF:1,\n/next/a.ts\n#EXTINF:1,\n/next/b.ts\n", $playlist->get());
+        $this->assertSame(<<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            /current/a.ts
+            #EXTINF:1,
+            /current/b.ts
+
+            M3U8, $playlist->get());
+        $this->assertSame(<<<'M3U8'
+            #EXTM3U
+            #EXTINF:1,
+            /next/a.ts
+            #EXTINF:1,
+            /next/b.ts
+
+            M3U8, $playlist->get());
     }
 }

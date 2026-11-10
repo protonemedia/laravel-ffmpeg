@@ -1580,7 +1580,21 @@ class ExportTest extends TestCase
     protected function lecture(): string
     {
         if (! is_file($chapters = $this->fixturePath('chapters.txt'))) {
-            file_put_contents($chapters, ";FFMETADATA1\ntitle=Original lecture\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1200\ntitle=First\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=1200\nEND=2400\ntitle=Second\n");
+            file_put_contents($chapters, <<<'META'
+                ;FFMETADATA1
+                title=Original lecture
+                [CHAPTER]
+                TIMEBASE=1/1000
+                START=0
+                END=1200
+                title=First
+                [CHAPTER]
+                TIMEBASE=1/1000
+                START=1200
+                END=2400
+                title=Second
+
+                META);
         }
 
         return $this->fixture('lecture.mkv', [

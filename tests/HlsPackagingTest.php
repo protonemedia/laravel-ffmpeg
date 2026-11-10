@@ -57,7 +57,16 @@ class HlsPackagingTest extends TestCase
         $binary = $this->useRealFFMpeg();
         $name = $disk;
         $disk = Storage::disk($name);
-        $disk->put('captions.srt', "1\n00:00:00,200 --> 00:00:01,000\nHello HLS\n\n2\n00:00:01,200 --> 00:00:02,200\nSecond cue\n");
+        $disk->put('captions.srt', <<<'SRT'
+            1
+            00:00:00,200 --> 00:00:01,000
+            Hello HLS
+
+            2
+            00:00:01,200 --> 00:00:02,200
+            Second cue
+
+            SRT);
         $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=2.4',
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2.4',
             '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000:duration=2.4', '-i', $disk->path('captions.srt'),
@@ -388,10 +397,25 @@ class HlsPackagingTest extends TestCase
             }
             $path = $process->path;
             $map = '#EXT-X-MAP:URI="init-0.mp4"';
-            $playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:2\n#EXT-X-PLAYLIST-TYPE:VOD\n".$map."\n#EXTINF:2.000000,\nsegment-0-00000000.m4s\n#EXT-X-ENDLIST\n";
+            $playlist = sprintf(<<<'M3U8'
+                #EXTM3U
+                #EXT-X-VERSION:7
+                #EXT-X-TARGETDURATION:2
+                #EXT-X-PLAYLIST-TYPE:VOD
+                %s
+                #EXTINF:2.000000,
+                segment-0-00000000.m4s
+                #EXT-X-ENDLIST
+
+                M3U8, $map);
             file_put_contents($path.'/init-0.mp4', 'owned initialization');
             file_put_contents($path.'/segment-0-00000000.m4s', 'owned fragment');
-            file_put_contents($path.'/master-0.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100000\nplaylist-0.m3u8\n");
+            file_put_contents($path.'/master-0.m3u8', <<<'M3U8'
+                #EXTM3U
+                #EXT-X-STREAM-INF:BANDWIDTH=100000
+                playlist-0.m3u8
+
+                M3U8);
             match ($case) {
                 'missing-init' => unlink($path.'/init-0.mp4'),
                 'empty-init' => file_put_contents($path.'/init-0.mp4', ''),
@@ -424,12 +448,29 @@ class HlsPackagingTest extends TestCase
     {
         $disk = Mockery::mock(FilesystemContract::class);
         $playlists = [
-            'master.m3u8' => "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"English, commentary\",URI=\"audio/en.m3u8\"\n"
-                ."#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"s\",NAME=\"External\",URI=\"https://external.example.test/subs.m3u8\"\n"
-                ."#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO=\"a\"\nvideo/index.m3u8\n",
-            'audio/en.m3u8' => "#EXTM3U\n#EXT-X-MAP:URI=\"../init/a.mp4\"\n#EXTINF:1,\n../audio/a.m4s\n",
-            'video/index.m3u8' => "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"https://keys.example.test/key\"\n"
-                ."#EXT-X-MAP:URI=\"https://cdn.example.test/init.mp4\",BYTERANGE=\"100@0\"\n#EXTINF:1,\n../video/v.m4s\n",
+            'master.m3u8' => <<<'M3U8'
+                #EXTM3U
+                #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="English, commentary",URI="audio/en.m3u8"
+                #EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="s",NAME="External",URI="https://external.example.test/subs.m3u8"
+                #EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="a"
+                video/index.m3u8
+
+                M3U8,
+            'audio/en.m3u8' => <<<'M3U8'
+                #EXTM3U
+                #EXT-X-MAP:URI="../init/a.mp4"
+                #EXTINF:1,
+                ../audio/a.m4s
+
+                M3U8,
+            'video/index.m3u8' => <<<'M3U8'
+                #EXTM3U
+                #EXT-X-KEY:METHOD=AES-128,URI="https://keys.example.test/key"
+                #EXT-X-MAP:URI="https://cdn.example.test/init.mp4",BYTERANGE="100@0"
+                #EXTINF:1,
+                ../video/v.m4s
+
+                M3U8,
         ];
         foreach ($playlists as $path => $contents) {
             $disk->shouldReceive('readStream')->with($path)->once()->andReturnUsing(function () use ($contents) {

@@ -159,11 +159,20 @@ class VolumeDetectTest extends TestCase
     {
         $url = 'https://example.invalid/audio.wav?dl=1&v=2&token=abc&id=0123456789abcdef';
         $this->fakeCredentialLeaks();
-        $output = "mean_volume: -21.5 dB\nmax_volume: -2.0 dB\nabc 0123456789abcdef dl=1&v=2&token=abc&id=0123456789abcdef";
+        $output = <<<'OUTPUT'
+            mean_volume: -21.5 dB
+            max_volume: -2.0 dB
+            abc 0123456789abcdef dl=1&v=2&token=abc&id=0123456789abcdef
+            OUTPUT;
         $this->assertSame($output, trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
 
         config(['laravel-ffmpeg.redact_credentials' => true]);
-        $this->assertSame("mean_volume: -21.5 dB\nmax_volume: -2.0 dB\n[redacted] [redacted] [query]", trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
+        $redacted = <<<'OUTPUT'
+            mean_volume: -21.5 dB
+            max_volume: -2.0 dB
+            [redacted] [redacted] [query]
+            OUTPUT;
+        $this->assertSame($redacted, trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
     }
 
     public function test_failed_rtsp_captures_redact_the_camera_password(): void
@@ -230,9 +239,12 @@ class VolumeDetectTest extends TestCase
         Storage::disk('memory')->put('audio.wav', 'source bytes');
         $binary = $this->root.'/ffmpeg';
         $pidFile = $this->root.'/pid';
-        file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\n".
-            'if (in_array("-version", $argv, true)) { echo "ffmpeg version 9.0.2\n"; exit; }'."\n".
-            'file_put_contents('.var_export($pidFile, true).', getmypid()); sleep(30);');
+        file_put_contents($binary, sprintf(<<<'PHP'
+            #!%s
+            <?php
+            if (in_array("-version", $argv, true)) { echo "ffmpeg version 9.0.2\n"; exit; }
+            file_put_contents(%s, getmypid()); sleep(30);
+            PHP, PHP_BINARY, var_export($pidFile, true)));
         chmod($binary, 0700);
         config(['laravel-ffmpeg.ffmpeg.binaries' => $binary, 'laravel-ffmpeg.timeout' => 0.3]);
         $this->assertThrows(

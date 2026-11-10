@@ -186,8 +186,11 @@ class ProbeQueryTest extends TestCase
     public function test_resource_limits_are_enforced_on_real_processes(string $body, string $category): void
     {
         $binary = $this->root.'/probe';
-        file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\n".
-            'if (in_array("-version", $argv, true)) { echo "ffprobe version 9.0.2"; exit; }'.$body);
+        file_put_contents($binary, sprintf(<<<'PHP'
+            #!%s
+            <?php
+            if (in_array("-version", $argv, true)) { echo "ffprobe version 9.0.2"; exit; }%s
+            PHP, PHP_BINARY, $body));
         chmod($binary, 0700);
         config(['laravel-ffmpeg.ffprobe.binaries' => $binary]);
         $this->assertThrows(

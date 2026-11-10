@@ -36,12 +36,46 @@ class CapabilitiesTest extends TestCase
             }
 
             return Process::result(output: match ($option) {
-                '-encoders' => "Encoders:\n V..... = Video\n V....D mpeg4 MPEG-4\n A..... aac AAC\n",
-                '-muxers' => "Formats:\n .E. = Muxing supported\n  E  mov,mp4 QuickTime\n",
-                '-filters' => "Filters:\n TS scale V->V Scale\n .. null V->V Pass through\n",
-                '-protocols' => "Supported file protocols:\nInput:\n file\n https\nOutput:\n file\n",
-                '-bsfs' => "Bitstream filters:\nh264_mp4toannexb\naac_adtstoasc\n",
-                '-hwaccels' => "Hardware acceleration methods:\ncuda\nvaapi\n",
+                '-encoders' => <<<'TEXT'
+                    Encoders:
+                     V..... = Video
+                     V....D mpeg4 MPEG-4
+                     A..... aac AAC
+
+                    TEXT,
+                '-muxers' => <<<'TEXT'
+                    Formats:
+                     .E. = Muxing supported
+                      E  mov,mp4 QuickTime
+
+                    TEXT,
+                '-filters' => <<<'TEXT'
+                    Filters:
+                     TS scale V->V Scale
+                     .. null V->V Pass through
+
+                    TEXT,
+                '-protocols' => <<<'TEXT'
+                    Supported file protocols:
+                    Input:
+                     file
+                     https
+                    Output:
+                     file
+
+                    TEXT,
+                '-bsfs' => <<<'TEXT'
+                    Bitstream filters:
+                    h264_mp4toannexb
+                    aac_adtstoasc
+
+                    TEXT,
+                '-hwaccels' => <<<'TEXT'
+                    Hardware acceleration methods:
+                    cuda
+                    vaapi
+
+                    TEXT,
             });
         });
     }
@@ -132,17 +166,35 @@ class CapabilitiesTest extends TestCase
         $this->assertStringNotContainsString($this->root, Artisan::output());
     }
 
+    /**
+     * Write an FFprobe stand-in that only answers the version command and get its path.
+     */
+    protected function versionOnlyProbe(): string
+    {
+        $probe = $this->root.'/ffprobe';
+
+        file_put_contents($probe, sprintf(<<<'PHP'
+            #!%s
+            <?php echo 'ffprobe version 9.0.2';
+            PHP, PHP_BINARY));
+
+        chmod($probe, 0700);
+
+        return $probe;
+    }
+
     public function test_real_capture_overflow_fails_without_leaking_paths(): void
     {
         $binary = $this->root.'/ffmpeg';
-        file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\n".
-            'if (in_array("-version", $argv, true)) { echo "ffmpeg version 9.0.2"; exit; } echo str_repeat("X", 3000000);');
+        file_put_contents($binary, sprintf(<<<'PHP'
+            #!%s
+            <?php
+            if (in_array("-version", $argv, true)) { echo "ffmpeg version 9.0.2"; exit; } echo str_repeat("X", 3000000);
+            PHP, PHP_BINARY));
         chmod($binary, 0700);
         // Both version commands can use this controlled executable; FFprobe's
         // separate version response is supplied by the second script.
-        $probe = $this->root.'/ffprobe';
-        file_put_contents($probe, '#!'.PHP_BINARY."\n<?php echo 'ffprobe version 9.0.2';");
-        chmod($probe, 0700);
+        $probe = $this->versionOnlyProbe();
         config(['laravel-ffmpeg.ffmpeg.binaries' => $binary, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertSame('output_limit', json_decode(Artisan::output(), true)['category']);
@@ -152,9 +204,7 @@ class CapabilitiesTest extends TestCase
 
     public function test_missing_binary_fails_without_leaking_paths(): void
     {
-        $probe = $this->root.'/ffprobe';
-        file_put_contents($probe, '#!'.PHP_BINARY."\n<?php echo 'ffprobe version 9.0.2';");
-        chmod($probe, 0700);
+        $probe = $this->versionOnlyProbe();
         config([
             'laravel-ffmpeg.ffmpeg.binaries' => $this->root.'/missing-private-binary',
             'laravel-ffmpeg.ffprobe.binaries' => $probe,

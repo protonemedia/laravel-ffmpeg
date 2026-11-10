@@ -27,8 +27,21 @@ class PlaybackTest extends TestCase
         parent::setUp();
         config(['app.key' => 'base64:'.base64_encode(random_bytes(32))]);
         $disk = Storage::disk('memory');
-        $disk->put('lesson/master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nlow/index.m3u8\n");
-        $disk->put('lesson/low/index.m3u8', "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"https://keys.example/private\",IV=0x01\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:1,\npart.m4s\n#EXT-X-ENDLIST\n");
+        $disk->put('lesson/master.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=800000
+            low/index.m3u8
+
+            M3U8);
+        $disk->put('lesson/low/index.m3u8', <<<'M3U8'
+            #EXTM3U
+            #EXT-X-KEY:METHOD=AES-128,URI="https://keys.example/private",IV=0x01
+            #EXT-X-MAP:URI="init.mp4"
+            #EXTINF:1,
+            part.m4s
+            #EXT-X-ENDLIST
+
+            M3U8);
         $disk->put('lesson/low/part.m4s', '0123456789abcdef');
         $disk->put('lesson/low/init.mp4', 'initialization');
         $disk->put('private/key', str_repeat('k', 16));
@@ -174,11 +187,17 @@ class PlaybackTest extends TestCase
         $this->login();
         $this->get($this->url('other/private.txt'))->assertNotFound();
         $this->get($this->url('private/missing'))->assertNotFound();
-        Storage::disk('memory')->put('lesson/master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n../../other/private.txt\n");
+        $master = <<<'M3U8'
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            %s
+
+            M3U8;
+        Storage::disk('memory')->put('lesson/master.m3u8', sprintf($master, '../../other/private.txt'));
         $this->get($this->url())->assertNotFound();
-        Storage::disk('memory')->put('lesson/master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlow/part.m4s\n");
+        Storage::disk('memory')->put('lesson/master.m3u8', sprintf($master, 'low/part.m4s'));
         $this->get($this->url())->assertNotFound();
-        Storage::disk('memory')->put('lesson/master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhttps://external.example/unowned\n");
+        Storage::disk('memory')->put('lesson/master.m3u8', sprintf($master, 'https://external.example/unowned'));
         $this->get($this->url())->assertNotFound();
         Storage::disk('memory')->put('private/key', 'invalid-key-length');
         $this->get($this->url('private/key'))->assertNotFound();

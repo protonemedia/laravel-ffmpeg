@@ -300,7 +300,12 @@ class HlsTest extends TestCase
     {
         $this->source();
         $disk = Storage::disk('local');
-        $disk->put('captions.srt', "1\n00:00:00,200 --> 00:00:01,100\nTyped captions\n");
+        $disk->put('captions.srt', <<<'SRT'
+            1
+            00:00:00,200 --> 00:00:01,100
+            Typed captions
+
+            SRT);
         $remux = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $disk->path('source.mkv'),
             '-i', $disk->path('captions.srt'), '-map', '0', '-map', '1:s', '-c', 'copy', $disk->path('captioned.mkv')]);
         $this->assertProcessSucceeded($remux);
@@ -460,16 +465,33 @@ class HlsTest extends TestCase
             foreach ($process->command as $token) {
                 if (preg_match('/\/playlist-([0-9]+)\.m3u8$/', $token, $match)) {
                     $index = $match[1];
-                    file_put_contents($token, "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:2.000000,\nsegment-$index-00000000.ts\n#EXT-X-ENDLIST\n");
+                    file_put_contents($token, sprintf(<<<'M3U8'
+                        #EXTM3U
+                        #EXT-X-TARGETDURATION:2
+                        #EXT-X-PLAYLIST-TYPE:VOD
+                        #EXTINF:2.000000,
+                        segment-%s-00000000.ts
+                        #EXT-X-ENDLIST
+
+                        M3U8, $index));
                     file_put_contents($process->path.'/segment-'.$index.'-00000000.ts', 'fake encoded TS');
-                    file_put_contents($process->path.'/master-'.$index.'.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100000\n".basename($token)."\n");
+                    file_put_contents($process->path.'/master-'.$index.'.m3u8', sprintf(<<<'M3U8'
+                        #EXTM3U
+                        #EXT-X-STREAM-INF:BANDWIDTH=100000
+                        %s
+
+                        M3U8, basename($token)));
                 }
             }
             if ($mutate !== null) {
                 $mutate($process);
             }
 
-            return Process::result(output: "out_time_us=2000000\nprogress=end\n");
+            return Process::result(output: <<<'PROGRESS'
+                out_time_us=2000000
+                progress=end
+
+                PROGRESS);
         });
     }
 
@@ -491,9 +513,16 @@ class HlsTest extends TestCase
                 'unreferenced' => file_put_contents($path.'/segment-0-00000001.ts', 'unexpected'),
                 'escape' => $playlist = str_replace('segment-0-00000000.ts', '../outside.ts', $playlist),
                 'network' => $playlist = str_replace('segment-0-00000000.ts', 'https://example.test/media.ts', $playlist),
-                'duplicate' => $playlist = str_replace('#EXT-X-ENDLIST', "#EXTINF:2.000000,\nsegment-0-00000000.ts\n#EXT-X-ENDLIST", $playlist),
+                'duplicate' => $playlist = str_replace('#EXT-X-ENDLIST', <<<'M3U8'
+                    #EXTINF:2.000000,
+                    segment-0-00000000.ts
+                    #EXT-X-ENDLIST
+                    M3U8, $playlist),
                 'truncated' => $playlist = str_replace('#EXT-X-ENDLIST', '', $playlist),
-                'key' => $playlist = str_replace('#EXTINF:', "#EXT-X-KEY:METHOD=AES-128,URI=\"key.bin\"\n#EXTINF:", $playlist),
+                'key' => $playlist = str_replace('#EXTINF:', <<<'M3U8'
+                    #EXT-X-KEY:METHOD=AES-128,URI="key.bin"
+                    #EXTINF:
+                    M3U8, $playlist),
                 'duration' => $playlist = str_replace('2.000000', '0.000000', $playlist),
                 'whitespace' => $playlist = "\n\n",
                 'target' => $playlist = str_replace('#EXT-X-TARGETDURATION:2', '', $playlist),
@@ -520,7 +549,11 @@ class HlsTest extends TestCase
             file_put_contents($process->path.'/segment-0-00000000.ts', str_repeat('a', 1000));
             file_put_contents($process->path.'/segment-0-00000001.ts', str_repeat('b', 100));
             $playlist = file_get_contents($process->path.'/playlist-0.m3u8');
-            file_put_contents($process->path.'/playlist-0.m3u8', str_replace('#EXT-X-ENDLIST', "#EXTINF:0.500000,\nsegment-0-00000001.ts\n#EXT-X-ENDLIST", $playlist));
+            file_put_contents($process->path.'/playlist-0.m3u8', str_replace('#EXT-X-ENDLIST', <<<'M3U8'
+                #EXTINF:0.500000,
+                segment-0-00000001.ts
+                #EXT-X-ENDLIST
+                M3U8, $playlist));
         });
         $result = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)->save('out/master.m3u8');
         $this->assertStringContainsString('#EXT-X-STREAM-INF:BANDWIDTH=4000,AVERAGE-BANDWIDTH=3520', $storage->get($result->playlist()->path));
@@ -828,7 +861,11 @@ class HlsTest extends TestCase
             if ($case === 'reuse') {
                 file_put_contents($process->path.'/segment-0-00000001.ts', 'next segment');
                 $path = $process->path.'/playlist-0.m3u8';
-                file_put_contents($path, str_replace('#EXT-X-ENDLIST', "#EXTINF:1.000000,\nsegment-0-00000001.ts\n#EXT-X-ENDLIST", file_get_contents($path)));
+                file_put_contents($path, str_replace('#EXT-X-ENDLIST', <<<'M3U8'
+                    #EXTINF:1.000000,
+                    segment-0-00000001.ts
+                    #EXT-X-ENDLIST
+                    M3U8, file_get_contents($path)));
             }
         });
         $export = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
@@ -943,7 +980,11 @@ class HlsTest extends TestCase
                     'reference' => str_replace('test/index.m3u8', 'https://example.test/external.m3u8', $contents),
                     'stream' => str_replace('#EXT-X-STREAM-INF:', '#EXT-X-STREAM-INF:FRAME-RATE=25,', $contents),
                     'key' => str_replace("#EXTM3U\n", "#EXTM3U\n#EXT-X-KEY:METHOD=NONE\n", $contents),
-                    'resource' => str_replace("#EXTM3U\n", "#EXTM3U\n#EXT-X-SESSION-DATA:DATA-ID=\"external\",URI = \"https://example.test/info\"\n", $contents),
+                    'resource' => str_replace("#EXTM3U\n", <<<'M3U8'
+                        #EXTM3U
+                        #EXT-X-SESSION-DATA:DATA-ID="external",URI = "https://example.test/info"
+
+                        M3U8, $contents),
                     'duplicate' => $contents."#EXTM3U\n",
                     'large' => $contents.str_repeat('#', 16777216),
                     'control' => $contents."# comment\r#EXT-X-KEY:METHOD=NONE\n",

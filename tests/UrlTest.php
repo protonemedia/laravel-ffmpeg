@@ -224,7 +224,10 @@ class UrlTest extends TestCase
     public function test_download_validation_rejects_header_injection(array $headers): void
     {
         Process::preventStrayProcesses();
-        Http::fake(['*' => Http::response("#EXTM3U\nhttps://elsewhere.example/segment.ts", 200)]);
+        Http::fake(['*' => Http::response(<<<'M3U8'
+            #EXTM3U
+            https://elsewhere.example/segment.ts
+            M3U8, 200)]);
 
         $this->assertThrows(
             fn () => FFMpeg::openUrl('https://media.example/input', $headers, download: true),
@@ -244,7 +247,10 @@ class UrlTest extends TestCase
     public function test_download_validation_rejects_staged_manifests_before_probing(): void
     {
         Process::preventStrayProcesses();
-        Http::fake(['*' => Http::response("#EXTM3U\nhttps://elsewhere.example/segment.ts", 200)]);
+        Http::fake(['*' => Http::response(<<<'M3U8'
+            #EXTM3U
+            https://elsewhere.example/segment.ts
+            M3U8, 200)]);
 
         $this->assertThrows(
             fn () => FFMpeg::openUrl('https://media.example/disguised.mp4', download: true)->probe(),

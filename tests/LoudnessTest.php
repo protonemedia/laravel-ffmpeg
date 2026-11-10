@@ -152,10 +152,13 @@ class LoudnessTest extends TestCase
         $this->fixture();
         $binary = $this->root.'/ffmpeg';
         // Wrap the real binary so only the measurement pass leaves invalid statistics.
-        file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\n"
-            .'passthru(implode(" ", array_map("escapeshellarg", ['.var_export($this->useRealFFMpeg(), true).', ...array_slice($argv, 1)])), $code);'."\n"
-            .'if (in_array("-af", $argv, true) && str_contains(implode(" ", $argv), "stats_file=loudness-measure.json")) { file_put_contents("loudness-measure.json", "{}"); }'."\n"
-            .'exit($code);');
+        file_put_contents($binary, sprintf(<<<'PHP'
+            #!%s
+            <?php
+            passthru(implode(" ", array_map("escapeshellarg", [%s, ...array_slice($argv, 1)])), $code);
+            if (in_array("-af", $argv, true) && str_contains(implode(" ", $argv), "stats_file=loudness-measure.json")) { file_put_contents("loudness-measure.json", "{}"); }
+            exit($code);
+            PHP, PHP_BINARY, var_export($this->useRealFFMpeg(), true)));
         chmod($binary, 0700);
         config(['laravel-ffmpeg.ffmpeg.binaries' => $binary]);
         $this->assertThrows(

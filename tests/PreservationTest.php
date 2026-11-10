@@ -169,8 +169,23 @@ class PreservationTest extends TestCase
      */
     protected function richMedia(): Media
     {
-        file_put_contents($this->root.'/captions.srt', "1\n00:00:00,100 --> 00:00:00,800\nBonjour\n");
-        file_put_contents($this->root.'/metadata.txt', ";FFMETADATA1\ntitle=Preserved\ncomment=Remove me\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=900\ntitle=Introduction\n");
+        file_put_contents($this->root.'/captions.srt', <<<'SRT'
+            1
+            00:00:00,100 --> 00:00:00,800
+            Bonjour
+
+            SRT);
+        file_put_contents($this->root.'/metadata.txt', <<<'FFMETADATA'
+            ;FFMETADATA1
+            title=Preserved
+            comment=Remove me
+            [CHAPTER]
+            TIMEBASE=1/1000
+            START=0
+            END=900
+            title=Introduction
+
+            FFMETADATA);
         $this->ffmpeg(['-f', 'lavfi', '-i', 'color=blue:size=16x16', '-frames:v', '1', $this->root.'/cover.png']);
         $this->ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=64x48:rate=10:duration=1',
             '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-i', $this->root.'/captions.srt',

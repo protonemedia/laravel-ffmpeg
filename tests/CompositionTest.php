@@ -1047,7 +1047,18 @@ class CompositionTest extends TestCase
     protected function storeInvertingLut(string $key): string
     {
         // Invert RGB, with the red coordinate varying fastest as required by .cube.
-        $lut = "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
+        $lut = <<<'CUBE'
+            LUT_3D_SIZE 2
+            1 1 1
+            0 1 1
+            1 0 1
+            0 0 1
+            1 1 0
+            0 1 0
+            1 0 0
+            0 0 0
+
+            CUBE;
 
         Storage::disk('memory')->put($key, $lut);
 
@@ -1283,9 +1294,32 @@ class CompositionTest extends TestCase
     public static function subtitleFormatProvider(): array
     {
         return [
-            'srt' => ['srt', "1\n00:00:05,000 --> 00:00:05,500\nCaption café\n"],
-            'vtt' => ['vtt', "WEBVTT\n\n00:05.000 --> 00:05.500\nCaption café\n"],
-            'ass' => ['ass', "[Script Info]\nScriptType: v4.00+\nPlayResX: 160\nPlayResY: 90\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, Alignment\nStyle: Default,DejaVu Sans,14,&H00FFFFFF,2\n[Events]\nFormat: Layer, Start, End, Style, Text\nDialogue: 0,0:00:05.00,0:00:05.50,Default,Caption café\n"],
+            'srt' => ['srt', <<<'SRT'
+                1
+                00:00:05,000 --> 00:00:05,500
+                Caption café
+
+                SRT],
+            'vtt' => ['vtt', <<<'VTT'
+                WEBVTT
+
+                00:05.000 --> 00:05.500
+                Caption café
+
+                VTT],
+            'ass' => ['ass', <<<'ASS'
+                [Script Info]
+                ScriptType: v4.00+
+                PlayResX: 160
+                PlayResY: 90
+                [V4+ Styles]
+                Format: Name, Fontname, Fontsize, PrimaryColour, Alignment
+                Style: Default,DejaVu Sans,14,&H00FFFFFF,2
+                [Events]
+                Format: Layer, Start, End, Style, Text
+                Dialogue: 0,0:00:05.00,0:00:05.50,Default,Caption café
+
+                ASS],
         ];
     }
 
@@ -1311,7 +1345,13 @@ class CompositionTest extends TestCase
     public static function forgedSubtitleProvider(): array
     {
         return [
-            'playlist' => ["#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nsibling.ts\n"],
+            'playlist' => [<<<'M3U8'
+                #EXTM3U
+                #EXT-X-TARGETDURATION:1
+                #EXTINF:1,
+                sibling.ts
+
+                M3U8],
             'concat list' => ["ffconcat version 1.0\nfile 'sibling.ts'\n"],
             'invalid UTF-8' => ["1\n00:00:00,000 --> 00:00:01,000\n\xff\n"],
         ];

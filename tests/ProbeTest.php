@@ -326,7 +326,11 @@ class ProbeTest extends TestCase
     public function test_it_detects_a_manifest_with_a_non_manifest_extension(): void
     {
         $this->fakeProbe();
-        Storage::disk('memory')->put('input.bin', "#EXTM3U\n#EXTINF:6,\n../private.ts");
+        Storage::disk('memory')->put('input.bin', <<<'M3U8'
+            #EXTM3U
+            #EXTINF:6,
+            ../private.ts
+            M3U8);
 
         $this->assertThrows(
             fn () => FFMpeg::disk('memory')->open('input.bin')->probe(),
