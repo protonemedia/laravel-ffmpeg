@@ -97,6 +97,7 @@ class Workspace
 
             if (! isset($this->probeVersions[$binary])) {
                 $this->runner->version($binary, 'ffprobe', $this->path);
+
                 $this->probeVersions[$binary] = true;
             }
 

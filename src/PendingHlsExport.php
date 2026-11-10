@@ -125,6 +125,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         }
 
         $this->export = new PendingExport($media, $disk, $this, 'hls-playlist');
+
         $this->export->video('libx264')->audio('aac');
     }
 
@@ -188,6 +189,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     public function playlistType(string $type): static
     {
         $this->export->assertOutputMutable();
+
         $type = strtolower($type);
 
         if (! in_array($type, ['vod', 'event', 'live'], true)) {
@@ -225,6 +227,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     public function playlistUsing(callable $callback): static
     {
         $this->export->assertOutputMutable();
+
         $this->playlistCallback = Closure::fromCallable($callback);
 
         return $this;
@@ -286,6 +289,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         }
 
         $outputs[] = $master;
+
         $this->ensureRenditionClipsMatch($outputs);
 
         return $outputs;
@@ -699,7 +703,9 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                 $paths[$index],
                 $encryption,
             );
+
             array_push($segments, ...$variantSegments);
+
             $playlists[] = [
                 'path' => $paths[$index],
                 'output' => $index,
@@ -710,11 +716,13 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
 
         $master = array_key_last($outputs);
         $masterPath = $outputs[$master]->destination()['path'];
+
         $this->writePlaylist(
             $paths[$master],
             $this->masterPlaylistLines($streamInfo, $masterPath),
             $masterPath,
         );
+
         $this->keyReferences = $encryption?->references() ?? [];
         $artifacts = [...($encryption?->artifacts() ?? []), ...$segments, ...$playlists, [
             'path' => $paths[$master],
@@ -722,6 +730,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             'role' => 'hls-master',
             'destination' => $outputs[$master]->destination(),
         ]];
+
         $this->export->validateDestinations(array_map(
             fn (array $artifact): ExportOutput => new ExportOutput(
                 $artifact['destination']['path'],

@@ -40,6 +40,7 @@ class HlsVariant
     public function audioGroup(string $group): static
     {
         $this->assertOutputMutable();
+
         $this->audioGroup = $group;
 
         return $this;
@@ -51,6 +52,7 @@ class HlsVariant
     public function subtitleGroup(string $group): static
     {
         $this->assertOutputMutable();
+
         $this->subtitleGroup = $group;
 
         return $this;

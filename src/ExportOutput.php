@@ -62,6 +62,7 @@ class ExportOutput
     public function configure(array $configuration): static
     {
         $this->assertOutputMutable();
+
         $properties = array_keys($this->outputConfiguration());
 
         if (array_diff(array_keys($configuration), $properties) !== []

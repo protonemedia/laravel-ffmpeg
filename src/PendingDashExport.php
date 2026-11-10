@@ -77,6 +77,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         }
 
         $this->export = new PendingExport($media, $disk, $this, 'dash-manifest');
+
         $this->export->video('libx264')->audio('aac');
     }
 
@@ -247,7 +248,9 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         }
 
         $representation = new DashRepresentation;
+
         $configure($representation);
+
         $this->representations[$name] = $representation;
         $this->sets[$adaptationSet]['representations'][] = $name;
 
@@ -260,6 +263,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     public function sharedHls(bool $enabled = true): static
     {
         $this->export->assertOutputMutable();
+
         $this->sharedHls = $enabled;
 
         return $this;
@@ -579,14 +583,19 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             // Each adaptation set declares segment alignment, so all of its representations
             // must share one segment clock or players could not switch between them.
             $setName = $this->adaptationSetOf($name);
+
             $this->ensureClocksAlign($clocks[$setName] ?? null, $parsed['durations']);
+
             $clocks[$setName] = $parsed['durations'];
             $longest = max($longest, array_sum($parsed['durations']));
             $representation = $this->importRepresentation($document, $parsed['representation'], $name);
+
             $sets[$setName]->appendChild($representation);
 
             [$files, $peak, $bytes] = $this->representationArtifacts($parsed);
+
             array_push($segments, ...$files);
+
             $info[$name] = $this->representationInfo($parsed, $representation, $peak, $bytes);
 
             if ($this->sharedHls) {
@@ -603,6 +612,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         }
 
         $this->write($paths[$master], $document->saveXML());
+
         $artifacts = [...$segments, ...$playlists, ['path' => $paths[$master], 'output' => $master,
             'role' => 'dash-manifest', 'destination' => $outputs[$master]->destination()]];
 
@@ -686,22 +696,26 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $document = new DOMDocument('1.0', 'UTF-8');
         $root = $document->createElementNS(DashManifest::NS, 'MPD');
+
         $document->appendChild($root);
         $root->setAttribute('type', 'static');
         $root->setAttribute('profiles', 'urn:mpeg:dash:profile:isoff-live:2011');
         $root->setAttribute('minBufferTime', 'PT'.CommandCompiler::timestamp($this->segmentDuration * 2).'S');
 
         $period = $root->appendChild($document->createElementNS(DashManifest::NS, 'Period'));
+
         $period->setAttribute('start', 'PT0S');
 
         $sets = [];
 
         foreach ($this->sets as $name => $set) {
             $node = $period->appendChild($document->createElementNS(DashManifest::NS, 'AdaptationSet'));
+
             $node->setAttribute('id', (string) count($sets));
             $node->setAttribute('contentType', $set['type']);
             $node->setAttribute('segmentAlignment', 'true');
             $node->setAttribute('startWithSAP', '1');
+
             $sets[$name] = $node;
         }
 
@@ -743,6 +757,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         }
 
         $representation->setAttribute('id', $name);
+
         $template = $representation->getElementsByTagNameNS(DashManifest::NS, 'SegmentTemplate')->item(0);
 
         if (! $template instanceof DOMElement) {
@@ -835,7 +850,9 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
 
         $lines[] = '#EXT-X-ENDLIST';
         $local = dirname($path).'/index.m3u8';
+
         $this->write($local, implode("\n", $lines)."\n");
+
         $destination = $output->destination();
         $destination['path'] = dirname($destination['path']).'/index.m3u8';
         $this->representationFiles[$name][$destination['path']] = true;
@@ -885,7 +902,9 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         }
 
         $local = dirname($path).'/master.m3u8';
+
         $this->write($local, implode("\n", $lines)."\n");
+
         $destination = $output->destination();
         $destination['path'] = (dirname($destination['path']) === '.' ? '' : dirname($destination['path']).'/')
             .'master.m3u8';

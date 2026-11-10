@@ -146,6 +146,7 @@ trait ConfiguresStreamMaps
     public function withoutAudio(): static
     {
         $this->assertOutputMutable();
+
         $this->omitAudio = true;
 
         return $this;
@@ -157,6 +158,7 @@ trait ConfiguresStreamMaps
     public function withoutVideo(): static
     {
         $this->assertOutputMutable();
+
         $this->omitVideo = true;
 
         return $this;

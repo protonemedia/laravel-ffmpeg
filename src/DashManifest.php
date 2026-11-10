@@ -33,9 +33,11 @@ class DashManifest
     {
         $document = self::load($path);
         $xpath = new DOMXPath($document);
+
         $xpath->registerNamespace('d', self::NS);
 
         self::ensureVocabularyIsAllowed($document);
+
         [$representation, $template] = self::locateRepresentation($document, $xpath, $type);
         $durations = self::durations($xpath, $template);
 
@@ -211,7 +213,9 @@ class DashManifest
     protected static function ensureInventoryMatches(string $path, array $files): void
     {
         $expected = ['index.mpd', ...$files];
+
         sort($expected);
+
         $actual = [];
 
         foreach (new DirectoryIterator(dirname($path)) as $file) {

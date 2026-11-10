@@ -85,7 +85,9 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
 
         if ($this->plan instanceof ExportPlan) {
             $export = $this->plan->restore();
+
             $export->cancelWhen(fn () => $this->batch()?->cancelled() ?? false);
+
             $result = $export->save($this->path);
         } else {
             $result = $this->mergeParts();

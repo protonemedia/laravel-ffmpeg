@@ -133,6 +133,7 @@ class PendingHlsMerge
     public function save(string $path): HlsExportResult
     {
         $this->resetComposition();
+
         $this->destinationDisk = $this->disk;
 
         try {
@@ -145,6 +146,7 @@ class PendingHlsMerge
             $destination = $this->versionedDestination($path);
             $storage = Storage::disk($this->destinationDisk);
             $this->paths[$this->destinationDisk][] = $destination;
+
             $this->ensurePathsDoNotConflict();
 
             $text = $this->renderMaster();
@@ -154,6 +156,7 @@ class PendingHlsMerge
             }
 
             [$presentation, $generated] = $this->describeComposition($destination, $text);
+
             $this->publishMaster($storage, $destination, $text);
 
             return new HlsExportResult($generated, [], presentation: $presentation);
@@ -215,8 +218,10 @@ class PendingHlsMerge
         }
 
         $this->addVariants($label, $inventory['variants']);
+
         $this->keys += $inventory['keys'];
         $this->provenance += $inventory['provenance'];
+
         // Rendering the master through the response parser validates every one of its
         // references, so nothing is published when a reference is invalid.
         $this->addMasterLines($presentation, $master, $index, $path);
@@ -254,6 +259,7 @@ class PendingHlsMerge
         if ($file['role'] === 'hls-playlist') {
             $metadata = $provenance[$file['path']] ?? [];
             $durations = $this->completedPlaylistDurations($presentation, $file, $metadata);
+
             $this->ensureClockMatches($metadata);
 
             if (! ($metadata['subtitle'] ?? false)) {
@@ -278,6 +284,7 @@ class PendingHlsMerge
         }
 
         $text = $this->owned(fn (): string => $presentation->render($file, fn ($id): string => "owned/{$id}"));
+
         preg_match_all('/^#EXTINF:([0-9]+(?:\.[0-9]+)?),/m', $text, $durations);
 
         if (substr_count($text, '#EXT-X-ENDLIST') !== 1 || substr_count($text, '#EXT-X-PLAYLIST-TYPE:VOD') !== 1

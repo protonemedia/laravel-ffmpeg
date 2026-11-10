@@ -52,6 +52,7 @@ trait CompilesOutputArguments
 
         foreach ($this->videoStreams as $overrides) {
             $encoding = array_replace($this->video, $overrides);
+
             $this->ensureSingleRateControl($encoding);
             $this->ensureCopyIsUnmodified($encoding, $this->videoFilters);
         }

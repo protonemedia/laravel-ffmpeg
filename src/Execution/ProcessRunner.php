@@ -151,8 +151,11 @@ class ProcessRunner
 
         try {
             $this->check($phase);
+
             $process = $this->startProcess($command, $directory, $outputLimit, $progress);
+
             $this->supervise($process, $phase);
+
             $result = $process->wait();
 
             // The strtr() function replaces the longest key first in a single pass, so a

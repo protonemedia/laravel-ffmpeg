@@ -95,6 +95,7 @@ class ImageOutput
     public static function sequenceArtifacts(ExportOutput $output, string $path, ?int $expected = null): array
     {
         $files = glob(str_replace('%08d', '*', $path)) ?: [];
+
         sort($files, SORT_NATURAL);
 
         if ($files === [] || ($expected !== null && count($files) !== $expected)) {

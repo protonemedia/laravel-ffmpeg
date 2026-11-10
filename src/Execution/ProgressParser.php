@@ -61,6 +61,7 @@ class ProgressParser
         foreach (explode("\n", $chunk) as $index => $part) {
             if ($index > 0) {
                 $this->line(rtrim($this->buffer, "\r"));
+
                 $this->buffer = '';
             }
 
@@ -116,7 +117,9 @@ class ProgressParser
 
         $progress = $this->pending;
         $this->pending = null;
+
         ($this->notify)($progress);
+
         $this->notifiedAt = $now;
     }
 }

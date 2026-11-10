@@ -30,6 +30,7 @@ trait PublishesArtifacts
 
         foreach ($artifacts as $index => $artifact) {
             $runner->check(Progress::PUBLICATION);
+
             $output = $artifact['target'] ?? $outputs[$artifact['output']];
             $destination = $artifact['destination'];
             $stream = null;

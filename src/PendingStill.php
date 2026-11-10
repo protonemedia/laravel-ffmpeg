@@ -50,6 +50,7 @@ class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
         }
 
         $this->export = new PendingExport(new Media($disk, new StillInput($image, $frameRate)), $disk, $this);
+
         $this->export->video('libx264')->outputOptions(['-pix_fmt', 'yuv420p']);
     }
 

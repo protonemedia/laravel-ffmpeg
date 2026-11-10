@@ -111,6 +111,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     public function mono(bool $enabled = true): static
     {
         $this->export->assertOutputMutable();
+
         $this->mixMono = $enabled;
 
         return $this;
@@ -286,6 +287,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     protected function decodedFrames(string $path, int $channels): int
     {
         clearstatcache(true, $path);
+
         $size = is_file($path) ? filesize($path) : false;
 
         if ($size === false || $size % ($channels * 2) !== 0) {

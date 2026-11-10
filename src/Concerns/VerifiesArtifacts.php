@@ -43,6 +43,7 @@ trait VerifiesArtifacts
 
         foreach ($artifacts as $artifact) {
             $workspace->runner->check(Progress::VALIDATION);
+
             $outputPath = $artifact['path'];
             $index = $artifact['output'];
             $role = $artifact['role'] ?? $this->outputRole;

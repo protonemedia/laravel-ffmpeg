@@ -70,6 +70,7 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
         $this->loopCount = $loop ? $loops ?? 0 : -1;
 
         $this->export = new PendingExport($media, $disk, $this);
+
         $this->export->resize($width)->frameRate($frameRate);
     }
 

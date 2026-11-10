@@ -37,6 +37,7 @@ class FilterGraph
     public static function resources(string $expression, array $resources, array &$used): string
     {
         self::validateExpression($expression);
+
         $result = [];
 
         foreach (self::split($expression, ',;') as [$filter, $separator]) {
@@ -52,6 +53,7 @@ class FilterGraph
     protected static function compileFilterResources(string $filter, array $resources, array &$used): string
     {
         preg_match('/^(?:\[[^\]]+\])*\s*([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?=/', $filter, $name);
+
         $quoted = false;
         $escaped = false;
         $compiled = '';

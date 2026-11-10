@@ -64,6 +64,7 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
 
         $this->graph = "[0:a:0]showwavespic=s={$width}x{$height}:colors=".implode('|', $colors).'[waveform]';
         $this->export = new PendingExport($media, $disk, $this, 'image');
+
         $this->export->map('[waveform]')->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
@@ -121,6 +122,7 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
 
             if ($index !== false) {
                 $filters[$flag] = $command[$index + 1];
+
                 array_splice($command, $index, 2);
             }
         }

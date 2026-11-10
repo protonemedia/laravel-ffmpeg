@@ -60,6 +60,7 @@ class HlsPlayback
     {
         abort_unless(is_string($request->query('expires')) && ctype_digit($request->query('expires'))
             && $request->hasValidSignature(), 403);
+
         $definition = $this->presentations[$request->route()->defaults['_hlsPlayback'] ?? ''] ?? null;
 
         if ($definition === null) {
@@ -71,6 +72,7 @@ class HlsPlayback
         $parameters['request'] = $request;
         [$resolve, $authorize] = $definition;
         $decision = app()->call($authorize, $parameters);
+
         abort_unless($decision === true || ($decision instanceof AuthorizationResponse && $decision->allowed()), 403);
 
         return app()->call($resolve, $parameters);

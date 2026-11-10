@@ -111,6 +111,7 @@ class ExportPlan
         }
 
         $captures = $reflection->getStaticVariables();
+
         array_walk_recursive($captures, static function ($capture): void {
             if (is_object($capture) || is_resource($capture)) {
                 throw new InvalidArgumentException('Queued callbacks must capture only scalar values or arrays.');

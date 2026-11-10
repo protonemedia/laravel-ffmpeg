@@ -61,7 +61,9 @@ trait ManagesHlsRenditions
         }
 
         $variant = new HlsVariant;
+
         $configure($variant);
+
         $this->variants[$name] = $variant;
         $this->variantPaths[$name] = $paths;
 
@@ -157,7 +159,9 @@ trait ManagesHlsRenditions
         $this->ensureRenditionIsUnique($type, $group, $name, $default);
 
         $id = 'rendition-'.strtolower($type)."-{$group}-".count($this->renditions);
+
         $this->variant($id, $configure, $playlist, $segments, $init);
+
         $this->renditions[$id] = [
             'type' => $type,
             'group' => $group,
@@ -249,6 +253,7 @@ trait ManagesHlsRenditions
     {
         $rendition = $this->renditions[$name] ?? null;
         $subtitle = ($rendition['type'] ?? null) === 'SUBTITLES';
+
         $this->ensureVariantPathsMatchPackaging($name, $subtitle);
 
         $settings = $variant->inherit($this->export->outputConfiguration());

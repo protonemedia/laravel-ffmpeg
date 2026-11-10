@@ -130,6 +130,7 @@ trait ConfiguresOutput
     public function outputOptions(array $tokens): static
     {
         $this->assertOutputMutable();
+
         $this->outputOptions = CommandCompiler::options([...$this->outputOptions, ...$tokens], 'output');
 
         return $this;
@@ -145,6 +146,7 @@ trait ConfiguresOutput
         string $seek = 'accurate',
     ): static {
         $this->assertOutputMutable();
+
         $start = CommandCompiler::seconds($start);
         $duration = $duration === null ? null : CommandCompiler::seconds($duration);
         $end = $end === null ? null : CommandCompiler::seconds($end);
@@ -180,6 +182,7 @@ trait ConfiguresOutput
     public function toDisk(string|Filesystem $disk, array $options = []): static
     {
         $this->assertOutputMutable();
+
         $this->disk = $disk;
         $this->outputDiskExplicit = true;
         $this->writeOptions = array_replace($this->writeOptions, $options);
@@ -193,6 +196,7 @@ trait ConfiguresOutput
     public function visibility(string $visibility): static
     {
         $this->assertOutputMutable();
+
         $this->writeOptions['visibility'] = $visibility;
 
         return $this;

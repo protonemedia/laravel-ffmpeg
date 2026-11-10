@@ -28,7 +28,9 @@ trait ConfiguresEncoders
         }
 
         $settings = new VideoStreamSettings;
+
         $configure($settings);
+
         $this->videoStreams[$track] = $settings->settings();
 
         return $this;
@@ -49,7 +51,9 @@ trait ConfiguresEncoders
         }
 
         $settings = new AudioStreamSettings;
+
         $configure($settings);
+
         $this->audioStreams[$track] = $settings->settings();
 
         return $this;
@@ -61,6 +65,7 @@ trait ConfiguresEncoders
     public function videoOptions(array $tokens): static
     {
         $this->assertOutputMutable();
+
         $this->video = array_replace($this->video, (new VideoStreamSettings)->options($tokens)->settings());
 
         return $this;
@@ -72,6 +77,7 @@ trait ConfiguresEncoders
     public function audioOptions(array $tokens): static
     {
         $this->assertOutputMutable();
+
         $this->audio = array_replace($this->audio, (new AudioStreamSettings)->options($tokens)->settings());
 
         return $this;
@@ -130,6 +136,7 @@ trait ConfiguresEncoders
         $this->assertOutputMutable();
         $this->codec($codec);
         $this->bitrate($bitrate);
+
         $this->audio = array_replace($this->audio, collect([
             'codec' => $codec, 'bitrate' => $bitrate,
         ])->whereNotNull()->all());

@@ -94,8 +94,10 @@ trait CompilesCommands
         }
 
         $graph = $this->filterGraph();
+
         $this->ensureCoverArtCanCompile($graph, $outputs);
         $this->ensureWatermarksCanCompile($graph);
+
         $resources = $this->resourceNames($outputs);
 
         if (array_any($resources, fn ($resource): bool => $resource['type'] === 'subtitle')
@@ -148,8 +150,11 @@ trait CompilesCommands
 
         foreach ($outputs as $index => $output) {
             $output = $this->prepareOutput($output);
+
             $this->ensureOutputMatchesInputs($output, $outputs, $graph, $composition);
+
             $maps = $this->resolveMaps($output);
+
             array_push($mappedLabels, ...$this->graphLabels($maps, $graph));
 
             $options = $output->outputArguments(
@@ -303,6 +308,7 @@ trait CompilesCommands
 
         if ($graph !== null) {
             FilterGraph::validate($graph, count($this->inputs), $mappedLabels);
+
             $globals[] = '-filter_complex';
             $globals[] = FilterGraph::resources($graph, $resources, $used);
         }

@@ -130,6 +130,7 @@ class PendingQueuedExport
         }
 
         $workflow = $this->configure(new HlsBatchJob($batch, $finalizer));
+
         $workflow->allOnConnection($this->connection)->allOnQueue($this->queue);
 
         return $workflow;
@@ -149,6 +150,7 @@ class PendingQueuedExport
     protected function configure(ExportJob|HlsBatchJob $job, bool $initial = true): ExportJob|HlsBatchJob
     {
         $job->onConnection($this->connection)->onQueue($this->queue)->delay($initial ? $this->delay : null);
+
         $timeout = $this->timeout ?? config('laravel-ffmpeg.timeout', 3600);
         $job->timeout = config('laravel-ffmpeg.queue.timeout') ?? ($timeout === null ? 0 : (int) ceil($timeout) + 30);
         $job->tries = config('laravel-ffmpeg.queue.tries', 1);

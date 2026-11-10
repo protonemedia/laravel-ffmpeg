@@ -93,6 +93,7 @@ class AudioStreamSettings
     public function filter(string $expression): static
     {
         FilterGraph::validateExpression($expression);
+
         $this->settings['filters'][] = $expression;
 
         return $this;

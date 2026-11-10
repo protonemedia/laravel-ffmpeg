@@ -72,6 +72,7 @@ trait StagesInputs
     protected function probeInputs(Workspace $workspace, array $resources): array
     {
         $runner = $workspace->runner;
+
         $runner->pairVersion(
             config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'),
             config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'),
@@ -96,6 +97,7 @@ trait StagesInputs
     protected function expectedStreams(Workspace $workspace, array $outputs, array $metadata): array
     {
         $expected = array_map(fn ($output): array => $this->selectedStreams($output, $workspace, $metadata), $outputs);
+
         $this->ensureTrackSettingsExist($outputs, $expected);
         $this->validateStreamSelections($expected);
 
@@ -338,6 +340,7 @@ trait StagesInputs
             }
 
             preg_match('/^(-?)(\d+)(?::(.*?))?(\?)?$/D', $map, $match);
+
             $exclude = $match[1] === '-';
             $input = (int) $match[2];
             $selector = $match[3] ?? '';

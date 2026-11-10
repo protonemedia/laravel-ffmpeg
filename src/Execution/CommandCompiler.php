@@ -97,6 +97,7 @@ class CommandCompiler
             $value = $tokens[$i + 1];
 
             [$name, $stream] = self::parseFlag($flag, $allowed, $scope);
+
             self::ensureSingleLineValue($name, $value);
             self::ensureStreamSpecifierIsSupported($name, $stream);
 

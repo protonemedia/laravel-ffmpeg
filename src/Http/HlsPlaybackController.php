@@ -107,6 +107,7 @@ class HlsPlaybackController
     {
         try {
             $key = stream_get_contents($stream, 17);
+
             abort_unless(is_string($key) && strlen($key) === 16, 404);
 
             return response($request->isMethod('HEAD') ? '' : $key, 200, [...$headers,

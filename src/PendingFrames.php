@@ -66,6 +66,7 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
         }
 
         $this->export = new PendingExport($media, $disk, $this, 'image');
+
         $this->export->map('0:V:0')->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
@@ -79,6 +80,7 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
         }
 
         $path = ImageOutput::sequenceDestination($path);
+
         $this->export->video(ImageOutput::codec($path));
 
         return $this->export->save($path);
@@ -118,6 +120,7 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
+
         $rate = match (true) {
             $this->every !== null => '1/'.CommandCompiler::timestamp($this->every),
             $this->duration === null => "{$this->count}/[duration]",

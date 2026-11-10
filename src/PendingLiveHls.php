@@ -186,6 +186,7 @@ class PendingLiveHls
     public function toDisk(string|Filesystem $disk): static
     {
         $this->mutable();
+
         $this->disk = $disk;
 
         return $this;
@@ -197,6 +198,7 @@ class PendingLiveHls
     public function onPublish(callable $callback): static
     {
         $this->mutable();
+
         $this->publication = Closure::fromCallable($callback);
 
         return $this;
@@ -210,6 +212,7 @@ class PendingLiveHls
     public function cancelWhen(callable $callback): static
     {
         $this->mutable();
+
         $this->cancellation = Closure::fromCallable($callback);
 
         return $this;
@@ -291,7 +294,9 @@ class PendingLiveHls
         $playlist = "{$directory}/index.m3u8";
         $workspace = null;
         $failed = false;
+
         $this->beginSession($disk, $directory, $playlist);
+
         $this->running = true;
 
         try {
@@ -303,8 +308,10 @@ class PendingLiveHls
             }
 
             $this->interruptIfNecessary();
+
             $workspace = new Workspace;
             $this->workspace = $workspace;
+
             $this->supervise();
 
             return $this->snapshot($playlist);
@@ -325,6 +332,7 @@ class PendingLiveHls
             // runs of the same builder proceed.
             $this->running = false;
             $this->stopped = false;
+
             $this->resetSession();
 
             try {
@@ -361,6 +369,7 @@ class PendingLiveHls
     protected function beginSession(Filesystem $filesystem, string $directory, string $playlist): void
     {
         $this->resetSession();
+
         $this->started = hrtime(true);
         $this->interrupt = new RuntimeException('Live session interrupted.');
         $this->filesystem = $filesystem;
@@ -424,9 +433,13 @@ class PendingLiveHls
     {
         $workspace = $this->workspace;
         $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
+
         $workspace->runner->version($binary, 'ffmpeg', $workspace->path);
+
         $input = $this->stageSource($workspace);
+
         $workspace->requireProtocols($binary, $input['protocols']);
+
         $this->prefix = 'live-'.bin2hex(random_bytes(12)).'-';
 
         do {
@@ -449,6 +462,7 @@ class PendingLiveHls
             );
 
             $finished = $result->exitCode === 0 && ! $this->reconnectOnEof;
+
             $this->publishPlaylist($start, $finished);
 
             if ($finished) {
@@ -550,6 +564,7 @@ class PendingLiveHls
         }
 
         $this->playlistPublished = true;
+
         // The playlist is committed before we prune, so we never delete a segment that the
         // last visible playlist still references.
         $this->pruneRetention($this->filesystem);
@@ -611,7 +626,9 @@ class PendingLiveHls
 
                 if ($number >= $this->next) {
                     $key = "{$this->directory}/{$name}";
+
                     $this->uploadSegment($this->filesystem, "{$this->workspace->path}/{$name}", $key);
+
                     $this->owned[$key] = $number;
                     $this->entries[] = [
                         'number' => $number,

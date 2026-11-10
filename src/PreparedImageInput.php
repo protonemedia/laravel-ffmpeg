@@ -87,7 +87,9 @@ class PreparedImageInput implements InputSource
         // URL images are always downloaded through Http, even when their descriptor
         // selected direct input, and the edits never touch an original file.
         $source = $workspace->stage($this->image, resource: true);
+
         $this->validate($source);
+
         $target = "{$workspace->path}/{$name}";
 
         if (! @copy($source, $target) || ! chmod($target, 0600)) {

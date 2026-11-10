@@ -146,6 +146,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
     public function duration(array $metadata, ?float $default): ?float
     {
         $item = $metadata[0];
+
         // The audio filter scales an initial offset, so audio-only sources may start later.
         PendingExport::assertZeroOrigins($item, 'Speed', audioOnlyOffset: true);
 

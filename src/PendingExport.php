@@ -280,6 +280,7 @@ class PendingExport implements Exportable
     public function addInput(Media $media): int
     {
         $this->assertMutable();
+
         $this->inputs[] = $media;
 
         if (! $this->outputDiskExplicit) {
@@ -425,7 +426,9 @@ class PendingExport implements Exportable
         }
 
         $output = new ExportOutput($path, config('filesystems.default'));
+
         $configure($output);
+
         $this->outputs[] = $output;
 
         return $this;
@@ -437,6 +440,7 @@ class PendingExport implements Exportable
     public function globalOptions(array $tokens): static
     {
         $this->assertMutable();
+
         $this->globalOptions = CommandCompiler::options([...$this->globalOptions, ...$tokens], 'global');
 
         return $this;
@@ -448,6 +452,7 @@ class PendingExport implements Exportable
     public function onProgress(callable $callback): static
     {
         $this->assertMutable();
+
         $this->progress = Closure::fromCallable($callback);
 
         return $this;
@@ -515,6 +520,7 @@ class PendingExport implements Exportable
             }
 
             ($this->reportProgress)(new Progress($this->phase));
+
             $result = $this->media->withInput(
                 fn (string $input, Workspace $workspace): string|ExportResult => $this->exportInWorkspace(
                     $workspace,
@@ -558,6 +564,7 @@ class PendingExport implements Exportable
         }
 
         $outputs = $this->configuredOutputs($path);
+
         $this->command(
             $outputs,
             collect($this->inputs)->keys()->map(fn (int|string $i): string => "[input:{$i}]")->all(),
@@ -579,10 +586,13 @@ class PendingExport implements Exportable
         $this->workspace = $workspace;
         [$paths, $this->redactions] = $this->stageInputs($workspace);
         $resources = $this->resourceNames($outputs);
+
         $this->stageResources($workspace, $resources);
 
         $this->phase = Progress::PROBING;
+
         ($this->reportProgress)(new Progress($this->phase));
+
         $metadata = $this->probeInputs($workspace, $resources);
         $expected = $this->expectedStreams($workspace, $outputs, $metadata);
         $outputPaths = $this->outputPaths($outputs, $workspace);
@@ -592,6 +602,7 @@ class PendingExport implements Exportable
         }
 
         $this->prepareOverlays($metadata);
+
         $duration = $this->progressDuration($outputs, $this->prepareEncoding($metadata));
         $this->phase = Progress::ENCODING;
         $command = $this->command($outputs, $paths, $outputPaths);
@@ -602,10 +613,13 @@ class PendingExport implements Exportable
         // passes, so we return to the encoding phase once the command is prepared.
         $command = $this->prepareCommand($workspace, $command, $outputPaths, $this->runAnalysis(...));
         $this->phase = Progress::ENCODING;
+
         $this->runEncodingPasses($command, $outputs, $outputPaths, $duration);
 
         $this->phase = Progress::VALIDATION;
+
         ($this->reportProgress)(new Progress($this->phase));
+
         $artifacts = $this->artifacts($outputs, $outputPaths);
         $sizes = $this->validateArtifacts($workspace, $artifacts, $outputs, $expected);
 
@@ -614,8 +628,11 @@ class PendingExport implements Exportable
         }
 
         $this->phase = Progress::PUBLICATION;
+
         ($this->reportProgress)(new Progress($this->phase));
+
         $files = $this->publishArtifacts($workspace->runner, $artifacts, $outputs, $sizes);
+
         $workspace->runner->check(Progress::PUBLICATION);
 
         return new ExportResult($files, $this->summaries);
@@ -645,7 +662,9 @@ class PendingExport implements Exportable
     protected function runAnalysis(array $command, string $failure): ProcessResult
     {
         $this->phase = Progress::ANALYSIS;
+
         ($this->reportProgress)(new Progress($this->phase));
+
         $process = $this->workspace->runner->run(
             $command,
             $this->workspace->path,
@@ -672,6 +691,7 @@ class PendingExport implements Exportable
 
         for ($pass = 1; $pass <= $totalPasses; $pass++) {
             ($this->reportProgress)(new Progress($this->phase, pass: $pass, totalPasses: $totalPasses));
+
             $passCommand = $command;
 
             if ($totalPasses === 2 && $pass === 1) {

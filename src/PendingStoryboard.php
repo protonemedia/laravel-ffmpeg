@@ -100,6 +100,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
 
         $this->interval = (int) round($every * 1000);
         $this->export = new PendingExport($media, $disk, $this, 'image');
+
         $this->export->map('0:V:0')->withoutMetadata(chapters: true)->video('mjpeg');
     }
 
@@ -133,6 +134,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         }
 
         $path = ImageOutput::sequenceDestination($path);
+
         $this->export->video(ImageOutput::codec($path));
 
         return $this->export->save($path);
@@ -187,6 +189,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         }
 
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
+
         $start = $this->export->clipSettings()['start'] ?? 0;
         $end = $this->duration === null ? '[end]' : CommandCompiler::timestamp($start + $this->duration / 1000000);
         $filter = 'trim=start='.CommandCompiler::timestamp($start).":end={$end},setpts=PTS-STARTPTS,"
@@ -204,6 +207,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         $sheets = $this->frames === null
             ? '[sheets]'
             : (string) (intdiv($this->frames - 1, $this->columns * $this->rows) + 1);
+
         array_splice($command, -1, 0, ['-f', 'image2', '-start_number', '1', '-frames:v', $sheets]);
 
         return $command;
@@ -267,6 +271,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     protected function thumbnailSize(string $path, ?array $expected): array
     {
         ImageOutput::validate($path, 'image');
+
         [$width, $height] = getimagesize($path);
 
         // We will remove the margins and padding to recover the size of one thumbnail,

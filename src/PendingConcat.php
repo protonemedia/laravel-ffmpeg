@@ -90,6 +90,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
             'contain' => $geometry->contain($width, $height),
         };
         $geometry->frameRate($frameRate);
+
         $this->videoConformance = [
             ...$geometry->outputConfiguration()['videoFilters'], 'setsar=1', 'setpts=PTS-STARTPTS',
         ];

@@ -22,6 +22,7 @@ trait ConfiguresOutputFilters
     {
         $this->assertOutputMutable();
         FilterGraph::validateExpression($expression);
+
         $this->videoFilters[] = $expression;
 
         return $this;
@@ -167,6 +168,7 @@ trait ConfiguresOutputFilters
         string $color = 'white',
     ): static {
         $this->assertOutputMutable();
+
         $this->videoFilters[] = ResourceFilter::drawText($text, $font, $size, $x, $y, $color);
 
         return $this;
@@ -178,6 +180,7 @@ trait ConfiguresOutputFilters
     public function burnSubtitles(Media $subtitles): static
     {
         $this->assertOutputMutable();
+
         $this->videoFilters[] = ResourceFilter::burnSubtitles($subtitles);
 
         return $this;
@@ -189,6 +192,7 @@ trait ConfiguresOutputFilters
     public function lut3d(Media $look): static
     {
         $this->assertOutputMutable();
+
         $this->videoFilters[] = ResourceFilter::lut3d($look);
 
         return $this;
@@ -211,6 +215,7 @@ trait ConfiguresOutputFilters
     {
         $this->assertOutputMutable();
         FilterGraph::validateExpression($expression);
+
         $this->audioFilters[] = $expression;
 
         return $this;

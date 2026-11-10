@@ -41,6 +41,7 @@ trait PackagesHlsSegments
         }
 
         $path = dirname($path)."/playlist-{$index}.m3u8";
+
         $this->writePlaylist($path, [
             '#EXTM3U',
             '#EXT-X-VERSION:3',
@@ -69,6 +70,7 @@ trait PackagesHlsSegments
             ['index' => $index, 'output' => $output, 'path' => $path, 'lines' => $lines],
             $encryption,
         );
+
         $this->ensureSegmentInventoryIsComplete($index, $path, $media);
 
         $destination = $output->destination()['path'];
@@ -94,6 +96,7 @@ trait PackagesHlsSegments
         $media['lines'][$target] = '#EXT-X-TARGETDURATION:'.max(1, (int) ceil($media['longest']));
 
         $this->writePlaylist($path, $this->withKeyTags($media['lines'], $media['keyTags']), $destination, $name);
+
         $this->variantFiles[$name][$destination] = true;
 
         return [$media['segments'], $info];
@@ -213,7 +216,9 @@ trait PackagesHlsSegments
 
         $name = array_keys($this->variants)[$index];
         $media['init'] = dirname($path)."/init-{$index}.mp4";
+
         $this->export->validateArtifact($media['init'], 'hls-init');
+
         $destination = $output->destination();
         $destination['path'] = $this->variantPaths[$name]['init']
             ?? (dirname($destination['path']) === '.' ? '' : dirname($destination['path']).'/').'init.mp4';
@@ -369,7 +374,9 @@ trait PackagesHlsSegments
     {
         $extension = $this->segmentExtension($this->isSubtitle($index));
         $actual = glob(dirname($path)."/segment-{$index}-*.{$extension}") ?: [];
+
         sort($actual);
+
         $initializations = collect(glob(dirname($path).'/init-*.mp4') ?: [])
             ->filter(fn (string $file): bool => (bool) preg_match('/\Ainit-'.$index.'(?:-|\.)/', basename($file)))
             ->values()

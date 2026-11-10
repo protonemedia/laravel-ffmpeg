@@ -147,6 +147,7 @@ class HlsPlaylist implements Responsable
     public function deleteAllFiles(callable $approve): static
     {
         $paths = [$this->path => true];
+
         $this->render(true, function (?string $target, string $uri) use (&$paths): void {
             $decoded = rawurldecode(parse_url($uri, PHP_URL_PATH) ?? '');
 
@@ -224,6 +225,7 @@ class HlsPlaylist implements Responsable
     protected function beginRender(bool $all, ?Closure $discover): void
     {
         $this->resetRender();
+
         $this->renderingAll = $all;
         $this->renderResolvers = $discover instanceof Closure ? [] : $this->resolvers;
         $this->discover = $discover;
@@ -357,6 +359,7 @@ class HlsPlaylist implements Responsable
     protected function referenceTarget(string $path, string $uri): ?string
     {
         $this->validateUri($uri);
+
         $target = null;
 
         if (! str_starts_with($uri, '/') && parse_url($uri, PHP_URL_SCHEME) === null) {
@@ -388,6 +391,7 @@ class HlsPlaylist implements Responsable
     protected function resolveUrl(Closure $resolver, ?string $target, string $path, string $uri): string
     {
         $url = $resolver($target, $path, $uri);
+
         $this->validateUri($url);
 
         return $url;
@@ -465,6 +469,7 @@ class HlsPlaylist implements Responsable
             $matches,
             PREG_SET_ORDER | PREG_OFFSET_CAPTURE,
         );
+
         $end = 0;
         $values = [];
 

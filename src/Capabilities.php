@@ -206,7 +206,9 @@ class Capabilities implements Arrayable, JsonSerializable
             'filters' => '/^\s+[TSC.]{2,3}\s+([a-zA-Z0-9_]+)\s+\S+\s+/m',
             default => '/^([a-zA-Z0-9_]+)\s*$/m',
         };
+
         preg_match_all($pattern, $output, $matches);
+
         $names = collect($matches[1])
             ->flatMap(fn (string $name): array => explode(',', $name))
             ->uniqueStrict()

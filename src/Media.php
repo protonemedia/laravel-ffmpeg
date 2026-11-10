@@ -390,6 +390,7 @@ class Media
 
         if (! $this->isProbeData($data)) {
             $data = $this->probe()->toArray();
+
             $cache->put($key, $data, $ttl);
         }
 
@@ -413,6 +414,7 @@ class Media
         ): ProcessResult {
             $runner = $workspace->runner;
             $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
+
             $runner->version($binary, 'ffmpeg', $workspace->path, Progress::ANALYSIS);
             $workspace->requireProtocols($binary, $this->protocolWhitelist(), Progress::ANALYSIS);
 
@@ -490,7 +492,9 @@ class Media
     public function probeInput(string $path, Workspace $workspace, ?string $selector = null): Metadata
     {
         $protocols = $this->protocolWhitelist();
+
         $workspace->requireProtocols(config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), $protocols);
+
         $data = $this->runProbe($workspace, $path, '[input]', $protocols,
             [...$this->probeOptions(), ...($selector === null ? [] : ['-select_streams', $selector])]);
 

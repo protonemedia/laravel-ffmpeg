@@ -83,6 +83,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         }
 
         $this->export = new PendingExport($source, $disk, $this);
+
         $this->export->map("0:a:{$audio}")->audio('aac');
     }
 
@@ -231,11 +232,14 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         // reopen this private lossless file, never a mutable remote or local source.
         $analyze([...$prefix, '-map', $command[$mapIndex + 1], '-vn', '-af', $preprocessing,
             '-map_metadata', '0', '-c:a', 'pcm_f64le', '-f', 'nut', $prepared], 'Loudness analysis failed.');
+
         $measure = [
             $command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1', '-i', $prepared,
             '-af', $this->loudnorm('loudness-measure.json'), '-f', 'null', '-',
         ];
+
         $analyze($measure, 'Loudness analysis failed.');
+
         $this->measurement = $this->readStats("{$workspace->path}/loudness-measure.json", Progress::ANALYSIS);
         $normalizer = $this->loudnorm('loudness-final.json');
 

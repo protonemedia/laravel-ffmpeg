@@ -256,12 +256,15 @@ class PendingProbe
     {
         $runner = $workspace->runner;
         $binary = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
+
         // The runner's operation budget is this query's timeout.
         $runner->version($binary, 'ffprobe', $workspace->path);
 
         // This is the same staged source and probe arguments used by Media::probe().
         $protocols = $this->media->protocolWhitelist();
+
         $workspace->requireProtocols($binary, $protocols);
+
         $command = $this->command($binary, $protocols, $path);
         $redactions = [$path => '[input]'] + $this->media->redactions();
         $result = $runner->run($command, $workspace->path, $redactions, $this->outputLimit, timeout: $this->timeout);

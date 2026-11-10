@@ -77,6 +77,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         }
 
         $this->export = new PendingExport($source, $disk, $this);
+
         $this->export->addInput($added);
 
         // Adding an input resets the destination to the default disk, so we will set the
@@ -106,6 +107,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     public function loop(bool $loop = true): static
     {
         $this->export->assertOutputMutable();
+
         $this->loop = $loop;
 
         return $this;
@@ -232,6 +234,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
 
         if ($this->loop) {
             $inputs = array_keys($command, '-i', true);
+
             array_splice($command, $inputs[1], 0, ['-stream_loop', '-1']);
         }
 
@@ -264,6 +267,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         }
 
         PendingExport::assertZeroOrigins($source, 'Audio mixing', audioOnlyOffset: true);
+
         $audio = $source->audio();
 
         if ($source->hasVideo() && $audio !== null
@@ -298,8 +302,11 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
             $inputs = array_keys($command, '-i', true);
             $protocols = array_keys($command, '-protocol_whitelist', true);
             $options = array_slice($command, $protocols[1], $inputs[1] + 2 - $protocols[1]);
+
             array_splice($options, array_search('-stream_loop', $options, true), 2);
+
             $prepared = 'audio-mix-loop.wav';
+
             $analyze([
                 $command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1',
                 ...$options, '-map', '0:a:0', '-af',
@@ -333,7 +340,9 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
 
         $source = $workspace->probe($this->source);
         $graph = $this->mixGraph($source->hasAudio(), $source->duration());
+
         FilterGraph::validate($graph, 2, ['mixed_audio']);
+
         $command[array_search('-filter_complex', $command, true) + 1] = $graph;
         $command[array_search('-t', $command, true) + 1] = CommandCompiler::timestamp($source->duration());
 
