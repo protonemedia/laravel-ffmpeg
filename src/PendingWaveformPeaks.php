@@ -208,11 +208,9 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         // frames. Using -ac alone would remix any layout that is not FFmpeg's default.
         $channels = $this->mixMono ? 1 : ($this->inputChannels ?: 1);
         if ($this->mixMono && $this->inputChannels > 0) {
-            $terms = array_map(
-                fn ($i): string => sprintf('%.17g', 1 / $this->inputChannels)."*c{$i}",
-                range(0, $this->inputChannels - 1),
-            );
-            $pan = 'pan=mono|c0='.implode('+', $terms);
+            $pan = 'pan=mono|c0='.collect(range(0, $this->inputChannels - 1))
+                ->map(fn ($i): string => sprintf('%.17g', 1 / $this->inputChannels)."*c{$i}")
+                ->implode('+');
             $index = array_search('-filter:a', $command, true);
             if ($index === false) {
                 array_splice($command, -1, 0, ['-filter:a', $pan]);

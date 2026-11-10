@@ -443,7 +443,7 @@ class PendingExport implements Exportable
     {
         return $this->command(
             $this->configuredOutputs(),
-            array_map(fn (int|string $i): string => "[input:{$i}]", array_keys($this->inputs)),
+            collect($this->inputs)->keys()->map(fn (int|string $i): string => "[input:{$i}]")->all(),
         );
     }
 
@@ -990,11 +990,10 @@ class PendingExport implements Exportable
     {
         $compiledInputs = [];
         // The demuxer repeats a looping mark, so a GIF loops for the whole video whatever loop count it embeds.
-        $looping = array_column(
-            array_filter($this->watermarks, fn (array $mark): bool => $mark['loop']),
-            'loop',
-            'input',
-        );
+        $looping = collect($this->watermarks)
+            ->filter(fn (array $mark): bool => $mark['loop'])
+            ->pluck('loop', 'input')
+            ->all();
 
         foreach ($this->inputs as $index => $input) {
             $compiledInputs[] = [
@@ -1086,7 +1085,10 @@ class PendingExport implements Exportable
         }
 
         $outputs = $this->configuredOutputs($path);
-        $this->command($outputs, array_map(fn (int|string $i): string => "[input:{$i}]", array_keys($this->inputs)));
+        $this->command(
+            $outputs,
+            collect($this->inputs)->keys()->map(fn (int|string $i): string => "[input:{$i}]")->all(),
+        );
         $this->validateDestinations($outputs);
 
         foreach ($outputs as $output) {
@@ -1265,10 +1267,9 @@ class PendingExport implements Exportable
                 $tracks = $output->outputConfiguration()[$key];
                 if ($tracks !== []
                     && ! in_array(null, $expected[$index], true)
-                    && max(array_keys($tracks)) >= count(array_filter(
-                        $expected[$index],
-                        fn ($selected): bool => $selected === $type,
-                    ))) {
+                    && max(array_keys($tracks)) >= collect($expected[$index])
+                        ->filter(fn ($selected): bool => $selected === $type)
+                        ->count()) {
                     throw MediaException::probing(
                         ucfirst($type)." track settings require existing output {$type} tracks.",
                         'mapping',
@@ -1472,10 +1473,9 @@ class PendingExport implements Exportable
 
         foreach (['video' => 'videoStreams', 'audio' => 'audioStreams'] as $type => $key) {
             if ($settings[$key] !== []
-                && max(array_keys($settings[$key])) >= count(array_filter(
-                    $actual,
-                    fn ($selected): bool => $selected === $type,
-                ))) {
+                && max(array_keys($settings[$key])) >= collect($actual)
+                    ->filter(fn ($selected): bool => $selected === $type)
+                    ->count()) {
                 throw new MediaException(
                     ucfirst($type)." track settings require existing encoded output {$type} tracks.",
                     $this->phase,
@@ -1656,11 +1656,11 @@ class PendingExport implements Exportable
      */
     protected function outputPaths(array $outputs, Workspace $workspace): array
     {
-        $paths = array_map(function (int|string $index) use ($outputs, $workspace): string {
+        $paths = collect($outputs)->keys()->map(function (int|string $index) use ($outputs, $workspace): string {
             $extension = pathinfo($outputs[$index]->destination()['path'], PATHINFO_EXTENSION);
 
             return "{$workspace->path}/output-{$index}".($extension === '' ? '' : ".{$extension}");
-        }, array_keys($outputs));
+        })->all();
 
         return $this->operation instanceof PackagesArtifacts
             ? $this->operation->outputPaths($paths, $outputs, $workspace)
@@ -1672,9 +1672,9 @@ class PendingExport implements Exportable
      */
     protected function artifacts(array $outputs, array $paths): array
     {
-        $artifacts = array_map(fn (int|string $index): array => [
+        $artifacts = collect($outputs)->keys()->map(fn (int|string $index): array => [
             'path' => $paths[$index], 'output' => $index, 'destination' => $outputs[$index]->destination(),
-        ], array_keys($outputs));
+        ])->all();
 
         return $this->operation instanceof PackagesArtifacts
             ? $this->operation->artifacts($artifacts, $outputs, $paths)
@@ -1865,13 +1865,11 @@ class PendingExport implements Exportable
      */
     protected function validateResources(Workspace $workspace, ProcessRunner $runner, array $resources): void
     {
-        $required = [];
-
-        foreach ($resources as $resource) {
-            if ($resource['type'] !== 'file') {
-                $required[] = $resource['type'] === 'text' ? 'drawtext' : 'subtitles';
-            }
-        }
+        $required = collect($resources)
+            ->reject(fn (array $resource): bool => $resource['type'] === 'file')
+            ->map(fn (array $resource): string => $resource['type'] === 'text' ? 'drawtext' : 'subtitles')
+            ->unique()
+            ->all();
 
         if ($required !== []) {
             $filters = $runner->run(
@@ -1879,7 +1877,7 @@ class PendingExport implements Exportable
                 $workspace->path,
             );
 
-            foreach (array_unique($required) as $filter) {
+            foreach ($required as $filter) {
                 if ($filters->exitCode !== 0
                     || ! preg_match('/^\s*\S+\s+'.preg_quote($filter, '/').'\s/m', $filters->output)) {
                     throw MediaException::probing("The FFmpeg build requires the {$filter} filter.", 'capability');
@@ -1979,7 +1977,10 @@ class PendingExport implements Exportable
             $input = $map['input'];
 
             if ($input === null) {
-                $matches = array_keys(array_filter($this->inputs, fn ($media): bool => $media->identity() === $source));
+                $matches = collect($this->inputs)
+                    ->filter(fn ($media): bool => $media->identity() === $source)
+                    ->keys()
+                    ->all();
 
                 if (count($matches) !== 1) {
                     throw new InvalidArgumentException(
@@ -2035,10 +2036,10 @@ class PendingExport implements Exportable
                 $identity = "{$input}:{$stream->get('index')}";
 
                 if ($exclude) {
-                    $selected = array_values(array_filter(
-                        $selected,
-                        fn (array $item): bool => $item['identity'] !== $identity,
-                    ));
+                    $selected = collect($selected)
+                        ->filter(fn (array $item): bool => $item['identity'] !== $identity)
+                        ->values()
+                        ->all();
                 } else {
                     $selected[] = ['identity' => $identity, 'type' => $stream->get('codec_type')];
                 }

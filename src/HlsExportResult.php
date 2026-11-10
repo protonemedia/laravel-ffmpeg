@@ -101,7 +101,7 @@ class HlsExportResult implements Result
         }
 
         $files = $this->files()->filter(fn ($file): bool => isset($this->variants[$name][$file->path]))->values();
-        $references = array_intersect_key($this->keyReferences, array_flip($files->pluck('path')->all()));
+        $references = collect($this->keyReferences)->only($files->pluck('path'))->all();
         $needed = [];
         foreach ($references as $urls) {
             foreach ($urls as $key) {

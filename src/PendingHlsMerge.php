@@ -470,17 +470,17 @@ class PendingHlsMerge
             provenance: $this->provenance,
         );
         $this->sizes[HlsPresentation::id($this->destinationDisk, $destination)] = strlen($text);
-        $generated = array_map(
-            fn (array $file): GeneratedFile => new GeneratedFile(
+        $generated = collect($this->files)
+            ->values()
+            ->map(fn (array $file): GeneratedFile => new GeneratedFile(
                 Storage::disk($file['disk']),
                 $file['disk'],
                 $file['path'],
                 $this->sizes[HlsPresentation::id($file['disk'], $file['path'])],
                 $file['role'],
                 $file === $master,
-            ),
-            array_values($this->files),
-        );
+            ))
+            ->all();
 
         return [$presentation, $generated];
     }

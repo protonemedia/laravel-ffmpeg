@@ -217,9 +217,9 @@ trait ConfiguresOutput
             throw new InvalidArgumentException('Invalid encoder preset.');
         }
 
-        $this->video = array_replace($this->video, array_filter([
+        $this->video = array_replace($this->video, collect([
             'codec' => $codec, 'bitrate' => $bitrate, 'crf' => $crf, 'preset' => $preset,
-        ], fn ($value): bool => $value !== null));
+        ])->whereNotNull()->all());
 
         return $this;
     }
@@ -232,9 +232,9 @@ trait ConfiguresOutput
         $this->assertOutputMutable();
         $this->codec($codec);
         $this->bitrate($bitrate);
-        $this->audio = array_replace($this->audio, array_filter([
+        $this->audio = array_replace($this->audio, collect([
             'codec' => $codec, 'bitrate' => $bitrate,
-        ], fn ($value): bool => $value !== null));
+        ])->whereNotNull()->all());
 
         return $this;
     }
@@ -600,7 +600,7 @@ trait ConfiguresOutput
      */
     public function resourceFilters(): array
     {
-        return array_values(array_filter($this->videoFilters, fn ($filter): bool => $filter instanceof ResourceFilter));
+        return collect($this->videoFilters)->whereInstanceOf(ResourceFilter::class)->values()->all();
     }
 
     /**
@@ -1291,9 +1291,9 @@ trait ConfiguresOutput
             return $this->maps;
         }
 
-        return array_values(array_filter([
+        return collect([
             $this->omitVideo ? null : '0:V:0?', $this->omitAudio ? null : '0:a:0?',
-        ]));
+        ])->filter()->values()->all();
     }
 
     /**
@@ -1377,10 +1377,7 @@ trait ConfiguresOutput
             } elseif (in_array($key, ['videoFilters', 'audioFilters', 'streamMetadata', 'dispositions'], true)) {
                 $shared[$key] = [...$shared[$key], ...$value];
             } elseif ($key === 'outputOptions') {
-                $overrides = [];
-                for ($i = 0; $i < count($value); $i += 2) {
-                    $overrides[] = $value[$i];
-                }
+                $overrides = collect($value)->nth(2)->all();
 
                 $tokens = $shared[$key];
                 $shared[$key] = [];

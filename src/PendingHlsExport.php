@@ -639,7 +639,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             );
         }
 
-        $remaining = array_diff(array_keys($this->variants), array_keys($this->renditions));
+        $remaining = collect($this->variants)->diffKeys($this->renditions)->keys()->all();
         foreach ($this->renditions as $rendition) {
             if (! array_any(
                 $remaining,
@@ -684,16 +684,16 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             }
 
             $part = new ExportPlan($this)->restore();
-            $part->variants = array_intersect_key($part->variants, array_flip($members));
-            $part->renditions = array_intersect_key($part->renditions, array_flip($members));
+            $part->variants = collect($part->variants)->only($members)->all();
+            $part->renditions = collect($part->renditions)->only($members)->all();
             $directory = "{$prefix}/parts/".count($parts);
-            $part->variantPaths = array_map(
-                fn ($paths): array => array_map(
+            $part->variantPaths = collect($part->variantPaths)
+                ->only($members)
+                ->map(fn ($paths): array => array_map(
                     fn ($value): ?string => $value === null ? null : "{$directory}/custom/{$value}",
                     $paths,
-                ),
-                array_intersect_key($part->variantPaths, array_flip($members)),
-            );
+                ))
+                ->all();
             $parts[] = [$part, "{$directory}/master.m3u8"];
         }
 
@@ -854,10 +854,11 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
      */
     public function twoPassOutputs(array $default, array $outputs): array
     {
-        return array_values(array_filter(
-            array_keys(array_values($this->variants)),
-            fn (int $index): bool => ! isset($this->renditions[array_keys($this->variants)[$index]]),
-        ));
+        return collect($this->variants)
+            ->keys()
+            ->reject(fn (int|string $name): bool => isset($this->renditions[$name]))
+            ->keys()
+            ->all();
     }
 
     /**
@@ -1301,10 +1302,10 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         $extension = $this->segmentExtension($this->isSubtitle($index));
         $actual = glob(dirname($path)."/segment-{$index}-*.{$extension}") ?: [];
         sort($actual);
-        $initializations = array_values(array_filter(
-            glob(dirname($path).'/init-*.mp4') ?: [],
-            fn (string $file): bool => (bool) preg_match('/\Ainit-'.$index.'(?:-|\.)/', basename($file)),
-        ));
+        $initializations = collect(glob(dirname($path).'/init-*.mp4') ?: [])
+            ->filter(fn (string $file): bool => (bool) preg_match('/\Ainit-'.$index.'(?:-|\.)/', basename($file)))
+            ->values()
+            ->all();
         if ($media['count'] === 0 || $media['duration'] !== null || $actual !== $media['owned']
             || $initializations !== ($media['init'] === null ? [] : [$media['init']])) {
             throw MediaException::validation('The HLS segment inventory is incomplete.', 'artifact');
@@ -1451,10 +1452,10 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             }
 
             $groups .= ",{$type}=\"{$group}\"";
-            $members = array_keys(array_filter(
-                $this->renditions,
-                fn (array $item): bool => $item['type'] === $type && $item['group'] === $group,
-            ));
+            $members = collect($this->renditions)
+                ->filter(fn (array $item): bool => $item['type'] === $type && $item['group'] === $group)
+                ->keys()
+                ->all();
             $info['peak'] += max(array_map(fn (int|string $member): int => $streamInfo[$member]['peak'], $members));
             $info['average'] += max(array_map(
                 fn (int|string $member): int => $streamInfo[$member]['average'],

@@ -138,7 +138,7 @@ class Capabilities implements Arrayable, JsonSerializable
                 );
             }
 
-            $absent = array_values(array_diff($names, $this->available($category)));
+            $absent = collect($names)->diff($this->available($category))->values()->all();
             if ($absent !== []) {
                 $missing[$category] = $absent;
             }
@@ -200,13 +200,12 @@ class Capabilities implements Arrayable, JsonSerializable
             default => '/^([a-zA-Z0-9_]+)\s*$/m',
         };
         preg_match_all($pattern, $output, $matches);
-        $names = [];
-        foreach ($matches[1] as $name) {
-            array_push($names, ...explode(',', $name));
-        }
-
-        $names = array_values(array_unique($names));
-        sort($names);
+        $names = collect($matches[1])
+            ->flatMap(fn (string $name): array => explode(',', $name))
+            ->uniqueStrict()
+            ->sort()
+            ->values()
+            ->all();
         if ($names === [] && $kind !== 'hwaccels') {
             throw MediaException::probing('Empty media capability listing.', 'capability');
         }
@@ -230,8 +229,7 @@ class Capabilities implements Arrayable, JsonSerializable
                 throw MediaException::probing('Invalid media protocol listing.', 'capability');
             }
 
-            sort($names);
-            $protocols[$direction] = array_values(array_unique($names));
+            $protocols[$direction] = collect($names)->sort()->uniqueStrict()->values()->all();
         }
 
         return $protocols;

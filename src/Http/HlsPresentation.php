@@ -133,7 +133,7 @@ class HlsPresentation
         }
 
         $files = array_intersect_key($this->files, $ids);
-        $keys = array_intersect_key($this->keys, array_flip(array_column($files, 'path')));
+        $keys = collect($this->keys)->only(array_column($files, 'path'))->all();
         foreach ($keys as $references) {
             foreach ($references as $key) {
                 $id = self::id($key['disk'], $key['path']);
@@ -144,7 +144,7 @@ class HlsPresentation
         }
 
         return new self(array_values($files), $this->playlist, $keys, $variants, true,
-            array_intersect_key($this->provenance, array_flip(array_column($files, 'path'))));
+            collect($this->provenance)->only(array_column($files, 'path'))->all());
     }
 
     /**

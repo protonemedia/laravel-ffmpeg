@@ -756,29 +756,30 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     protected function writeSharedHlsMaster(array $info, int $master, ExportOutput $output, string $path): array
     {
         $lines = ['#EXTM3U', '#EXT-X-VERSION:7'];
-        $audio = array_filter($info, fn (array $item): bool => $item['type'] === 'audio');
+        $audio = collect($info)->filter(fn (array $item): bool => $item['type'] === 'audio');
         foreach ($audio as $name => $item) {
             $lines[] = "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"{$name}\""
-                .',DEFAULT='.(array_key_first($audio) === $name ? 'YES' : 'NO')
+                .',DEFAULT='.($audio->keys()->first() === $name ? 'YES' : 'NO')
                 .",AUTOSELECT=YES,URI=\"{$name}/index.m3u8\"";
         }
 
         foreach ($info as $name => $item) {
-            if ($item['type'] === 'audio' && count($info) !== count($audio)) {
+            if ($item['type'] === 'audio' && count($info) !== $audio->count()) {
                 continue;
             }
 
             $bandwidth = (int) $item['bandwidth']
-                + ($item['type'] === 'video' && $audio !== [] ? max(array_column($audio, 'bandwidth')) : 0);
+                + ($item['type'] === 'video' && $audio->isNotEmpty() ? $audio->max('bandwidth') : 0);
             $average = $item['average']
-                + ($item['type'] === 'video' && $audio !== [] ? max(array_column($audio, 'average')) : 0);
+                + ($item['type'] === 'video' && $audio->isNotEmpty() ? $audio->max('average') : 0);
             $codecs = array_unique([
                 $item['codecs'],
-                ...($item['type'] === 'video' ? array_column($audio, 'codecs') : []),
+                ...($item['type'] === 'video' ? $audio->pluck('codecs')->all() : []),
             ]);
             $video = '';
             if ($item['type'] === 'video') {
-                $video = ",RESOLUTION={$item['width']}x{$item['height']}".($audio !== [] ? ',AUDIO="audio"' : '');
+                $video = ",RESOLUTION={$item['width']}x{$item['height']}"
+                    .($audio->isNotEmpty() ? ',AUDIO="audio"' : '');
             }
 
             $lines[] = "#EXT-X-STREAM-INF:BANDWIDTH={$bandwidth},AVERAGE-BANDWIDTH={$average}"

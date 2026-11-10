@@ -35,13 +35,14 @@ class DoctorCommand extends Command
     {
         try {
             $capabilities = new Capabilities;
-            $requirements = [];
-            foreach ([
+            $options = [
                 'encoder' => 'encoders', 'muxer' => 'muxers', 'filter' => 'filters',
                 'protocol' => 'input_protocols', 'bsf' => 'bitstream_filters', 'hwaccel' => 'hardware_accelerators',
-            ] as $option => $category) {
-                $requirements[$category] = $this->option($option);
-            }
+            ];
+
+            $requirements = collect($options)
+                ->mapWithKeys(fn (string $category, string $option): array => [$category => $this->option($option)])
+                ->all();
 
             $requirements['ffprobe_input_protocols'] = $this->option('protocol');
             $missing = $capabilities->missing($requirements);

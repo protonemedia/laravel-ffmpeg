@@ -144,14 +144,15 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
 
         // We conservatively validate every source audio track, including unselected tracks,
         // rather than guessing how arbitrary stream selectors resolve.
-        foreach ($item->audioStreams() as $stream) {
+        if ($item->audioStreams()->contains(function ($stream): bool {
             $start = $stream->get('start_time');
-            if (! is_numeric($start) || ! is_finite((float) $start) || (float) $start < 0) {
-                throw MediaException::probing(
-                    'Speed requires nonnegative audio origins on all source tracks.',
-                    'metadata',
-                );
-            }
+
+            return ! is_numeric($start) || ! is_finite((float) $start) || (float) $start < 0;
+        })) {
+            throw MediaException::probing(
+                'Speed requires nonnegative audio origins on all source tracks.',
+                'metadata',
+            );
         }
 
         $settings = $this->export->outputConfiguration();
