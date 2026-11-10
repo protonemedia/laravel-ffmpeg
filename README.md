@@ -21,7 +21,7 @@ $result = FFMpeg::open('lessons/original.mp4')
 You may run an export immediately or [dispatch it to a queue](#queue-conversions), and each completed export lists its generated files, including playlists, segments, and keys.
 
 > [!IMPORTANT]
-> Version 9 is in development; these examples follow the `9.x` branch, not a published release. It replaces PHP-FFMpeg and removes its format and filter objects, so consult the [upgrade guide](UPGRADING.md) when upgrading.
+> Version 9 is in development; these examples follow the `9.x` branch, not a published release. It replaces PHP-FFMpeg and removes its format and filter objects, so consult the [upgrade guide](UPGRADE.md) when upgrading.
 
 - [Getting Started](#getting-started)
     - [Installation](#installation)
