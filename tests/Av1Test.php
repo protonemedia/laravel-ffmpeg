@@ -131,7 +131,9 @@ class Av1Test extends TestCase
     {
         $media = $this->source();
 
-        $result = $media->hls(segmentDuration: 0.5)
+        // FFmpeg only measures a variant's bandwidth from segments longer than half a second,
+        // and without it the variant playlist has no stream info for the codec attribute.
+        $result = $media->hls(segmentDuration: 1)
             ->fmp4()
             ->variant('small', fn (HlsVariant $variant) => $variant
                 ->resize(width: 160)
