@@ -142,7 +142,7 @@ trait ConfiguresEncoders
      */
     protected function codec(?string $codec): void
     {
-        if ($codec !== null && ! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
+        if ($codec !== null && ! preg_match('/^[a-zA-Z0-9_][a-zA-Z0-9_-]*$/D', $codec)) {
             throw new InvalidArgumentException('Invalid FFmpeg encoder name.');
         }
     }

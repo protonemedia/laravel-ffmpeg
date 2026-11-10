@@ -20,7 +20,7 @@ class VideoStreamSettings
      */
     public function codec(string $codec): static
     {
-        if (! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
+        if (! preg_match('/^[a-zA-Z0-9_][a-zA-Z0-9_-]*$/D', $codec)) {
             throw new InvalidArgumentException('Invalid FFmpeg encoder name.');
         }
 
