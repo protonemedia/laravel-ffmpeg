@@ -178,7 +178,7 @@ class DashTest extends TestCase
         $this->assertNotContains('dash-manifest', array_column($result->playback()->toArray()['files'], 'role'));
     }
 
-    public function test_ordinary_queue_job_serialization_runs_without_generating_hls_unless_requested(): void
+    public function test_queued_jobs_do_not_generate_hls_by_default(): void
     {
         $export = $this->export($this->source());
         $job = unserialize(serialize($export->queued()->job('queued/manifest.mpd')));
@@ -187,6 +187,11 @@ class DashTest extends TestCase
         $this->assertFalse(Storage::disk('local')->exists('queued/master.m3u8'));
         $this->decode(Storage::disk('local')->path('queued/manifest.mpd'), ['-map', '0']);
         Event::assertDispatched(Events\QueuedExportCompleted::class, fn ($event) => $event->playback === null);
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_queued_jobs_generate_shared_hls_when_requested(): void
+    {
         unserialize(serialize($this->export($this->source())->sharedHls()->queued()->job('shared/manifest.mpd')))->handle();
         Event::assertDispatched(Events\QueuedExportCompleted::class, fn ($event) => $event->playback !== null
             && HlsPresentation::fromArray($event->playback)->file()['path'] === 'shared/master.m3u8');

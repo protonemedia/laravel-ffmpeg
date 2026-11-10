@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\WorkerOptions;
 use Illuminate\Support\Facades\Bus;
@@ -25,6 +26,11 @@ use RuntimeException;
 #[RequiresEnv('FFMPEG_9_FFPROBE')]
 class QueueTest extends TestCase
 {
+    /**
+     * The directory holding the source video shared by every test in the class.
+     */
+    protected static ?string $fixtures = null;
+
     protected array $completed = [];
 
     protected array $errors = [];
@@ -67,10 +73,18 @@ class QueueTest extends TestCase
         });
         $disk = Storage::disk('queued');
         $disk->makeDirectory('');
-        $result = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=96x64:rate=10:duration=1.6',
-            '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1.6',
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-threads', '1', $disk->path('source.mp4')]);
-        $this->assertProcessSucceeded($result);
+        copy($this->sourceFixture($ffmpeg), $disk->path('source.mp4'));
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        if (static::$fixtures !== null) {
+            (new Filesystem)->deleteDirectory(static::$fixtures);
+
+            static::$fixtures = null;
+        }
+
+        parent::tearDownAfterClass();
     }
 
     protected function work(): void
@@ -81,6 +95,30 @@ class QueueTest extends TestCase
     protected function source()
     {
         return FFMpeg::disk('queued')->open('source.mp4');
+    }
+
+    /**
+     * Get the path of the source video, encoding it the first time a test needs it.
+     */
+    protected function sourceFixture(string $ffmpeg): string
+    {
+        // Every test converts the same short clip, so we encode it once per class
+        // and copy it onto each test's disk. The directory is removed once every
+        // test in the class has finished.
+        static::$fixtures ??= sys_get_temp_dir().'/laravel-ffmpeg-fixtures-'.bin2hex(random_bytes(8));
+
+        if (! is_file($path = static::$fixtures.'/source.mp4')) {
+            if (! is_dir(static::$fixtures)) {
+                mkdir(static::$fixtures, 0700);
+            }
+
+            $result = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=96x64:rate=10:duration=1.6',
+                '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1.6',
+                '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-threads', '1', $path]);
+            $this->assertProcessSucceeded($result);
+        }
+
+        return $path;
     }
 
     public function test_fluent_dispatch_serializes_a_snapshot_and_runs_callbacks_middleware_retries_and_chains(): void
@@ -188,7 +226,7 @@ class QueueTest extends TestCase
         $this->assertNotNull(DB::table('job_batches')->sole()->cancelled_at);
     }
 
-    public function test_native_batches_can_cancel_queued_conversions_before_they_start(): void
+    public function test_native_batches_run_queued_conversions(): void
     {
         $bitmap = imagecreatetruecolor(8, 8);
         imagefill($bitmap, 0, 0, imagecolorallocate($bitmap, 255, 0, 0));
@@ -197,6 +235,7 @@ class QueueTest extends TestCase
         Storage::disk('queued')->put('logo.png', ob_get_clean());
         $hash = hash('sha256', Storage::disk('queued')->get('logo.png'));
         $logo = FFMpeg::disk('queued')->open('logo.png');
+
         Bus::batch([
             $this->source()->frame(0.5)->queued(connection: 'database', queue: 'media')->job('preview.jpg'),
             $this->source()->export()->queued(connection: 'database', queue: 'media')->job('ready.mp4'),
@@ -207,6 +246,7 @@ class QueueTest extends TestCase
         $this->work();
         $this->work();
         $this->work();
+
         $this->assertSame([96, 64], array_slice(getimagesize(Storage::disk('queued')->path('preview.jpg')), 0, 2));
         $this->assertSame(96, FFMpeg::disk('queued')->open('ready.mp4')->probe()->video()->get('width'));
         // The recorded edit survives the queue: the red mark in the bottom-right corner is gray.
@@ -216,21 +256,27 @@ class QueueTest extends TestCase
         $this->assertLessThan(150, $pixel['red'], json_encode($pixel));
         $this->assertSame($hash, hash('sha256', Storage::disk('queued')->get('logo.png')));
         $this->assertCount(3, $this->completed);
-        $this->completed = [];
+        $this->assertSame([], $this->errors);
+    }
+
+    public function test_native_batches_can_cancel_queued_conversions_before_they_start(): void
+    {
         $batch = Bus::batch([
             $this->source()->frame(0.5)->queued(connection: 'database', queue: 'media')->job('frame.jpg'),
             $this->source()->export()->queued(connection: 'database', queue: 'media')->job('copy.mp4'),
         ])->onConnection('database')->onQueue('media')->dispatch();
+
         $batch->cancel();
         $this->work();
         $this->work();
+
         $this->assertFalse(Storage::disk('queued')->exists('frame.jpg'));
         $this->assertFalse(Storage::disk('queued')->exists('copy.mp4'));
         $this->assertCount(0, $this->completed);
         $this->assertSame([], $this->errors);
     }
 
-    public function test_cancellation_during_encoding_and_before_finalization_prevents_publication(): void
+    public function test_cancellation_during_encoding_prevents_publication(): void
     {
         Bus::batch([
             $this->source()->export()->video('libx264')->onProgress(static function ($progress) {
@@ -242,12 +288,18 @@ class QueueTest extends TestCase
                 }
             })->queued(connection: 'database', queue: 'media')->job('cancelled.mp4'),
         ])->onConnection('database')->onQueue('media')->dispatch();
+
         $this->work();
+
         $this->assertFalse(Storage::disk('queued')->exists('cancelled.mp4'));
         $this->assertFalse(Storage::disk('queued')->exists('progress-after-cancellation'));
         $this->assertCount(1, $this->errors);
         $this->assertInstanceOf(ExportCancelled::class, $this->errors[0]);
+        $this->assertWorkspacesAreCleanedUp();
+    }
 
+    public function test_cancellation_before_parallel_finalization_prevents_publication(): void
+    {
         $queued = $this->source()->hls(segmentDuration: 0.5)->video(bitrate: '100k', preset: 'ultrafast')
             ->variant('small', fn ($v) => $v->resize(width: 48))
             ->variant('large', fn ($v) => $v->resize(width: 96))
@@ -256,14 +308,16 @@ class QueueTest extends TestCase
         $this->work();
         $this->work();
         $this->work();
+
         $batch = DB::table('job_batches')->where('name', 'FFmpeg '.$queued->id)->sole();
         Bus::findBatch($batch->id)->cancel();
         $this->work();
+
         $this->assertSame([], Storage::disk('queued')->allFiles('cancelled'));
         $this->assertFalse(Storage::disk('queued')->exists('follow-up'));
         $this->assertCount(0, $this->completed);
-        $this->assertCount(2, $this->errors);
-        $this->assertInstanceOf(ExportCancelled::class, $this->errors[1]);
+        $this->assertCount(1, $this->errors);
+        $this->assertInstanceOf(ExportCancelled::class, $this->errors[0]);
         $this->assertWorkspacesAreCleanedUp();
     }
 

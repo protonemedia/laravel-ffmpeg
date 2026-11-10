@@ -104,14 +104,19 @@ class LiveHlsTest extends TestCase
         $this->assertStringNotContainsString('#EXT-X-ENDLIST', $disk->get('live/index.m3u8'));
     }
 
-    public function test_clean_eof_finishes_but_reconnects_keep_numbers_and_insert_discontinuities(): void
+    public function test_clean_eof_finishes_the_playlist(): void
+    {
+        $disk = Storage::disk('local');
+        $complete = (new PendingLiveHls($this->source(1.2), $disk, 0.4, 3))->run('finite');
+        $this->assertSame('completed', $complete->status);
+        $this->assertStringContainsString('#EXT-X-ENDLIST', $disk->get($complete->playlist));
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
+    }
+
+    public function test_reconnects_keep_numbers_and_insert_discontinuities(): void
     {
         $source = $this->source(1.2);
         $disk = Storage::disk('local');
-        $complete = (new PendingLiveHls($source, $disk, 0.4, 3))->run('finite');
-        $this->assertSame('completed', $complete->status);
-        $this->assertStringContainsString('#EXT-X-ENDLIST', $disk->get($complete->playlist));
-
         $observed = false;
         $live = (new PendingLiveHls($source, $disk, 0.4, 3))->retry(1, 0, reconnectOnEof: true);
         $live->onPublish(function (LiveHlsResult $snapshot) use ($disk, $live, &$observed): void {
@@ -166,7 +171,7 @@ class LiveHlsTest extends TestCase
         $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
-    public function test_reconnect_can_recover_a_failed_source_and_backoff_remains_cancellable(): void
+    public function test_reconnect_can_recover_a_failed_source(): void
     {
         $this->source(1.2);
         $disk = Storage::disk('local');
@@ -191,7 +196,12 @@ class LiveHlsTest extends TestCase
         $this->assertSame('completed', $result->status);
         $this->assertGreaterThanOrEqual(2, $result->attempts);
         $this->assertGreaterThan(0, $result->publishedSegments);
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
+    }
 
+    public function test_retry_backoff_remains_cancellable(): void
+    {
+        $disk = Storage::disk('local');
         $disk->put('broken.ts', 'source failure');
         $began = hrtime(true);
         $calls = 0;
@@ -250,15 +260,20 @@ class LiveHlsTest extends TestCase
         $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
-    public function test_total_timeout_and_pre_start_cancellation_have_explicit_partial_results(): void
+    public function test_total_timeout_returns_a_partial_result(): void
     {
-        $source = $this->source();
         $disk = Storage::disk('local');
-        $result = (new PendingLiveHls($source, $disk, 0.4, 2))->timeout(3)->run('timeout');
+        $result = (new PendingLiveHls($this->source(), $disk, 0.4, 2))->timeout(3)->run('timeout');
         $this->assertSame('timed_out', $result->status);
         $this->assertGreaterThan(0, $result->publishedSegments);
         $this->assertStringNotContainsString('#EXT-X-ENDLIST', $disk->get($result->playlist));
-        $cancelled = (new PendingLiveHls($source, $disk))->cancelWhen(fn () => true)->run('cancelled');
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
+    }
+
+    public function test_cancellation_before_the_first_attempt_publishes_nothing(): void
+    {
+        $disk = Storage::disk('local');
+        $cancelled = (new PendingLiveHls(new Media('local', 'source.mkv'), $disk))->cancelWhen(fn () => true)->run('cancelled');
         $this->assertSame('cancelled', $cancelled->status);
         $this->assertSame(0, $cancelled->attempts);
         $this->assertSame([], $disk->allFiles('cancelled'));

@@ -71,7 +71,7 @@ class ExecutionPolicyTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_resetting_limits_restores_configuration_and_queue_plans_capture_limits(): void
+    public function test_queued_plans_keep_the_limits_they_were_created_with(): void
     {
         $this->binaries('usleep(180000);');
         $export = FFMpeg::disk('memory')->open('source.mp4')->export()->timeout(0.1);
@@ -95,7 +95,7 @@ class ExecutionPolicyTest extends TestCase
     }
 
     #[DataProvider('invalidDeadlineProvider')]
-    public function test_deadlines_reject_nonpositive_and_nonfinite_values_without_staging(string $method, float $seconds): void
+    public function test_invalid_deadlines_are_rejected_without_staging(string $method, float $seconds): void
     {
         $this->assertThrows(
             fn () => FFMpeg::disk('missing')->open('source.mp4')->export()->{$method}($seconds),
@@ -118,7 +118,7 @@ class ExecutionPolicyTest extends TestCase
         ];
     }
 
-    public function test_queue_defaults_are_overridden_by_dispatch_and_job_configuration(): void
+    public function test_dispatch_and_job_configuration_override_queue_defaults(): void
     {
         config(['laravel-ffmpeg.queue' => ['connection' => 'redis', 'queue' => 'conversions',
             'tries' => 3, 'backoff' => [10, 30], 'timeout' => 100]]);
@@ -131,7 +131,13 @@ class ExecutionPolicyTest extends TestCase
             $job->timeout = 40;
         })->job('out.mp4');
         $this->assertSame(['database', 'media', 2, 40], [$job->connection, $job->queue, $job->tries, $job->timeout]);
-        config(['laravel-ffmpeg.queue.timeout' => null]);
+    }
+
+    public function test_queued_job_timeouts_follow_the_operation_timeout_without_a_queue_timeout(): void
+    {
+        config(['laravel-ffmpeg.queue' => ['connection' => 'redis', 'queue' => 'conversions',
+            'tries' => 3, 'backoff' => [10, 30], 'timeout' => null]]);
+        $export = FFMpeg::disk('memory')->open('source.mp4')->export();
         $this->assertSame(33, $export->timeout(2.5)->queued()->job('out.mp4')->timeout);
         config(['laravel-ffmpeg.timeout' => null]);
         $this->assertSame(0, $export->timeout(null)->queued()->job('out.mp4')->timeout);

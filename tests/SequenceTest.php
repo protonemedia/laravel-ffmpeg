@@ -22,21 +22,29 @@ class SequenceTest extends TestCase
         return $bytes;
     }
 
-    public function test_sequence_inspection_is_pure_and_rejects_ambiguous_patterns_rates_and_ranges(): void
+    public function test_sequence_framerate_is_inspected_as_an_input_option(): void
+    {
+        Process::fake();
+        $sequence = FFMpeg::disk('missing')->openSequence('photos/frame-%04d.png', count: 3, framerate: '30000/1001', start: 7);
+        $command = $sequence->export()->video('libx264', crf: 23)->inspect();
+        $this->assertSame('30000/1001', $command[array_search('-framerate', $command) + 1]);
+        $this->assertLessThan(array_search('-i', $command), array_search('-framerate', $command));
+        $this->assertWorkspacesAreCleanedUp();
+        Process::assertNothingRan();
+    }
+
+    public function test_sequences_cannot_be_standalone_concat_inputs(): void
     {
         Process::fake();
         $selector = FFMpeg::disk('missing');
         $sequence = $selector->openSequence('photos/frame-%04d.png', count: 3, framerate: '30000/1001', start: 7);
-        $command = $sequence->export()->video('libx264', crf: 23)->inspect();
-        $this->assertSame('30000/1001', $command[array_search('-framerate', $command) + 1]);
-        $this->assertLessThan(array_search('-i', $command), array_search('-framerate', $command));
         $this->assertThrows(fn () => $selector->open('one.png')->concat($sequence), InvalidArgumentException::class);
         $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
     }
 
     #[DataProvider('invalidSequenceProvider')]
-    public function test_ambiguous_patterns_rates_and_ranges_are_rejected(string $pattern, int $count, float|string $framerate, int $start): void
+    public function test_invalid_sequences_are_rejected(string $pattern, int $count, float|string $framerate, int $start): void
     {
         Process::fake();
 
@@ -70,7 +78,7 @@ class SequenceTest extends TestCase
     }
 
     #[DataProvider('sequenceProvider')]
-    public function test_local_png_and_remote_jpeg_sequences_preserve_exact_order_count_rate_and_source_bytes(string $disk, string $suffix, int $start, float|string $rate): void
+    public function test_sequences_encode_every_frame_in_order_without_changing_the_sources(string $disk, string $suffix, int $start, float|string $rate): void
     {
         $binary = $this->useRealFFMpeg();
         $this->fakeLocalDisk();
@@ -120,7 +128,7 @@ class SequenceTest extends TestCase
     }
 
     #[DataProvider('invalidMiddleImageProvider')]
-    public function test_missing_mismatched_and_disguised_images_fail_without_partial_publication(?string $bytes): void
+    public function test_incomplete_sequences_fail_without_publishing(?string $bytes): void
     {
         $this->useRealFFMpeg();
         Storage::disk('memory')->put('photo-07.png', static::image([255, 0, 0]));
@@ -151,7 +159,7 @@ class SequenceTest extends TestCase
         ];
     }
 
-    public function test_a_valid_header_with_corrupt_image_data_cannot_publish_a_shorter_timelapse(): void
+    public function test_corrupt_images_cannot_publish_a_shorter_timelapse(): void
     {
         $this->useRealFFMpeg();
         Storage::disk('memory')->put('photo-0.png', static::image([255, 0, 0]));

@@ -79,7 +79,7 @@ class IntegrationRecipeTest extends TestCase
         return $queued->job('conversions/'.$queued->id.'/web.mp4');
     }
 
-    public function test_profiles_apply_to_fresh_sync_and_serialized_queue_exports(): void
+    public function test_profiles_apply_to_sync_exports(): void
     {
         $command = $this->export()->inspect();
         $this->assertContains('libx264', $command);
@@ -89,7 +89,10 @@ class IntegrationRecipeTest extends TestCase
         $result = $this->export()->save('sync.mp4');
         $this->assertSame('sync.mp4', $result->file()->path);
         Storage::disk('recipes')->assertExists('sync.mp4');
+    }
 
+    public function test_serialized_queue_exports_publish_their_inventory(): void
+    {
         Bus::fake();
         $job = $this->request();
         Bus::dispatch($job);
@@ -97,7 +100,7 @@ class IntegrationRecipeTest extends TestCase
         Storage::disk('recipes')->assertMissing($job->path);
         // Exercise the public job after a real serialization boundary, without a worker.
         $restored = unserialize(serialize($job));
-        $this->assertSame($command, $restored->plan->restore()->inspect());
+        $this->assertSame($this->export()->inspect(), $restored->plan->restore()->inspect());
         $restored->handle();
         $row = DB::table('recipe_conversions')->where('export_id', $job->exportId)->sole();
         $this->assertSame('ready', $row->status);
@@ -109,15 +112,23 @@ class IntegrationRecipeTest extends TestCase
         $this->assertSame('private', Storage::disk('receipts')->getVisibility($job->exportId.'.json'));
     }
 
-    public function test_duplicate_completion_preserves_inventory_and_does_not_publish_an_old_job(): void
+    public function test_duplicate_completion_preserves_the_inventory(): void
     {
-        $old = $this->request();
+        $this->request();
         $new = $this->request();
         $new->handle();
         $original = DB::table('recipe_conversions')->where('export_id', $new->exportId)->sole()->inventory;
         $receipt = json_decode($original, true, flags: JSON_THROW_ON_ERROR);
         Event::dispatch(new QueuedExportCompleted($new->exportId, $receipt['files'], $receipt['playback']));
         $this->assertSame($original, DB::table('recipe_conversions')->where('export_id', $new->exportId)->sole()->inventory);
+        $this->assertSame(2, DB::table('recipe_conversions')->count());
+    }
+
+    public function test_an_older_job_does_not_replace_the_published_export(): void
+    {
+        $old = $this->request();
+        $new = $this->request();
+        $new->handle();
         $old->handle();
         $this->assertSame('stale', DB::table('recipe_conversions')->where('export_id', $old->exportId)->sole()->status);
         $this->assertSame($new->exportId, DB::table('recipe_media')->sole()->published_export_id);
@@ -126,7 +137,7 @@ class IntegrationRecipeTest extends TestCase
 
     #[TestWith(['source_version', 'sha256:revision-2'])]
     #[TestWith(['profile_version', 'web-v3'])]
-    public function test_changed_source_or_profile_blocks_publication_even_when_the_export_id_matches(string $column, string $value): void
+    public function test_a_changed_source_or_profile_blocks_publication(string $column, string $value): void
     {
         $job = $this->request();
         DB::table('recipe_media')->where('id', 1)->update([$column => $value]);
@@ -135,7 +146,7 @@ class IntegrationRecipeTest extends TestCase
         $this->assertNull(DB::table('recipe_media')->sole()->published_export_id);
     }
 
-    public function test_database_failure_keeps_published_files_and_private_receipt_for_reconciliation(): void
+    public function test_database_failures_can_be_reconciled_from_the_receipt(): void
     {
         $job = $this->request();
         DB::unprepared("CREATE TRIGGER recipe_fail BEFORE UPDATE ON recipe_media BEGIN SELECT RAISE(ABORT, 'persistence unavailable'); END");

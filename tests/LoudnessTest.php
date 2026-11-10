@@ -42,7 +42,7 @@ class LoudnessTest extends TestCase
             integrated: -18, truePeak: -2, linear: $linear, audio: $audio);
     }
 
-    public function test_inspection_is_pure_and_rejects_unsupported_configuration(): void
+    public function test_inspection_trims_and_filters_before_loudnorm(): void
     {
         Process::fake();
         $operation = $this->operation()->clip(3, duration: 4)->audioFilter('pan=mono|c0=c0,volume=0.5');
@@ -70,7 +70,7 @@ class LoudnessTest extends TestCase
         ];
     }
 
-    public function test_normalization_measures_exact_selected_trimmed_filtered_samples_and_normalizes_them(): void
+    public function test_normalization_measures_the_trimmed_filtered_samples(): void
     {
         $source = $this->fixture();
         $sourceHash = hash_file('sha256', $source);
@@ -108,7 +108,7 @@ class LoudnessTest extends TestCase
 
     #[TestWith([true])]
     #[TestWith([false])]
-    public function test_native_linear_and_explicit_dynamic_modes_use_a_private_sample_snapshot(bool $linear): void
+    public function test_normalization_measures_a_private_snapshot_of_the_source(bool $linear): void
     {
         $binary = $this->useRealFFMpeg();
         $path = Storage::disk('loudness')->path('varying.wav');
@@ -134,7 +134,7 @@ class LoudnessTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_normalization_keeps_silence_nonfinite_and_reports_dynamic_mode(): void
+    public function test_silence_stays_silent(): void
     {
         $this->fixture(silent: true);
         $result = FFMpeg::disk('loudness')->open('silence.mka')->normalizeLoudness(audio: 0)
@@ -166,7 +166,7 @@ class LoudnessTest extends TestCase
         $this->assertFalse(Storage::disk('loudness')->exists('normalized.wav'));
     }
 
-    public function test_export_pipeline_publishes_results_and_cleans_failure_and_callback_cancellation(): void
+    public function test_normalized_exports_report_their_processes(): void
     {
         $this->fixture();
         $events = [];

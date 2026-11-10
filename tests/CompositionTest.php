@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Filesystem\Filesystem as LocalFilesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\File;
 use Illuminate\Process\Factory;
@@ -24,6 +25,7 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
 use ProtoneMedia\LaravelFFMpeg\ExportResult;
 use ProtoneMedia\LaravelFFMpeg\Media;
+use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Stream;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -31,6 +33,11 @@ use ProtoneMedia\LaravelFFMpeg\Watermark;
 
 class CompositionTest extends TestCase
 {
+    /**
+     * The directory with the videos FFmpeg generated once for the whole class.
+     */
+    protected static ?string $fixtures = null;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -68,6 +75,57 @@ class CompositionTest extends TestCase
 
             return Process::result();
         });
+    }
+
+    /**
+     * Remove the media FFmpeg generated for the class after its last test.
+     */
+    public static function tearDownAfterClass(): void
+    {
+        if (static::$fixtures !== null) {
+            (new LocalFilesystem)->deleteDirectory(static::$fixtures);
+
+            static::$fixtures = null;
+        }
+
+        parent::tearDownAfterClass();
+    }
+
+    /**
+     * Get the path of the given generated video, running FFmpeg only the first time.
+     */
+    protected function fixture(string $name): string
+    {
+        $ffmpeg = $this->useRealFFMpeg();
+
+        // Several tests start from the same small synthetic videos. Generating each one
+        // once per class keeps the real FFmpeg tests fast, and every test still copies
+        // the video to its own disk so it can never change what the next test reads.
+        static::$fixtures ??= sys_get_temp_dir().'/laravel-ffmpeg-composition-'.bin2hex(random_bytes(8));
+
+        $path = static::$fixtures.'/'.$name;
+
+        if (is_file($path)) {
+            return $path;
+        }
+
+        if (! is_dir(static::$fixtures)) {
+            mkdir(static::$fixtures, 0700);
+        }
+
+        $arguments = match ($name) {
+            'red.mkv' => ['-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=2', '-c:v', 'ffv1'],
+            'red-short.mkv' => ['-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=1', '-c:v', 'ffv1'],
+            'red-with-audio.mkv' => ['-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=2',
+                '-f', 'lavfi', '-i', 'sine=sample_rate=48000:duration=2', '-c:v', 'ffv1', '-c:a', 'pcm_s16le'],
+            'blue-with-tone.mkv' => ['-f', 'lavfi', '-i', 'color=blue:size=16x12:rate=10:duration=2',
+                '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2', '-c:v', 'ffv1', '-c:a', 'pcm_s16le'],
+            'black-captions.mkv' => ['-f', 'lavfi', '-i', 'color=black:size=160x90:rate=10:duration=6', '-c:v', 'ffv1'],
+        };
+
+        $this->assertProcessSucceeded(Process::run([$ffmpeg, '-v', 'error', ...$arguments, $path]));
+
+        return $path;
     }
 
     /**
@@ -186,7 +244,7 @@ class CompositionTest extends TestCase
         Process::assertNothingRan();
     }
 
-    public function test_resources_use_whole_unquoted_generated_values_and_inspection_does_not_read_them(): void
+    public function test_resource_placeholders_become_generated_file_names_without_reading_the_resource(): void
     {
         Process::fake();
         $media = FFMpeg::disk('missing')->open('source.mkv');
@@ -194,7 +252,14 @@ class CompositionTest extends TestCase
         $export = $media->export()->resource('look', $lut)->videoFilter('lut3d=file={{look}}');
         $this->assertContains('lut3d=file=resource-0.cube', $export->inspect());
         $this->assertSame($export->inspect(), $media->export()->lut3d($lut)->inspect());
+        Process::assertNothingRan();
+    }
 
+    public function test_quoted_filter_values_are_not_parsed_as_labels_or_chains(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('source.mkv');
+        $lut = FFMpeg::disk('missing')->open("a 'quoted', 日本語: look.cube");
         // Brackets, commas and semicolons in a quoted filter value are not labels or chains.
         $this->assertContains("[0:v]drawtext=text='[not_a_label],;':fontfile=resource-0.cube[out]", $media->export()
             ->resource('font', $lut)->filterComplex("[0:v]drawtext=text='[not_a_label],;':fontfile={{font}}[out]")
@@ -233,19 +298,25 @@ class CompositionTest extends TestCase
         ];
     }
 
-    public function test_typed_resources_reject_overrides_expansion_and_input_seeks_without_io(): void
+    public function test_text_resources_are_staged_as_text_files(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('source.mkv');
+        $this->assertContains('drawtext=textfile=resource-0.txt:expansion=none', $media->export()
+            ->textResource('title', "100%: café ' [x],; \\ %{not_a_function}")
+            ->videoFilter('drawtext=textfile={{title}}:expansion=none')->inspect());
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_subtitle_resources_are_staged_as_subtitle_files(): void
     {
         Process::fake();
         $media = FFMpeg::disk('missing')->open('source.mkv');
         $subtitle = FFMpeg::disk('missing')->open('captions.srt');
-
-        $this->assertContains('drawtext=textfile=resource-0.txt:expansion=none', $media->export()
-            ->textResource('title', "100%: café ' [x],; \\ %{not_a_function}")
-            ->videoFilter('drawtext=textfile={{title}}:expansion=none')->inspect());
         $this->assertContains('[0:v]subtitles=filename=resource-0.srt[out]', $media->export()
             ->subtitleResource('captions', $subtitle)->filterComplex('[0:v]subtitles=filename={{captions}}[out]')
             ->map('[out]')->inspect());
-
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -339,7 +410,7 @@ class CompositionTest extends TestCase
         ];
     }
 
-    public function test_literal_text_is_written_unchanged_and_missing_filter_support_is_typed(): void
+    public function test_literal_text_resources_are_written_unchanged_and_privately(): void
     {
         $text = "100%: café ' [x],; \\ %{not_a_function}\n";
         $resource = null;
@@ -353,7 +424,11 @@ class CompositionTest extends TestCase
             ->videoFilter('drawtext=textfile={{title}}:expansion=none')->toDisk('memory')->save('text.mkv');
         $this->assertSame([$text, 0600], $resource);
         $this->assertSame('encoded', Storage::disk('memory')->get('text.mkv'));
+    }
 
+    public function test_missing_filter_support_fails_with_a_capability_error(): void
+    {
+        $text = "100%: café ' [x],; \\ %{not_a_function}\n";
         Process::fake(function (PendingProcess $process) {
             return Process::result(output: in_array('-version', $process->command, true) ? basename($process->command[0]).' version 9.0.2' : '');
         });
@@ -367,18 +442,30 @@ class CompositionTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_probed_streams_resolve_to_their_source_and_absolute_index_without_more_io(): void
+    public function test_probed_streams_map_to_their_absolute_index_without_more_io(): void
     {
         [$media, $video, $audio] = $this->probedStreams();
         $this->assertSame(7, $video->index());
         $command = $media->export()->mapAudio($audio)->mapVideo($video)->inspect();
         $positions = array_keys($command, '-map');
         $this->assertSame(['0:9', '0:7'], array_map(fn ($i) => $command[$i + 1], $positions));
+        Process::assertNothingRan();
+    }
+
+    public function test_streams_can_be_selected_by_track_or_language(): void
+    {
+        [$media] = $this->probedStreams();
         $this->assertContains('0:a:m:language:eng:?', $media->export()->mapAudio(language: 'eng', optional: true)->inspect());
         $this->assertContains('0:v:1', $media->export()->mapVideo(track: 1)->inspect());
         $this->assertContains('0:a:0', $media->export()->mapAudio()->inspect());
         $this->assertSame($media->export()->mapVideo(input: 0)->mapAudio(input: 0)->inspect(),
             $media->export()->mapVideo(0)->mapAudio(0)->inspect());
+        Process::assertNothingRan();
+    }
+
+    public function test_probed_streams_resolve_to_the_input_that_holds_their_source(): void
+    {
+        [$media, $video] = $this->probedStreams();
         $other = FFMpeg::disk('missing')->open('other.mkv');
         $export = $other->export();
         $export->addInput($media);
@@ -691,18 +778,33 @@ class CompositionTest extends TestCase
         ];
     }
 
-    public function test_watermark_edits_are_deferred_and_failures_cannot_mutate_originals_or_publish(): void
+    /**
+     * Get an export whose watermark edit the image driver rejects when it processes the logo.
+     */
+    protected function unprocessableWatermark(): PendingExport
     {
-        Process::fake();
-        $local = $this->fakeLocalDisk();
+        $this->fakeLocalDisk();
         $this->addTestFile('logo.png');
         $this->addTestFile('video.mp4');
-        $hash = hash_file('sha256', $local->path('logo.png'));
+
         // The driver rejects the color only when it processes the image; the color stands in for a private value.
-        $export = FFMpeg::disk('local')->open('video.mp4')->export()->video('ffv1')
+        return FFMpeg::disk('local')->open('video.mp4')->export()->video('ffv1')
             ->watermark(FFMpeg::disk('local')->open('logo.png'), fn (Watermark $watermark) => $watermark->rotate(10, background: 'application-secret'));
+    }
+
+    public function test_watermark_edits_are_deferred_until_execution(): void
+    {
+        Process::fake();
+        $export = $this->unprocessableWatermark();
         $this->assertContains('[input:1]', $export->inspect());
         Process::assertNothingRan();
+    }
+
+    public function test_failed_watermark_edits_keep_the_original_and_publish_nothing(): void
+    {
+        Process::fake();
+        $export = $this->unprocessableWatermark();
+        $hash = hash_file('sha256', Storage::disk('local')->path('logo.png'));
         $this->assertThrows(
             fn () => $export->toDisk('memory')->save('failed.mkv'),
             fn (MediaException $exception) => $exception->phase === 'staging'
@@ -711,7 +813,7 @@ class CompositionTest extends TestCase
                 && ! str_contains($exception->getMessage(), 'application-secret'),
         );
         $this->assertFalse(Storage::disk('memory')->exists('failed.mkv'));
-        $this->assertSame($hash, hash_file('sha256', $local->path('logo.png')));
+        $this->assertSame($hash, hash_file('sha256', Storage::disk('local')->path('logo.png')));
         $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
     }
@@ -776,9 +878,7 @@ class CompositionTest extends TestCase
     {
         $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
-        $generation = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=2',
-            '-f', 'lavfi', '-i', 'sine=sample_rate=48000:duration=2', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $local->path('source.mkv')]);
-        $this->assertProcessSucceeded($generation);
+        copy($this->fixture('red-with-audio.mkv'), $local->path('source.mkv'));
         $bitmap = imagecreatetruecolor(32, 16);
         imagealphablending($bitmap, false);
         imagesavealpha($bitmap, true);
@@ -840,16 +940,21 @@ class CompositionTest extends TestCase
         imagepng($bitmap, $path);
     }
 
-    public function test_watermark_helpers_compose_images_after_each_outputs_geometry_and_reject_conflicts(): void
+    /**
+     * Put the short red video and a blue logo on the local disk and open both.
+     */
+    protected function openWatermarkSources(): array
     {
-        $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
-        $generation = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=1',
-            '-c:v', 'ffv1', $local->path('source.mkv')]);
-        $this->assertProcessSucceeded($generation);
+        copy($this->fixture('red-short.mkv'), $local->path('source.mkv'));
         $this->createBlueLogo($local->path('logo.png'));
-        $media = FFMpeg::disk('local')->open('source.mkv');
-        $logo = FFMpeg::disk('local')->open('logo.png');
+
+        return [FFMpeg::disk('local')->open('source.mkv'), FFMpeg::disk('local')->open('logo.png')];
+    }
+
+    public function test_watermarks_are_drawn_after_each_outputs_resize(): void
+    {
+        [$media, $logo] = $this->openWatermarkSources();
         $export = $media->export()->watermark($logo, fn (Watermark $watermark) => $watermark->left(4)->top(2))
             ->watermark($logo, fn (Watermark $watermark) => $watermark->center()->opacity(0.5))
             ->output('large.mkv', fn ($out) => $out->resize(80, 60)->video('ffv1')->withoutAudio()->toDisk('memory'))
@@ -870,17 +975,29 @@ class CompositionTest extends TestCase
             $red = imagecolorsforindex($frame, imagecolorat($frame, $width - 2, $height - 2));
             $this->assertGreaterThan(220, $red['red']);
         }
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_per_track_video_filters_run_before_the_watermark(): void
+    {
+        [$media, $logo] = $this->openWatermarkSources();
         // Per-track video filters run with the output filters, before the overlay.
         $colored = $media->export()->watermark($logo)->video('libx264')->toDisk('memory')
             ->videoStream(0, fn ($video) => $video->color('bt709', 'bt709', 'bt709'));
         $this->assertNotContains('-filter:v:0', $colored->inspect());
         $colored->save('colored.mp4');
         $this->assertSame('bt709', FFMpeg::disk('memory')->open('colored.mp4')->probe()->video()->get('color_primaries'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_videos_cannot_become_static_watermarks(): void
+    {
+        [$media] = $this->openWatermarkSources();
         $this->assertThrows(
             fn () => $media->export()->watermark($media)->video('ffv1')->save('invalid.mkv'),
             fn (MediaException $exception) => $exception->category === 'watermark',
         );
-        $this->assertFalse($local->exists('invalid.mkv'));
+        $this->assertFalse(Storage::disk('local')->exists('invalid.mkv'));
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -912,22 +1029,48 @@ class CompositionTest extends TestCase
         ];
     }
 
-    public function test_real_graphs_stage_luts_compose_mixed_disks_and_keep_output_timelines_independent(): void
+    /**
+     * Put the red video on the memory disk under a nested multibyte name and the blue video on the local disk.
+     */
+    protected function stageGraphSources(): FilesystemAdapter
     {
-        $ffmpeg = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
-        $source = $this->root.'/red.mkv';
-        $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=2',
-            '-c:v', 'ffv1', $source]);
-        $this->assertProcessSucceeded($generation);
-        $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:size=16x12:rate=10:duration=2',
-            '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $local->path('blue.mkv')]);
-        $this->assertProcessSucceeded($generation);
-        Storage::disk('memory')->put('nested/red 日本語.mkv', file_get_contents($source));
+        Storage::disk('memory')->put('nested/red 日本語.mkv', file_get_contents($this->fixture('red.mkv')));
+        copy($this->fixture('blue-with-tone.mkv'), $local->path('blue.mkv'));
+
+        return $local;
+    }
+
+    /**
+     * Store a .cube LUT that inverts RGB on the memory disk and get its contents.
+     */
+    protected function storeInvertingLut(string $key): string
+    {
         // Invert RGB, with the red coordinate varying fastest as required by .cube.
         $lut = "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
+
+        Storage::disk('memory')->put($key, $lut);
+
+        return $lut;
+    }
+
+    /**
+     * Get the MD5 hash FFmpeg computes for the first audio stream of the given file.
+     */
+    protected function audioHash(string $ffmpeg, string $path): string
+    {
+        $audio = Process::run([$ffmpeg, '-v', 'error', '-i', $path, '-map', '0:a', '-f', 'md5', '-']);
+        $this->assertProcessSucceeded($audio);
+
+        return $audio->output();
+    }
+
+    public function test_real_luts_are_staged_for_every_output(): void
+    {
+        $ffmpeg = $this->useRealFFMpeg();
+        $local = $this->stageGraphSources();
         $lutKey = "looks/a 'quoted', 日本語: invert.cube";
-        Storage::disk('memory')->put($lutKey, $lut);
+        $this->storeInvertingLut($lutKey);
         $look = FFMpeg::disk('memory')->open($lutKey);
         $helper = FFMpeg::disk('memory')->open('nested/red 日本語.mkv')->export()
             ->output('graded.mkv', fn ($out) => $out->mapVideo(0)->lut3d($look)->video('ffv1')
@@ -945,15 +1088,21 @@ class CompositionTest extends TestCase
             $this->assertGreaterThan(225, $rgb[1]);
             $this->assertGreaterThan(225, $rgb[2]);
         }
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_real_graph_outputs_on_mixed_disks_keep_independent_timelines(): void
+    {
+        $ffmpeg = $this->useRealFFMpeg();
+        $local = $this->stageGraphSources();
+        $lutKey = "looks/a 'quoted', 日本語: invert.cube";
+        $lut = $this->storeInvertingLut($lutKey);
         $export = FFMpeg::disk('memory')->open('nested/red 日本語.mkv')->export();
         $this->assertSame(1, $export->addInput(FFMpeg::disk('local')->open('blue.mkv')));
-        $retained = null;
         $result = $export->resource('look', FFMpeg::disk('memory')->open($lutKey))
             ->filterComplex('[0:v]lut3d=file={{look}},split[base][small];[base][1:v]overlay=x=8:y=6[full];[small]scale=40:30[thumb]')
-            ->output('composed.mkv', function (ExportOutput $out) use (&$retained) {
-                $retained = $out;
-                $out->map('[full]')->map('1:a')->video('ffv1')->audio('pcm_s16le')->withoutMetadata()->chaptersFrom(null)->clip(0.4, duration: 0.8)->toDisk('memory');
-            })
+            ->output('composed.mkv', fn (ExportOutput $out) => $out->map('[full]')->map('1:a')->video('ffv1')->audio('pcm_s16le')
+                ->withoutMetadata()->chaptersFrom(null)->clip(0.4, duration: 0.8)->toDisk('memory'))
             ->output('thumb.mkv', fn ($out) => $out->map('[thumb]')->video('ffv1')->metadataFrom(0)->chaptersFrom(null)->toDisk('local'))
             ->output('sound.wav', fn ($out) => $out->map('1:a')->audio('copy')->withoutMetadata()->chaptersFrom(null)->toDisk('local'))
             ->save();
@@ -982,12 +1131,34 @@ class CompositionTest extends TestCase
         $this->assertLessThan(25, $blue[0]);
         $this->assertLessThan(25, $blue[1]);
         $this->assertGreaterThan(225, $blue[2]);
-        $audio = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('sound.wav'), '-map', '0:a', '-f', 'md5', '-']);
-        $original = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('blue.mkv'), '-map', '0:a', '-f', 'md5', '-']);
-        $this->assertProcessSucceeded($audio);
-        $this->assertProcessSucceeded($original);
-        $this->assertSame($original->output(), $audio->output());
+        $this->assertSame($this->audioHash($ffmpeg, $local->path('blue.mkv')), $this->audioHash($ffmpeg, $local->path('sound.wav')));
+        $this->assertWorkspacesAreCleanedUp();
+    }
 
+    public function test_real_retained_outputs_are_frozen_once_execution_starts(): void
+    {
+        $this->useRealFFMpeg();
+        $this->stageGraphSources();
+        $retained = null;
+        $export = FFMpeg::disk('memory')->open('nested/red 日本語.mkv')->export();
+        $export->addInput(FFMpeg::disk('local')->open('blue.mkv'));
+        $export->filterComplex('[0:v]split[base][small];[base][1:v]overlay=x=8:y=6[full];[small]scale=40:30[thumb]')
+            ->output('composed.mkv', function (ExportOutput $out) use (&$retained) {
+                $retained = $out;
+                $out->map('[full]')->map('1:a')->video('ffv1')->audio('pcm_s16le')->withoutMetadata()->chaptersFrom(null)->clip(0.4, duration: 0.8)->toDisk('memory');
+            })
+            ->output('thumb.mkv', fn ($out) => $out->map('[thumb]')->video('ffv1')->metadataFrom(0)->chaptersFrom(null)->toDisk('local'))
+            ->save();
+
+        $this->assertThrows(fn () => $retained->video('copy'), LogicException::class);
+        $this->assertThrows(fn () => $retained->streamMetadata('a', 'language', 'eng'), LogicException::class);
+        $this->assertThrows(fn () => $retained->disposition('a', 'default'), LogicException::class);
+    }
+
+    public function test_real_graph_outputs_can_copy_audio_from_another_input(): void
+    {
+        $ffmpeg = $this->useRealFFMpeg();
+        $local = $this->stageGraphSources();
         $withCopiedAudio = FFMpeg::disk('memory')->open('nested/red 日本語.mkv')->export();
         $withCopiedAudio->addInput(FFMpeg::disk('local')->open('blue.mkv'));
         $withCopiedAudio->filterComplex('[0:v]null[video]')->map('[video]')->map('1:a')->video('ffv1')->audio('copy')
@@ -996,11 +1167,14 @@ class CompositionTest extends TestCase
         $this->assertCount(2, $copied->streams());
         $this->assertSame('pcm_s16le', $copied->audio()->get('codec_name'));
         $this->assertSame([80, 60], [$copied->video()->width(), $copied->video()->height()]);
-        $copiedAudio = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('copied-audio.mkv'), '-map', '0:a', '-f', 'md5', '-']);
-        $this->assertProcessSucceeded($copiedAudio);
-        $this->assertSame($original->output(), $copiedAudio->output());
+        $this->assertSame($this->audioHash($ffmpeg, $local->path('blue.mkv')), $this->audioHash($ffmpeg, $local->path('copied-audio.mkv')));
         $this->assertWorkspacesAreCleanedUp();
+    }
 
+    public function test_real_stream_metadata_and_dispositions_are_scoped_to_each_output(): void
+    {
+        $this->useRealFFMpeg();
+        $this->stageGraphSources();
         $title = "English 'mix'; 日本語 = literal";
         FFMpeg::disk('local')->open('blue.mkv')->export()->filterComplex('[0:a]asplit[english][german]')
             ->output('tagged-first.mkv', fn ($out) => $out->map('[english]')->mapVideo(0)
@@ -1026,10 +1200,6 @@ class CompositionTest extends TestCase
         $this->assertNull($second->audio()->tag('title'));
         $this->assertFalse($second->audio()->isDefault());
         $this->assertFalse($second->audio()->isForced());
-
-        $this->assertThrows(fn () => $retained->video('copy'), LogicException::class);
-        $this->assertThrows(fn () => $retained->streamMetadata('a', 'language', 'eng'), LogicException::class);
-        $this->assertThrows(fn () => $retained->disposition('a', 'default'), LogicException::class);
     }
 
     public function test_real_fonts_and_literal_text_render_without_filter_or_percent_expansion(): void
@@ -1074,9 +1244,7 @@ class CompositionTest extends TestCase
     protected function createSubtitleCanvas(string $ffmpeg): FilesystemAdapter
     {
         $local = $this->fakeLocalDisk();
-        $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=black:size=160x90:rate=10:duration=6',
-            '-c:v', 'ffv1', $local->path('black.mkv')]);
-        $this->assertProcessSucceeded($generation);
+        copy($this->fixture('black-captions.mkv'), $local->path('black.mkv'));
 
         return $local;
     }

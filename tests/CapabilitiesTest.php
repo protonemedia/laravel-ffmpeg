@@ -112,7 +112,7 @@ class CapabilitiesTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_failed_capture_and_missing_temporary_root_are_reported_without_binary_details(): void
+    public function test_failed_capture_is_reported_without_binary_details(): void
     {
         $this->fakeCapabilities(brokenOption: '-encoders');
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
@@ -121,13 +121,18 @@ class CapabilitiesTest extends TestCase
         $this->assertStringNotContainsString('secret-token', Artisan::output());
         $this->assertStringNotContainsString('/private/binary', Artisan::output());
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_missing_temporary_root_is_reported_without_its_path(): void
+    {
+        $this->fakeCapabilities();
         config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/absent/root']);
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertSame('filesystem', json_decode(Artisan::output(), true)['category']);
         $this->assertStringNotContainsString($this->root, Artisan::output());
     }
 
-    public function test_real_capture_overflow_and_missing_binary_fail_without_leaking_paths(): void
+    public function test_real_capture_overflow_fails_without_leaking_paths(): void
     {
         $binary = $this->root.'/ffmpeg';
         file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\n".
@@ -142,7 +147,18 @@ class CapabilitiesTest extends TestCase
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertSame('output_limit', json_decode(Artisan::output(), true)['category']);
         $this->assertStringNotContainsString($this->root, Artisan::output());
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $this->root.'/missing-private-binary']);
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
+    }
+
+    public function test_missing_binary_fails_without_leaking_paths(): void
+    {
+        $probe = $this->root.'/ffprobe';
+        file_put_contents($probe, '#!'.PHP_BINARY."\n<?php echo 'ffprobe version 9.0.2';");
+        chmod($probe, 0700);
+        config([
+            'laravel-ffmpeg.ffmpeg.binaries' => $this->root.'/missing-private-binary',
+            'laravel-ffmpeg.ffprobe.binaries' => $probe,
+        ]);
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertStringNotContainsString($this->root, Artisan::output());
         $this->assertStringNotContainsString('missing-private-binary', Artisan::output());

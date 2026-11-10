@@ -3,7 +3,8 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Closure;
-use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Contracts\Filesystem\Filesystem as FilesystemContract;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -19,6 +20,31 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class HlsPackagingTest extends TestCase
 {
+    /**
+     * The directory with the rendition group exports shared by the whole class.
+     */
+    protected static ?string $groups = null;
+
+    /**
+     * The rendition group exports and their hooked playlists, keyed by segment format.
+     */
+    protected static array $groupExports = [];
+
+    /**
+     * Remove the shared rendition group exports after the last test of the class.
+     */
+    public static function tearDownAfterClass(): void
+    {
+        if (static::$groups !== null) {
+            (new Filesystem)->deleteDirectory(static::$groups);
+
+            static::$groups = null;
+            static::$groupExports = [];
+        }
+
+        parent::tearDownAfterClass();
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -26,10 +52,11 @@ class HlsPackagingTest extends TestCase
             'filesystems.disks.hls-packaging-keys' => ['driver' => 'local', 'root' => $this->root.'/keys']]);
     }
 
-    protected function source()
+    protected function source(string $disk = 'hls-packaging')
     {
         $binary = $this->useRealFFMpeg();
-        $disk = Storage::disk('hls-packaging');
+        $name = $disk;
+        $disk = Storage::disk($name);
         $disk->put('captions.srt', "1\n00:00:00,200 --> 00:00:01,000\nHello HLS\n\n2\n00:00:01,200 --> 00:00:02,200\nSecond cue\n");
         $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=2.4',
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2.4',
@@ -38,12 +65,12 @@ class HlsPackagingTest extends TestCase
             '-g', '14', '-c:a', 'aac', '-c:s', 'srt', '-threads', '1', $disk->path('source.mkv')]);
         $this->assertProcessSucceeded($result);
 
-        return FFMpeg::disk('hls-packaging')->open('source.mkv');
+        return FFMpeg::disk($name)->open('source.mkv');
     }
 
-    protected function decode(string $path, array $maps = ['0:v:0', '0:a:0']): string
+    protected function decode(string $path, array $maps = ['0:v:0', '0:a:0'], string $disk = 'hls-packaging'): string
     {
-        $command = [$this->useRealFFMpeg(), '-v', 'error', '-xerror', '-i', Storage::disk('hls-packaging')->path($path)];
+        $command = [$this->useRealFFMpeg(), '-v', 'error', '-xerror', '-i', Storage::disk($disk)->path($path)];
         foreach ($maps as $map) {
             array_push($command, '-map', $map);
         }
@@ -158,10 +185,34 @@ class HlsPackagingTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    #[DataProvider('packagingProvider')]
-    public function test_reusable_audio_and_subtitle_groups_decode_each_track_and_rewrite_every_owned_playlist(bool $fragmented): void
+    /**
+     * Export the rendition group ladder once per segment format and get its disk, result and hooked playlists.
+     */
+    protected function exportGroups(bool $fragmented): array
     {
-        $media = $this->source();
+        $this->useRealFFMpeg();
+
+        // The two-pass ladder with its renditions is the slowest export in this class. We
+        // encode it once per segment format in a directory shared by the whole class, so
+        // each test below can check one part of the same published package.
+        static::$groups ??= sys_get_temp_dir().'/laravel-ffmpeg-hls-groups-'.bin2hex(random_bytes(8));
+
+        $type = $fragmented ? 'fmp4' : 'ts';
+        $disk = 'hls-groups-'.$type;
+
+        config(["filesystems.disks.{$disk}" => ['driver' => 'local', 'root' => static::$groups.'/'.$type]]);
+
+        static::$groupExports[$type] ??= $this->saveGroups($disk, $fragmented);
+
+        return [$disk, ...static::$groupExports[$type]];
+    }
+
+    /**
+     * Save the rendition group ladder to the given disk and get its result and hooked playlists.
+     */
+    protected function saveGroups(string $disk, bool $fragmented): array
+    {
+        $media = $this->source($disk);
         $export = $media->hls(segmentDuration: 0.7)->video(bitrate: '180k')->audio(bitrate: '48k')
             ->variant('small', fn (HlsVariant $v) => $v->resize(width: 80)->audioGroup('sound')->subtitleGroup('captions'), playlist: 'video/small/index.m3u8')
             ->variant('large', fn (HlsVariant $v) => $v->audioGroup('sound')->subtitleGroup('captions'), playlist: 'video/large/index.m3u8')
@@ -172,14 +223,22 @@ class HlsPackagingTest extends TestCase
             $export->fmp4();
         }
         $seen = [];
-        $result = $export->twoPass()->playlistUsing(function ($text, $path) use (&$seen) {
+        $result = $export->twoPass()->playlistUsing(function ($text, $path) use (&$seen, $disk) {
             $seen[] = $path;
-            $this->assertFalse(Storage::disk('hls-packaging')->exists('catalog/master.m3u8'));
+            $this->assertFalse(Storage::disk($disk)->exists('catalog/master.m3u8'));
 
             return str_replace("#EXTM3U\n", "#EXTM3U\n# Application comment\n", $text);
         })->save('catalog/master.m3u8');
-        $disk = Storage::disk('hls-packaging');
-        $master = $disk->get($result->playlist()->path);
+        $this->assertWorkspacesAreCleanedUp();
+
+        return [$result, $seen];
+    }
+
+    #[DataProvider('packagingProvider')]
+    public function test_rendition_groups_are_listed_in_the_master_playlist(bool $fragmented): void
+    {
+        [$disk, $result, $seen] = $this->exportGroups($fragmented);
+        $master = Storage::disk($disk)->get($result->playlist()->path);
         $this->assertSame(3, substr_count($master, '#EXT-X-MEDIA:'));
         $this->assertSame(2, substr_count($master, '#EXT-X-STREAM-INF:'));
         $this->assertSame(2, substr_count($master, 'AUDIO="sound",SUBTITLES="captions"'));
@@ -187,10 +246,17 @@ class HlsPackagingTest extends TestCase
         $this->assertStringContainsString('TYPE=SUBTITLES,GROUP-ID="captions",NAME="English",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="en",FORCED=NO,URI="../text/en/index.m3u8"', $master);
         $this->assertStringContainsString('mp4a.40.2', $master);
         $this->assertCount(6, $seen);
+        $this->assertCount($fragmented ? 4 : 0, $result->files()->where('role', 'hls-init'));
+    }
+
+    #[DataProvider('packagingProvider')]
+    public function test_audio_renditions_decode_their_own_track(bool $fragmented): void
+    {
+        [$disk, $result] = $this->exportGroups($fragmented);
         foreach (['English' => 440, 'Español, stereo name' => 880] as $name => $frequency) {
             $path = $result->audioRendition('sound', $name)->playlist()->path;
-            $this->decode($path, ['0:a:0']);
-            $pcm = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $disk->path($path), '-map', '0:a:0',
+            $this->decode($path, ['0:a:0'], $disk);
+            $pcm = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', Storage::disk($disk)->path($path), '-map', '0:a:0',
                 '-t', '1', '-ar', '8000', '-ac', '1', '-f', 's16le', '-']);
             $this->assertProcessSucceeded($pcm);
             $previous = $crossings = 0;
@@ -203,6 +269,13 @@ class HlsPackagingTest extends TestCase
             }
             $this->assertEqualsWithDelta($frequency, $crossings, 6);
         }
+    }
+
+    #[DataProvider('packagingProvider')]
+    public function test_subtitle_renditions_keep_their_cues_on_the_video_clock(bool $fragmented): void
+    {
+        [$disk, $result] = $this->exportGroups($fragmented);
+        $disk = Storage::disk($disk);
         $subtitle = $result->subtitleRendition('captions', 'English');
         $this->assertCount(2, $subtitle->files());
         $vtt = $subtitle->files()->firstWhere('role', 'hls-segment');
@@ -217,20 +290,31 @@ class HlsPackagingTest extends TestCase
         $decodeText = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $disk->path($vtt->path), '-f', 'srt', '-']);
         $this->assertProcessSucceeded($decodeText);
         $this->assertStringContainsString('00:00:00,200 --> 00:00:01,000', $decodeText->output());
-        $this->decode($result->playlist()->path);
+    }
+
+    #[DataProvider('packagingProvider')]
+    public function test_grouped_master_and_variant_playlists_decode(bool $fragmented): void
+    {
+        [$disk, $result] = $this->exportGroups($fragmented);
+        $this->decode($result->playlist()->path, disk: $disk);
         foreach (['small', 'large'] as $name) {
-            $this->decode($result->variant($name)->playlist()->path, ['0:v:0']);
+            $this->decode($result->variant($name)->playlist()->path, ['0:v:0'], $disk);
         }
-        $rewritten = FFMpeg::disk('hls-packaging')->playlist($result->playlist()->path)
+    }
+
+    #[DataProvider('packagingProvider')]
+    public function test_rewriting_grouped_playlists_covers_every_owned_playlist(bool $fragmented): void
+    {
+        [$name, $result] = $this->exportGroups($fragmented);
+        $disk = Storage::disk($name);
+        $rewritten = FFMpeg::disk($name)->playlist($result->playlist()->path)
             ->playlistUrlsUsing(fn ($target) => $disk->path('responses/'.$target))
             ->mediaUrlsUsing(fn ($target) => $disk->path($target))->all();
         $this->assertCount(6, $rewritten);
         foreach ($rewritten as $path => $contents) {
             $disk->put('responses/'.$path, $contents);
         }
-        $this->decode('responses/'.$result->playlist()->path);
-        $this->assertCount($fragmented ? 4 : 0, $result->files()->where('role', 'hls-init'));
-        $this->assertWorkspacesAreCleanedUp();
+        $this->decode('responses/'.$result->playlist()->path, disk: $name);
     }
 
     #[DataProvider('invalidPackagingProvider')]
@@ -338,7 +422,7 @@ class HlsPackagingTest extends TestCase
 
     public function test_dynamic_group_traversal_reads_only_owned_local_playlists_never_external_playlists_init_keys_or_media(): void
     {
-        $disk = Mockery::mock(Filesystem::class);
+        $disk = Mockery::mock(FilesystemContract::class);
         $playlists = [
             'master.m3u8' => "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"English, commentary\",URI=\"audio/en.m3u8\"\n"
                 ."#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"s\",NAME=\"External\",URI=\"https://external.example.test/subs.m3u8\"\n"

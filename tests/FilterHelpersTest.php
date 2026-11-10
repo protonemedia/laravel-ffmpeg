@@ -56,14 +56,11 @@ class FilterHelpersTest extends TestCase
         return array_values(unpack('e*', $this->ffmpeg(['-i', Storage::disk('filter-helpers')->path($name), '-map', '0:a:0', '-c:a', 'pcm_f64le', '-f', 'f64le', '-'])));
     }
 
-    public function test_flips_grayscale_and_low_level_filters_transform_asymmetric_pixels_in_call_order(): void
+    public function test_flips_mirror_asymmetric_pixels(): void
     {
         $this->fixture();
         $this->export()->flipHorizontally()->save('horizontal.mkv');
         $this->export()->flipVertically()->save('vertical.mkv');
-        $this->export()->flipHorizontally()->flipVertically()->grayscale()->save('gray.mkv');
-        $this->export()->flipHorizontally()->videoFilter('crop=16:16:0:0')->save('flip-first.mkv');
-        $this->export()->videoFilter('crop=16:16:0:0')->flipHorizontally()->save('crop-first.mkv');
 
         $horizontal = $this->pixels('horizontal.mkv');
         $vertical = $this->pixels('vertical.mkv');
@@ -74,6 +71,13 @@ class FilterHelpersTest extends TestCase
         $this->assertGreaterThan(230, $this->pixel($vertical, 8, 24)[0]);
         $this->assertLessThan(20, $this->pixel($vertical, 8, 24)[2]);
         $this->assertGreaterThan(230, $this->pixel($vertical, 24, 8)[2]);
+    }
+
+    public function test_grayscale_removes_color_but_keeps_brightness(): void
+    {
+        $this->fixture();
+        $this->export()->flipHorizontally()->flipVertically()->grayscale()->save('gray.mkv');
+
         $gray = $this->pixels('gray.mkv');
         foreach ([[8, 8], [24, 24]] as [$x, $y]) {
             [$red, $green, $blue] = $this->pixel($gray, $x, $y);
@@ -81,6 +85,14 @@ class FilterHelpersTest extends TestCase
             $this->assertEqualsWithDelta($red, $blue, 2);
         }
         $this->assertGreaterThan($this->pixel($gray, 8, 8)[0], $this->pixel($gray, 24, 24)[0]);
+    }
+
+    public function test_helpers_and_filters_apply_in_call_order(): void
+    {
+        $this->fixture();
+        $this->export()->flipHorizontally()->videoFilter('crop=16:16:0:0')->save('flip-first.mkv');
+        $this->export()->videoFilter('crop=16:16:0:0')->flipHorizontally()->save('crop-first.mkv');
+
         $white = $this->pixel($this->pixels('flip-first.mkv'), 8, 8, width: 16, height: 16);
         $red = $this->pixel($this->pixels('crop-first.mkv'), 8, 8, width: 16, height: 16);
         $this->assertGreaterThan(230, min($white));
@@ -110,17 +122,20 @@ class FilterHelpersTest extends TestCase
         ];
     }
 
-    public function test_volume_and_fades_change_real_pcm_and_video_at_requested_times(): void
+    public function test_volume_scales_real_samples(): void
     {
         $this->fixture();
         $this->export()->audioFilter('volume=0.5')->volume(0.5)->save('quiet.mkv');
         $this->export()->volume(0)->save('mute.mkv');
         $this->assertEqualsWithDelta(0.1, $this->samples('quiet.mkv')[8000], 0.00001);
         $this->assertSame(0.0, max($this->samples('mute.mkv')));
+        $this->assertWorkspacesAreCleanedUp();
+    }
 
+    public function test_fades_apply_at_the_requested_times(): void
+    {
+        $this->fixture();
         $this->export()->fadeIn(1)->fadeOut(1, 2)->save('both.mkv');
-        $this->export()->fadeIn(1, 0.5, audio: false)->fadeOut(0.5, 2, audio: false)->save('video.mkv');
-        $this->export()->fadeIn(1, 0.5, video: false)->fadeOut(0.5, 2, video: false)->save('audio.mkv');
         $samples = $this->samples('both.mkv');
         $this->assertCount(24000, $samples);
         foreach ([0 => 0, 4000 => 0.2, 12000 => 0.4, 20000 => 0.2, 23999 => 0] as $sample => $expected) {
@@ -130,6 +145,13 @@ class FilterHelpersTest extends TestCase
         foreach ([0 => 0, 10 => 127, 30 => 255, 50 => 127] as $frame => $expected) {
             $this->assertEqualsWithDelta($expected, $this->pixel($frames, 24, 8, $frame)[0], 4);
         }
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_video_fades_leave_the_audio_untouched(): void
+    {
+        $this->fixture();
+        $this->export()->fadeIn(1, 0.5, audio: false)->fadeOut(0.5, 2, audio: false)->save('video.mkv');
         $video = $this->pixels('video.mkv');
         foreach ([5 => 0, 20 => 127, 35 => 255, 45 => 127, 55 => 0] as $frame => $expected) {
             $this->assertEqualsWithDelta($expected, $this->pixel($video, 24, 8, $frame)[0], 4);
@@ -137,6 +159,13 @@ class FilterHelpersTest extends TestCase
         foreach ([0, 8000, 20000] as $sample) {
             $this->assertEqualsWithDelta(0.4, $this->samples('video.mkv')[$sample], 0.00001);
         }
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_audio_fades_leave_the_video_untouched(): void
+    {
+        $this->fixture();
+        $this->export()->fadeIn(1, 0.5, video: false)->fadeOut(0.5, 2, video: false)->save('audio.mkv');
         $audio = $this->samples('audio.mkv');
         foreach ([2000 => 0, 8000 => 0.2, 14000 => 0.4, 18000 => 0.2, 22000 => 0] as $sample => $expected) {
             $this->assertEqualsWithDelta($expected, $audio[$sample], 0.0001);
@@ -149,7 +178,7 @@ class FilterHelpersTest extends TestCase
     }
 
     #[DataProvider('audioDelayProvider')]
-    public function test_audio_delay_inserts_silence_in_every_channel_and_keeps_all_original_samples(float $seconds): void
+    public function test_audio_delay_inserts_silence_in_every_channel(float $seconds): void
     {
         $this->useRealFFMpeg();
         $this->ffmpeg(['-f', 'lavfi', '-i', 'aevalsrc=0.25|-0.5:s=8000:d=1', '-c:a', 'pcm_f64le', Storage::disk('filter-helpers')->path('stereo.wav')]);

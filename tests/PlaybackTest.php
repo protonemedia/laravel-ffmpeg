@@ -66,7 +66,17 @@ class PlaybackTest extends TestCase
         return $matches[0];
     }
 
-    public function test_every_resource_requires_authentication_a_valid_signature_and_current_authorization(): void
+    /**
+     * Get the signed URL of the lesson's variant playlist and the signed URLs it links to.
+     */
+    protected function variantLinks(): array
+    {
+        $variant = $this->links($this->get($this->url())->assertOk()->getContent())[0];
+
+        return [$variant, $this->links($this->get($variant)->assertOk()->getContent())];
+    }
+
+    public function test_every_resource_is_authorized_on_every_request(): void
     {
         $master = $this->url();
         $this->getJson($master)->assertUnauthorized();
@@ -84,24 +94,52 @@ class PlaybackTest extends TestCase
         }
     }
 
-    public function test_signed_children_keep_the_original_deadline_and_return_private_media_ranges_and_raw_keys(): void
+    public function test_signed_children_keep_the_original_deadline(): void
     {
         $this->login();
         $master = $this->url();
         parse_str(parse_url($master, PHP_URL_QUERY), $original);
         $variant = $this->links($this->get($master)->assertOk()->getContent())[0];
         $this->travel(2)->minutes();
-        $response = $this->get($variant)->assertOk()->assertHeader('Content-Type', 'application/vnd.apple.mpegurl');
-        $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
-        $links = $this->links($response->getContent());
+        $links = $this->links($this->get($variant)->assertOk()->getContent());
         foreach ([$variant, ...$links] as $url) {
             parse_str(parse_url($url, PHP_URL_QUERY), $query);
             $this->assertSame($original['expires'], $query['expires']);
             $this->assertStringNotContainsString('private/key', $url);
         }
+        $this->travel(4)->minutes();
+        foreach ([$master, $variant, ...$links] as $url) {
+            $this->getJson($url)->assertForbidden();
+        }
+    }
+
+    public function test_variant_playlists_are_never_cached(): void
+    {
+        $this->login();
+        [$variant] = $this->variantLinks();
+        $response = $this->get($variant)->assertOk()->assertHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+    }
+
+    public function test_keys_are_returned_raw(): void
+    {
+        $this->login();
+        [, $links] = $this->variantLinks();
         $this->get($links[0])->assertOk()->assertContent(str_repeat('k', 16))
             ->assertHeader('Content-Type', 'application/octet-stream')->assertHeader('Content-Length', '16');
+    }
+
+    public function test_initialization_segments_are_streamed(): void
+    {
+        $this->login();
+        [, $links] = $this->variantLinks();
         $this->assertSame('initialization', $this->get($links[1])->assertOk()->streamedContent());
+    }
+
+    public function test_media_segments_support_byte_ranges(): void
+    {
+        $this->login();
+        [, $links] = $this->variantLinks();
         $media = $this->get($links[2], ['Range' => 'bytes=3-7'])->assertStatus(206)
             ->assertHeader('Content-Range', 'bytes 3-7/16')->assertHeader('Content-Length', '5')
             ->assertHeader('Content-Type', 'video/mp4')->assertHeader('X-Content-Type-Options', 'nosniff');
@@ -109,19 +147,14 @@ class PlaybackTest extends TestCase
         $this->assertSame('cdef', $this->get($links[2], ['Range' => 'bytes=-4'])->assertStatus(206)->streamedContent());
         $this->assertSame('ef', $this->get($links[2], ['Range' => 'bytes=14-'])->assertStatus(206)->streamedContent());
         $this->head($links[2])->assertOk()->assertHeader('Content-Length', '16')->assertContent('');
-        $this->travel(4)->minutes();
-        foreach ([$master, $variant, ...$links] as $url) {
-            $this->getJson($url)->assertForbidden();
-        }
     }
 
     #[DataProvider('unsatisfiableRangeProvider')]
     public function test_unsatisfiable_ranges_are_rejected(string $range): void
     {
         $this->login();
-        $variant = $this->links($this->get($this->url())->assertOk()->getContent())[0];
-        $segment = $this->links($this->get($variant)->assertOk()->getContent())[2];
-        $this->get($segment, ['Range' => $range])->assertStatus(416)->assertHeader('Content-Range', 'bytes */16');
+        [, $links] = $this->variantLinks();
+        $this->get($links[2], ['Range' => $range])->assertStatus(416)->assertHeader('Content-Range', 'bytes */16');
     }
 
     public static function unsatisfiableRangeProvider(): array
@@ -153,7 +186,7 @@ class PlaybackTest extends TestCase
         $this->get($this->url('lesson/low/part.m4s'))->assertNotFound();
     }
 
-    public function test_route_cache_and_explicit_model_bindings_preserve_policy_checks(): void
+    public function test_cached_routes_with_model_bindings_keep_policy_checks(): void
     {
         Route::bind('lesson', fn ($id) => new PlaybackLesson(['id' => $id]));
         Hls::define('lessons', resolve: fn (PlaybackLesson $lesson) => HlsPresentation::fromArray($this->inventory),
@@ -166,7 +199,7 @@ class PlaybackTest extends TestCase
         $this->get($this->url())->assertForbidden();
     }
 
-    public function test_bearer_playback_is_explicit_and_still_checks_authorization_on_every_request(): void
+    public function test_bearer_playback_checks_authorization_on_every_request(): void
     {
         Hls::routes('/bearer/{lesson}', name: 'bearer.hls', playback: 'bearer', middleware: ['web']);
         Hls::define('bearer', resolve: fn () => HlsPresentation::fromArray($this->inventory), authorize: fn () => $this->allowed);
@@ -190,7 +223,7 @@ class PlaybackTest extends TestCase
         }
     }
 
-    public function test_token_guards_and_policy_callbacks_apply_to_child_requests(): void
+    public function test_token_guards_apply_to_child_requests(): void
     {
         Auth::viaRequest('playback-token', fn (Request $request) => $request->bearerToken() === 'test-token' ? new GenericUser(['id' => 42]) : null);
         config(['auth.guards.playback' => ['driver' => 'playback-token']]);
@@ -204,7 +237,7 @@ class PlaybackTest extends TestCase
         $this->get($variant, ['Authorization' => 'Bearer test-token'])->assertOk();
     }
 
-    public function test_encrypted_export_inventory_serves_the_actual_segments_and_separate_disk_keys(): void
+    public function test_encrypted_export_segments_decrypt_with_the_served_keys(): void
     {
         $ffmpeg = $this->useRealFFMpeg();
         config(['filesystems.disks.playback-keys' => ['driver' => 'memory']]);

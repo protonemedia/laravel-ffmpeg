@@ -51,7 +51,7 @@ class UrlTest extends TestCase
         return ($tls ? 'https://' : 'http://').trim($server->getOutput());
     }
 
-    public function test_url_inspection_is_pure_and_rejects_credential_bearing_direct_inputs(): void
+    public function test_direct_url_inspection_is_pure(): void
     {
         Http::preventStrayRequests();
         Process::fake();
@@ -68,9 +68,15 @@ class UrlTest extends TestCase
         $this->assertStringNotContainsString('private-signed-value', ob_get_clean());
         Process::assertNothingRan();
         Http::assertNothingSent();
+    }
+
+    public function test_direct_urls_reject_headers(): void
+    {
+        Http::preventStrayRequests();
+        Process::fake();
 
         $this->expectException(InvalidArgumentException::class);
-        FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer secret']);
+        FFMpeg::openUrl('https://media.example/audio.m4a?signature=private-signed-value', headers: ['Authorization' => 'Bearer secret']);
     }
 
     #[DataProvider('invalidUrlProvider')]
@@ -94,7 +100,7 @@ class UrlTest extends TestCase
         ];
     }
 
-    public function test_public_urls_probe_export_and_redact_signed_queries_without_downloading(): void
+    public function test_public_urls_are_probed_and_exported_without_downloading(): void
     {
         $this->useRealFFMpeg();
         config(['laravel-ffmpeg.redact_credentials' => true]);
@@ -110,6 +116,12 @@ class UrlTest extends TestCase
         $this->assertStringNotContainsString('private-signed-value', json_encode($result->processes()));
         $this->assertWorkspacesAreCleanedUp();
         Http::assertNothingSent();
+    }
+
+    public function test_probe_failures_redact_partial_urls_in_diagnostics(): void
+    {
+        config(['laravel-ffmpeg.redact_credentials' => true]);
+        $media = FFMpeg::openUrl('http://127.0.0.1:8000/public?signature=private-signed-value');
 
         // A partial URL in FFmpeg's diagnostics must not expose its query value.
         Process::fake(function ($process) {
@@ -129,12 +141,11 @@ class UrlTest extends TestCase
         );
     }
 
-    public function test_authenticated_downloads_keep_headers_separate_and_publish_two_audio_tracks(): void
+    public function test_authenticated_download_inspection_is_lazy_and_redacted(): void
     {
         $this->useRealFFMpeg();
         $base = $this->server();
         $first = FFMpeg::openUrl($base.'/private?signature=private-download-signature', headers: ['Authorization' => 'Bearer first-secret'], download: true, inputOptions: ['-probesize', '2048']);
-        $second = FFMpeg::openUrl($base.'/private', ['Authorization' => 'Bearer second-secret'], download: true);
         $command = $first->export()->inspect();
         $this->assertContains('2048', $command);
         $this->assertStringNotContainsString('first-secret', json_encode($command));
@@ -146,6 +157,14 @@ class UrlTest extends TestCase
         $this->assertStringNotContainsString('private-download-signature', $debug);
         $this->assertFileDoesNotExist($this->root.'/requests');
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_authenticated_downloads_keep_their_headers_separate(): void
+    {
+        $this->useRealFFMpeg();
+        $base = $this->server();
+        $first = FFMpeg::openUrl($base.'/private?signature=private-download-signature', headers: ['Authorization' => 'Bearer first-secret'], download: true, inputOptions: ['-probesize', '2048']);
+        $second = FFMpeg::openUrl($base.'/private', ['Authorization' => 'Bearer second-secret'], download: true);
         $export = $first->export();
         $export->addInput($second);
         $result = $export->map('0:a:0')->map('1:a:0')->audio('copy')
@@ -162,7 +181,7 @@ class UrlTest extends TestCase
 
     #[TestWith([false, null])]
     #[TestWith([true, 'first'])]
-    public function test_edited_url_watermarks_download_once_per_execution_without_exposing_urls_to_processes(bool $authenticated, ?string $source): void
+    public function test_url_watermarks_are_fetched_once_without_exposing_the_url(bool $authenticated, ?string $source): void
     {
         $this->useRealFFMpeg();
         $base = $this->server(fixture: __DIR__.'/src/logo.png');

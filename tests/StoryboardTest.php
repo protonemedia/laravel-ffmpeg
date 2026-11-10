@@ -31,7 +31,7 @@ class StoryboardTest extends TestCase
         return FFMpeg::disk('local')->open('colors.mkv');
     }
 
-    public function test_inspection_is_pure_and_invalid_intervals_and_layouts_are_rejected(): void
+    public function test_inspection_builds_the_tile_filter_without_io(): void
     {
         Process::fake();
         $media = FFMpeg::disk('missing')->open('video.mp4');
@@ -68,7 +68,7 @@ class StoryboardTest extends TestCase
     }
 
     #[DataProvider('invalidStoryboardProvider')]
-    public function test_invalid_intervals_and_layouts_are_rejected(array $arguments): void
+    public function test_invalid_storyboards_are_rejected(array $arguments): void
     {
         Process::fake();
         $this->assertThrows(
@@ -94,7 +94,7 @@ class StoryboardTest extends TestCase
         ];
     }
 
-    public function test_sheets_and_cues_agree_on_order_spacing_relative_paths_and_the_partial_last_sheet(): void
+    public function test_cues_point_at_the_matching_tile_of_each_sheet(): void
     {
         $media = $this->colors();
         $original = Storage::disk('local')->get('colors.mkv');
@@ -132,10 +132,9 @@ class StoryboardTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_clips_bound_thumbnails_before_tiling_and_custom_urls_keep_their_query(): void
+    public function test_clips_are_applied_before_tiling(): void
     {
-        $media = $this->colors();
-        $media->storyboard(every: 0.2, columns: 2, rows: 2)->resize(height: 12)->clip(0.2, duration: 0.45)
+        $this->colors()->storyboard(every: 0.2, columns: 2, rows: 2)->resize(height: 12)->clip(0.2, duration: 0.45)
             ->vtt('clip.vtt', fn ($key, $index) => 'https://cdn.example/custom-'.$index.'.png?token=signed')
             ->toDisk('memory')->save('clip-%d.png');
         $image = imagecreatefromstring(Storage::disk('memory')->get('clip-1.png'));
@@ -149,26 +148,33 @@ class StoryboardTest extends TestCase
         $this->assertSame(3, substr_count($vtt, ' --> '));
         $this->assertStringContainsString('00:00:00.400 --> 00:00:00.450', $vtt);
         $this->assertStringContainsString('https://cdn.example/custom-1.png?token=signed#xywh=0,12,20,12', $vtt);
-        $media->storyboard(every: 1, columns: 1, rows: 1)->clip(1.3, duration: 1)->vtt('short.vtt')
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_a_clip_shorter_than_the_interval_ends_its_only_cue_at_the_clip_end(): void
+    {
+        $this->colors()->storyboard(every: 1, columns: 1, rows: 1)->clip(1.3, duration: 1)->vtt('short.vtt')
             ->toDisk('memory')->save('short-%d.png');
         $this->assertStringContainsString('00:00:00.000 --> 00:00:00.050', Storage::disk('memory')->get('short.vtt'));
         $this->assertFalse(Storage::disk('memory')->exists('short-2.png'));
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_jpeg_quality_is_preserved_and_invalid_cue_urls_prevent_all_publication(): void
+    public function test_jpeg_quality_is_preserved(): void
     {
-        $binary = $this->useRealFFMpeg();
-        $local = $this->fakeLocalDisk();
-        $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=10:duration=0.4', '-c:v', 'ffv1', $local->path('detail.mkv')]);
-        $this->assertProcessSucceeded($result);
-        $media = FFMpeg::disk('local')->open('detail.mkv');
+        $media = $this->detail();
         foreach ([2, 31] as $quality) {
             $result = $media->storyboard(every: 0.2, columns: 2, rows: 1)->outputOptions(['-q:v', (string) $quality])
                 ->toDisk('memory')->save('quality-'.$quality.'-%d.jpg');
             $this->assertCount(1, $result->files());
         }
         $this->assertGreaterThan(Storage::disk('memory')->size('quality-31-1.jpg'), Storage::disk('memory')->size('quality-2-1.jpg'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_invalid_cue_urls_prevent_all_publication(): void
+    {
+        $media = $this->detail();
         $this->assertThrows(
             fn () => $media->storyboard(every: 0.2, columns: 1, rows: 1)->vtt('invalid.vtt', fn () => "image.png\n\ninjected")
                 ->toDisk('memory')->save('invalid-%d.png'),
@@ -179,7 +185,20 @@ class StoryboardTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_a_failed_vtt_upload_reports_and_retains_the_published_sheets(): void
+    /**
+     * Write a short, detailed test pattern to the local disk and open it.
+     */
+    protected function detail(): Media
+    {
+        $binary = $this->useRealFFMpeg();
+        $local = $this->fakeLocalDisk();
+        $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=10:duration=0.4', '-c:v', 'ffv1', $local->path('detail.mkv')]);
+        $this->assertProcessSucceeded($result);
+
+        return FFMpeg::disk('local')->open('detail.mkv');
+    }
+
+    public function test_a_failed_vtt_upload_keeps_the_published_sheets(): void
     {
         $media = $this->colors();
         $storage = Storage::disk('memory');

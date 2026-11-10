@@ -82,7 +82,7 @@ class OutputTracksTest extends TestCase
         $this->media('album.m4a')->export()->coverArt($this->media('art.jpg'))->save('replacement.m4a');
     }
 
-    public function test_keeps_all_motion_tracks_in_mp4_and_rejects_mov(): void
+    public function test_keeps_all_motion_tracks_in_mp4(): void
     {
         $this->fixture();
         $this->ffmpeg(['-i', $this->path('source.mp4'), '-map', '0:v:0', '-map', '0:v:0', '-map', '0:a:0',
@@ -92,6 +92,11 @@ class OutputTracksTest extends TestCase
         foreach ([0, 1] as $track) {
             $this->assertSame($this->decoded('multi.mp4', '0:V:'.$track), $this->decoded('covered-multi.mp4', '0:V:'.$track));
         }
+    }
+
+    public function test_cover_art_rejects_mov(): void
+    {
+        $this->fixture();
         $this->expectException(InvalidArgumentException::class);
         $this->media('source.mp4')->export()->coverArt($this->media('art.png'))->save('unsupported.mov');
     }

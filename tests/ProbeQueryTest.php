@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\PendingProbe;
 use ProtoneMedia\LaravelFFMpeg\ProbeResult;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -52,7 +53,7 @@ class ProbeQueryTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_public_query_is_lazy_bounded_and_returns_separate_raw_sections(): void
+    public function test_queries_run_lazily_and_return_raw_sections(): void
     {
         $this->fakeProbe(function (PendingProcess $process) {
             $command = $process->command;
@@ -81,7 +82,7 @@ class ProbeQueryTest extends TestCase
             && in_array('-count_frames', $process->command, true) && in_array('v:0', $process->command, true));
     }
 
-    public function test_packet_and_time_bounds_are_typed_and_mutually_replace_each_other(): void
+    public function test_packet_and_time_bounds_replace_each_other(): void
     {
         $intervals = [];
         $this->fakeProbe(function (PendingProcess $process) use (&$intervals) {
@@ -97,7 +98,7 @@ class ProbeQueryTest extends TestCase
     }
 
     #[DataProvider('invalidQueryProvider')]
-    public function test_invalid_or_unbounded_requests_are_rejected_before_any_process(Closure $configure): void
+    public function test_unbounded_queries_are_rejected_before_any_process(Closure $configure): void
     {
         Process::fake();
         $this->assertThrows(fn () => $configure($this->pendingQuery()), InvalidArgumentException::class);
@@ -124,7 +125,7 @@ class ProbeQueryTest extends TestCase
     }
 
     #[DataProvider('malformedOutputProvider')]
-    public function test_malformed_query_output_is_rejected_and_cleaned(string $output): void
+    public function test_malformed_query_output_is_rejected(string $output): void
     {
         $this->fakeProbe(fn () => Process::result(output: $output));
         $this->assertThrows(
@@ -144,7 +145,7 @@ class ProbeQueryTest extends TestCase
         ];
     }
 
-    public function test_failed_queries_are_sanitized_and_cleaned(): void
+    public function test_failed_queries_are_sanitized(): void
     {
         $this->fakeProbe(fn (PendingProcess $process) => Process::result(exitCode: 1, errorOutput: end($process->command)));
         $this->assertThrows(
@@ -155,7 +156,7 @@ class ProbeQueryTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_url_queries_use_the_source_protocol_policy_and_redact_decoded_json(): void
+    public function test_url_queries_redact_the_decoded_json(): void
     {
         config(['laravel-ffmpeg.redact_credentials' => true]);
         $url = 'https://example.test/video.mp4?token=private-value';
@@ -182,7 +183,7 @@ class ProbeQueryTest extends TestCase
 
     #[TestWith(['echo str_repeat("X", 100000);', 'output_limit'])]
     #[TestWith(['usleep(400000); echo "{}";', 'timeout'])]
-    public function test_real_process_output_and_total_timeout_caps_are_enforced(string $body, string $category): void
+    public function test_resource_limits_are_enforced_on_real_processes(string $body, string $category): void
     {
         $binary = $this->root.'/probe';
         file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\n".
@@ -197,18 +198,9 @@ class ProbeQueryTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_real_vfr_b_frames_keyframes_intervals_and_counts_preserve_native_timestamps(): void
+    public function test_frame_queries_keep_native_timestamps(): void
     {
-        $ffmpeg = $this->useRealFFMpeg();
-        $disk = Storage::disk('query');
-        $disk->put('.keep', '');
-        $generated = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=64x48:r=24:d=3',
-            '-vf', 'select=if(lt(n\,12)\,1\,not(mod(n\,3)))', '-fps_mode', 'vfr', '-c:v', 'mpeg4', '-bf', '2', '-g', '12',
-            '-q:v', '3', $disk->path('vfr.mp4')]);
-        $this->assertProcessSucceeded($generated);
-        $media = FFMpeg::disk('query')->open('vfr.mp4');
-        $frames = $media->probeQuery()->selectStreams('v:0')->frames()->readInterval(0, 4)
-            ->entries(['frame' => ['pts_time', 'key_frame', 'pict_type'], 'stream' => ['index']])->get();
+        $frames = $this->frameQuery($this->vfrMedia());
         $this->assertGreaterThan(20, $frames->frames()->count());
         $this->assertContains('B', $frames->frames()->pluck('pict_type')->all());
         $times = $frames->frames()->pluck('pts_time')->map(fn ($time) => (float) $time)->all();
@@ -217,24 +209,73 @@ class ProbeQueryTest extends TestCase
             $deltas[] = round($times[$i] - $times[$i - 1], 3);
         }
         $this->assertGreaterThan(1, count(array_unique($deltas)));
-        $packets = $media->probeQuery()->selectStreams('v:0')->packets()->readPackets(7)
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_packet_queries_read_the_requested_number_of_packets(): void
+    {
+        $packets = $this->vfrMedia()->probeQuery()->selectStreams('v:0')->packets()->readPackets(7)
             ->entries(['packet' => ['pts_time', 'dts_time', 'flags'], 'stream' => ['index']])->get();
         $this->assertCount(7, $packets->packets());
         $this->assertTrue($packets->packets()->contains(fn ($packet) => $packet['pts_time'] !== $packet['dts_time']));
+        Storage::disk('memory')->put('vfr.mp4', Storage::disk('query')->get('vfr.mp4'));
+        $this->assertCount(3, FFMpeg::disk('memory')->open('vfr.mp4')->probeQuery()->packets()->readPackets(3)->get()->packets());
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_keyframe_queries_return_only_keyframes(): void
+    {
+        $media = $this->vfrMedia();
         $keys = $media->probeQuery()->selectStreams('v:0')->keyframes()->readInterval(0, 4)
             ->entries(['frame' => ['key_frame', 'pts_time']])->get();
         $this->assertGreaterThan(0, $keys->frames()->count());
-        $this->assertLessThan($frames->frames()->count(), $keys->frames()->count());
+        $this->assertLessThan($this->frameQuery($media)->frames()->count(), $keys->frames()->count());
         $this->assertTrue($keys->frames()->every(fn ($frame) => $frame['key_frame'] === 1));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_count_queries_match_the_decoded_frames(): void
+    {
+        $media = $this->vfrMedia();
         $counts = $media->probeQuery()->selectStreams('v:0')->countPackets()->countFrames()->readInterval(0, 4)
             ->entries(['stream' => ['nb_read_frames', 'nb_read_packets']])->get();
-        $this->assertSame($frames->frames()->count(), (int) $counts->get('streams.0.nb_read_frames'));
-        $this->assertSame($frames->frames()->count(), (int) $counts->get('streams.0.nb_read_packets'));
+        $frames = $this->frameQuery($media)->frames()->count();
+        $this->assertSame($frames, (int) $counts->get('streams.0.nb_read_frames'));
+        $this->assertSame($frames, (int) $counts->get('streams.0.nb_read_packets'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_interval_queries_read_part_of_the_stream(): void
+    {
+        $media = $this->vfrMedia();
         $partial = $media->probeQuery()->selectStreams('v:0')->packets()->readInterval(1, 0.25)->get();
         $this->assertGreaterThan(0, $partial->packets()->count());
-        $this->assertLessThan($frames->frames()->count(), $partial->packets()->count());
-        Storage::disk('memory')->put('vfr.mp4', $disk->get('vfr.mp4'));
-        $this->assertCount(3, FFMpeg::disk('memory')->open('vfr.mp4')->probeQuery()->packets()->readPackets(3)->get()->packets());
+        $this->assertLessThan($this->frameQuery($media)->frames()->count(), $partial->packets()->count());
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Write a variable frame rate video with B-frames to the query disk.
+     */
+    protected function vfrMedia(): Media
+    {
+        $ffmpeg = $this->useRealFFMpeg();
+        $disk = Storage::disk('query');
+        $disk->put('.keep', '');
+        $generated = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=64x48:r=24:d=3',
+            '-vf', 'select=if(lt(n\,12)\,1\,not(mod(n\,3)))', '-fps_mode', 'vfr', '-c:v', 'mpeg4', '-bf', '2', '-g', '12',
+            '-q:v', '3', $disk->path('vfr.mp4')]);
+        $this->assertProcessSucceeded($generated);
+
+        return FFMpeg::disk('query')->open('vfr.mp4');
+    }
+
+    /**
+     * Query every frame of the first four seconds of the given media's first video stream.
+     */
+    protected function frameQuery(Media $media): ProbeResult
+    {
+        return $media->probeQuery()->selectStreams('v:0')->frames()->readInterval(0, 4)
+            ->entries(['frame' => ['pts_time', 'key_frame', 'pict_type'], 'stream' => ['index']])->get();
     }
 }

@@ -50,7 +50,7 @@ class WaveformPeaksTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_asymmetric_signed_little_endian_extrema_keep_unequal_channels_and_partial_bucket(): void
+    public function test_peaks_keep_signed_extrema_per_channel_and_bucket(): void
     {
         $media = $this->wav('asymmetric.wav', [
             [-32768, -1234, -257, -1, 1, 257, 1234, 32767, -256, 256, 128],
@@ -107,7 +107,7 @@ class WaveformPeaksTest extends TestCase
         $this->clean();
     }
 
-    public function test_read_chunk_boundaries_preserve_channel_alignment_and_bucket_extrema(): void
+    public function test_read_chunk_boundaries_keep_channels_aligned(): void
     {
         $media = $this->wav('chunks.wav', [range(1, 4101), range(-4101, -1)]);
         $peaks = $this->pending($media, 2050)->get();
@@ -116,24 +116,36 @@ class WaveformPeaksTest extends TestCase
         $this->clean();
     }
 
-    public function test_silence_filters_and_accurate_clips_describe_decoded_output_frames(): void
+    public function test_filters_describe_the_decoded_output(): void
     {
         $media = $this->wav('ramp.wav', [range(100, 110)]);
         $silent = $this->pending($media)->audioFilter('volume=0')->get();
         $this->assertSame([[[0, 0], [0, 0], [0, 0]]], $silent->channels);
+        $this->clean();
+    }
+
+    public function test_accurate_clips_describe_only_the_clipped_frames(): void
+    {
+        $media = $this->wav('ramp.wav', [range(100, 110)]);
         $clip = $this->pending($media)->audioFilter('volume=2:precision=fixed')->clip(2 / 8000, duration: 6 / 8000)->get();
         $this->assertSame(6, $clip->frames);
         $this->assertSame([4, 2], $clip->bucketFrames);
         $this->assertSame([[[204, 210], [212, 214]]], $clip->channels);
+        $this->clean();
+    }
+
+    public function test_a_clip_past_the_end_has_no_frames(): void
+    {
+        $media = $this->wav('ramp.wav', [range(100, 110)]);
         $empty = $this->pending($media)->clip(1.0, duration: 1.0)->get();
         $this->assertSame(0, $empty->frames);
         $this->assertSame([[]], $empty->channels);
         $this->clean();
     }
 
-    public function test_selected_audio_track_is_decoded_and_a_missing_track_fails_cleanly(): void
+    public function test_the_selected_audio_track_is_decoded(): void
     {
-        $first = $this->wav('first.wav', [[100, 200, 300, 400, 500]]);
+        $this->wav('first.wav', [[100, 200, 300, 400, 500]]);
         $this->wav('second.wav', [[-500, -400, -300, -200, -100]], 16000);
         $process = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-i', $this->root.'/disk/first.wav',
             '-i', $this->root.'/disk/second.wav', '-map', '0:a', '-map', '1:a', '-c:a', 'pcm_s16le', $this->root.'/disk/tracks.nut']);
@@ -143,6 +155,12 @@ class WaveformPeaksTest extends TestCase
         $this->assertSame(16000, $peaks->sampleRate);
         $this->assertSame(5 / 16000, $peaks->duration());
         $this->assertSame([[[-500, -200], [-100, -100]]], $peaks->channels);
+        $this->clean();
+    }
+
+    public function test_a_missing_audio_track_fails_cleanly(): void
+    {
+        $first = $this->wav('first.wav', [[100, 200, 300, 400, 500]]);
         $this->assertThrows(
             fn () => $this->pending($first)->audioTrack(1)->get(),
             fn (MediaException $exception) => $exception->category === 'mapping',
@@ -150,7 +168,7 @@ class WaveformPeaksTest extends TestCase
         $this->clean();
     }
 
-    public function test_publication_uses_a_stream_and_false_returns_fail_without_leaking_workspaces(): void
+    public function test_a_failed_publication_closes_its_stream(): void
     {
         $media = $this->wav('source.wav', [[-10, 20, -30, 40]]);
         $disk = Mockery::mock(Filesystem::class);
@@ -178,7 +196,7 @@ class WaveformPeaksTest extends TestCase
         (new Media('peaks-fixtures', 'missing.wav'))->waveformPeaks()->clip(1, duration: 1, seek: 'keyframe')->inspect();
     }
 
-    public function test_aggregate_memory_is_bounded_and_filter_failures_clean_up(): void
+    public function test_aggregate_memory_is_bounded(): void
     {
         $media = $this->wav('long.wav', [array_fill(0, 100001, 1)]);
         $this->assertThrows(
@@ -186,6 +204,12 @@ class WaveformPeaksTest extends TestCase
             fn (MediaException $exception) => $exception->category === 'output_limit',
         );
         $this->assertSame([[[1, 1], [1, 1]]], $this->pending($media)->buckets(2)->get()->channels);
+        $this->clean();
+    }
+
+    public function test_filter_failures_clean_up(): void
+    {
+        $media = $this->wav('long.wav', [array_fill(0, 100001, 1)]);
         $this->assertThrows(
             fn () => $this->pending($media)->audioFilter('not_a_real_audio_filter')->get(),
             fn (MediaException $exception) => $exception->phase === 'encoding',

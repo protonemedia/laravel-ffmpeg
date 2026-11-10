@@ -120,6 +120,18 @@ class ProbeTest extends TestCase
         ], []], $seen);
 
         $this->assertSame(12.375, $metadata->duration());
+        $this->assertSame($key, $metadata->toArray()['format']['filename']);
+        $this->assertSame('source bytes', $disk->get($key));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_probe_results_expose_streams_tags_and_chapters(): void
+    {
+        Storage::disk('local')->put('lecture.mp4', 'source bytes');
+        $this->fakeProbe();
+
+        $metadata = FFMpeg::disk('local')->open('lecture.mp4')->probe();
+
         $this->assertCount(6, $metadata->streams());
         $this->assertCount(1, $metadata->videoStreams());
         $this->assertSame(854, $metadata->video()->width());
@@ -154,10 +166,7 @@ class ProbeTest extends TestCase
         $this->assertSame([0], $metadata->coverArt()->map->index()->all());
         $this->assertTrue($metadata->coverArt()->first()->isCoverArt());
         $this->assertFalse($metadata->video()->isCoverArt());
-        $this->assertSame($key, $metadata->toArray()['format']['filename']);
         $this->assertSame('fallback', $metadata->get('missing', 'fallback'));
-        $this->assertSame('source bytes', $disk->get($key));
-        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_it_stages_non_local_disks_and_supplied_filesystems_privately(): void

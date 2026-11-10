@@ -44,7 +44,7 @@ class SpeedTest extends TestCase
         return $path;
     }
 
-    public function test_inspection_is_pure_preserves_maps_and_orders_filters_before_speed(): void
+    public function test_filters_are_applied_before_the_speed_change(): void
     {
         Process::fake();
         $operation = $this->media()->speed(3)->mapVideo(track: 1)->mapAudio(track: 1)
@@ -55,9 +55,15 @@ class SpeedTest extends TestCase
         $this->assertStringContainsString('-map 0:v:1 -map 0:a:1', $text);
         $this->assertStringContainsString('hflip,settb=AVTB,setpts=PTS/3', $text);
         $this->assertStringContainsString('volume=0.5,asetpts=PTS-STARTPTS+STARTPTS/3,atempo=2,atempo=1.5', $text);
-        $this->assertStringContainsString('atempo=0.5,atempo=0.5', implode(' ', $this->media()->speed(0.25)->inspect()));
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_slow_factors_chain_tempo_filters(): void
+    {
+        Process::fake();
+        $this->assertStringContainsString('atempo=0.5,atempo=0.5', implode(' ', $this->media()->speed(0.25)->inspect()));
+        Process::assertNothingRan();
     }
 
     #[DataProvider('invalidFactorProvider')]
@@ -98,7 +104,7 @@ class SpeedTest extends TestCase
     }
 
     #[DataProvider('factorProvider')]
-    public function test_asymmetric_factors_retime_decoded_video_and_audio_without_changing_pitch(float $factor): void
+    public function test_speed_changes_keep_the_pitch(float $factor): void
     {
         $source = $this->fixture();
         $hash = hash_file('sha256', $source);
@@ -247,7 +253,7 @@ class SpeedTest extends TestCase
         $this->assertPitch($path);
     }
 
-    public function test_failure_and_unsupported_timeline_leave_source_and_workspace_intact(): void
+    public function test_encoding_failures_leave_the_source_and_workspace_intact(): void
     {
         $source = $this->fixture();
         $hash = hash_file('sha256', $source);
@@ -255,6 +261,15 @@ class SpeedTest extends TestCase
             fn () => $this->media()->speed(1.5)->videoFilter('not_a_filter')->save('failed.mkv'),
             fn (MediaException $exception) => $exception->phase === 'encoding',
         );
+        $this->assertSame($hash, hash_file('sha256', $source));
+        $this->assertFalse(Storage::disk('speed')->exists('failed.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_sources_with_a_shifted_timeline_are_rejected(): void
+    {
+        $source = $this->fixture();
+        $hash = hash_file('sha256', $source);
         $shift = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $source, '-c', 'copy', '-output_ts_offset', '2', Storage::disk('speed')->path('shifted.mkv')]);
         $this->assertProcessSucceeded($shift);
         $this->assertThrows(

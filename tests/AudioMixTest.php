@@ -196,7 +196,7 @@ class AudioMixTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_one_shot_music_pads_short_tracks_and_trims_long_tracks_without_gain_pumping(): void
+    public function test_one_shot_music_pads_short_tracks_without_gain_pumping(): void
     {
         $this->fixture();
         $source = $this->media();
@@ -211,9 +211,13 @@ class AudioMixTest extends TestCase
         $this->assertSample($samples, 1.8, 0.025, -0.05);
         $this->assertSample($samples, 2.5, 0, 0);
         $this->assertCount(3 * 48000 * 2, $samples);
+    }
 
+    public function test_one_shot_music_trims_long_tracks(): void
+    {
+        $this->fixture();
         $this->ffmpeg(['-f', 'lavfi', '-i', 'aevalsrc=0.3|-0.1:s=48000:d=5', '-c:a', 'pcm_f64le', $this->path('long.wav')]);
-        $source->mixAudio($this->media('long.wav'), volume: 0.5, originalVolume: 0)
+        $this->media()->mixAudio($this->media('long.wav'), volume: 0.5, originalVolume: 0)
             ->withoutVideo()->audio('pcm_f64le')->volume(0.5)->save('trimmed.wav');
         $samples = $this->samples('trimmed.wav');
         $this->assertCount(3 * 48000 * 2, $samples);
@@ -221,19 +225,23 @@ class AudioMixTest extends TestCase
         $this->assertSample($samples, 2.9, 0.075, -0.025);
     }
 
-    public function test_silent_video_and_audio_only_sources_receive_music_without_inventing_original_audio(): void
+    public function test_silent_video_receives_music_without_inventing_original_audio(): void
     {
         $this->fixture(audio: false);
-        $music = $this->media('music.wav');
-        $this->media()->backgroundMusic($music)->video('copy')->audio('pcm_f64le')->save('silent-with-music.mkv');
+        $this->media()->backgroundMusic($this->media('music.wav'))->video('copy')->audio('pcm_f64le')->save('silent-with-music.mkv');
         $samples = $this->samples('silent-with-music.mkv');
         $this->assertCount(3 * 48000 * 2, $samples);
         $this->assertSample($samples, 0.1, 0.04, 0.08);
         $this->assertSample($samples, 2.8, -0.08, 0.04);
         $this->assertSame('ffv1', $this->media('silent-with-music.mkv')->probe()->video()->codec());
+        $this->assertWorkspacesAreCleanedUp();
+    }
 
+    public function test_audio_only_sources_receive_looped_music(): void
+    {
+        $this->fixture(audio: false);
         $this->ffmpeg(['-f', 'lavfi', '-i', 'aevalsrc=0.1|-0.2:s=48000:d=1.5', '-c:a', 'pcm_f64le', $this->path('speech.wav')]);
-        $this->media('speech.wav')->mixAudio($music, volume: 0.25)->loop()->audio('pcm_f64le')->save('audio-only.wav');
+        $this->media('speech.wav')->mixAudio($this->media('music.wav'), volume: 0.25)->loop()->audio('pcm_f64le')->save('audio-only.wav');
         $samples = $this->samples('audio-only.wav');
         $this->assertCount(1.5 * 48000 * 2, $samples);
         $this->assertSample($samples, 0.1, 0.15, -0.1);

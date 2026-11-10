@@ -47,23 +47,30 @@ class PlaylistTest extends TestCase
         $this->assertSame($variant, $disk->get('shows/variants/low'));
     }
 
-    public function test_external_urls_have_no_disk_target_and_are_never_followed(): void
+    public function test_external_playlist_urls_have_no_disk_target_and_are_never_followed(): void
     {
         $disk = Storage::disk('memory');
         $master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhttps://cdn.example.test/variant?token=old\n#EXT-X-STREAM-INF:BANDWIDTH=2\n/streams/high\n";
         $disk->put('master.m3u8', $master);
         $seen = [];
+
         $all = FFMpeg::disk('memory')->playlist('master.m3u8')->playlistUrlsUsing(function ($target, $source, $uri) use (&$seen) {
             $seen[] = [$target, $source, $uri];
 
             return $uri;
         })->all();
+
         $this->assertSame(['master.m3u8' => $master], $all->all());
         $this->assertSame([
             [null, 'master.m3u8', 'https://cdn.example.test/variant?token=old'],
             [null, 'master.m3u8', '/streams/high'],
         ], $seen);
-        $disk->put('encrypted.m3u8', "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"/private/key?id=1\",IV=0x01\n#EXTINF:1,\nhttps://cdn.example.test/segment\n");
+    }
+
+    public function test_external_key_urls_have_no_disk_target(): void
+    {
+        Storage::disk('memory')->put('encrypted.m3u8', "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"/private/key?id=1\",IV=0x01\n#EXTINF:1,\nhttps://cdn.example.test/segment\n");
+
         $output = FFMpeg::disk('memory')->playlist('encrypted.m3u8')->keyUrlsUsing(function ($target, $source, $uri) {
             $this->assertNull($target);
             $this->assertSame('encrypted.m3u8', $source);
@@ -71,15 +78,23 @@ class PlaylistTest extends TestCase
 
             return '/signed/key?id=2';
         })->get();
+
         $this->assertStringContainsString('URI="/signed/key?id=2",IV=0x01', $output);
     }
 
-    public function test_cycles_are_visited_once_and_get_reads_only_its_source(): void
+    public function test_get_reads_only_its_source(): void
+    {
+        Storage::disk('memory')->put('master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nchild.m3u8\n");
+
+        $this->assertStringContainsString('child.m3u8', FFMpeg::disk('memory')->playlist('master.m3u8')->get());
+    }
+
+    public function test_cycles_are_visited_once(): void
     {
         $disk = Storage::disk('memory');
         $disk->put('master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nchild.m3u8\n");
-        $this->assertStringContainsString('child.m3u8', FFMpeg::disk('memory')->playlist('master.m3u8')->get());
         $disk->put('child.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nmaster.m3u8\n");
+
         $this->assertSame(['master.m3u8', 'child.m3u8'], FFMpeg::disk('memory')->playlist('master.m3u8')->all()->keys()->all());
     }
 
@@ -381,38 +396,55 @@ class PlaylistTest extends TestCase
         );
     }
 
-    public function test_input_and_rewritten_output_are_bounded_at_sixteen_mib(): void
+    public function test_input_is_bounded_at_sixteen_mib(): void
     {
         $disk = Storage::disk('memory');
         $exact = "#EXTM3U\n#".str_repeat('x', 16777216 - 9);
         $disk->put('exact.m3u8', $exact);
-        $this->assertSame($exact, FFMpeg::disk('memory')->playlist('exact.m3u8')->get());
         $disk->put('large.m3u8', $exact.'x');
+
+        $this->assertSame($exact, FFMpeg::disk('memory')->playlist('exact.m3u8')->get());
         $this->assertThrows(
             fn () => FFMpeg::disk('memory')->playlist('large.m3u8')->get(),
             fn (MediaException $exception) => $exception->category === 'artifact',
         );
-        $disk->put('index.m3u8', "#EXTM3U\n#EXTINF:1,\npart.ts\n");
+    }
+
+    public function test_rewritten_output_is_bounded_at_sixteen_mib(): void
+    {
+        Storage::disk('memory')->put('index.m3u8', "#EXTM3U\n#EXTINF:1,\npart.ts\n");
+
         $this->expectException(MediaException::class);
+
         FFMpeg::disk('memory')->playlist('index.m3u8')->mediaUrlsUsing(fn () => '/'.str_repeat('x', 16777216))->get();
     }
 
-    public function test_traversal_limits_apply_to_the_whole_collection(): void
+    public function test_traversal_follows_at_most_1024_playlists(): void
     {
         $disk = Storage::disk('memory');
         for ($index = 0; $index < 1024; $index++) {
             $disk->put($index.'.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n".($index + 1).".m3u8\n");
         }
+
         $this->assertThrows(
             fn () => FFMpeg::disk('memory')->playlist('0.m3u8')->all(),
             fn (MediaException $exception) => $exception->category === 'artifact'
                 && str_contains($exception->getMessage(), '1024'),
         );
+
         $disk->put('1023.m3u8', "#EXTM3U\n# End\n");
+
         $this->assertCount(1024, FFMpeg::disk('memory')->playlist('0.m3u8')->all());
+    }
+
+    public function test_traversal_bounds_the_whole_collection_at_sixteen_mib(): void
+    {
+        $disk = Storage::disk('memory');
         $disk->put('master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlarge.m3u8\n");
         $disk->put('large.m3u8', "#EXTM3U\n#".str_repeat('x', 16777216 - 9));
+
         $this->expectException(MediaException::class);
+
         FFMpeg::disk('memory')->playlist('master.m3u8')->all();
     }
 

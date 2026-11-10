@@ -15,7 +15,7 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class GifTest extends TestCase
 {
-    public function test_inspection_is_pure_and_filters_precede_the_palette_in_caller_order(): void
+    public function test_filters_precede_the_palette_in_caller_order(): void
     {
         Process::fake();
         $gif = FFMpeg::disk('missing')->open('missing.mp4')->gif()->rotate(90)->crop(100, 100)
@@ -36,7 +36,7 @@ class GifTest extends TestCase
     }
 
     #[DataProvider('invalidSettingsProvider')]
-    public function test_invalid_and_contradictory_settings_fail_without_io(Closure $configure): void
+    public function test_invalid_settings_fail_without_io(Closure $configure): void
     {
         Process::fake();
         $media = FFMpeg::disk('missing')->open('missing.mp4');
@@ -62,7 +62,7 @@ class GifTest extends TestCase
     }
 
     #[DataProvider('loopProvider')]
-    public function test_native_gif_has_changing_palette_frames_requested_timing_and_loop_bytes(int $loop, bool $looping, ?int $loops): void
+    public function test_native_gifs_honour_the_requested_settings(int $loop, bool $looping, ?int $loops): void
     {
         $binary = $this->useRealFFMpeg();
         $source = $this->root.'/source.mp4';
@@ -130,26 +130,31 @@ class GifTest extends TestCase
 
     public function test_clip_selects_source_frames_before_palette_generation(): void
     {
-        $binary = $this->useRealFFMpeg();
-        $source = $this->root.'/colors.mp4';
-        $fixture = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=64x48:rate=10:duration=1',
-            '-f', 'lavfi', '-i', 'color=blue:size=64x48:rate=10:duration=1',
-            '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]', '-map', '[v]', '-c:v', 'libx264', '-threads', '1', $source]);
-        $this->assertProcessSucceeded($fixture);
+        $source = $this->colorsFixture();
         FFMpeg::disk()->open(new File($source))->gif(64, 10)->clip(1.0, duration: 0.5)->toDisk('memory')->save('blue.gif');
         $image = imagecreatefromstring(Storage::disk('memory')->get('blue.gif'));
         $pixel = imagecolorsforindex($image, imagecolorat($image, 20, 20));
         $this->assertGreaterThan(240, $pixel['blue']);
         $this->assertLessThan(10, $pixel['red']);
+        $this->assertWorkspacesAreCleanedUp();
+    }
 
-        // No clip is required; caller geometry is still applied in order.
+    public function test_geometry_is_applied_in_caller_order_without_a_clip(): void
+    {
+        $source = $this->colorsFixture();
         $media = FFMpeg::disk()->open(new File($source));
         $media->gif(64, 12.5)->rotate(90)->resize(32, 40)->toDisk('memory')->save('whole.gif');
         $whole = FFMpeg::disk('memory')->open('whole.gif')->probe();
         $this->assertSame(32, $whole->video()->get('width'));
         $this->assertSame(40, $whole->video()->get('height'));
         $this->assertEqualsWithDelta(2.0, $whole->duration(), 0.01);
+        $this->assertWorkspacesAreCleanedUp();
+    }
 
+    public function test_failed_preprocessing_keeps_the_existing_destination(): void
+    {
+        $source = $this->colorsFixture();
+        $media = FFMpeg::disk()->open(new File($source));
         Storage::disk('memory')->put('retained.gif', 'existing destination');
         $hash = hash_file('sha256', $source);
         $this->assertThrows(
@@ -157,6 +162,17 @@ class GifTest extends TestCase
             fn (MediaException $exception) => $exception->phase === 'analysis',
         );
 
+        $this->assertSame('existing destination', Storage::disk('memory')->get('retained.gif'));
+        $this->assertSame($hash, hash_file('sha256', $source));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_cancelled_analysis_keeps_the_existing_destination(): void
+    {
+        $source = $this->colorsFixture();
+        $media = FFMpeg::disk()->open(new File($source));
+        Storage::disk('memory')->put('retained.gif', 'existing destination');
+        $hash = hash_file('sha256', $source);
         $this->assertThrows(fn () => $media->gif()->toDisk('memory')->onProgress(function ($progress) {
             if ($progress->phase === 'analysis') {
                 throw new ExportCancelled;
@@ -166,5 +182,20 @@ class GifTest extends TestCase
         $this->assertSame('existing destination', Storage::disk('memory')->get('retained.gif'));
         $this->assertSame($hash, hash_file('sha256', $source));
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Write a two second video that turns from red to blue halfway and get its path.
+     */
+    protected function colorsFixture(): string
+    {
+        $binary = $this->useRealFFMpeg();
+        $source = $this->root.'/colors.mp4';
+        $fixture = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=64x48:rate=10:duration=1',
+            '-f', 'lavfi', '-i', 'color=blue:size=64x48:rate=10:duration=1',
+            '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]', '-map', '[v]', '-c:v', 'libx264', '-threads', '1', $source]);
+        $this->assertProcessSucceeded($fixture);
+
+        return $source;
     }
 }

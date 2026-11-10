@@ -87,7 +87,7 @@ class VolumeDetectTest extends TestCase
     }
 
     #[DataProvider('failedAnalysisProvider')]
-    public function test_missing_tracks_bad_filters_and_broken_sources_are_inspectable_failures(Closure $analyze): void
+    public function test_failed_analyses_are_inspectable(Closure $analyze): void
     {
         $this->silenceFixture();
         Storage::disk('local')->put('broken.wav', 'not audio');
@@ -127,7 +127,7 @@ class VolumeDetectTest extends TestCase
         $this->assertProcessSucceeded($fixture);
     }
 
-    public function test_signed_urls_are_redacted_in_both_output_streams_commands_and_explicit_exceptions(): void
+    public function test_signed_urls_are_redacted_everywhere_they_appear(): void
     {
         config(['laravel-ffmpeg.redact_credentials' => true]);
         $url = 'https://example.invalid/audio.wav?token=private-token';
@@ -155,9 +155,32 @@ class VolumeDetectTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_credential_redaction_is_opt_in_and_keeps_short_ordinary_values(): void
+    public function test_credential_redaction_is_opt_in(): void
     {
         $url = 'https://example.invalid/audio.wav?dl=1&v=2&token=abc&id=0123456789abcdef';
+        $this->fakeCredentialLeaks();
+        $output = "mean_volume: -21.5 dB\nmax_volume: -2.0 dB\nabc 0123456789abcdef dl=1&v=2&token=abc&id=0123456789abcdef";
+        $this->assertSame($output, trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
+
+        config(['laravel-ffmpeg.redact_credentials' => true]);
+        $this->assertSame("mean_volume: -21.5 dB\nmax_volume: -2.0 dB\n[redacted] [redacted] [query]", trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
+    }
+
+    public function test_failed_rtsp_captures_redact_the_camera_password(): void
+    {
+        $this->fakeCredentialLeaks();
+        config(['laravel-ffmpeg.redact_credentials' => true]);
+        $this->assertThrows(
+            fn () => FFMpeg::openRtsp('rtsp://admin:1234@camera.invalid/live')->frame()->toDisk('memory')->save('snapshot.png'),
+            fn (MediaException $exception) => trim($exception->diagnostics) === 'user admin rejected with password [redacted]',
+        );
+    }
+
+    /**
+     * Fake FFmpeg processes that echo the credentials of the input in their error output.
+     */
+    protected function fakeCredentialLeaks(): void
+    {
         Process::preventStrayProcesses();
         Process::fake(function (PendingProcess $process) {
             return match (true) {
@@ -167,15 +190,6 @@ class VolumeDetectTest extends TestCase
                 default => Process::result(errorOutput: "mean_volume: -21.5 dB\nmax_volume: -2.0 dB\nabc 0123456789abcdef dl=1&v=2&token=abc&id=0123456789abcdef"),
             };
         });
-        $output = "mean_volume: -21.5 dB\nmax_volume: -2.0 dB\nabc 0123456789abcdef dl=1&v=2&token=abc&id=0123456789abcdef";
-        $this->assertSame($output, trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
-
-        config(['laravel-ffmpeg.redact_credentials' => true]);
-        $this->assertSame("mean_volume: -21.5 dB\nmax_volume: -2.0 dB\n[redacted] [redacted] [query]", trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
-        $this->assertThrows(
-            fn () => FFMpeg::openRtsp('rtsp://admin:1234@camera.invalid/live')->frame()->toDisk('memory')->save('snapshot.png'),
-            fn (MediaException $exception) => trim($exception->diagnostics) === 'user admin rejected with password [redacted]',
-        );
     }
 
     public function test_missing_url_protocols_fail_in_the_analysis_phase(): void
@@ -211,7 +225,7 @@ class VolumeDetectTest extends TestCase
         ];
     }
 
-    public function test_launch_errors_and_timeouts_throw_and_clean_up_instead_of_returning_a_failed_result(): void
+    public function test_timeouts_throw_and_reap_the_process_instead_of_returning_a_failed_result(): void
     {
         Storage::disk('memory')->put('audio.wav', 'source bytes');
         $binary = $this->root.'/ffmpeg';
@@ -227,6 +241,12 @@ class VolumeDetectTest extends TestCase
         );
         $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
         $this->assertWorkspacesAreCleanedUp();
+        $this->assertSame('source bytes', Storage::disk('memory')->get('audio.wav'));
+    }
+
+    public function test_launch_errors_throw_instead_of_returning_a_failed_result(): void
+    {
+        Storage::disk('memory')->put('audio.wav', 'source bytes');
         config(['laravel-ffmpeg.ffmpeg.binaries' => $this->root.'/missing-binary']);
         $this->assertThrows(
             fn () => FFMpeg::disk('memory')->open('audio.wav')->analyze(),

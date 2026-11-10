@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Filesystem\Filesystem as LocalFilesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Process;
@@ -16,6 +17,7 @@ use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Events;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\HlsExportResult;
 use ProtoneMedia\LaravelFFMpeg\HlsVariant;
 use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsExport;
@@ -24,6 +26,16 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class HlsTest extends TestCase
 {
+    /**
+     * The directory that holds the real variants shared by the tests of this class.
+     */
+    protected static ?string $realVariantsRoot = null;
+
+    /**
+     * The result of saving the shared real variants.
+     */
+    protected static ?HlsExportResult $realVariantsResult = null;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -64,44 +76,79 @@ class HlsTest extends TestCase
         return json_decode($result->output(), true)['streams'];
     }
 
-    public function test_inspection_inherits_late_defaults_appends_filters_and_keeps_variants_independent(): void
+    protected function exportWithLateDefaults(Media $media): PendingHlsExport
     {
-        Process::fake();
-        $media = FFMpeg::disk('absent')->open('unread.mp4');
-        $export = $media->hls(segmentDuration: 0.7)
+        return $media->hls(segmentDuration: 0.7)
             ->variant('low', fn (HlsVariant $variant) => $variant->resize(width: 80)->video(bitrate: '200k')->outputOptions(['-threads', '2']))
             ->variant('high', fn (HlsVariant $variant) => $variant->resize(height: 96))
             ->video('libx264', bitrate: '600k')->audio('aac', bitrate: '48k')->videoFilter('hflip')->outputOptions(['-threads', '3']);
+    }
+
+    public function test_inspection_is_pure(): void
+    {
+        Process::fake();
+        $export = $this->exportWithLateDefaults(FFMpeg::disk('absent')->open('unread.mp4'));
         $command = $export->inspect();
         $this->assertSame($command, $export->inspect());
         $this->assertSame(1, count(array_filter($command, fn ($token) => $token === '-i')));
-        $this->assertContains('hflip,scale=w=80:h=-2:reset_sar=1', $command);
-        $this->assertContains('hflip,scale=w=-2:h=96:reset_sar=1', $command);
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_variants_inherit_late_defaults_unless_they_override_them(): void
+    {
+        Process::fake();
+        $command = $this->exportWithLateDefaults(FFMpeg::disk('absent')->open('unread.mp4'))->inspect();
         $first = array_slice($command, 0, array_search('[output:0]', $command));
         $second = array_slice($command, array_search('[output:0]', $command) + 1);
         $this->assertSame('200k', $first[array_search('-b:v', $first) + 1]);
         $this->assertSame('600k', $second[array_search('-b:v', $second) + 1]);
         $this->assertSame('2', $first[array_search('-threads', $first) + 1]);
         $this->assertSame('3', $second[array_search('-threads', $second) + 1]);
-        $this->assertContains('expr:gte(t,n_forced*0.7)', $command);
-        $this->assertNotContains('independent_segments', $command);
-        $this->assertNotContains('hflip', $media->hls()->variant('fresh', fn () => null)->inspect());
-        $this->assertFalse(is_callable([new HlsVariant, 'toDisk']));
-        $this->assertFalse(is_callable([new HlsVariant, 'save']));
-        Process::assertNothingRan();
-        $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_real_variants_have_usable_segments_aligned_keyframes_and_relative_nested_playlists(): void
+    public function test_export_filters_run_before_the_scale_of_each_variant(): void
     {
-        $media = $this->source();
+        Process::fake();
+        $media = FFMpeg::disk('absent')->open('unread.mp4');
+        $command = $this->exportWithLateDefaults($media)->inspect();
+        $this->assertContains('hflip,scale=w=80:h=-2:reset_sar=1', $command);
+        $this->assertContains('hflip,scale=w=-2:h=96:reset_sar=1', $command);
+        $this->assertNotContains('hflip', $media->hls()->variant('fresh', fn () => null)->inspect());
+    }
+
+    public function test_variants_are_keyframed_on_the_segment_grid(): void
+    {
+        Process::fake();
+        $command = $this->exportWithLateDefaults(FFMpeg::disk('absent')->open('unread.mp4'))->inspect();
+        $this->assertContains('expr:gte(t,n_forced*0.7)', $command);
+        $this->assertNotContains('independent_segments', $command);
+    }
+
+    public function test_variants_cannot_be_saved_on_their_own(): void
+    {
+        $this->assertFalse(is_callable([new HlsVariant, 'toDisk']));
+        $this->assertFalse(is_callable([new HlsVariant, 'save']));
+    }
+
+    protected function realVariants(): PendingHlsExport
+    {
+        $this->source();
+        Storage::disk('memory')->put('original/source.mkv', Storage::disk('local')->get('source.mkv'));
+
+        return FFMpeg::disk('memory')->open('original/source.mkv')->hls(segmentDuration: 0.7)->audio(bitrate: '48k')
+            ->variant('small', fn (HlsVariant $variant) => $variant->resize(width: 80)->video(bitrate: '120k'))
+            ->variant('large', fn (HlsVariant $variant) => $variant->video(bitrate: '300k'));
+    }
+
+    public function test_real_variants_publish_segments_before_playlists(): void
+    {
+        $export = $this->realVariants();
+        $original = Storage::disk('local')->get('source.mkv');
         $progressEvents = [];
         Event::listen(Events\ExportProgress::class, function ($event) use (&$progressEvents) {
             $progressEvents[] = $event;
         });
-        $original = Storage::disk('local')->get('source.mkv');
-        Storage::disk('memory')->put('original/source.mkv', $original);
-        $media = FFMpeg::disk('memory')->open('original/source.mkv');
         $writes = [];
         $storage = Storage::disk('memory');
         $disk = Mockery::mock(Filesystem::class);
@@ -112,24 +159,81 @@ class HlsTest extends TestCase
             return $storage->put($path, $stream, $options);
         });
         $disk->shouldReceive('size')->andReturnUsing(fn ($path) => $storage->size($path));
-        $result = $media->hls(segmentDuration: 0.7)->audio(bitrate: '48k')
-            ->variant('small', fn (HlsVariant $variant) => $variant->resize(width: 80)->video(bitrate: '120k'))
-            ->variant('large', fn (HlsVariant $variant) => $variant->video(bitrate: '300k'))
-            ->toDisk($disk, ['CacheControl' => 'max-age=60'])->visibility('private')->save('course/é #?/master.m3u8');
+        $result = $export->toDisk($disk, ['CacheControl' => 'max-age=60'])->visibility('private')->save('course/é #?/master.m3u8');
         $this->assertCount(1, $result->processes());
-        $this->assertSame('course/é #?/master.m3u8', $result->playlist()->path);
-        $master = $storage->get($result->playlist()->path);
-        $this->assertSame(2, substr_count($master, '#EXT-X-STREAM-INF:'));
-        $this->assertStringContainsString('RESOLUTION=80x48', $master);
-        $this->assertStringContainsString('RESOLUTION=160x96', $master);
-        $this->assertStringContainsString("small/index.m3u8\n", $master);
-        $this->assertStringContainsString("large/index.m3u8\n", $master);
         $this->assertSame('course/é #?/master.m3u8', end($writes));
         $firstPlaylist = array_search('course/é #?/small/index.m3u8', $writes);
         foreach (array_slice($writes, 0, $firstPlaylist) as $path) {
             $this->assertStringEndsWith('.ts', $path);
         }
         $this->assertSame(count($writes) - 3, $firstPlaylist);
+        $this->assertSame($original, Storage::disk('local')->get('source.mkv'));
+        $this->assertSame($original, $storage->get('original/source.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
+        Event::assertDispatchedTimes(Events\ExportCompleted::class, 1);
+        $this->assertNotEmpty(array_filter($progressEvents, fn ($event) => $event->progress->isEncoding()
+            && $event->progress->elapsedSeconds !== null));
+        $this->assertSame('publication', end($progressEvents)->progress->phase);
+        Event::assertDispatched(Events\ExportCompleted::class,
+            fn ($event) => $event->operationId === $progressEvents[0]->operationId);
+        $this->assertContains('course/é #?/master.m3u8', array_column($progressEvents[0]->outputs, 'path'));
+    }
+
+    /**
+     * Get the result of saving the real variants to the "real-variants" disk.
+     */
+    protected function savedRealVariants(): HlsExportResult
+    {
+        // Encoding the variants is the slow part, and several tests only read the
+        // published files, so we encode them once for the class and point each
+        // test at the same directory. Tests may still use their own local disk.
+        $this->useRealFFMpeg();
+
+        static::$realVariantsRoot ??= sys_get_temp_dir().'/laravel-ffmpeg-hls-'.bin2hex(random_bytes(8));
+
+        config(['filesystems.disks.real-variants' => ['driver' => 'local', 'root' => static::$realVariantsRoot]]);
+
+        if (static::$realVariantsResult === null) {
+            static::$realVariantsResult = $this->realVariants()->toDisk('real-variants')->save('course/é #?/master.m3u8');
+        } else {
+            $this->fakeLocalDisk();
+        }
+
+        return static::$realVariantsResult;
+    }
+
+    /**
+     * Remove the shared real variants after the last test of the class.
+     */
+    public static function tearDownAfterClass(): void
+    {
+        if (static::$realVariantsRoot !== null) {
+            (new LocalFilesystem)->deleteDirectory(static::$realVariantsRoot);
+        }
+
+        static::$realVariantsRoot = null;
+        static::$realVariantsResult = null;
+
+        parent::tearDownAfterClass();
+    }
+
+    public function test_real_master_playlists_list_every_variant_relatively(): void
+    {
+        $result = $this->savedRealVariants();
+        $this->assertSame('course/é #?/master.m3u8', $result->playlist()->path);
+        $master = Storage::disk('real-variants')->get($result->playlist()->path);
+        $this->assertSame(2, substr_count($master, '#EXT-X-STREAM-INF:'));
+        $this->assertStringContainsString('RESOLUTION=80x48', $master);
+        $this->assertStringContainsString('RESOLUTION=160x96', $master);
+        $this->assertStringContainsString("small/index.m3u8\n", $master);
+        $this->assertStringContainsString("large/index.m3u8\n", $master);
+    }
+
+    public function test_real_variants_have_aligned_keyframed_segments_that_decode(): void
+    {
+        $result = $this->savedRealVariants();
+        $storage = Storage::disk('real-variants');
+        $local = Storage::disk('local');
         $durations = [];
         foreach (['small' => [80, 48], 'large' => [160, 96]] as $name => $dimensions) {
             $variant = $result->variant($name);
@@ -141,8 +245,7 @@ class HlsTest extends TestCase
             $this->assertCount(4, $durations[$name]);
             $files = $variant->files()->where('role', 'hls-segment')->values();
             $this->assertCount(4, $files);
-            $local = Storage::disk('local');
-            foreach ($files as $index => $file) {
+            foreach ($files as $file) {
                 $this->assertStringContainsString("\n".basename($file->path)."\n", $playlist);
                 $key = 'playback/'.$name.'/'.basename($file->path);
                 $local->put($key, $storage->get($file->path));
@@ -162,16 +265,29 @@ class HlsTest extends TestCase
         }
         $this->assertSame($durations['small'], $durations['large']);
         $this->assertEqualsWithDelta(0.7, $durations['small'][0], 0.05);
-        $this->assertSame($original, Storage::disk('local')->get('source.mkv'));
-        $this->assertSame($original, $storage->get('original/source.mkv'));
-        $this->assertWorkspacesAreCleanedUp();
-        Event::assertDispatchedTimes(Events\ExportCompleted::class, 1);
-        $this->assertNotEmpty(array_filter($progressEvents, fn ($event) => $event->progress->isEncoding()
-            && $event->progress->elapsedSeconds !== null));
-        $this->assertSame('publication', end($progressEvents)->progress->phase);
-        Event::assertDispatched(Events\ExportCompleted::class,
-            fn ($event) => $event->operationId === $progressEvents[0]->operationId);
-        $this->assertContains('course/é #?/master.m3u8', array_column($progressEvents[0]->outputs, 'path'));
+    }
+
+    protected function typedExport(Media $media, string $type, bool $fragmented): PendingHlsExport
+    {
+        $export = $media->hls(segmentDuration: 0.7)->playlistType(strtoupper($type))
+            ->variant('main', fn (HlsVariant $variant) => $variant->video('libx264', preset: 'ultrafast')
+                ->map('0:v:0')->audioGroup('sound')->subtitleGroup('text'))
+            ->audioRendition('sound', 'Music', fn ($variant) => $variant->map('0:a:0'))
+            ->subtitleRendition('text', 'Captions', fn ($variant) => $variant->map('0:s:0'));
+
+        return $fragmented ? $export->fmp4() : $export;
+    }
+
+    #[DataProvider('playlistTypes')]
+    public function test_playlist_types_are_passed_to_the_muxer_except_for_live(string $type, bool $fragmented): void
+    {
+        Process::fake();
+        $command = $this->typedExport(FFMpeg::disk('absent')->open('unread.mkv'), $type, $fragmented)->inspect();
+        if ($type === 'live') {
+            $this->assertNotContains('-hls_playlist_type', $command);
+        } else {
+            $this->assertSame($type, $command[array_search('-hls_playlist_type', $command, true) + 1]);
+        }
     }
 
     public static function playlistTypes(): array
@@ -188,22 +304,7 @@ class HlsTest extends TestCase
         $remux = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $disk->path('source.mkv'),
             '-i', $disk->path('captions.srt'), '-map', '0', '-map', '1:s', '-c', 'copy', $disk->path('captioned.mkv')]);
         $this->assertProcessSucceeded($remux);
-        $media = FFMpeg::disk('local')->open('captioned.mkv');
-        $export = $media->hls(segmentDuration: 0.7)->playlistType(strtoupper($type))
-            ->variant('main', fn (HlsVariant $variant) => $variant->video('libx264', preset: 'ultrafast')
-                ->map('0:v:0')->audioGroup('sound')->subtitleGroup('text'))
-            ->audioRendition('sound', 'Music', fn ($variant) => $variant->map('0:a:0'))
-            ->subtitleRendition('text', 'Captions', fn ($variant) => $variant->map('0:s:0'));
-        if ($fragmented) {
-            $export->fmp4();
-        }
-        $command = $export->inspect();
-        if ($type === 'live') {
-            $this->assertNotContains('-hls_playlist_type', $command);
-        } else {
-            $this->assertSame($type, $command[array_search('-hls_playlist_type', $command, true) + 1]);
-        }
-        $result = $export->save('typed/master.m3u8');
+        $result = $this->typedExport(FFMpeg::disk('local')->open('captioned.mkv'), $type, $fragmented)->save('typed/master.m3u8');
         $this->assertCount(3, $result->files()->where('role', 'hls-playlist'));
         foreach ($result->files()->where('role', 'hls-playlist') as $file) {
             $playlist = $disk->get($file->path);
@@ -255,7 +356,7 @@ class HlsTest extends TestCase
     }
 
     #[DataProvider('streamLayoutProvider')]
-    public function test_audio_only_silent_video_copy_and_all_audio_selection_are_preserved(bool $video, bool $audio, string $name): void
+    public function test_copied_and_encoded_variants_preserve_the_stream_layout(bool $video, bool $audio, string $name): void
     {
         $media = $this->source($video, $audio);
         if (! $video) {
@@ -274,12 +375,6 @@ class HlsTest extends TestCase
         $streams = $this->probe(Storage::disk('local')->path($first->path));
         $this->assertSame($video ? ($audio ? ['video', 'audio'] : ['video']) : ['audio'], array_column($streams, 'codec_type'));
         $this->assertStringNotContainsString('#EXT-X-INDEPENDENT-SEGMENTS', Storage::disk('local')->get($result->playlist()->path));
-        if ($video && $audio) {
-            $result = $media->hls(segmentDuration: 0.7)->video('copy')->audio('copy')->map('0:V:0')->map('0:a')
-                ->variant('all', fn () => null)->save('all/master.m3u8');
-            $first = $result->variant('all')->files()->where('role', 'hls-segment')->first();
-            $this->assertSame(['video', 'audio', 'audio'], array_column($this->probe(Storage::disk('local')->path($first->path)), 'codec_type'));
-        }
         $encoded = $media->hls(segmentDuration: 0.2)->variant('encoded', fn () => null)->save('encoded/master.m3u8');
         $playlist = Storage::disk('local')->get($encoded->variant('encoded')->playlist()->path);
         $this->assertStringContainsString('#EXT-X-TARGETDURATION:1', $playlist);
@@ -287,6 +382,14 @@ class HlsTest extends TestCase
         $this->assertSame($video ? ($audio ? ['video', 'audio'] : ['video']) : ['audio'],
             array_column($this->probe(Storage::disk('local')->path($first->path)), 'codec_type'));
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_every_audio_stream_can_be_mapped_into_a_variant(): void
+    {
+        $result = $this->source()->hls(segmentDuration: 0.7)->video('copy')->audio('copy')->map('0:V:0')->map('0:a')
+            ->variant('all', fn () => null)->save('all/master.m3u8');
+        $first = $result->variant('all')->files()->where('role', 'hls-segment')->first();
+        $this->assertSame(['video', 'audio', 'audio'], array_column($this->probe(Storage::disk('local')->path($first->path)), 'codec_type'));
     }
 
     public function test_a_shared_watermark_graph_feeds_independent_clipped_hls_variants(): void
@@ -409,7 +512,7 @@ class HlsTest extends TestCase
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
-    public function test_master_bandwidth_comes_from_generated_segments_and_owned_segments_cannot_replace_the_source(): void
+    public function test_master_bandwidth_comes_from_generated_segments(): void
     {
         $storage = Storage::disk('memory');
         $storage->put('source.mp4', 'source');
@@ -422,7 +525,13 @@ class HlsTest extends TestCase
         $result = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)->save('out/master.m3u8');
         $this->assertStringContainsString('#EXT-X-STREAM-INF:BANDWIDTH=4000,AVERAGE-BANDWIDTH=3520', $storage->get($result->playlist()->path));
         $this->assertSame('out/test/index.m3u8', $result->variant('test')->playlist()->path);
+    }
+
+    public function test_owned_segments_cannot_replace_the_source(): void
+    {
+        $storage = Storage::disk('memory');
         $storage->put('protected/test/segment-00000000.ts', 'source bytes');
+        $this->fakePipeline();
         $this->assertThrows(function () {
             FFMpeg::disk('memory')->open('protected/test/segment-00000000.ts')->hls()->variant('test', fn () => null)->save('protected/master.m3u8');
         }, InvalidArgumentException::class);
@@ -591,6 +700,22 @@ class HlsTest extends TestCase
     }
 
     #[DataProvider('encryptionModes')]
+    public function test_encryption_neither_changes_the_command_nor_writes_keys_before_saving(?string $key, ?int $rotateEvery): void
+    {
+        Process::fake();
+        $secrets = Storage::fake('secrets');
+        $export = FFMpeg::disk('absent')->open('unread.mkv')->hls(segmentDuration: 0.7)
+            ->variant('low', fn ($variant) => $variant->resize(width: 80), playlist: 'lists/low/index.m3u8', segments: 'assets/low/part-%03d.ts')
+            ->variant('high', fn () => null, playlist: 'lists/high/index.m3u8', segments: 'assets/high/part-%d.ts');
+        $command = $export->inspect();
+        $export->encrypt('secrets', fn ($path) => $secrets->path($path), key: $key, rotateEvery: $rotateEvery, directory: 'lesson/keys')
+            ->playlistUsing(fn ($text) => str_replace("#EXTM3U\n", "#EXTM3U\n# Encrypted lesson\n", $text));
+        $this->assertSame($command, $export->inspect());
+        $this->assertSame([], $secrets->allFiles());
+        Process::assertNothingRan();
+    }
+
+    #[DataProvider('encryptionModes')]
     public function test_encrypted_variants_decrypt_to_the_original_bytes_and_play_through_rotation(?string $key, ?int $rotateEvery): void
     {
         $media = $this->source();
@@ -601,11 +726,8 @@ class HlsTest extends TestCase
             ->variant('high', fn () => null, playlist: 'lists/high/index.m3u8', segments: 'assets/high/part-%d.ts');
         $plain = $export->save('master.m3u8');
         $original = $plain->files()->where('role', 'hls-segment')->mapWithKeys(fn ($file) => [$file->path => $disk->get($file->path)])->all();
-        $command = $export->inspect();
         $export->encrypt('secrets', fn ($path) => $secrets->path($path), key: $key, rotateEvery: $rotateEvery, directory: 'lesson/keys')
             ->playlistUsing(fn ($text) => str_replace("#EXTM3U\n", "#EXTM3U\n# Encrypted lesson\n", $text));
-        $this->assertSame($command, $export->inspect());
-        $this->assertSame([], $secrets->allFiles());
         $result = $export->save('master.m3u8');
         $this->assertSame($plain->file()->path, $result->file()->path);
         $this->assertSame('hls-segment', $result->file()->role);
@@ -747,36 +869,52 @@ class HlsTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    #[TestWith([false])]
-    #[TestWith([true])]
-    public function test_failed_private_key_publication_precedes_media_and_reports_successful_keys(bool $keysSucceed): void
+    public function test_failed_key_publication_stops_before_any_media(): void
     {
-        $disk = Storage::disk('memory');
-        $disk->put('source.mp4', 'source');
+        Storage::disk('memory')->put('source.mp4', 'source');
         $storedKeys = Storage::fake('secrets');
         $this->fakePipeline();
         $secrets = Mockery::mock(Filesystem::class);
-        $secrets->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $keysSucceed && $storedKeys->put($path, $stream, $options));
+        $secrets->shouldReceive('put')->andReturnFalse();
         $secrets->shouldReceive('size')->andReturnUsing(fn ($path) => $storedKeys->size($path));
-        $failedMedia = Mockery::mock(Filesystem::class);
-        $failedMedia->shouldReceive('put')->andReturnFalse();
-        $this->assertThrows(function () use ($secrets, $failedMedia) {
-            FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
-                ->encrypt($secrets, fn ($path) => '/keys/'.$path)->toDisk($failedMedia)->save('out/master.m3u8');
-        }, function (MediaException $exception) use ($keysSucceed, $storedKeys) {
+        $this->assertThrows(fn () => $this->saveEncryptedTo($secrets), function (MediaException $exception) {
             $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
-            $this->assertCount($keysSucceed ? 1 : 0, $exception->published);
-            if ($keysSucceed) {
-                $this->assertSame(16, $storedKeys->size($exception->published[0]['path']));
-                $this->assertSame('out/test/segment-00000000.ts', $exception->destination['path']);
-            } else {
-                $this->assertStringEndsWith('.key', $exception->destination['path']);
-            }
+            $this->assertCount(0, $exception->published);
+            $this->assertStringEndsWith('.key', $exception->destination['path']);
 
             return true;
         });
-        $this->assertSame(['source.mp4'], $disk->allFiles());
+        $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_failed_media_publication_reports_the_published_keys(): void
+    {
+        Storage::disk('memory')->put('source.mp4', 'source');
+        $storedKeys = Storage::fake('secrets');
+        $this->fakePipeline();
+        $secrets = Mockery::mock(Filesystem::class);
+        $secrets->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $storedKeys->put($path, $stream, $options));
+        $secrets->shouldReceive('size')->andReturnUsing(fn ($path) => $storedKeys->size($path));
+        $this->assertThrows(fn () => $this->saveEncryptedTo($secrets), function (MediaException $exception) use ($storedKeys) {
+            $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
+            $this->assertCount(1, $exception->published);
+            $this->assertSame(16, $storedKeys->size($exception->published[0]['path']));
+            $this->assertSame('out/test/segment-00000000.ts', $exception->destination['path']);
+
+            return true;
+        });
+        $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    protected function saveEncryptedTo(Filesystem $secrets): void
+    {
+        $failedMedia = Mockery::mock(Filesystem::class);
+        $failedMedia->shouldReceive('put')->andReturnFalse();
+
+        FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
+            ->encrypt($secrets, fn ($path) => '/keys/'.$path)->toDisk($failedMedia)->save('out/master.m3u8');
     }
 
     public static function invalidPlaylistHooks(): array

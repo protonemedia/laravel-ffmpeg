@@ -37,7 +37,7 @@ class EncodingOptionsTest extends TestCase
         $this->assertNotContains('-threads', $this->arguments($this->destination()));
     }
 
-    public function test_stream_settings_are_output_ordered_snapshots_and_serializable(): void
+    public function test_stream_settings_are_serializable_snapshots(): void
     {
         $retained = null;
         $output = $this->destination()->audio('aac')->audioOptions(['-ar', '48000'])->audioFilter('volume=0.5')
@@ -62,7 +62,7 @@ class EncodingOptionsTest extends TestCase
         $this->assertSame($arguments, $this->arguments($this->destination()->configure($inherited)));
     }
 
-    public function test_accepts_only_curated_options_with_fixed_scope_and_arity(): void
+    public function test_accepts_curated_options(): void
     {
         $tokens = ['-cpu-used:v:1', '6', '-deadline:v', 'realtime', '-row-mt:v', '1', '-rc:v', 'vbr',
             '-cq:v', '23', '-rc-lookahead:v', '20', '-spatial-aq:v', '1', '-temporal-aq:v', '1', '-aq-strength:v', '8',
@@ -116,7 +116,7 @@ class EncodingOptionsTest extends TestCase
     }
 
     #[DataProvider('incompatibleTrackProvider')]
-    public function test_rejects_copy_filters_and_encoder_options(Closure $configure): void
+    public function test_rejects_settings_that_conflict_with_stream_copy(Closure $configure): void
     {
         $this->expectException(InvalidArgumentException::class);
 
@@ -177,7 +177,7 @@ class EncodingOptionsTest extends TestCase
         return $result->output();
     }
 
-    public function test_real_asymmetric_multitrack_audio_and_color_encoding(): void
+    public function test_real_per_track_encoding_settings(): void
     {
         $this->realFixture();
         $this->media('source.mkv')->export()->mapVideo()->mapAudio(track: 1)->mapAudio(track: 0)
@@ -210,13 +210,18 @@ class EncodingOptionsTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_real_x265_private_settings_and_safe_bitstream_remux(): void
+    public function test_real_x265_private_settings(): void
     {
         $this->realFixture();
         $this->media('source.mkv')->export()->withoutAudio()->video('libx265', crf: 30, preset: 'ultrafast')
             ->videoOptions(['-x265-params', 'keyint=10:scenecut=0:pools=1:frame-threads=1:log-level=0'])
             ->save('hevc.mp4');
         $this->assertSame('hevc', $this->media('hevc.mp4')->probe()->streams()[0]->get('codec_name'));
+    }
+
+    public function test_real_bitstream_remux_keeps_the_decoded_frames(): void
+    {
+        $this->realFixture();
         $this->media('source.mkv')->export()->withoutAudio()->video('copy')
             ->outputOptions(['-bsf:v', 'h264_mp4toannexb', '-f', 'mpegts', '-muxdelay', '0', '-muxpreload', '0'])
             ->save('remux.ts');
