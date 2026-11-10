@@ -85,7 +85,7 @@ Event::listen(QueuedExportCompleted::class, RetainConversionInventory::class);
 
 Each `files` entry contains `disk`, `path`, `size`, `role`, and `owned`. Preserve all entries, not just the first file. Preserve the optional `playback` array for HLS. Do not guess a versioned manifest path from the requested destination. Keep receipts and inventories private, and generate authorized delivery URLs when requested. Do not persist expiring signed URLs as file identity.
 
-The [tested application fixture](../tests/NativeIntegrationRecipeTest.php) provides a small schema, a synchronous receipt listener, transactional stale-result checks, reconciliation, and ownership-aware cleanup. Its `RecipeInventory` class is application example code, not a package API. Rename the tables and disks to match your application. Use a shared durable disk instead of the test's `Storage::fake()` disks.
+The [tested application fixture](../tests/IntegrationRecipeTest.php) provides a small schema, a synchronous receipt listener, transactional stale-result checks, reconciliation, and ownership-aware cleanup. Its `RecipeInventory` class is application example code, not a package API. Rename the tables and disks to match your application. Use a shared durable disk instead of the test's `Storage::fake()` disks.
 
 ### Recover when persistence fails
 
@@ -149,7 +149,7 @@ For application-policy tests, use `Process::fake()` with `Process::preventStrayP
 Run the complete fixture without FFmpeg binaries:
 
 ```sh
-vendor/bin/phpunit tests/NativeIntegrationRecipeTest.php
+vendor/bin/phpunit tests/IntegrationRecipeTest.php
 ```
 
 The tests run a serialized public export job and observe database rows and stored files. They cover duplicate completion, superseded jobs, changed source and profile versions, persistence rollback after publication, receipt reconciliation, and owned versus borrowed cleanup. They do not prove codec correctness, cross-process locking, or your Plank version's import behavior. Add real FFmpeg acceptance tests and a production-database concurrency test for those boundaries.

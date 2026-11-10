@@ -7,7 +7,6 @@ use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
-use PHPUnit\Framework\Attributes\Test;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
@@ -40,8 +39,7 @@ class VolumeDetectTest extends TestCase
         return dirname($probe).'/ffmpeg';
     }
 
-    #[Test]
-    public function native_analysis_measures_selected_tracks_and_filters_without_publishing_media(): void
+    public function test_native_analysis_measures_selected_tracks_and_filters_without_publishing_media(): void
     {
         $binary = $this->native();
         $local = $this->fakeLocalDisk();
@@ -76,8 +74,7 @@ class VolumeDetectTest extends TestCase
         }
     }
 
-    #[Test]
-    public function silence_is_successful_but_missing_tracks_and_bad_filters_are_inspectable_failures(): void
+    public function test_silence_is_successful_but_missing_tracks_and_bad_filters_are_inspectable_failures(): void
     {
         $binary = $this->native();
         $local = $this->fakeLocalDisk();
@@ -107,8 +104,7 @@ class VolumeDetectTest extends TestCase
         $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
-    #[Test]
-    public function signed_urls_are_redacted_in_both_output_streams_commands_and_explicit_exceptions(): void
+    public function test_signed_urls_are_redacted_in_both_output_streams_commands_and_explicit_exceptions(): void
     {
         config(['laravel-ffmpeg.redact_credentials' => true]);
         $url = 'https://example.invalid/audio.wav?token=private-token';
@@ -138,8 +134,7 @@ class VolumeDetectTest extends TestCase
         $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
-    #[Test]
-    public function credential_redaction_is_opt_in_and_keeps_short_ordinary_values(): void
+    public function test_credential_redaction_is_opt_in_and_keeps_short_ordinary_values(): void
     {
         $url = 'https://example.invalid/audio.wav?dl=1&v=2&token=abc&id=0123456789abcdef';
         Process::preventStrayProcesses();
@@ -164,8 +159,7 @@ class VolumeDetectTest extends TestCase
         }
     }
 
-    #[Test]
-    public function missing_url_protocols_fail_in_the_analysis_phase(): void
+    public function test_missing_url_protocols_fail_in_the_analysis_phase(): void
     {
         Process::preventStrayProcesses();
         Process::fake(fn (PendingProcess $process) => Process::result(output: in_array('-version', $process->command, true)
@@ -178,8 +172,7 @@ class VolumeDetectTest extends TestCase
         }
     }
 
-    #[Test]
-    public function invalid_analysis_requests_fail_before_staging_or_process_execution(): void
+    public function test_invalid_analysis_requests_fail_before_staging_or_process_execution(): void
     {
         Process::fake();
         foreach ([['', 0], ["volumedetect\0", 0], ['amovie=https://example.invalid/audio.wav', 0], ['volumedetect', -1]] as [$filter, $audio]) {
@@ -193,8 +186,7 @@ class VolumeDetectTest extends TestCase
         Process::assertNothingRan();
     }
 
-    #[Test]
-    public function launch_errors_and_timeouts_throw_and_clean_up_instead_of_returning_a_failed_result(): void
+    public function test_launch_errors_and_timeouts_throw_and_clean_up_instead_of_returning_a_failed_result(): void
     {
         Storage::disk('memory')->put('audio.wav', 'source bytes');
         $binary = $this->root.'/ffmpeg';

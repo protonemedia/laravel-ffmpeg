@@ -4,7 +4,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Support\Traits\Macroable;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ProtoneMedia\LaravelFFMpeg\PendingAudioMix;
 use ProtoneMedia\LaravelFFMpeg\PendingConcat;
@@ -61,9 +60,8 @@ class BuilderShapeTest extends TestCase
         ];
     }
 
-    #[Test]
     #[DataProvider('builders')]
-    public function builders_are_macroable_compositions_without_unsupported_methods(string $class, array $unsupported): void
+    public function test_builders_are_macroable_compositions_without_unsupported_methods(string $class, array $unsupported): void
     {
         $reflection = new ReflectionClass($class);
         $this->assertFalse($reflection->getParentClass());
@@ -87,8 +85,7 @@ class BuilderShapeTest extends TestCase
         }
     }
 
-    #[Test]
-    public function no_package_class_extends_another(): void
+    public function test_no_package_class_extends_another(): void
     {
         $classes = 0;
         foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(dirname(__DIR__).'/src')) as $file) {

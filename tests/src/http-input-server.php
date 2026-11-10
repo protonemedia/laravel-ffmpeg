@@ -1,6 +1,6 @@
 <?php
 
-// A loopback-only, range-capable fixture. Owned and stopped by NativeUrlTest.
+// A loopback-only, range-capable fixture. Owned and stopped by UrlTest.
 $context = stream_context_create(isset($argv[3]) ? ['ssl' => [
     'local_cert' => $argv[3], 'local_pk' => $argv[4],
 ]] : []);
