@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -11,50 +10,32 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class OutputTracksTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-output-tracks-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
         mkdir($this->root.'/files', 0700);
-        config([
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
-            'filesystems.disks.output-tracks' => ['driver' => 'local', 'root' => $this->root.'/files'],
-        ]);
+        config(['filesystems.disks.output-tracks' => ['driver' => 'local', 'root' => $this->root.'/files']]);
     }
 
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function path(string $name): string
+    protected function path(string $name): string
     {
         return Storage::disk('output-tracks')->path($name);
     }
 
-    private function media(string $name)
+    protected function media(string $name)
     {
         return FFMpeg::disk('output-tracks')->open($name);
     }
 
-    private function ffmpeg(array $arguments): string
+    protected function ffmpeg(array $arguments): string
     {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real output-track acceptance.');
-        }
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
-        $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-y', ...$arguments]);
+        $result = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-y', ...$arguments]);
         $this->assertTrue($result->successful(), $result->errorOutput());
 
         return $result->output();
     }
 
-    private function fixture(): void
+    protected function fixture(): void
     {
         $this->ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
             '-c:v', 'libx264', '-threads', '1', '-c:a', 'aac', $this->path('source.mp4')]);
@@ -63,7 +44,7 @@ class OutputTracksTest extends TestCase
         }
     }
 
-    private function decoded(string $name, string $map): string
+    protected function decoded(string $name, string $map): string
     {
         return $this->ffmpeg(['-i', $this->path($name), '-map', $map, '-f', 'framemd5', '-']);
     }

@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -12,35 +11,6 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class ConcatTest extends TestCase
 {
-    private string $root;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-concat-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
-    }
-
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function native(): string
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run native concat acceptance.');
-        }
-
-        $binary = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => $binary]);
-
-        return $binary;
-    }
-
     public function test_compatible_concat_inspection_is_pure_and_does_not_accept_direct_urls(): void
     {
         Process::fake();
@@ -126,7 +96,7 @@ class ConcatTest extends TestCase
 
     public function test_copy_and_transcoded_concat_preserve_order_and_sources(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         foreach ([['red', '64x48', '0.6'], ['blue', '64x48', '1.1'], ['blue', '80x60', '1.1']] as $index => [$color, $size, $duration]) {
             $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', "color=$color:size=$size:rate=10:duration=$duration",
                 '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-threads', '1', $this->root.'/'.$index.'.mp4']);
@@ -203,7 +173,7 @@ class ConcatTest extends TestCase
 
     public function test_audio_concat_preserves_sample_order_and_rejects_channel_layout_mismatches(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         foreach (['0.2:s=8000:d=0.35', '0.7:s=8000:d=0.65', '0.7|0.7:s=8000:d=0.2'] as $index => $signal) {
             $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'aevalsrc='.$signal,
                 '-c:a', 'pcm_s16le', $this->root.'/'.$index.'.wav']);
@@ -233,7 +203,7 @@ class ConcatTest extends TestCase
 
     public function test_normalized_concat_preserves_audio_delays_across_different_inputs(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         foreach ([['red', '64x48', '10', '0.6', '0.1', '0.2|0.4:s=48000:d=0.3'],
             ['blue', '80x60', '20', '1.1', '0.15', '0.7:s=8000:d=0.95']] as $index => [$color, $size, $rate, $duration, $delay, $signal]) {
             $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', "color=$color:size=$size:rate=$rate:duration=$duration",
@@ -306,7 +276,7 @@ class ConcatTest extends TestCase
 
     public function test_copy_concat_retains_each_segments_audio_delay_relative_to_video(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         foreach ([['red', '0.6', '0.1', '0.5'], ['blue', '1.1', '0.15', '0.95']] as $index => [$color, $duration, $delay, $audio]) {
             $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', "color=$color:size=64x48:rate=10:duration=$duration",
                 '-itsoffset', $delay, '-f', 'lavfi', '-i', 'sine=sample_rate=8000:duration='.$audio,

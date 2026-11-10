@@ -5,7 +5,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\WorkerOptions;
 use Illuminate\Support\Facades\Bus;
@@ -14,6 +13,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Orchestra\Testbench\Attributes\RequiresEnv;
 use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
@@ -21,29 +21,21 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Watermark;
 use RuntimeException;
 
+#[RequiresEnv('FFMPEG_9_FFPROBE')]
 class QueueTest extends TestCase
 {
-    private string $root;
+    protected array $completed = [];
 
-    private array $completed = [];
-
-    private array $errors = [];
+    protected array $errors = [];
 
     protected function setUp(): void
     {
         parent::setUp();
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for queue acceptance.');
-        }
-        $this->root = sys_get_temp_dir().'/native-queue-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/work', 0700);
+        $ffmpeg = $this->useRealFFMpeg();
         config(['app.key' => 'base64:'.base64_encode(random_bytes(32)),
             'database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:',
             'queue.default' => 'database', 'queue.connections.database' => ['driver' => 'database', 'table' => 'jobs', 'queue' => 'media', 'retry_after' => 4000],
             'queue.batching' => ['database' => 'sqlite', 'table' => 'job_batches'],
-            'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe,
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/work',
             'filesystems.disks.queued' => ['driver' => 'local', 'root' => $this->root.'/storage', 'throw' => true]]);
         Schema::create('jobs', function (Blueprint $table) {
             $table->id();
@@ -74,26 +66,18 @@ class QueueTest extends TestCase
         });
         $disk = Storage::disk('queued');
         $disk->makeDirectory('');
-        $result = Process::run([dirname($probe).'/ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=96x64:rate=10:duration=1.6',
+        $result = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=96x64:rate=10:duration=1.6',
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1.6',
             '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-threads', '1', $disk->path('source.mp4')]);
         $this->assertTrue($result->successful(), $result->errorOutput());
     }
 
-    protected function tearDown(): void
-    {
-        if (isset($this->root)) {
-            (new Filesystem)->deleteDirectory($this->root);
-        }
-        parent::tearDown();
-    }
-
-    private function work(): void
+    protected function work(): void
     {
         app('queue.worker')->runNextJob('database', 'media', new WorkerOptions(sleep: 0, rest: 0));
     }
 
-    private function source()
+    protected function source()
     {
         return FFMpeg::disk('queued')->open('source.mp4');
     }
@@ -132,7 +116,7 @@ class QueueTest extends TestCase
         $this->work();
         $this->assertSame('published', Storage::disk('queued')->get('follow-up'));
         $this->assertSame(0, DB::table('jobs')->count());
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_a_saved_hls_builder_can_still_be_queued(): void
@@ -281,7 +265,7 @@ class QueueTest extends TestCase
         $this->assertCount(0, $this->completed);
         $this->assertCount(2, $this->errors);
         $this->assertInstanceOf(ExportCancelled::class, $this->errors[1]);
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_parallel_hls_keeps_shared_renditions_together_and_serializes_encryption_callbacks(): void
@@ -361,7 +345,7 @@ class QueueTest extends TestCase
         $this->assertCount(2, $this->completed);
         $this->assertSame([], $this->errors);
         $this->assertSame(0, DB::table('jobs')->count());
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 }
 

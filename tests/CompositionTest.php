@@ -23,26 +23,14 @@ use ProtoneMedia\LaravelFFMpeg\Watermark;
 
 class CompositionTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-composition-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
         Storage::disk('memory')->put('source.mkv', 'source media');
         Event::fake([Events\ExportStarting::class, Events\ExportCompleted::class, Events\ExportFailed::class, Events\ExportCancelled::class]);
     }
 
-    protected function tearDown(): void
-    {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function fakePipeline(?callable $encode = null, ?callable $probe = null): void
+    protected function fakePipeline(?callable $encode = null, ?callable $probe = null): void
     {
         Process::preventStrayProcesses();
         Process::fake(function (PendingProcess $process) use ($encode, $probe) {
@@ -639,11 +627,7 @@ class CompositionTest extends TestCase
 
     public function test_image_watermarks_preserve_alpha_offsets_duration_and_audio_with_optional_edits(): void
     {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real watermark acceptance.');
-        }
-        $binary = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $binary, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $generation = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=2',
             '-f', 'lavfi', '-i', 'sine=sample_rate=48000:duration=2', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $local->path('source.mkv')]);
@@ -694,11 +678,7 @@ class CompositionTest extends TestCase
 
     public function test_watermark_helpers_compose_images_after_each_outputs_geometry_and_reject_conflicts(): void
     {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real watermark acceptance.');
-        }
-        $binary = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $binary, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $generation = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=1',
             '-c:v', 'ffv1', $local->path('source.mkv')]);
@@ -763,14 +743,7 @@ class CompositionTest extends TestCase
 
     public function test_real_graphs_stage_luts_compose_mixed_disks_and_keep_output_timelines_independent(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real FFmpeg 9.0.x composition acceptance.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $source = $this->root.'/red.mkv';
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=2',
@@ -899,14 +872,7 @@ class CompositionTest extends TestCase
 
     public function test_real_fonts_and_literal_text_render_without_filter_or_percent_expansion(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real font rendering.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $font = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
         $this->assertFileExists($font, 'Native resource acceptance requires DejaVu Sans.');
@@ -942,14 +908,7 @@ class CompositionTest extends TestCase
 
     public function test_real_subtitles_validate_content_and_keep_cue_timing_through_accurate_clips(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real subtitle resources.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=black:size=160x90:rate=10:duration=6',
             '-c:v', 'ffv1', $local->path('black.mkv')]);
@@ -1002,13 +961,7 @@ class CompositionTest extends TestCase
 
     public function test_real_type_scoped_graph_conflicts_fail_without_publishing(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real FFmpeg graph conflicts.');
-        }
-
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $this->useRealFFMpeg();
         $media = FFMpeg::disk('local')->open(new File(__DIR__.'/src/guitar.m4a'));
 
         foreach (['copy', 'filter'] as $conflict) {
@@ -1037,13 +990,7 @@ class CompositionTest extends TestCase
 
     public function test_real_unlabeled_graph_pads_are_rejected_before_publication(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real FFmpeg graph validation.');
-        }
-
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $this->useRealFFMpeg();
         $media = FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'));
 
         try {

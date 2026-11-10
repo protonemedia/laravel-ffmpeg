@@ -19,33 +19,20 @@ use RuntimeException;
 
 class ExportTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->root = sys_get_temp_dir().'/native-export-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
         Storage::disk('memory')->put('source.mp4', 'original media');
         Event::fake([Events\ExportStarting::class, Events\ExportCompleted::class, Events\ExportFailed::class, Events\ExportCancelled::class]);
     }
 
-    protected function tearDown(): void
-    {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
-
-        parent::tearDown();
-    }
-
-    private function metadata(): string
+    protected function metadata(): string
     {
         return '{"format":{"duration":"10.0"},"streams":[{"index":0,"codec_type":"video"},{"index":1,"codec_type":"audio"}],"chapters":[]}';
     }
 
-    private function fakePipeline(?callable $encode = null, ?string $metadata = null): void
+    protected function fakePipeline(?callable $encode = null, ?string $metadata = null): void
     {
         Process::preventStrayProcesses();
         Process::fake(function (PendingProcess $process) use ($encode, $metadata) {
@@ -141,14 +128,7 @@ class ExportTest extends TestCase
 
     public function test_real_geometry_helpers_preserve_display_aspect_or_explicitly_stretch_and_center(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real geometry helper acceptance.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
             'color=red:size=160x80:rate=10:duration=0.3,drawbox=x=0:y=0:w=40:h=80:color=blue:t=fill,drawbox=x=120:y=0:w=40:h=80:color=green:t=fill,setsar=2',
@@ -304,14 +284,7 @@ class ExportTest extends TestCase
 
     public function test_real_integer_bitrates_encode_identically_to_explicit_unit_strings(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real bitrate encoding.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $fixture = $this->root.'/bitrates.mkv';
         $generation = Process::run([
             $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=1',
@@ -426,14 +399,7 @@ class ExportTest extends TestCase
 
     public function test_real_frames_sample_after_the_timestamp_and_return_or_publish_images(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real frame extraction.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $fixture = $this->root.'/sparse.mkv';
         $generation = Process::run([
             $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=96x64:r=1:d=1',
@@ -584,14 +550,7 @@ class ExportTest extends TestCase
 
     public function test_real_image_sequences_resample_intervals_counts_and_short_clips(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real image sequences.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $fixture = $this->root.'/colors.mkv';
         $generation = Process::run([
             $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=80x48:r=10:d=0.2',
@@ -700,14 +659,7 @@ class ExportTest extends TestCase
 
     public function test_real_two_pass_exports_keep_independent_output_statistics_and_report_both_passes(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real two-pass encoding.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $fixture = $this->root.'/passes.mkv';
         $generation = Process::run([
             $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=1.2',
@@ -805,14 +757,7 @@ class ExportTest extends TestCase
 
     public function test_real_waveforms_render_audio_levels_filters_clips_colors_and_geometry(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real waveform images.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $fixture = $this->root.'/levels.wav';
         $generation = Process::run([
             $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'aevalsrc=if(lt(t\,0.3)\,0\,0.8):s=8000:d=1.2',
@@ -1180,14 +1125,7 @@ class ExportTest extends TestCase
 
     public function test_real_exports_preserve_copy_metadata_and_apply_filtered_accurate_clips(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run real FFmpeg 9.0.x export acceptance.');
-        }
-
-        $ffmpeg = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         file_put_contents($this->root.'/chapters.txt', ";FFMETADATA1\ntitle=Original lecture\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1200\ntitle=First\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=1200\nEND=2400\ntitle=Second\n");
         $fixture = $this->root.'/fixture.mkv';
         $generation = Process::run([

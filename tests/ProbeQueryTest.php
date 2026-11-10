@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -14,31 +13,19 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class ProbeQueryTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-query-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
-            'filesystems.disks.query' => ['driver' => 'local', 'root' => $this->root.'/media']]);
+        config(['filesystems.disks.query' => ['driver' => 'local', 'root' => $this->root.'/media']]);
         Storage::disk('memory')->put('source.mp4', 'source');
     }
 
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function pendingQuery(): PendingProbe
+    protected function pendingQuery(): PendingProbe
     {
         return FFMpeg::disk('memory')->open('source.mp4')->probeQuery();
     }
 
-    private function fakeProbe(callable $response): void
+    protected function fakeProbe(callable $response): void
     {
         Process::preventStrayProcesses();
         Process::fake(function (PendingProcess $process) use ($response) {
@@ -198,14 +185,10 @@ class ProbeQueryTest extends TestCase
 
     public function test_real_vfr_b_frames_keyframes_intervals_and_counts_preserve_native_timestamps(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native query acceptance.');
-        }
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe]);
+        $ffmpeg = $this->useRealFFMpeg();
         $disk = Storage::disk('query');
         $disk->put('.keep', '');
-        $generated = Process::run([dirname($probe).'/ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=64x48:r=24:d=3',
+        $generated = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=64x48:r=24:d=3',
             '-vf', 'select=if(lt(n\,12)\,1\,not(mod(n\,3)))', '-fps_mode', 'vfr', '-c:v', 'mpeg4', '-bf', '2', '-g', '12',
             '-q:v', '3', $disk->path('vfr.mp4')]);
         $this->assertTrue($generated->successful(), $generated->errorOutput());

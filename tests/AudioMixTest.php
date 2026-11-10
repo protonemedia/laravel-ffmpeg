@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -12,36 +11,14 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class AudioMixTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-audio-mix-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
         mkdir($this->root.'/files', 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config([
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
-            'filesystems.disks.audio-mix' => ['driver' => 'local', 'root' => $this->root.'/files'],
-        ]);
+        config(['filesystems.disks.audio-mix' => ['driver' => 'local', 'root' => $this->root.'/files']]);
     }
 
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function native(): void
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native audio-mix acceptance.');
-        }
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
-    }
-
-    private function ffmpeg(array $arguments): string
+    protected function ffmpeg(array $arguments): string
     {
         $process = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-y', ...$arguments]);
         $this->assertTrue($process->successful(), $process->errorOutput());
@@ -49,19 +26,19 @@ class AudioMixTest extends TestCase
         return $process->output();
     }
 
-    private function path(string $name): string
+    protected function path(string $name): string
     {
         return Storage::disk('audio-mix')->path($name);
     }
 
-    private function media(string $name = 'source.mkv')
+    protected function media(string $name = 'source.mkv')
     {
         return FFMpeg::disk('audio-mix')->open($name);
     }
 
-    private function fixture(bool $audio = true): void
+    protected function fixture(bool $audio = true): void
     {
-        $this->native();
+        $this->useRealFFMpeg();
         $arguments = ['-f', 'lavfi', '-i', 'color=red:s=48x32:r=10:d=3'];
         if ($audio) {
             array_push($arguments, '-itsoffset', '0.2', '-f', 'lavfi', '-i', 'aevalsrc=0.1|-0.2:s=32000:d=1.8');
@@ -71,12 +48,12 @@ class AudioMixTest extends TestCase
             '-c:a', 'pcm_f64le', $this->path('music.wav')]);
     }
 
-    private function samples(string $name): array
+    protected function samples(string $name): array
     {
         return array_values(unpack('e*', $this->ffmpeg(['-i', $this->path($name), '-map', '0:a:0', '-c:a', 'pcm_f64le', '-f', 'f64le', 'pipe:1'])));
     }
 
-    private function assertSample(array $samples, float $at, float $left, float $right): void
+    protected function assertSample(array $samples, float $at, float $left, float $right): void
     {
         $offset = (int) round($at * 48000) * 2;
         $this->assertEqualsWithDelta($left, $samples[$offset], 0.0001);

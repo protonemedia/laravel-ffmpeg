@@ -11,34 +11,19 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class GeneratedFileTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-generated-file-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
         config([
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
             'filesystems.disks.generated-local' => ['driver' => 'local', 'root' => $this->root.'/files'],
             'filesystems.disks.generated-remote' => ['driver' => 'memory'],
         ]);
     }
 
-    protected function tearDown(): void
-    {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
     public function test_exported_files_delete_only_the_exact_local_or_remote_destination(): void
     {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native generated-file acceptance.');
-        }
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
-        $process = Process::run([dirname($probe).'/ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+        $ffmpeg = $this->useRealFFMpeg();
+        $process = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
             'sine=frequency=440:duration=0.1', '-c:a', 'pcm_s16le', $this->root.'/source.wav']);
         $this->assertTrue($process->successful(), $process->errorOutput());
         $local = Storage::disk('generated-local');

@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -10,37 +9,16 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class FilterHelpersTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-filter-helpers-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
         mkdir($this->root.'/files', 0700);
-        config([
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
-            'filesystems.disks.filter-helpers' => ['driver' => 'local', 'root' => $this->root.'/files'],
-        ]);
+        config(['filesystems.disks.filter-helpers' => ['driver' => 'local', 'root' => $this->root.'/files']]);
     }
 
-    protected function tearDown(): void
+    protected function fixture(): void
     {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function fixture(): void
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real filter helper acceptance.');
-        }
-
-        config([
-            'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg',
-            'laravel-ffmpeg.ffprobe.binaries' => $probe,
-        ]);
+        $this->useRealFFMpeg();
         $this->ffmpeg([
             '-f', 'lavfi', '-i', 'color=white:s=32x32:r=20:d=3,drawbox=x=0:y=0:w=16:h=16:color=red:t=fill,drawbox=x=16:y=16:w=16:h=16:color=blue:t=fill',
             '-f', 'lavfi', '-i', 'aevalsrc=0.4:s=8000:d=3',
@@ -48,7 +26,7 @@ class FilterHelpersTest extends TestCase
         ]);
     }
 
-    private function ffmpeg(array $arguments): string
+    protected function ffmpeg(array $arguments): string
     {
         $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', ...$arguments]);
         $this->assertTrue($result->successful(), $result->errorOutput());
@@ -56,22 +34,22 @@ class FilterHelpersTest extends TestCase
         return $result->output();
     }
 
-    private function export()
+    protected function export()
     {
         return FFMpeg::disk('filter-helpers')->open('source.mkv')->export()->video('ffv1')->audio('pcm_f64le');
     }
 
-    private function pixels(string $name): string
+    protected function pixels(string $name): string
     {
         return $this->ffmpeg(['-i', Storage::disk('filter-helpers')->path($name), '-map', '0:v:0', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']);
     }
 
-    private function pixel(string $frames, int $x, int $y, int $frame = 0, int $width = 32, int $height = 32): array
+    protected function pixel(string $frames, int $x, int $y, int $frame = 0, int $width = 32, int $height = 32): array
     {
         return array_values(unpack('C*', substr($frames, (($frame * $height + $y) * $width + $x) * 3, 3)));
     }
 
-    private function samples(string $name): array
+    protected function samples(string $name): array
     {
         return array_values(unpack('e*', $this->ffmpeg(['-i', Storage::disk('filter-helpers')->path($name), '-map', '0:a:0', '-c:a', 'pcm_f64le', '-f', 'f64le', '-'])));
     }

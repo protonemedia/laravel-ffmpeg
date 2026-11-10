@@ -15,18 +15,7 @@ use Symfony\Component\Process\Process as Server;
 
 class UrlTest extends TestCase
 {
-    private string $root;
-
-    private array $servers = [];
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-url-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
-    }
+    protected array $servers = [];
 
     protected function tearDown(): void
     {
@@ -38,16 +27,7 @@ class UrlTest extends TestCase
         parent::tearDown();
     }
 
-    private function native(): void
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run native URL acceptance.');
-        }
-
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
-    }
-
-    private function server(bool $tls = false, ?string $fixture = null): string
+    protected function server(bool $tls = false, ?string $fixture = null): string
     {
         $command = [PHP_BINARY, __DIR__.'/src/http-input-server.php', $fixture ?? __DIR__.'/src/guitar.m4a', $this->root.'/requests'];
 
@@ -102,7 +82,7 @@ class UrlTest extends TestCase
 
     public function test_public_urls_probe_export_and_redact_signed_queries_without_downloading(): void
     {
-        $this->native();
+        $this->useRealFFMpeg();
         config(['laravel-ffmpeg.redact_credentials' => true]);
         Http::preventStrayRequests();
         $url = $this->server().'/public?signature=private-signed-value';
@@ -139,7 +119,7 @@ class UrlTest extends TestCase
 
     public function test_authenticated_downloads_keep_headers_separate_and_publish_two_audio_tracks(): void
     {
-        $this->native();
+        $this->useRealFFMpeg();
         $base = $this->server();
         $first = FFMpeg::openUrl($base.'/private?signature=private-download-signature', headers: ['Authorization' => 'Bearer first-secret'], download: true, inputOptions: ['-probesize', '2048']);
         $second = FFMpeg::openUrl($base.'/private', ['Authorization' => 'Bearer second-secret'], download: true);
@@ -170,7 +150,7 @@ class UrlTest extends TestCase
 
     public function test_edited_url_watermarks_download_once_per_execution_without_exposing_urls_to_processes(): void
     {
-        $this->native();
+        $this->useRealFFMpeg();
         $base = $this->server(fixture: __DIR__.'/src/logo.png');
         foreach ([false, true] as $authenticated) {
             $url = $base.($authenticated ? '/private' : '/public').'?signature=private-image-signature';
@@ -253,7 +233,7 @@ class UrlTest extends TestCase
 
     public function test_https_rejects_an_untrusted_certificate_in_both_transport_modes(): void
     {
-        $this->native();
+        $this->useRealFFMpeg();
         $url = $this->server(tls: true).'/public';
 
         foreach ([false, true] as $download) {

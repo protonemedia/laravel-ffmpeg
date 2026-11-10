@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -16,22 +15,12 @@ use ProtoneMedia\LaravelFFMpeg\VideoStreamSettings;
 
 class EncodingOptionsTest extends TestCase
 {
-    private ?string $root = null;
-
-    protected function tearDown(): void
-    {
-        if ($this->root !== null) {
-            (new Filesystem)->deleteDirectory($this->root);
-        }
-        parent::tearDown();
-    }
-
-    private function destination(): ExportOutput
+    protected function destination(): ExportOutput
     {
         return new ExportOutput('output.mkv', 'memory');
     }
 
-    private function arguments(ExportOutput $output): array
+    protected function arguments(ExportOutput $output): array
     {
         return $output->outputArguments(fn ($filter) => $filter, $output->maps());
     }
@@ -148,34 +137,27 @@ class EncodingOptionsTest extends TestCase
         $this->assertLessThan(array_search('-i', $command, true), array_search('-init_hw_device', $command, true));
     }
 
-    private function realFixture(): void
+    protected function realFixture(): void
     {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for real encoding acceptance.');
-        }
-        $this->root = sys_get_temp_dir().'/native-encoding-options-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
+        $this->useRealFFMpeg();
         mkdir($this->root.'/files', 0700);
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe,
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
-            'filesystems.disks.encoding-options' => ['driver' => 'local', 'root' => $this->root.'/files']]);
+        config(['filesystems.disks.encoding-options' => ['driver' => 'local', 'root' => $this->root.'/files']]);
         $this->runTool(['-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=44100:duration=1',
             '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000:duration=1', '-map', '0:v', '-map', '1:a', '-map', '2:a',
             '-c:v', 'libx264', '-threads', '1', '-c:a', 'pcm_s16le', '-ac:a:1', '2', $this->path('source.mkv')]);
     }
 
-    private function path(string $name): string
+    protected function path(string $name): string
     {
         return Storage::disk('encoding-options')->path($name);
     }
 
-    private function media(string $name)
+    protected function media(string $name)
     {
         return FFMpeg::disk('encoding-options')->open($name);
     }
 
-    private function runTool(array $arguments): string
+    protected function runTool(array $arguments): string
     {
         $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-y', ...$arguments]);
         $this->assertTrue($result->successful(), $result->errorOutput());

@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -12,36 +11,9 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class VolumeDetectTest extends TestCase
 {
-    private string $root;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-analysis-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
-    }
-
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function native(): string
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native audio analysis acceptance.');
-        }
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
-
-        return dirname($probe).'/ffmpeg';
-    }
-
     public function test_native_analysis_measures_selected_tracks_and_filters_without_publishing_media(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $fixture = Process::run([$binary, '-v', 'error',
             '-f', 'lavfi', '-i', 'aevalsrc=0.125*sin(2*PI*440*t):s=48000:d=0.25',
@@ -76,7 +48,7 @@ class VolumeDetectTest extends TestCase
 
     public function test_silence_is_successful_but_missing_tracks_and_bad_filters_are_inspectable_failures(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $fixture = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=8000:cl=mono:d=0.1', $local->path('silence.wav')]);
         $this->assertTrue($fixture->successful(), $fixture->errorOutput());

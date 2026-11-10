@@ -3,13 +3,14 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Auth\GenericUser;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ItemNotFoundException;
 use InvalidArgumentException;
+use League\Flysystem\Filesystem;
 use League\Flysystem\ReadOnly\ReadOnlyFilesystemAdapter;
+use Orchestra\Testbench\Attributes\RequiresEnv;
 use PHPUnit\Framework\Attributes\DataProvider;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
@@ -17,45 +18,24 @@ use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Support\Hls;
 
+#[RequiresEnv('FFMPEG_9_FFPROBE')]
 class HlsSelectionTest extends TestCase
 {
-    private string $root;
+    protected array $inventory;
 
-    private array $inventory;
-
-    private bool $allowed = true;
+    protected bool $allowed = true;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-hls-selection-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/work', 0700);
         config(['app.key' => 'base64:'.base64_encode(random_bytes(32)),
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/work',
             'filesystems.disks.selection' => ['driver' => 'local', 'root' => $this->root.'/storage'],
             'filesystems.disks.selection-keys' => ['driver' => 'local', 'root' => $this->root.'/keys']]);
     }
 
-    protected function tearDown(): void
+    protected function source()
     {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function binary(): string
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for HLS selection acceptance.');
-        }
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
-
-        return dirname($probe).'/ffmpeg';
-    }
-
-    private function source()
-    {
-        $binary = $this->binary();
+        $binary = $this->useRealFFMpeg();
         $disk = Storage::disk('selection');
         if (! $disk->exists('source.mkv')) {
             $disk->put('captions.srt', "1\n00:00:00,100 --> 00:00:01,000\nHello selection\n");
@@ -69,7 +49,7 @@ class HlsSelectionTest extends TestCase
         return FFMpeg::disk('selection')->open('source.mkv');
     }
 
-    private function export(string $directory, bool $encrypted = false, bool $fragmented = false)
+    protected function export(string $directory, bool $encrypted = false, bool $fragmented = false)
     {
         $export = $this->source()->hls(segmentDuration: 0.7)->video(bitrate: '180k')->audio(bitrate: '48k')
             ->variant('small', function ($v) use ($encrypted) {
@@ -94,7 +74,7 @@ class HlsSelectionTest extends TestCase
         return $export->save($directory.'/master.m3u8');
     }
 
-    private function decode(HlsPresentation $presentation): void
+    protected function decode(HlsPresentation $presentation): void
     {
         $disk = Storage::disk('selection');
         $prefix = 'responses/'.bin2hex(random_bytes(5)).'/';
@@ -111,13 +91,13 @@ class HlsSelectionTest extends TestCase
             });
             $disk->put($prefix.$id.'.m3u8', $text);
         }
-        $result = Process::run([$this->binary(), '-v', 'error', '-xerror', '-allowed_extensions', 'ALL',
+        $result = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-xerror', '-allowed_extensions', 'ALL',
             '-protocol_whitelist', 'file,crypto,data', '-i', $disk->path($prefix.$presentation->toArray()['playlist'].'.m3u8'),
             '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-']);
         $this->assertTrue($result->successful(), $result->errorOutput());
     }
 
-    private function register(HlsPresentation $presentation): void
+    protected function register(HlsPresentation $presentation): void
     {
         $this->inventory = $presentation->toArray();
         Hls::define('selection', resolve: fn () => HlsPresentation::fromArray($this->inventory), authorize: fn () => $this->allowed);
@@ -125,7 +105,7 @@ class HlsSelectionTest extends TestCase
         $this->actingAs(new GenericUser(['id' => 42]));
     }
 
-    private function url(?string $id = null): string
+    protected function url(?string $id = null): string
     {
         return Hls::url('selection.hls', array_filter(['asset' => 'lesson', 'hlsResource' => $id]));
     }
@@ -178,7 +158,7 @@ class HlsSelectionTest extends TestCase
         $this->allowed = false;
         $this->get($masterUrl)->assertForbidden();
         $this->get($this->url($selected->toArray()['playlist']))->assertForbidden();
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     #[DataProvider('packaging')]
@@ -228,7 +208,7 @@ class HlsSelectionTest extends TestCase
             $before[$path] = hash('sha256', $disk->get($path));
         }
         $adapter = new ReadOnlyFilesystemAdapter($disk->getAdapter());
-        Storage::set('selection', new FilesystemAdapter(new \League\Flysystem\Filesystem($adapter), $adapter));
+        Storage::set('selection', new FilesystemAdapter(new Filesystem($adapter), $adapter));
         try {
             FFMpeg::mergeHls(['one' => $first, 'two' => $second])->save('catalog/master.m3u8');
             $this->fail('Read-only storage accepted a composed master.');

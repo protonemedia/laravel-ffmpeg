@@ -3,7 +3,6 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Contracts\Console\Kernel;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Process;
@@ -14,25 +13,14 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class CapabilitiesTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-capabilities-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root,
-            'laravel-ffmpeg.ffmpeg.binaries' => 'ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => 'ffprobe']);
+        config(['laravel-ffmpeg.ffmpeg.binaries' => 'ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => 'ffprobe']);
         $this->app->make(Kernel::class)->registerCommand(new DoctorCommand);
     }
 
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function fakeCapabilities(string $probeVersion = '9.0.2', ?string $brokenOption = null): void
+    protected function fakeCapabilities(string $probeVersion = '9.0.2', ?string $brokenOption = null): void
     {
         Process::preventStrayProcesses();
         Process::fake(function (PendingProcess $process) use ($probeVersion, $brokenOption) {
@@ -73,7 +61,7 @@ class CapabilitiesTest extends TestCase
         $this->assertSame(['encoders' => ['missing']], $capabilities->missing(['encoders' => ['aac', 'missing']]));
         $this->assertSame($capabilities, $capabilities->require(['filters' => ['scale']]));
         $this->assertSame($capabilities->toArray(), json_decode(json_encode($capabilities), true));
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
         $this->assertInstanceOf(Capabilities::class, FFMpeg::capabilities());
         $this->expectException(MediaException::class);
         $capabilities->require(['encoders' => ['absent']]);
@@ -88,7 +76,7 @@ class CapabilitiesTest extends TestCase
         $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame(['encoders' => ['not_present']], $report['missing']);
         $this->assertFalse($report['hardware']['device_usability_tested']);
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_mismatched_and_wrong_major_versions_fail_sanitized(): void
@@ -102,7 +90,7 @@ class CapabilitiesTest extends TestCase
                 $this->assertSame('version', $exception->category);
                 $this->assertSame('', $exception->diagnostics);
             }
-            $this->assertSame([], glob($this->root.'/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
     }
 
@@ -114,7 +102,7 @@ class CapabilitiesTest extends TestCase
         $this->assertSame('capability', $report['category']);
         $this->assertStringNotContainsString('secret-token', Artisan::output());
         $this->assertStringNotContainsString('/private/binary', Artisan::output());
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
         config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/absent/root']);
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertSame('filesystem', json_decode(Artisan::output(), true)['category']);
@@ -140,16 +128,12 @@ class CapabilitiesTest extends TestCase
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertStringNotContainsString($this->root, Artisan::output());
         $this->assertStringNotContainsString('missing-private-binary', Artisan::output());
-        $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
     public function test_native_binaries_expose_real_compiled_in_capabilities_and_the_command_runs(): void
     {
-        $probe = getenv('FFMPEG_9_FFPROBE');
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native capability acceptance.');
-        }
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
+        $this->useRealFFMpeg();
         $capabilities = new Capabilities;
         $this->assertMatchesRegularExpression('/\A9\.0\.\d+\z/', $capabilities->versions()['ffmpeg']);
         $this->assertSame([], $capabilities->missing(['encoders' => ['mpeg4', 'aac'], 'muxers' => ['mp4', 'hls'],
@@ -159,6 +143,6 @@ class CapabilitiesTest extends TestCase
         $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame([], $report['missing']);
         $this->assertTrue($report['temporary_root']['writable']);
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 }

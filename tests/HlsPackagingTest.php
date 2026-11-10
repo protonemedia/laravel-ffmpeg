@@ -2,7 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -16,38 +16,16 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class HlsPackagingTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-hls-packaging-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/work', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/work',
-            'filesystems.disks.hls-packaging' => ['driver' => 'local', 'root' => $this->root.'/storage'],
+        config(['filesystems.disks.hls-packaging' => ['driver' => 'local', 'root' => $this->root.'/storage'],
             'filesystems.disks.hls-packaging-keys' => ['driver' => 'local', 'root' => $this->root.'/keys']]);
     }
 
-    protected function tearDown(): void
+    protected function source()
     {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function native(): string
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for HLS packaging acceptance.');
-        }
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
-
-        return dirname($probe).'/ffmpeg';
-    }
-
-    private function source()
-    {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $disk = Storage::disk('hls-packaging');
         $disk->put('captions.srt', "1\n00:00:00,200 --> 00:00:01,000\nHello HLS\n\n2\n00:00:01,200 --> 00:00:02,200\nSecond cue\n");
         $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=2.4',
@@ -60,9 +38,9 @@ class HlsPackagingTest extends TestCase
         return FFMpeg::disk('hls-packaging')->open('source.mkv');
     }
 
-    private function decode(string $path, array $maps = ['0:v:0', '0:a:0']): string
+    protected function decode(string $path, array $maps = ['0:v:0', '0:a:0']): string
     {
-        $command = [$this->native(), '-v', 'error', '-xerror', '-i', Storage::disk('hls-packaging')->path($path)];
+        $command = [$this->useRealFFMpeg(), '-v', 'error', '-xerror', '-i', Storage::disk('hls-packaging')->path($path)];
         foreach ($maps as $map) {
             array_push($command, '-map', $map);
         }
@@ -104,7 +82,7 @@ class HlsPackagingTest extends TestCase
         $this->assertCount($fragmented ? 1 : 0, $variant->files()->where('role', 'hls-init'));
         $this->decode($variant->playlist()->path);
         $this->decode($result->playlist()->path);
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     #[DataProvider('packaging')]
@@ -124,7 +102,7 @@ class HlsPackagingTest extends TestCase
             }
             $inspectedSecondPass = true;
             $this->assertTrue(Storage::disk('hls-packaging')->missing('out/master.m3u8'));
-            $workspace = glob($this->root.'/work/*')[0];
+            $workspace = glob($this->root.'/workspaces/*')[0];
             $this->assertSame([], glob($workspace.'/*.m3u8'));
             $this->assertSame([], glob($workspace.'/*.ts'));
             $this->assertSame([], glob($workspace.'/*.m4s'));
@@ -140,7 +118,7 @@ class HlsPackagingTest extends TestCase
             $this->assertCount($fragmented ? 1 : 0, $result->variant($name)->files()->where('role', 'hls-init'));
         }
         $this->decode($result->playlist()->path);
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_custom_fragment_paths_and_dynamic_map_references_decode_without_publishing_probe_files(): void
@@ -168,7 +146,7 @@ class HlsPackagingTest extends TestCase
         $this->decode('responses/'.$result->playlist()->path);
         $this->assertCount(1, $result->files()->where('role', 'hls-init'));
         $this->assertFalse(collect($disk->allFiles())->contains(fn ($path) => str_contains($path, '.probe.')));
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     #[DataProvider('packaging')]
@@ -203,7 +181,7 @@ class HlsPackagingTest extends TestCase
         foreach (['English' => 440, 'Español, stereo name' => 880] as $name => $frequency) {
             $path = $result->audioRendition('sound', $name)->playlist()->path;
             $this->decode($path, ['0:a:0']);
-            $pcm = Process::run([$this->native(), '-v', 'error', '-i', $disk->path($path), '-map', '0:a:0',
+            $pcm = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $disk->path($path), '-map', '0:a:0',
                 '-t', '1', '-ar', '8000', '-ac', '1', '-f', 's16le', '-']);
             $this->assertTrue($pcm->successful(), $pcm->errorOutput());
             $previous = $crossings = 0;
@@ -227,7 +205,7 @@ class HlsPackagingTest extends TestCase
             '-show_entries', 'stream=start_time', '-of', 'json', $disk->path($result->variant('small')->playlist()->path)]);
         $this->assertTrue($probe->successful(), $probe->errorOutput());
         $this->assertEqualsWithDelta((float) json_decode($probe->output(), true)['streams'][0]['start_time'] * 90000, (int) $clock[1], 1);
-        $decodeText = Process::run([$this->native(), '-v', 'error', '-i', $disk->path($vtt->path), '-f', 'srt', '-']);
+        $decodeText = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $disk->path($vtt->path), '-f', 'srt', '-']);
         $this->assertTrue($decodeText->successful(), $decodeText->errorOutput());
         $this->assertStringContainsString('00:00:00,200 --> 00:00:01,000', $decodeText->output());
         $this->decode($result->playlist()->path);
@@ -243,7 +221,7 @@ class HlsPackagingTest extends TestCase
         }
         $this->decode('responses/'.$result->playlist()->path);
         $this->assertCount($fragmented ? 4 : 0, $result->files()->where('role', 'hls-init'));
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_invalid_packaging_and_group_settings_fail_before_io(): void
@@ -272,7 +250,7 @@ class HlsPackagingTest extends TestCase
                 $invalid();
                 $this->fail('Invalid HLS packaging settings were accepted.');
             } catch (InvalidArgumentException) {
-                $this->assertSame([], glob($this->root.'/work/*'));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
             }
         }
         Process::assertNothingRan();
@@ -329,12 +307,12 @@ class HlsPackagingTest extends TestCase
             $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
         }
         $this->assertSame(['source.mp4'], $disk->allFiles());
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_dynamic_group_traversal_reads_only_owned_local_playlists_never_external_playlists_init_keys_or_media(): void
     {
-        $disk = Mockery::mock(\Illuminate\Contracts\Filesystem\Filesystem::class);
+        $disk = Mockery::mock(Filesystem::class);
         $playlists = [
             'master.m3u8' => "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"English, commentary\",URI=\"audio/en.m3u8\"\n"
                 ."#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"s\",NAME=\"External\",URI=\"https://external.example.test/subs.m3u8\"\n"
@@ -377,7 +355,7 @@ class HlsPackagingTest extends TestCase
             } catch (MediaException $exception) {
                 $this->assertSame(['probing', 'mapping'], [$exception->phase, $exception->category]);
                 $this->assertFalse(Storage::disk('hls-packaging')->exists('out/master.m3u8'));
-                $this->assertSame([], glob($this->root.'/work/*'));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
             }
         }
     }
@@ -397,7 +375,7 @@ class HlsPackagingTest extends TestCase
         } catch (ExportCancelled) {
             $this->assertFalse(Storage::disk('hls-packaging')->exists('out/master.m3u8'));
             $this->assertSame([], Storage::disk('hls-packaging-keys')->allFiles());
-            $this->assertSame([], glob($this->root.'/work/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
     }
 }

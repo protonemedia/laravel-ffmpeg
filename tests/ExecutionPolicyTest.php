@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -14,27 +13,15 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class ExecutionPolicyTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-policy-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/work', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/work',
-            'laravel-ffmpeg.timeout' => 5, 'laravel-ffmpeg.idle_timeout' => null]);
+        config(['laravel-ffmpeg.timeout' => 5, 'laravel-ffmpeg.idle_timeout' => null]);
         Storage::disk('memory')->put('source.mp4', 'source');
         Event::fake();
     }
 
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function binaries(string $encode = '', int $probeDelay = 0): void
+    protected function binaries(string $encode = '', int $probeDelay = 0): void
     {
         $body = '#!'.PHP_BINARY."\n<?php\n"
             .'if (in_array("-version", $argv, true)) { usleep('.$probeDelay.'); echo basename($argv[0])." version 9.0.2"; exit; }'."\n"
@@ -62,7 +49,7 @@ class ExecutionPolicyTest extends TestCase
         $result = $media->export()->save('normal.mp4');
         $this->assertSame('normal.mp4', $result->file()->path);
         $this->assertSame('encoded', Storage::disk('memory')->get('normal.mp4'));
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public static function deadlines(): array
@@ -86,7 +73,7 @@ class ExecutionPolicyTest extends TestCase
             $this->assertFileExists($pid);
             $this->assertFalse(posix_kill((int) file_get_contents($pid), 0));
             $this->assertFalse(Storage::disk('memory')->exists('late.mp4'));
-            $this->assertSame([], glob($this->root.'/work/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
     }
 
@@ -103,7 +90,7 @@ class ExecutionPolicyTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('timeout', $exception->category);
             $this->assertFalse(Storage::disk('memory')->exists('queued.mp4'));
-            $this->assertSame([], glob($this->root.'/work/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
     }
 
@@ -123,7 +110,7 @@ class ExecutionPolicyTest extends TestCase
                     FFMpeg::disk('missing')->open('source.mp4')->export()->{$method}($seconds);
                     $this->fail('Invalid deadlines must be rejected.');
                 } catch (InvalidArgumentException) {
-                    $this->assertSame([], glob($this->root.'/work/*'));
+                    $this->assertSame([], glob($this->root.'/workspaces/*'));
                 }
             }
         }

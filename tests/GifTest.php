@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -13,34 +12,6 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class GifTest extends TestCase
 {
-    private string $root;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-gif-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
-    }
-
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function native(): string
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run native GIF acceptance.');
-        }
-
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
-
-        return dirname($probe).'/ffmpeg';
-    }
-
     public function test_inspection_is_pure_and_filters_precede_the_palette_in_caller_order(): void
     {
         Process::fake();
@@ -85,7 +56,7 @@ class GifTest extends TestCase
 
     public function test_native_gif_has_changing_palette_frames_requested_timing_and_loop_bytes(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $source = $this->root.'/source.mp4';
         $fixture = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=128x96:rate=20:duration=2',
             '-f', 'lavfi', '-i', 'sine=duration=2', '-c:v', 'libx264', '-threads', '1', '-c:a', 'aac', $source]);
@@ -144,7 +115,7 @@ class GifTest extends TestCase
 
     public function test_clip_selects_source_frames_before_palette_generation(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $source = $this->root.'/colors.mp4';
         $fixture = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=64x48:rate=10:duration=1',
             '-f', 'lavfi', '-i', 'color=blue:size=64x48:rate=10:duration=1',

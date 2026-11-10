@@ -114,11 +114,7 @@ class PlaylistTest extends TestCase
 
     public function test_an_old_native_export_can_be_reopened_and_deleted_without_its_result_inventory(): void
     {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native HLS cleanup acceptance.');
-        }
-        $binary = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => $binary]);
+        $binary = $this->useRealFFMpeg();
         $disk = $this->fakeLocalDisk();
         $source = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=80x48:rate=10:duration=1.2',
             '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '1', $disk->path('source.mp4')]);

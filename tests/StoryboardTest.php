@@ -13,35 +13,9 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class StoryboardTest extends TestCase
 {
-    private string $root;
-
-    protected function setUp(): void
+    protected function colors(): Media
     {
-        parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-storyboard-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root]);
-    }
-
-    protected function tearDown(): void
-    {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function native(): string
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native storyboard acceptance.');
-        }
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
-
-        return dirname($probe).'/ffmpeg';
-    }
-
-    private function colors(): Media
-    {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $command = [$binary, '-v', 'error'];
         foreach (['red', 'lime', 'blue', 'yellow', 'magenta', 'cyan', 'white'] as $index => $color) {
@@ -81,7 +55,7 @@ class StoryboardTest extends TestCase
                 $media->storyboard(...$arguments);
                 $this->fail('An invalid storyboard was accepted.');
             } catch (InvalidArgumentException) {
-                $this->assertSame([], glob($this->root.'/*'));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
             }
         }
         Process::assertNothingRan();
@@ -122,7 +96,7 @@ class StoryboardTest extends TestCase
             $this->assertSame([0, 0, 0], [$pixel['red'], $pixel['green'], $pixel['blue']]);
         }
         $this->assertSame($original, Storage::disk('local')->get('colors.mkv'));
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_clips_bound_thumbnails_before_tiling_and_custom_urls_keep_their_query(): void
@@ -146,12 +120,12 @@ class StoryboardTest extends TestCase
             ->toDisk('memory')->save('short-%d.png');
         $this->assertStringContainsString('00:00:00.000 --> 00:00:00.050', Storage::disk('memory')->get('short.vtt'));
         $this->assertFalse(Storage::disk('memory')->exists('short-2.png'));
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_jpeg_quality_is_preserved_and_invalid_cue_urls_prevent_all_publication(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=10:duration=0.4', '-c:v', 'ffv1', $local->path('detail.mkv')]);
         $this->assertTrue($result->successful(), $result->errorOutput());
@@ -170,7 +144,7 @@ class StoryboardTest extends TestCase
             $this->assertSame('validation', $exception->phase);
             $this->assertFalse(Storage::disk('memory')->exists('invalid-1.png'));
             $this->assertFalse(Storage::disk('memory')->exists('invalid.vtt'));
-            $this->assertSame([], glob($this->root.'/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
     }
 
@@ -194,6 +168,6 @@ class StoryboardTest extends TestCase
         $this->assertNotEmpty($storage->get('sheet-2.png'));
         $this->assertFalse($storage->exists('preview.vtt'));
         $this->assertTrue(Storage::disk('local')->exists('colors.mkv'));
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 }

@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -11,49 +10,22 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class SpeedTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-speed-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
         mkdir($this->root.'/files', 0700);
-        config([
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
-            'filesystems.disks.speed-native' => ['driver' => 'local', 'root' => $this->root.'/files'],
-        ]);
+        config(['filesystems.disks.speed' => ['driver' => 'local', 'root' => $this->root.'/files']]);
     }
 
-    protected function tearDown(): void
+    protected function media(string $path = 'source.mkv')
     {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
+        return FFMpeg::disk('speed')->open($path);
     }
 
-    private function native(): string
+    protected function fixture(float $delay = 0, string $kind = 'both'): string
     {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native speed acceptance.');
-        }
-        config([
-            'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg',
-            'laravel-ffmpeg.ffprobe.binaries' => $probe,
-        ]);
-
-        return dirname($probe).'/ffmpeg';
-    }
-
-    private function media(string $path = 'source.mkv')
-    {
-        return FFMpeg::disk('speed-native')->open($path);
-    }
-
-    private function fixture(float $delay = 0, string $kind = 'both'): string
-    {
-        $binary = $this->native();
-        $path = Storage::disk('speed-native')->path('source.mkv');
+        $binary = $this->useRealFFMpeg();
+        $path = Storage::disk('speed')->path('source.mkv');
         $command = [$binary, '-v', 'error', '-y'];
         if ($kind !== 'audio') {
             array_push($command, '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=30:d=6');
@@ -110,7 +82,7 @@ class SpeedTest extends TestCase
         $hash = hash_file('sha256', $source);
         foreach ([1.5, 0.75, 3.0] as $factor) {
             $result = $this->media()->speed($factor)->video('ffv1')->audio('pcm_s16le')->save('speed-'.$factor.'.mkv');
-            $path = Storage::disk('speed-native')->path($result->file()->path);
+            $path = Storage::disk('speed')->path($result->file()->path);
             $frames = $this->frames($path);
             $video = array_values(array_filter($frames, fn ($f) => $f['media_type'] === 'video'));
             $audio = array_values(array_filter($frames, fn ($f) => $f['media_type'] === 'audio'));
@@ -125,15 +97,15 @@ class SpeedTest extends TestCase
 
     public function test_speeding_up_h264_with_a_frame_rate_time_base_keeps_every_frame(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $result = Process::run([$binary, '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=25:d=2',
             '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-            '-c:a', 'aac', '-video_track_timescale', '25', Storage::disk('speed-native')->path('h264.mp4')]);
+            '-c:a', 'aac', '-video_track_timescale', '25', Storage::disk('speed')->path('h264.mp4')]);
         $this->assertTrue($result->successful(), $result->errorOutput());
 
         foreach ([2.0, 3.0] as $factor) {
             $result = $this->media('h264.mp4')->speed($factor)->save("h264-{$factor}.mp4");
-            $frames = $this->frames(Storage::disk('speed-native')->path($result->file()->path));
+            $frames = $this->frames(Storage::disk('speed')->path($result->file()->path));
             $times = array_map(
                 fn ($frame) => (float) $frame['best_effort_timestamp_time'],
                 array_values(array_filter($frames, fn ($frame) => $frame['media_type'] === 'video')),
@@ -149,7 +121,7 @@ class SpeedTest extends TestCase
         $this->fixture(1.2);
         foreach ([1.5, 0.75, 3.0] as $factor) {
             $result = $this->media()->speed($factor)->video('ffv1')->audio('pcm_s16le')->save('delayed-'.$factor.'.mkv');
-            $frames = $this->frames(Storage::disk('speed-native')->path($result->file()->path));
+            $frames = $this->frames(Storage::disk('speed')->path($result->file()->path));
             $audio = array_values(array_filter($frames, fn ($f) => $f['media_type'] === 'audio'));
             $this->assertEqualsWithDelta(1.2 / $factor, (float) $audio[0]['best_effort_timestamp_time'], 0.025);
             $last = end($audio);
@@ -168,7 +140,7 @@ class SpeedTest extends TestCase
                 $operation = $this->media()->speed(1.5)->video('ffv1')->audio('pcm_s16le');
                 $select === 'audio' ? $operation->withoutVideo() : $operation->withoutAudio();
                 $operation->save('only.mkv');
-                $types = array_unique(array_column($this->frames(Storage::disk('speed-native')->path('only.mkv')), 'media_type'));
+                $types = array_unique(array_column($this->frames(Storage::disk('speed')->path('only.mkv')), 'media_type'));
                 $this->assertSame([$select], array_values($types));
             }
             if ($kind !== 'both') {
@@ -215,7 +187,7 @@ class SpeedTest extends TestCase
         $this->fixture(delay: 0.5, kind: 'audio');
         $this->assertEqualsWithDelta(0.5, (float) $this->media()->probe()->get('format.start_time'), 0.01);
         $this->media()->speed(1.5)->audio('pcm_s16le')->save('offset.mkv');
-        $path = Storage::disk('speed-native')->path('offset.mkv');
+        $path = Storage::disk('speed')->path('offset.mkv');
         $frames = $this->frames($path);
         $last = end($frames);
         // As in any export, FFmpeg drops an audio-only source's leading offset; 5.5 s of audio becomes 3.67 s.
@@ -234,7 +206,7 @@ class SpeedTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('encoding', $exception->phase);
         }
-        $shift = Process::run([$this->native(), '-v', 'error', '-i', $source, '-c', 'copy', '-output_ts_offset', '2', Storage::disk('speed-native')->path('shifted.mkv')]);
+        $shift = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $source, '-c', 'copy', '-output_ts_offset', '2', Storage::disk('speed')->path('shifted.mkv')]);
         $this->assertTrue($shift->successful(), $shift->errorOutput());
         try {
             $this->media('shifted.mkv')->speed(1.5)->save('failed.mkv');
@@ -243,11 +215,11 @@ class SpeedTest extends TestCase
             $this->assertSame(['probing', 'metadata'], [$exception->phase, $exception->category]);
         }
         $this->assertSame($hash, hash_file('sha256', $source));
-        $this->assertFalse(Storage::disk('speed-native')->exists('failed.mkv'));
+        $this->assertFalse(Storage::disk('speed')->exists('failed.mkv'));
         $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
-    private function frames(string $path): array
+    protected function frames(string $path): array
     {
         $result = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-of', 'json', '-show_frames', $path]);
         $this->assertTrue($result->successful(), $result->errorOutput());
@@ -255,9 +227,9 @@ class SpeedTest extends TestCase
         return json_decode($result->output(), true)['frames'];
     }
 
-    private function assertPitch(string $path): void
+    protected function assertPitch(string $path): void
     {
-        $result = Process::run([$this->native(), '-v', 'error', '-i', $path, '-map', '0:a:0', '-t', '1', '-f', 's16le', '-ac', '1', '-ar', '48000', '-']);
+        $result = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $path, '-map', '0:a:0', '-t', '1', '-f', 's16le', '-ac', '1', '-ar', '48000', '-']);
         $this->assertTrue($result->successful(), $result->errorOutput());
         $samples = array_values(unpack('v*', $result->output()));
         $crossings = 0;

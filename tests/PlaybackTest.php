@@ -17,9 +17,9 @@ use ProtoneMedia\LaravelFFMpeg\Support\Hls;
 
 class PlaybackTest extends TestCase
 {
-    private bool $allowed = true;
+    protected bool $allowed = true;
 
-    private array $inventory;
+    protected array $inventory;
 
     protected function setUp(): void
     {
@@ -46,19 +46,19 @@ class PlaybackTest extends TestCase
         Hls::routes('/lessons/{lesson}/hls', name: 'lessons.hls', playback: 'lessons');
     }
 
-    private function login(): void
+    protected function login(): void
     {
         $this->actingAs(new GenericUser(['id' => 42]));
     }
 
-    private function url(?string $path = null, int $lesson = 42): string
+    protected function url(?string $path = null, int $lesson = 42): string
     {
         return Hls::url('lessons.hls', array_filter([
             'lesson' => $lesson, 'hlsResource' => $path === null ? null : HlsPresentation::id('memory', $path),
         ]), expires: now()->addMinutes(5));
     }
 
-    private function links(string $playlist): array
+    protected function links(string $playlist): array
     {
         preg_match_all('~https?://[^\s"]+~', $playlist, $matches);
 
@@ -187,11 +187,8 @@ class PlaybackTest extends TestCase
 
     public function test_encrypted_export_inventory_serves_the_actual_segments_and_separate_disk_keys(): void
     {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native encrypted playback acceptance.');
-        }
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe,
-            'filesystems.disks.playback-keys' => ['driver' => 'memory']]);
+        $ffmpeg = $this->useRealFFMpeg();
+        config(['filesystems.disks.playback-keys' => ['driver' => 'memory']]);
         $result = FFMpeg::open(new File(__DIR__.'/src/video.mp4'))
             ->hls(segmentDuration: 0.7)->video('libx264', bitrate: 80_000)->audio('aac', bitrate: 48_000)
             ->variant('small', fn ($variant) => $variant->resize(width: 64))
@@ -227,7 +224,7 @@ class PlaybackTest extends TestCase
         $path = tempnam(sys_get_temp_dir(), 'playback-decode-');
         try {
             file_put_contents($path, $decoded);
-            $process = Process::run([dirname($probe).'/ffmpeg', '-v', 'error', '-i', $path, '-f', 'null', '-']);
+            $process = Process::run([$ffmpeg, '-v', 'error', '-i', $path, '-f', 'null', '-']);
             $this->assertTrue($process->successful(), $process->errorOutput());
         } finally {
             unlink($path);

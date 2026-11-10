@@ -4,7 +4,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -14,37 +13,15 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class InputHelpersTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-input-helpers-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/work', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/work',
-            'filesystems.disks.input-helpers' => ['driver' => 'local', 'root' => $this->root.'/output']]);
-    }
-
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function native(): string
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native input acceptance.');
-        }
-        config(['laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
-
-        return dirname($probe).'/ffmpeg';
+        config(['filesystems.disks.input-helpers' => ['driver' => 'local', 'root' => $this->root.'/output']]);
     }
 
     public function test_still_video_is_finite_and_preserves_local_and_remote_image_content(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $image = imagecreatetruecolor(80, 48);
         imagefill($image, 0, 0, imagecolorallocate($image, 240, 10, 30));
         imagepng($image, $this->root.'/source.png');
@@ -69,12 +46,12 @@ class InputHelpersTest extends TestCase
         }
         $this->assertSame($bytes, file_get_contents($this->root.'/source.png'));
         $this->assertSame($bytes, Storage::disk('memory')->get('source.png'));
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_invalid_still_inputs_fail_without_publication(): void
     {
-        $this->native();
+        $this->useRealFFMpeg();
         Storage::disk('memory')->put('bad.png', 'not image data');
         try {
             FFMpeg::disk('memory')->open('bad.png')->still(1)->toDisk('input-helpers')->save('bad.mp4');
@@ -88,14 +65,14 @@ class InputHelpersTest extends TestCase
                 FFMpeg::open('photo.png')->still($duration, $rate);
                 $this->fail('Invalid still configuration accepted.');
             } catch (InvalidArgumentException) {
-                $this->assertSame([], glob($this->root.'/work/*'));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
             }
         }
     }
 
     public function test_cache_hits_preserve_metadata_and_source_bound_stream_selection_and_version_keys_invalidate(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $path = $this->root.'/input.mp4';
         $make = fn ($width) => Process::run([$binary, '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=blue:s='.$width.'x48:r=10',
             '-t', '1', '-c:v', 'libx264', $path]);
@@ -166,12 +143,12 @@ class InputHelpersTest extends TestCase
             }
         }
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_an_unavailable_hardware_encoder_fails_explicitly_without_software_fallback_or_publication(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $encoders = Process::run([$binary, '-hide_banner', '-encoders']);
         $this->assertTrue($encoders->successful(), $encoders->errorOutput());
         if (preg_match('/\bh264_nvenc\b/', $encoders->output())) {
@@ -194,7 +171,7 @@ class InputHelpersTest extends TestCase
                 $this->assertStringContainsString("Unknown encoder 'h264_nvenc'", $exception->diagnostics);
                 $this->assertStringNotContainsString($this->root, $exception->diagnostics);
                 $this->assertSame([], Storage::disk('input-helpers')->allFiles());
-                $this->assertSame([], glob($this->root.'/work/*'));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
                 $this->assertSame($hash, hash_file('sha256', $path));
             }
         }
@@ -202,7 +179,7 @@ class InputHelpersTest extends TestCase
 
     public function test_an_unavailable_hardware_decoder_fails_instead_of_silently_using_software_decoding(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $backends = Process::run([$binary, '-hide_banner', '-hwaccels']);
         $this->assertTrue($backends->successful(), $backends->errorOutput());
         if (preg_match('/^cuda$/m', $backends->output())) {
@@ -220,14 +197,14 @@ class InputHelpersTest extends TestCase
             $this->assertStringContainsString('No device available for decoder: device type cuda', $exception->diagnostics);
             $this->assertStringNotContainsString($this->root, $exception->diagnostics);
             $this->assertSame([], Storage::disk('input-helpers')->allFiles());
-            $this->assertSame([], glob($this->root.'/work/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
             $this->assertSame($hash, hash_file('sha256', $path));
         }
     }
 
     public function test_rtsp_snapshots_capture_real_tcp_and_udp_frames_and_bound_failed_cameras(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         config(['laravel-ffmpeg.redact_credentials' => true]);
         $encoded = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=green:s=80x48:r=10',
             '-t', '1', '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
@@ -267,7 +244,7 @@ class InputHelpersTest extends TestCase
                     }
                     $this->assertFalse(Storage::disk('input-helpers')->exists('snapshot-'.$index.'.png'));
                 }
-                $this->assertSame([], glob($this->root.'/work/*'));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
             } finally {
                 if ($server->running()) {
                     $server->stop();

@@ -21,36 +21,15 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class HlsTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-hls-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root]);
         Event::fake([Events\ExportStarting::class, Events\ExportCompleted::class, Events\ExportFailed::class, Events\ExportCancelled::class]);
     }
 
-    protected function tearDown(): void
+    protected function source(bool $video = true, bool $audio = true): Media
     {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function native(): string
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native HLS acceptance.');
-        }
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
-
-        return dirname($probe).'/ffmpeg';
-    }
-
-    private function source(bool $video = true, bool $audio = true): Media
-    {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $disk = $this->fakeLocalDisk();
         $command = [$binary, '-v', 'error'];
         if ($video) {
@@ -74,7 +53,7 @@ class HlsTest extends TestCase
         return FFMpeg::disk('local')->open('source.mkv');
     }
 
-    private function probe(string $path): array
+    protected function probe(string $path): array
     {
         $result = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-show_streams', '-of', 'json', $path]);
         $this->assertTrue($result->successful(), $result->errorOutput());
@@ -107,7 +86,7 @@ class HlsTest extends TestCase
         $this->assertFalse(is_callable([new HlsVariant, 'toDisk']));
         $this->assertFalse(is_callable([new HlsVariant, 'save']));
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_real_variants_have_usable_segments_aligned_keyframes_and_relative_nested_playlists(): void
@@ -182,7 +161,7 @@ class HlsTest extends TestCase
         $this->assertEqualsWithDelta(0.7, $durations['small'][0], 0.05);
         $this->assertSame($original, Storage::disk('local')->get('source.mkv'));
         $this->assertSame($original, $storage->get('original/source.mkv'));
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
         Event::assertDispatchedTimes(Events\ExportCompleted::class, 1);
         $this->assertNotEmpty(array_filter($progressEvents, fn ($event) => $event->progress->isEncoding()
             && $event->progress->elapsedSeconds !== null));
@@ -203,7 +182,7 @@ class HlsTest extends TestCase
         $this->source();
         $disk = Storage::disk('local');
         $disk->put('captions.srt', "1\n00:00:00,200 --> 00:00:01,100\nTyped captions\n");
-        $remux = Process::run([$this->native(), '-v', 'error', '-i', $disk->path('source.mkv'),
+        $remux = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $disk->path('source.mkv'),
             '-i', $disk->path('captions.srt'), '-map', '0', '-map', '1:s', '-c', 'copy', $disk->path('captioned.mkv')]);
         $this->assertTrue($remux->successful(), $remux->errorOutput());
         $media = FFMpeg::disk('local')->open('captioned.mkv');
@@ -234,9 +213,9 @@ class HlsTest extends TestCase
         }
         $this->assertStringContainsString('Typed captions', $disk->get($result->subtitleRendition('text', 'Captions')->files()->firstWhere('role', 'hls-segment')->path));
         $this->assertGreaterThan(1, $result->files()->where('role', 'hls-segment')->count());
-        $decoded = Process::run([$this->native(), '-v', 'error', '-i', Storage::disk('local')->path('typed/master.m3u8'), '-f', 'null', '-']);
+        $decoded = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', Storage::disk('local')->path('typed/master.m3u8'), '-f', 'null', '-']);
         $this->assertTrue($decoded->successful(), $decoded->errorOutput());
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_invalid_playlist_types_and_non_vod_parallel_work_are_rejected_before_dispatch(): void
@@ -293,7 +272,7 @@ class HlsTest extends TestCase
             $first = $encoded->variant('encoded')->files()->where('role', 'hls-segment')->first();
             $this->assertSame($video ? ($audio ? ['video', 'audio'] : ['video']) : ['audio'],
                 array_column($this->probe(Storage::disk('local')->path($first->path)), 'codec_type'));
-            $this->assertSame([], glob($this->root.'/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
     }
 
@@ -327,7 +306,7 @@ class HlsTest extends TestCase
         }
         $this->assertTrue($disk->exists('source.mkv'));
         $this->assertSame([24, 16], array_slice(getimagesize($disk->path('logo.png')), 0, 2));
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_an_extra_unlabeled_graph_stream_is_rejected_before_hls_publication(): void
@@ -342,10 +321,10 @@ class HlsTest extends TestCase
             $this->assertSame(['validation', 'mapping'], [$exception->phase, $exception->category]);
         }
         $this->assertSame([], Storage::disk('memory')->allFiles());
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
-    private function fakePipeline(?callable $mutate = null): void
+    protected function fakePipeline(?callable $mutate = null): void
     {
         Process::preventStrayProcesses();
         Process::fake(function (PendingProcess $process) use ($mutate) {
@@ -411,7 +390,7 @@ class HlsTest extends TestCase
             $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
         }
         $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
@@ -435,7 +414,7 @@ class HlsTest extends TestCase
         } catch (InvalidArgumentException) {
             $this->assertSame('source bytes', $storage->get('protected/test/segment-00000000.ts'));
             $this->assertFalse($storage->exists('protected/master.m3u8'));
-            $this->assertSame([], glob($this->root.'/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
     }
 
@@ -459,7 +438,7 @@ class HlsTest extends TestCase
         }
         $this->assertSame('old master', $storage->get('out/master.m3u8'));
         $this->assertSame('source', $storage->get('source.mp4'));
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_cancellation_freezes_variants_and_cleans_up_without_publishing(): void
@@ -484,7 +463,7 @@ class HlsTest extends TestCase
             $this->fail('Cancellation was swallowed.');
         } catch (ExportCancelled) {
             $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-            $this->assertSame([], glob($this->root.'/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
         Event::assertDispatchedTimes(Events\ExportCancelled::class, 1);
         Event::assertNotDispatched(Events\ExportCompleted::class);
@@ -514,7 +493,7 @@ class HlsTest extends TestCase
         $this->assertSame(['shared/é #?/high-0.ts', 'lists/high/index.m3u8'], $result->variant('high')->files()->pluck('path')->all());
         $this->assertSame(['segment-00000000.ts', 'root.m3u8'], $result->variant('root')->files()->pluck('path')->all());
         $this->assertSame(['100% ready/segment-00000000.ts', '100% ready/index.m3u8'], $result->variant('literal')->files()->pluck('path')->all());
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_custom_nested_playlists_decode_with_segments_in_separate_directories(): void
@@ -561,7 +540,7 @@ class HlsTest extends TestCase
         $decoded = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-xerror',
             '-i', Storage::disk('local')->path($result->playlist()->path), '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-']);
         $this->assertTrue($decoded->successful(), $decoded->errorOutput());
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_dynamically_rewritten_encrypted_playlists_decode_every_variant_through_key_rotation(): void
@@ -596,7 +575,7 @@ class HlsTest extends TestCase
                 '-i', $disk->path('responses/'.$path), '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-']);
             $this->assertTrue($decoded->successful(), $decoded->errorOutput());
         }
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public static function encryptionModes(): array
@@ -669,7 +648,7 @@ class HlsTest extends TestCase
             $this->assertNotSame($secrets->get($keys[0]->path), $secrets->get($second[0]->path));
         }
         $this->assertTrue($disk->exists('source.mkv'));
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_encryption_handles_padding_and_cbc_chaining_across_large_segments(): void
@@ -688,7 +667,7 @@ class HlsTest extends TestCase
             $this->assertSame((intdiv($length, 16) + 1) * 16, strlen($ciphertext));
             $this->assertSame($plain, openssl_decrypt($ciphertext, 'aes-128-cbc', '0123456789abcdef', OPENSSL_RAW_DATA, hex2bin($match[1])));
         }
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_encryption_failures_and_hook_tampering_publish_nothing_and_clean_private_files(): void
@@ -733,7 +712,7 @@ class HlsTest extends TestCase
                 }
                 $this->assertSame(['source.mp4'], $disk->allFiles());
                 $this->assertSame([], $secrets->allFiles());
-                $this->assertSame([], glob($this->root.'/*'));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
             }
         }
     }
@@ -766,7 +745,7 @@ class HlsTest extends TestCase
             }
         }
         $this->assertSame(['source.mp4'], $disk->allFiles());
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public static function invalidPlaylistHooks(): array
@@ -811,7 +790,7 @@ class HlsTest extends TestCase
             $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
         }
         $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-        $this->assertSame([], glob($this->root.'/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
@@ -836,7 +815,7 @@ class HlsTest extends TestCase
                 $this->assertSame($failure, $exception);
             }
             $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-            $this->assertSame([], glob($this->root.'/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
         Event::assertDispatchedTimes(Events\ExportFailed::class, 1);
         Event::assertDispatchedTimes(Events\ExportCancelled::class, 1);
@@ -855,7 +834,7 @@ class HlsTest extends TestCase
             $this->fail('Colliding concrete segment destinations were accepted.');
         } catch (InvalidArgumentException) {
             $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-            $this->assertSame([], glob($this->root.'/*'));
+            $this->assertSame([], glob($this->root.'/workspaces/*'));
         }
     }
 
@@ -888,7 +867,7 @@ class HlsTest extends TestCase
                 $invalid();
                 $this->fail('Invalid HLS settings were accepted.');
             } catch (InvalidArgumentException|PathTraversalDetected) {
-                $this->assertSame([], glob($this->root.'/*'));
+                $this->assertSame([], glob($this->root.'/workspaces/*'));
             }
         }
         Process::assertNothingRan();

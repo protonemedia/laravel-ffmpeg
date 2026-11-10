@@ -11,40 +11,31 @@ use League\Flysystem\Local\LocalFilesystemAdapter;
 use League\Flysystem\PathPrefixing\PathPrefixedAdapter;
 use League\Flysystem\PathTraversalDetected;
 use League\Flysystem\ReadOnly\ReadOnlyFilesystemAdapter;
+use Orchestra\Testbench\Attributes\RequiresEnv;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
+#[RequiresEnv('FFMPEG_9_FFPROBE')]
 class PreservationTest extends TestCase
 {
-    private string $root;
-
-    private string $ffmpeg;
+    protected string $ffmpeg;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $probe = getenv('FFMPEG_9_FFPROBE');
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for preservation acceptance.');
-        }
-        $this->ffmpeg = dirname($probe).'/ffmpeg';
-        $this->root = sys_get_temp_dir().'/native-preservation-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config(['filesystems.default' => 'memory', 'laravel-ffmpeg.ffmpeg.binaries' => $this->ffmpeg,
-            'laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
+        $this->ffmpeg = $this->useRealFFMpeg();
+        config(['filesystems.default' => 'memory']);
     }
 
     protected function tearDown(): void
     {
         if (isset($this->root)) {
             $this->assertSame([], glob($this->root.'/workspaces/*'));
-            (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
         }
         parent::tearDown();
     }
 
-    private function ffmpeg(array $arguments): string
+    protected function ffmpeg(array $arguments): string
     {
         $result = Process::run([$this->ffmpeg, '-v', 'error', '-y', ...$arguments]);
         $this->assertTrue($result->successful(), $result->errorOutput());

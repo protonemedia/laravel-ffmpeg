@@ -17,29 +17,14 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class ProbeTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->root = sys_get_temp_dir().'/native-probe-test-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config([
-            'laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces',
-            'filesystems.disks.local' => ['driver' => 'local', 'root' => $this->root.'/local'],
-        ]);
+        config(['filesystems.disks.local' => ['driver' => 'local', 'root' => $this->root.'/local']]);
     }
 
-    protected function tearDown(): void
-    {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
-
-        parent::tearDown();
-    }
-
-    private function metadataJson(): string
+    protected function metadataJson(): string
     {
         return json_encode([
             'format' => ['duration' => '12.375', 'tags' => ['title' => 'Lecture', 'com.example.title' => 'Literal key']],
@@ -55,7 +40,7 @@ class ProbeTest extends TestCase
         ]);
     }
 
-    private function fakeProbe(mixed $response = null, ?callable $inspect = null): void
+    protected function fakeProbe(mixed $response = null, ?callable $inspect = null): void
     {
         Process::preventStrayProcesses();
         Process::fake(function (PendingProcess $process) use ($response, $inspect) {
@@ -69,7 +54,7 @@ class ProbeTest extends TestCase
         });
     }
 
-    private function binary(string $body): string
+    protected function binary(string $body): string
     {
         $path = $this->root.'/ffprobe';
         file_put_contents($path, '#!'.PHP_BINARY."\n<?php\n".
@@ -469,13 +454,7 @@ class ProbeTest extends TestCase
 
     public function test_it_reads_real_media_through_local_and_non_local_storage(): void
     {
-        $binary = getenv('FFMPEG_9_FFPROBE');
-
-        if (! $binary) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to a matching FFprobe 9.0.x binary for real-media acceptance.');
-        }
-
-        config(['laravel-ffmpeg.ffprobe.binaries' => $binary]);
+        $this->useRealFFMpeg();
         $this->addTestFile('video.mp4');
         $this->addTestFile('video.mp4', 'memory');
 

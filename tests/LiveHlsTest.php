@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Mockery;
+use Orchestra\Testbench\Attributes\RequiresEnv;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\LiveHlsResult;
 use ProtoneMedia\LaravelFFMpeg\LiveHlsSource;
@@ -15,40 +16,22 @@ use ProtoneMedia\LaravelFFMpeg\PendingLiveHls;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use Symfony\Component\Process\Process as Server;
 
+#[RequiresEnv('FFMPEG_9_FFPROBE')]
 class LiveHlsTest extends TestCase
 {
-    private string $root;
-
-    private string $binary;
+    protected string $binary;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $probe = getenv('FFMPEG_9_FFPROBE');
-        $this->binary = $probe ? dirname($probe).'/ffmpeg' : '';
-        if (! is_executable($this->binary)) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run native live acceptance.');
-        }
-        $this->root = sys_get_temp_dir().'/native-live-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root,
-            'laravel-ffmpeg.ffmpeg.binaries' => $this->binary,
-            'laravel-ffmpeg.ffprobe.binaries' => dirname($this->binary).'/ffprobe',
-            'laravel-ffmpeg.timeout' => 30, 'laravel-ffmpeg.idle_timeout' => null]);
-        config(['filesystems.disks.local' => ['driver' => 'local', 'root' => $this->root.'/storage']]);
+        $this->binary = $this->useRealFFMpeg();
+        config(['laravel-ffmpeg.timeout' => 30, 'laravel-ffmpeg.idle_timeout' => null,
+            'filesystems.disks.local' => ['driver' => 'local', 'root' => $this->root.'/storage']]);
         Storage::forgetDisk('local');
         Storage::disk('local')->makeDirectory('');
     }
 
-    protected function tearDown(): void
-    {
-        if (isset($this->root)) {
-            (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
-        }
-        parent::tearDown();
-    }
-
-    private function source(float $duration = 5): Media
+    protected function source(float $duration = 5): Media
     {
         $result = Process::run([$this->binary, '-v', 'error', '-y', '-f', 'lavfi', '-i',
             'testsrc2=size=128x72:rate=20:duration='.$duration, '-f', 'lavfi', '-i',
@@ -61,7 +44,7 @@ class LiveHlsTest extends TestCase
         return new Media('local', 'source.mkv');
     }
 
-    private function children(): array
+    protected function children(): array
     {
         $children = [];
         foreach (glob('/proc/[0-9]*/status') ?: [] as $path) {
@@ -99,7 +82,7 @@ class LiveHlsTest extends TestCase
                 $decode = Process::run([$this->binary, '-v', 'error', '-i', $disk->path($snapshot->segments[0]), '-f', 'null', '-']);
                 $this->assertTrue($decode->successful(), $decode->errorOutput());
             }
-            $local = glob($this->root.'/laravel-ffmpeg-*/live-*.ts*') ?: [];
+            $local = glob($this->root.'/workspaces/laravel-ffmpeg-*/live-*.ts*') ?: [];
             $this->assertLessThanOrEqual(7, count($local));
             $seen[] = $snapshot->lastSequence;
             if ($snapshot->publishedSegments >= 7) {
@@ -116,7 +99,7 @@ class LiveHlsTest extends TestCase
         foreach ($pids as $pid) {
             $this->assertDirectoryDoesNotExist('/proc/'.$pid, 'Child must have been reaped.');
         }
-        $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
         $this->assertStringNotContainsString('#EXT-X-ENDLIST', $disk->get('live/index.m3u8'));
     }
 
@@ -146,7 +129,7 @@ class LiveHlsTest extends TestCase
         $again = $live->run('reconnect-again');
         $this->assertSame(2, $again->attempts);
         $this->assertSame('cancelled', $again->status);
-        $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
     public function test_workspace_cleanup_failure_does_not_replace_an_application_exception(): void
@@ -154,8 +137,8 @@ class LiveHlsTest extends TestCase
         $live = (new PendingLiveHls($this->source(1.2), Storage::disk('local'), 0.4, 3))
             ->onPublish(function (): void {
                 // A missing workspace makes Workspace::delete() fail during cleanup.
-                foreach (glob($this->root.'/laravel-ffmpeg-*') as $workspace) {
-                    rename($workspace, $this->root.'/moved-'.basename($workspace));
+                foreach (glob($this->root.'/workspaces/laravel-ffmpeg-*') as $workspace) {
+                    rename($workspace, $this->root.'/workspaces/moved-'.basename($workspace));
                 }
                 throw new \RuntimeException('Application publication hook failed.');
             });
@@ -181,7 +164,7 @@ class LiveHlsTest extends TestCase
             $this->assertStringContainsString('after 3 attempts', $exception->getMessage());
             $this->assertStringNotContainsString('broken.ts', $exception->getMessage());
         }
-        $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
     public function test_reconnect_can_recover_a_failed_source_and_backoff_remains_cancellable(): void
@@ -225,7 +208,7 @@ class LiveHlsTest extends TestCase
         $this->assertSame('cancelled', $result->status);
         $this->assertSame(1, $result->attempts);
         $this->assertLessThan(2, (hrtime(true) - $began) / 1e9);
-        $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
     public function test_destination_failure_retains_last_readable_playlist_and_stops_child(): void
@@ -264,7 +247,7 @@ class LiveHlsTest extends TestCase
         foreach ($pids as $pid) {
             $this->assertDirectoryDoesNotExist('/proc/'.$pid);
         }
-        $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
     public function test_total_timeout_and_pre_start_cancellation_have_explicit_partial_results(): void
@@ -279,7 +262,7 @@ class LiveHlsTest extends TestCase
         $this->assertSame('cancelled', $cancelled->status);
         $this->assertSame(0, $cancelled->attempts);
         $this->assertSame([], $disk->allFiles('cancelled'));
-        $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
+        $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
     public function test_trusted_http_factory_ingests_and_publishes_a_decodable_presentation(): void
@@ -299,7 +282,7 @@ class LiveHlsTest extends TestCase
             $this->assertTrue($decoded->successful(), $decoded->errorOutput());
             $requests = array_map(fn ($line) => json_decode($line, true, flags: JSON_THROW_ON_ERROR), file($this->root.'/requests', FILE_IGNORE_NEW_LINES));
             $this->assertContains('/public', array_column($requests, 'path'));
-            $this->assertSame([], glob($this->root.'/laravel-ffmpeg-*'));
+            $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
         } finally {
             $server->stop(0);
         }

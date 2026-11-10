@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -11,36 +10,7 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class SequenceTest extends TestCase
 {
-    private string $root;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-sequence-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/workspaces', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
-    }
-
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function native(): string
-    {
-        if (! ($probe = getenv('FFMPEG_9_FFPROBE'))) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run native sequence acceptance.');
-        }
-
-        $binary = dirname($probe).'/ffmpeg';
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => $binary]);
-
-        return $binary;
-    }
-
-    private function image(array $color, bool $jpeg = false, int $width = 64): string
+    protected function image(array $color, bool $jpeg = false, int $width = 64): string
     {
         $image = imagecreatetruecolor($width, 48);
         imagefill($image, 0, 0, imagecolorallocate($image, ...$color));
@@ -82,7 +52,7 @@ class SequenceTest extends TestCase
 
     public function test_local_png_and_remote_jpeg_sequences_preserve_exact_order_count_rate_and_source_bytes(): void
     {
-        $binary = $this->native();
+        $binary = $this->useRealFFMpeg();
         $this->fakeLocalDisk();
         foreach ([['local', 'png', 7, 2.5], ['memory', 'jpg', 0, '5/2']] as [$disk, $suffix, $start, $rate]) {
             $pattern = "photos/é 'quoted'/frame-%04d.$suffix";
@@ -122,7 +92,7 @@ class SequenceTest extends TestCase
 
     public function test_missing_mismatched_and_disguised_images_fail_without_partial_publication(): void
     {
-        $this->native();
+        $this->useRealFFMpeg();
         Storage::disk('memory')->put('photo-07.png', $this->image([255, 0, 0]));
         Storage::disk('memory')->put('photo-09.png', $this->image([0, 0, 255]));
         foreach ([null, $this->image([0, 255, 0], width: 80), 'not an image', $this->image([0, 255, 0], jpeg: true)] as $bytes) {
@@ -143,7 +113,7 @@ class SequenceTest extends TestCase
 
     public function test_a_valid_header_with_corrupt_image_data_cannot_publish_a_shorter_timelapse(): void
     {
-        $this->native();
+        $this->useRealFFMpeg();
         Storage::disk('memory')->put('photo-0.png', $this->image([255, 0, 0]));
         Storage::disk('memory')->put('photo-1.png', substr($this->image([0, 255, 0]), 0, 33));
         Storage::disk('memory')->put('photo-2.png', $this->image([0, 0, 255]));

@@ -3,7 +3,6 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -15,13 +14,9 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 /** Pre-dispatch rejections that need no FFmpeg binary. */
 class QueueValidationTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-queue-validation-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
         config(['app.key' => 'base64:'.base64_encode(random_bytes(32)),
             'database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:',
             'queue.default' => 'database', 'queue.connections.database' => ['driver' => 'database', 'table' => 'jobs', 'queue' => 'media', 'retry_after' => 4000],
@@ -52,13 +47,7 @@ class QueueValidationTest extends TestCase
         Storage::disk('queued')->put('source.mp4', 'source');
     }
 
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function source()
+    protected function source()
     {
         return FFMpeg::disk('queued')->open('source.mp4');
     }

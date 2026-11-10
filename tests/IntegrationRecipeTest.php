@@ -4,7 +4,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -20,15 +19,10 @@ use RuntimeException;
 
 class IntegrationRecipeTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-recipes-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:',
-            'laravel-ffmpeg.temporary_files_root' => $this->root,
             'laravel-ffmpeg.enable_events' => true]);
         Storage::fake('recipes');
         Storage::fake('receipts');
@@ -66,18 +60,12 @@ class IntegrationRecipeTest extends TestCase
         });
     }
 
-    protected function tearDown(): void
-    {
-        (new Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function export(): PendingExport
+    protected function export(): PendingExport
     {
         return RecipeWebVideo::apply(FFMpeg::disk('recipes')->open('source.mp4')->export());
     }
 
-    private function request(): ExportJob
+    protected function request(): ExportJob
     {
         $queued = $this->export()->queued();
         DB::transaction(function () use ($queued) {

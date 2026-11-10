@@ -6,37 +6,23 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use Mockery;
+use Orchestra\Testbench\Attributes\RequiresEnv;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\PendingWaveformPeaks;
 
+#[RequiresEnv('FFMPEG_9_FFPROBE')]
 class WaveformPeaksTest extends TestCase
 {
-    private string $root;
-
     protected function setUp(): void
     {
         parent::setUp();
-        $this->root = sys_get_temp_dir().'/native-peaks-'.bin2hex(random_bytes(8));
-        mkdir($this->root, 0700);
-        mkdir($this->root.'/work', 0700);
+        $this->useRealFFMpeg();
         mkdir($this->root.'/disk', 0700);
-        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/work',
-            'filesystems.disks.peaks-fixtures' => ['driver' => 'local', 'root' => $this->root.'/disk']]);
-        $probe = getenv('FFMPEG_9_FFPROBE');
-        if (! $probe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE for native peaks acceptance.');
-        }
-        config(['laravel-ffmpeg.ffprobe.binaries' => $probe, 'laravel-ffmpeg.ffmpeg.binaries' => dirname($probe).'/ffmpeg']);
+        config(['filesystems.disks.peaks-fixtures' => ['driver' => 'local', 'root' => $this->root.'/disk']]);
     }
 
-    protected function tearDown(): void
-    {
-        (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($this->root);
-        parent::tearDown();
-    }
-
-    private function wav(string $name, array $channels, int $rate = 8000): Media
+    protected function wav(string $name, array $channels, int $rate = 8000): Media
     {
         $pcm = '';
         foreach (array_keys($channels[0]) as $frame) {
@@ -52,14 +38,14 @@ class WaveformPeaksTest extends TestCase
         return new Media('peaks-fixtures', $name);
     }
 
-    private function pending(Media $media, int $samples = 4): PendingWaveformPeaks
+    protected function pending(Media $media, int $samples = 4): PendingWaveformPeaks
     {
         return $media->waveformPeaks($samples);
     }
 
-    private function clean(): void
+    protected function clean(): void
     {
-        $this->assertSame([], glob($this->root.'/work/*'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
     public function test_asymmetric_signed_little_endian_extrema_keep_unequal_channels_and_partial_bucket(): void
