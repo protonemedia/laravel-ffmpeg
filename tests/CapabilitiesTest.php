@@ -186,27 +186,15 @@ class CapabilitiesTest extends TestCase
      */
     protected function versionOnlyProbe(): string
     {
-        $probe = $this->root.'/ffprobe';
-
-        file_put_contents($probe, sprintf(<<<'PHP'
-            #!%s
-            <?php echo 'ffprobe version 9.0.2';
-            PHP, PHP_BINARY));
-
-        chmod($probe, 0700);
-
-        return $probe;
+        return $this->fakeBinary($this->root.'/ffprobe', "echo 'ffprobe version 9.0.2';");
     }
 
     public function test_real_capture_overflow_fails_without_leaking_paths(): void
     {
-        $binary = $this->root.'/ffmpeg';
-        file_put_contents($binary, sprintf(<<<'PHP'
-            #!%s
-            <?php
+        $binary = $this->fakeBinary($this->root.'/ffmpeg', <<<'PHP'
             if (in_array("-version", $argv, true)) { echo "ffmpeg version 9.0.2"; exit; } echo str_repeat("X", 3000000);
-            PHP, PHP_BINARY));
-        chmod($binary, 0700);
+            PHP);
+
         // Both version commands can use this controlled executable; FFprobe's
         // separate version response is supplied by the second script.
         $probe = $this->versionOnlyProbe();

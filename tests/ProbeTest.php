@@ -80,10 +80,11 @@ class ProbeTest extends TestCase
 
     protected function binary(string $body): string
     {
-        $path = $this->root.'/ffprobe';
-        file_put_contents($path, '#!'.PHP_BINARY."\n<?php\n".
-            'if (in_array("-version", $argv, true)) { echo "ffprobe version 9.0.2\n"; exit; }'."\n".$body);
-        chmod($path, 0700);
+        $path = $this->fakeBinary(
+            $this->root.'/ffprobe',
+            'if (in_array("-version", $argv, true)) { echo "ffprobe version 9.0.2\n"; exit; }'."\n".$body,
+        );
+
         config(['laravel-ffmpeg.ffprobe.binaries' => $path]);
 
         return $path;

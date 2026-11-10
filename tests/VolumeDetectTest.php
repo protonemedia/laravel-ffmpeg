@@ -291,16 +291,12 @@ class VolumeDetectTest extends TestCase
     {
         Storage::disk('memory')->put('audio.wav', 'source bytes');
 
-        $binary = $this->root.'/ffmpeg';
         $pidFile = $this->root.'/pid';
 
-        file_put_contents($binary, sprintf(<<<'PHP'
-            #!%s
-            <?php
+        $binary = $this->fakeBinary($this->root.'/ffmpeg', sprintf(<<<'PHP'
             if (in_array("-version", $argv, true)) { echo "ffmpeg version 9.0.2\n"; exit; }
             file_put_contents(%s, getmypid()); sleep(30);
-            PHP, PHP_BINARY, var_export($pidFile, true)));
-        chmod($binary, 0700);
+            PHP, var_export($pidFile, true)));
         config(['laravel-ffmpeg.ffmpeg.binaries' => $binary, 'laravel-ffmpeg.timeout' => 0.3]);
 
         $this->assertThrows(

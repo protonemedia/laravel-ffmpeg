@@ -5,7 +5,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\WorkerOptions;
 use Illuminate\Support\Facades\Bus;
@@ -26,11 +25,6 @@ use RuntimeException;
 #[RequiresEnv('FFMPEG_9_FFPROBE')]
 class QueueTest extends TestCase
 {
-    /**
-     * The directory holding the source video shared by every test in the class.
-     */
-    protected static ?string $fixtures = null;
-
     protected array $completed = [];
 
     protected array $errors = [];
@@ -82,17 +76,6 @@ class QueueTest extends TestCase
         copy($this->sourceFixture($ffmpeg), $disk->path('source.mp4'));
     }
 
-    public static function tearDownAfterClass(): void
-    {
-        if (static::$fixtures !== null) {
-            (new Filesystem)->deleteDirectory(static::$fixtures);
-
-            static::$fixtures = null;
-        }
-
-        parent::tearDownAfterClass();
-    }
-
     protected function work(): void
     {
         app('queue.worker')->runNextJob('database', 'media', new WorkerOptions(sleep: 0, rest: 0));
@@ -111,13 +94,7 @@ class QueueTest extends TestCase
         // Every test converts the same short clip, so we encode it once per class
         // and copy it onto each test's disk. The directory is removed once every
         // test in the class has finished.
-        static::$fixtures ??= sys_get_temp_dir().'/laravel-ffmpeg-fixtures-'.bin2hex(random_bytes(8));
-
-        if (! is_file($path = static::$fixtures.'/source.mp4')) {
-            if (! is_dir(static::$fixtures)) {
-                mkdir(static::$fixtures, 0700);
-            }
-
+        if (! is_file($path = $this->fixturePath('source.mp4'))) {
             $result = Process::run([
                 $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=96x64:rate=10:duration=1.6',
                 '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1.6',

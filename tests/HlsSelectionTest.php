@@ -24,11 +24,6 @@ use ProtoneMedia\LaravelFFMpeg\Support\Hls;
 class HlsSelectionTest extends TestCase
 {
     /**
-     * The directory that holds the completed exports shared by the tests of this class.
-     */
-    protected static ?string $completed = null;
-
-    /**
      * The playback inventories of the shared completed exports.
      */
     protected static array $completedInventories = [];
@@ -139,32 +134,26 @@ class HlsSelectionTest extends TestCase
         // storage of each test. The inventories only hold disk-relative paths.
         $this->useRealFFMpeg();
 
-        if (static::$completed === null) {
+        if (static::$completedInventories === []) {
             static::$completedInventories = [
                 $this->export('first')->playback()->toArray(),
                 $this->export('second')->playback()->toArray(),
             ];
 
-            static::$completed = sys_get_temp_dir().'/laravel-ffmpeg-selection-'.bin2hex(random_bytes(8));
-
-            (new LocalFilesystem)->copyDirectory($this->root.'/storage', static::$completed);
+            (new LocalFilesystem)->copyDirectory($this->root.'/storage', $this->fixturePath('completed'));
         } else {
-            (new LocalFilesystem)->copyDirectory(static::$completed, $this->root.'/storage');
+            (new LocalFilesystem)->copyDirectory($this->fixturePath('completed'), $this->root.'/storage');
         }
 
         return static::$completedInventories;
     }
 
     /**
-     * Remove the shared completed exports after the last test of the class.
+     * Forget the shared completed exports after the last test of the class.
      */
     public static function tearDownAfterClass(): void
     {
-        if (static::$completed !== null) {
-            (new LocalFilesystem)->deleteDirectory(static::$completed);
-
-            static::$completed = null;
-        }
+        static::$completedInventories = [];
 
         parent::tearDownAfterClass();
     }

@@ -4,7 +4,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Filesystem\Filesystem as LocalFilesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Process;
@@ -24,11 +23,6 @@ use RuntimeException;
 
 class ExportTest extends TestCase
 {
-    /**
-     * The directory holding the media fixtures shared by every test in the class.
-     */
-    protected static ?string $fixtures = null;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -38,17 +32,6 @@ class ExportTest extends TestCase
             Events\ExportStarting::class, Events\ExportCompleted::class, Events\ExportFailed::class,
             Events\ExportCancelled::class,
         ]);
-    }
-
-    public static function tearDownAfterClass(): void
-    {
-        if (static::$fixtures !== null) {
-            (new LocalFilesystem)->deleteDirectory(static::$fixtures);
-
-            static::$fixtures = null;
-        }
-
-        parent::tearDownAfterClass();
     }
 
     protected function metadata(): string
@@ -80,20 +63,6 @@ class ExportTest extends TestCase
 
             return Process::result(output: "out_time_us=4000000\nspeed=2.0x\nprogress=end\n");
         });
-    }
-
-    /**
-     * Get the path of the given fixture in the directory shared by the class.
-     */
-    protected function fixturePath(string $name): string
-    {
-        static::$fixtures ??= sys_get_temp_dir().'/laravel-ffmpeg-fixtures-'.bin2hex(random_bytes(8));
-
-        if (! is_dir(static::$fixtures)) {
-            mkdir(static::$fixtures, 0700);
-        }
-
-        return static::$fixtures.'/'.$name;
     }
 
     /**
@@ -1740,24 +1709,18 @@ class ExportTest extends TestCase
             $this->markTestSkipped('Child reaping verification requires POSIX process inspection.');
         }
 
-        $ffprobe = $this->root.'/ffprobe';
-        $ffmpeg = $this->root.'/ffmpeg';
         $pidFile = $this->root.'/pid';
-        file_put_contents(
-            $ffprobe,
-            '#!'.PHP_BINARY."\n<?php\n"
-                .'if (in_array("-version", $argv, true)) { echo "ffprobe version 9.0.2"; } '
+        $ffprobe = $this->fakeBinary(
+            $this->root.'/ffprobe',
+            'if (in_array("-version", $argv, true)) { echo "ffprobe version 9.0.2"; } '
                 .'else { echo '.var_export($this->metadata(), true).'; }',
         );
-        file_put_contents(
-            $ffmpeg,
-            '#!'.PHP_BINARY."\n<?php\n"
-                .'if (in_array("-version", $argv, true)) { echo "ffmpeg version 9.0.2"; exit; } '
+        $ffmpeg = $this->fakeBinary(
+            $this->root.'/ffmpeg',
+            'if (in_array("-version", $argv, true)) { echo "ffmpeg version 9.0.2"; exit; } '
                 .'file_put_contents('.var_export($pidFile, true).', getmypid()); '
                 .'echo "out_time_us=1000000\nspeed=1x\nprogress=continue\n"; flush(); sleep(30);',
         );
-        chmod($ffprobe, 0700);
-        chmod($ffmpeg, 0700);
         config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $ffprobe]);
         $original = new $class('Stop this export');
 

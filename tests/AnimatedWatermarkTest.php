@@ -2,7 +2,6 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use Orchestra\Testbench\Attributes\RequiresEnv;
@@ -14,11 +13,6 @@ use ProtoneMedia\LaravelFFMpeg\Watermark;
 class AnimatedWatermarkTest extends TestCase
 {
     /**
-     * The directory with the media FFmpeg generated once for the whole class.
-     */
-    protected static ?string $fixtures = null;
-
-    /**
      * Set up the test environment.
      */
     protected function setUp(): void
@@ -29,36 +23,14 @@ class AnimatedWatermarkTest extends TestCase
     }
 
     /**
-     * Remove the generated media after the last test of the class.
-     */
-    public static function tearDownAfterClass(): void
-    {
-        if (static::$fixtures !== null) {
-            (new Filesystem)->deleteDirectory(static::$fixtures);
-
-            static::$fixtures = null;
-        }
-
-        parent::tearDownAfterClass();
-    }
-
-    /**
      * Get the path of the given fixture, generating it with FFmpeg the first time.
      */
     protected function fixture(string $name): string
     {
         $binary = $this->useRealFFMpeg();
 
-        static::$fixtures ??= sys_get_temp_dir().'/laravel-ffmpeg-animated-'.bin2hex(random_bytes(8));
-
-        $path = static::$fixtures.'/'.$name;
-
-        if (is_file($path)) {
+        if (is_file($path = $this->fixturePath($name))) {
             return $path;
-        }
-
-        if (! is_dir(static::$fixtures)) {
-            mkdir(static::$fixtures, 0700);
         }
 
         $arguments = match ($name) {

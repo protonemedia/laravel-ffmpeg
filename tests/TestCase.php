@@ -21,6 +21,11 @@ abstract class TestCase extends BaseTestCase
     protected string $root;
 
     /**
+     * The directory holding the media fixtures shared by every test in the class.
+     */
+    protected static ?string $fixtures = null;
+
+    /**
      * Set up the test environment.
      */
     protected function setUp(): void
@@ -48,6 +53,49 @@ abstract class TestCase extends BaseTestCase
         }
 
         parent::tearDown();
+    }
+
+    /**
+     * Remove the fixture directory after the last test of the class.
+     */
+    public static function tearDownAfterClass(): void
+    {
+        // Every test class shares this one static property. That only works because
+        // PHPUnit finishes a class, including this method, before it starts the next
+        // one, and calls it even when tests in the class failed or were skipped.
+        if (static::$fixtures !== null) {
+            (new Filesystem)->deleteDirectory(static::$fixtures);
+
+            static::$fixtures = null;
+        }
+
+        parent::tearDownAfterClass();
+    }
+
+    /**
+     * Get the path of the given file in the fixture directory shared by the class.
+     */
+    protected function fixturePath(string $name): string
+    {
+        static::$fixtures ??= sys_get_temp_dir().'/laravel-ffmpeg-fixtures-'.bin2hex(random_bytes(8));
+
+        if (! is_dir(static::$fixtures)) {
+            mkdir(static::$fixtures, 0700);
+        }
+
+        return static::$fixtures.'/'.$name;
+    }
+
+    /**
+     * Write an executable PHP script to the given path and get the path.
+     */
+    protected function fakeBinary(string $path, string $script): string
+    {
+        file_put_contents($path, '#!'.PHP_BINARY."\n<?php\n".$script);
+
+        chmod($path, 0700);
+
+        return $path;
     }
 
     /**

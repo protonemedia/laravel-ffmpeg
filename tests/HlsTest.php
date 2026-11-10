@@ -4,7 +4,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Filesystem\Filesystem as LocalFilesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Process;
@@ -26,11 +25,6 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class HlsTest extends TestCase
 {
-    /**
-     * The directory that holds the real variants shared by the tests of this class.
-     */
-    protected static ?string $realVariantsRoot = null;
-
     /**
      * The result of saving the shared real variants.
      */
@@ -229,9 +223,10 @@ class HlsTest extends TestCase
         // test at the same directory. Tests may still use their own local disk.
         $this->useRealFFMpeg();
 
-        static::$realVariantsRoot ??= sys_get_temp_dir().'/laravel-ffmpeg-hls-'.bin2hex(random_bytes(8));
-
-        config(['filesystems.disks.real-variants' => ['driver' => 'local', 'root' => static::$realVariantsRoot]]);
+        config(['filesystems.disks.real-variants' => [
+            'driver' => 'local',
+            'root' => $this->fixturePath('real-variants'),
+        ]]);
 
         if (static::$realVariantsResult === null) {
             static::$realVariantsResult = $this->realVariants()
@@ -245,15 +240,10 @@ class HlsTest extends TestCase
     }
 
     /**
-     * Remove the shared real variants after the last test of the class.
+     * Forget the shared real variants after the last test of the class.
      */
     public static function tearDownAfterClass(): void
     {
-        if (static::$realVariantsRoot !== null) {
-            (new LocalFilesystem)->deleteDirectory(static::$realVariantsRoot);
-        }
-
-        static::$realVariantsRoot = null;
         static::$realVariantsResult = null;
 
         parent::tearDownAfterClass();

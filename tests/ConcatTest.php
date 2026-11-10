@@ -3,7 +3,6 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Closure;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -18,11 +17,6 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 class ConcatTest extends TestCase
 {
     /**
-     * The directory holding the media fixtures shared by every test in the class.
-     */
-    protected static ?string $fixtures = null;
-
-    /**
      * The paths of the delayed inputs opened by the current test.
      */
     protected array $delayedInputs = [];
@@ -31,17 +25,6 @@ class ConcatTest extends TestCase
      * The hashes of the delayed inputs before the current test used them.
      */
     protected array $delayedHashes = [];
-
-    public static function tearDownAfterClass(): void
-    {
-        if (static::$fixtures !== null) {
-            (new Filesystem)->deleteDirectory(static::$fixtures);
-
-            static::$fixtures = null;
-        }
-
-        parent::tearDownAfterClass();
-    }
 
     public function test_compatible_concat_inspection_is_pure_and_does_not_accept_direct_urls(): void
     {
@@ -626,20 +609,6 @@ class ConcatTest extends TestCase
             'late.mov',
             ['-i', $this->fixturePath('sine-red.mov'), '-c', 'copy', '-output_ts_offset', '1'],
         );
-    }
-
-    /**
-     * Get the path of the given fixture in the directory shared by the class.
-     */
-    protected function fixturePath(string $name): string
-    {
-        static::$fixtures ??= sys_get_temp_dir().'/laravel-ffmpeg-fixtures-'.bin2hex(random_bytes(8));
-
-        if (! is_dir(static::$fixtures)) {
-            mkdir(static::$fixtures, 0700);
-        }
-
-        return static::$fixtures.'/'.$name;
     }
 
     /**

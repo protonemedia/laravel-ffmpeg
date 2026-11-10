@@ -4,7 +4,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Filesystem\Filesystem as LocalFilesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\File;
 use Illuminate\Process\Factory;
@@ -33,11 +32,6 @@ use ProtoneMedia\LaravelFFMpeg\Watermark;
 
 class CompositionTest extends TestCase
 {
-    /**
-     * The directory with the videos FFmpeg generated once for the whole class.
-     */
-    protected static ?string $fixtures = null;
-
     /**
      * Set up the test environment.
      */
@@ -94,20 +88,6 @@ class CompositionTest extends TestCase
     }
 
     /**
-     * Remove the media FFmpeg generated for the class after its last test.
-     */
-    public static function tearDownAfterClass(): void
-    {
-        if (static::$fixtures !== null) {
-            (new LocalFilesystem)->deleteDirectory(static::$fixtures);
-
-            static::$fixtures = null;
-        }
-
-        parent::tearDownAfterClass();
-    }
-
-    /**
      * Get the path of the given generated video, running FFmpeg only the first time.
      */
     protected function fixture(string $name): string
@@ -117,16 +97,8 @@ class CompositionTest extends TestCase
         // Several tests start from the same small synthetic videos. Generating each one
         // once per class keeps the real FFmpeg tests fast, and every test still copies
         // the video to its own disk so it can never change what the next test reads.
-        static::$fixtures ??= sys_get_temp_dir().'/laravel-ffmpeg-composition-'.bin2hex(random_bytes(8));
-
-        $path = static::$fixtures.'/'.$name;
-
-        if (is_file($path)) {
+        if (is_file($path = $this->fixturePath($name))) {
             return $path;
-        }
-
-        if (! is_dir(static::$fixtures)) {
-            mkdir(static::$fixtures, 0700);
         }
 
         $arguments = match ($name) {

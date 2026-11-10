@@ -4,7 +4,6 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem as FilesystemContract;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -21,26 +20,16 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 class HlsPackagingTest extends TestCase
 {
     /**
-     * The directory with the rendition group exports shared by the whole class.
-     */
-    protected static ?string $groups = null;
-
-    /**
      * The rendition group exports and their hooked playlists, keyed by segment format.
      */
     protected static array $groupExports = [];
 
     /**
-     * Remove the shared rendition group exports after the last test of the class.
+     * Forget the shared rendition group exports after the last test of the class.
      */
     public static function tearDownAfterClass(): void
     {
-        if (static::$groups !== null) {
-            (new Filesystem)->deleteDirectory(static::$groups);
-
-            static::$groups = null;
-            static::$groupExports = [];
-        }
+        static::$groupExports = [];
 
         parent::tearDownAfterClass();
     }
@@ -289,12 +278,10 @@ class HlsPackagingTest extends TestCase
         // The two-pass ladder with its renditions is the slowest export in this class. We
         // encode it once per segment format in a directory shared by the whole class, so
         // each test below can check one part of the same published package.
-        static::$groups ??= sys_get_temp_dir().'/laravel-ffmpeg-hls-groups-'.bin2hex(random_bytes(8));
-
         $type = $fragmented ? 'fmp4' : 'ts';
         $disk = 'hls-groups-'.$type;
 
-        config(["filesystems.disks.{$disk}" => ['driver' => 'local', 'root' => static::$groups.'/'.$type]]);
+        config(["filesystems.disks.{$disk}" => ['driver' => 'local', 'root' => $this->fixturePath($type)]]);
 
         static::$groupExports[$type] ??= $this->saveGroups($disk, $fragmented);
 

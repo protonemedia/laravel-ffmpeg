@@ -23,26 +23,22 @@ class ExecutionPolicyTest extends TestCase
 
     protected function binaries(string $encode = '', int $probeDelay = 0): void
     {
-        $body = sprintf(<<<'PHP'
-            #!%1$s
-            <?php
+        $script = sprintf(<<<'PHP'
             if (in_array("-version", $argv, true)) {
-                usleep(%2$d);
+                usleep(%1$d);
                 echo basename($argv[0])." version 9.0.2";
                 exit;
             }
             if (basename($argv[0]) === "ffprobe") {
-                usleep(%2$d);
+                usleep(%1$d);
                 echo '{"format":{"duration":"1"},"streams":[{"index":0,"codec_type":"video"}],"chapters":[]}';
                 exit;
             }
-            %3$s
+            %2$s
             file_put_contents(end($argv), "encoded");
-            PHP, PHP_BINARY, $probeDelay, $encode);
+            PHP, $probeDelay, $encode);
         foreach (['ffmpeg', 'ffprobe'] as $tool) {
-            file_put_contents($this->root.'/'.$tool, $body);
-            chmod($this->root.'/'.$tool, 0700);
-            config(['laravel-ffmpeg.'.$tool.'.binaries' => $this->root.'/'.$tool]);
+            config(['laravel-ffmpeg.'.$tool.'.binaries' => $this->fakeBinary($this->root.'/'.$tool, $script)]);
         }
     }
 
