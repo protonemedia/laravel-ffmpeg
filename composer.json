@@ -29,6 +29,7 @@
         "intervention/image": "^4.2",
         "larastan/larastan": "^3.9",
         "laravel/pint": "^1.14",
+        "league/flysystem-aws-s3-v3": "^3.25.1",
         "league/flysystem-memory": "^3.10",
         "league/flysystem-path-prefixing": "^3.0",
         "league/flysystem-read-only": "^3.0",
