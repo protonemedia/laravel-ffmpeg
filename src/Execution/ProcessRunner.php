@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
+use Closure;
 use Illuminate\Contracts\Process\InvokedProcess;
 use Illuminate\Support\Facades\Process;
 use InvalidArgumentException;
@@ -42,6 +43,26 @@ class ProcessRunner
      * The exception thrown by an application callback while the process runs.
      */
     protected ?Throwable $applicationFailure = null;
+
+    /**
+     * The high-resolution time the running process started, in nanoseconds.
+     */
+    protected int|float|null $processStartedAt = null;
+
+    /**
+     * The deadline in seconds of the running process.
+     */
+    protected ?float $processTimeout = null;
+
+    /**
+     * The parser that receives the progress of the running process.
+     */
+    protected ?ProgressParser $progress = null;
+
+    /**
+     * The callback invoked each time the running process is polled.
+     */
+    protected ?Closure $tick = null;
 
     /**
      * Create a new process runner instance.
@@ -133,11 +154,15 @@ class ProcessRunner
             'failure' => null,
         ];
         $this->applicationFailure = null;
+        $this->processStartedAt = $started;
+        $this->processTimeout = $timeout;
+        $this->progress = $progress;
+        $this->tick = $tick === null ? null : $tick(...);
 
         try {
             $this->check($phase);
             $process = $this->startProcess($command, $directory, $outputLimit, $progress);
-            $this->supervise($process, $phase, $started, $progress, $timeout, $tick);
+            $this->supervise($process, $phase);
             $result = $process->wait();
 
             // The strtr() function replaces the longest key first in a single pass, so a
@@ -164,6 +189,10 @@ class ProcessRunner
             } finally {
                 $this->capture = null;
                 $this->applicationFailure = null;
+                $this->processStartedAt = null;
+                $this->processTimeout = null;
+                $this->progress = null;
+                $this->tick = null;
             }
         }
     }
@@ -219,26 +248,20 @@ class ProcessRunner
     /**
      * Poll the process until it exits, enforcing the capture limit and deadlines.
      */
-    protected function supervise(
-        InvokedProcess $process,
-        string $phase,
-        int|float $started,
-        ?ProgressParser $progress,
-        ?float $timeout,
-        ?callable $tick,
-    ): void {
+    protected function supervise(InvokedProcess $process, string $phase): void
+    {
         do {
             $running = $process->running();
 
             $this->ensureCaptureSucceeded($phase);
 
-            if ($tick !== null) {
-                $this->callApplication($tick);
+            if ($this->tick instanceof Closure) {
+                $this->callApplication($this->tick);
             }
 
             $this->check($phase);
-            $this->ensureWithinDeadlines($phase, $started, $timeout);
-            $this->callApplication(fn () => $progress?->notify(! $running));
+            $this->ensureWithinDeadlines($phase);
+            $this->callApplication(fn () => $this->progress?->notify(! $running));
 
             if ($running) {
                 usleep(10000);
@@ -277,12 +300,14 @@ class ProcessRunner
     /**
      * Ensure the process has not exceeded its total or idle deadline.
      */
-    protected function ensureWithinDeadlines(string $phase, int|float $started, ?float $timeout): void
+    protected function ensureWithinDeadlines(string $phase): void
     {
         $now = hrtime(true);
         $totalDeadline = config('laravel-ffmpeg.timeout', 3600);
-        if ($timeout !== null) {
-            $totalDeadline = $totalDeadline === null ? $timeout : min($timeout, $totalDeadline);
+        if ($this->processTimeout !== null) {
+            $totalDeadline = $totalDeadline === null
+                ? $this->processTimeout
+                : min($this->processTimeout, $totalDeadline);
         }
 
         $idleDeadline = config('laravel-ffmpeg.idle_timeout');
@@ -290,7 +315,7 @@ class ProcessRunner
             $idleDeadline = $idleDeadline === null ? $this->idleTimeout : min($idleDeadline, $this->idleTimeout);
         }
 
-        if (($totalDeadline !== null && ($now - $started) / 1e9 >= $totalDeadline)
+        if (($totalDeadline !== null && ($now - $this->processStartedAt) / 1e9 >= $totalDeadline)
             || ($idleDeadline !== null && ($now - $this->capture['lastOutput']) / 1e9 >= $idleDeadline)) {
             throw new MediaException('The media process timed out.', $phase, 'timeout');
         }

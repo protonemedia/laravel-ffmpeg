@@ -33,6 +33,42 @@ class HlsPlaylist implements Responsable
     protected array $resolvers = [];
 
     /**
+     * Indicates if the running render includes every local playlist it references.
+     */
+    protected bool $renderingAll = false;
+
+    /**
+     * The URL resolvers applied by the running render, keyed by reference kind.
+     *
+     * @var array<string, Closure>
+     */
+    protected array $renderResolvers = [];
+
+    /**
+     * The callback that receives every reference of the running render.
+     */
+    protected ?Closure $discover = null;
+
+    /**
+     * The playlists queued by the running render, in reading order.
+     *
+     * @var list<string>
+     */
+    protected array $pending = [];
+
+    /**
+     * The playlists queued by the running render, keyed by path.
+     *
+     * @var array<string, true>
+     */
+    protected array $queued = [];
+
+    /**
+     * The number of bytes the running render may still produce.
+     */
+    protected int $outputBudget = 0;
+
+    /**
      * Create a new HLS playlist instance.
      */
     public function __construct(protected readonly string|Filesystem $disk, string $path)
@@ -158,48 +194,58 @@ class HlsPlaylist implements Responsable
      */
     protected function render(bool $all, ?Closure $discover = null): array
     {
-        $pending = [$this->path];
-        $queued = [$this->path => true];
-        $result = [];
-        $resolvers = $discover instanceof Closure ? [] : $this->resolvers;
-        $inputBudget = Media::MAX_MANIFEST_BYTES;
-        $outputBudget = Media::MAX_MANIFEST_BYTES;
-        for ($index = 0; $index < count($pending); $index++) {
-            $path = $pending[$index];
-            $content = $this->read($path, $inputBudget);
-            $inputBudget -= strlen($content);
+        $this->beginRender($all, $discover);
 
-            [$result[$path], $discovered, $outputBudget] = $this->renderPlaylist(
-                $path, $content, $all, $queued, $resolvers, $discover, $outputBudget
-            );
+        try {
+            $result = [];
+            $inputBudget = Media::MAX_MANIFEST_BYTES;
+            for ($index = 0; $index < count($this->pending); $index++) {
+                $path = $this->pending[$index];
+                $content = $this->read($path, $inputBudget);
+                $inputBudget -= strlen($content);
 
-            foreach ($discovered as $target) {
-                $queued[$target] = true;
-                $pending[] = $target;
+                $result[$path] = $this->renderPlaylist($path, $content);
             }
-        }
 
-        return $result;
+            return $result;
+        } finally {
+            $this->resetRender();
+        }
     }
 
     /**
-     * Render one playlist and collect the local playlists it adds to the queue.
-     *
-     * @param  array<string, true>  $queued
-     * @param  array<string, Closure>  $resolvers
-     * @return array{string, list<string>, int}
+     * Start a render that begins with the opened playlist and the full output budget.
      */
-    protected function renderPlaylist(
-        string $path,
-        string $content,
-        bool $all,
-        array $queued,
-        array $resolvers,
-        ?Closure $discover,
-        int $outputBudget,
-    ): array {
+    protected function beginRender(bool $all, ?Closure $discover): void
+    {
+        $this->resetRender();
+        $this->renderingAll = $all;
+        $this->renderResolvers = $discover instanceof Closure ? [] : $this->resolvers;
+        $this->discover = $discover;
+        $this->pending = [$this->path];
+        $this->queued = [$this->path => true];
+        $this->outputBudget = Media::MAX_MANIFEST_BYTES;
+    }
+
+    /**
+     * Reset the render state to its defaults.
+     */
+    protected function resetRender(): void
+    {
+        $this->renderingAll = false;
+        $this->renderResolvers = [];
+        $this->discover = null;
+        $this->pending = [];
+        $this->queued = [];
+        $this->outputBudget = 0;
+    }
+
+    /**
+     * Render one playlist and queue the local playlists it references.
+     */
+    protected function renderPlaylist(string $path, string $content): string
+    {
         $lines = explode("\n", str_replace("\r\n", "\n", $content));
-        $discovered = [];
         $cache = [];
         $type = null;
         foreach ($lines as $lineIndex => &$line) {
@@ -209,30 +255,31 @@ class HlsPlaylist implements Responsable
                 $uri = substr($line, $offset, $length);
                 $target = $this->referenceTarget($path, $uri);
 
-                if ($discover instanceof Closure) {
-                    $discover($target, $uri);
+                if ($this->discover instanceof Closure) {
+                    ($this->discover)($target, $uri);
                 }
 
-                if ($all && $kind === 'playlist' && $target !== null && ! isset($queued[$target])) {
-                    if (count($queued) >= 1024) {
+                if ($this->renderingAll && $kind === 'playlist' && $target !== null
+                    && ! isset($this->queued[$target])) {
+                    if (count($this->queued) >= 1024) {
                         throw MediaException::response(
                             'An HLS response cannot read more than 1024 local playlists.',
                             'artifact',
                         );
                     }
 
-                    $queued[$target] = true;
-                    $discovered[] = $target;
+                    $this->queued[$target] = true;
+                    $this->pending[] = $target;
                 }
 
-                if (isset($resolvers[$kind])) {
-                    $cache[$kind][$uri] ??= $this->resolveUrl($resolvers[$kind], $target, $path, $uri);
+                if (isset($this->renderResolvers[$kind])) {
+                    $cache[$kind][$uri] ??= $this->resolveUrl($this->renderResolvers[$kind], $target, $path, $uri);
                     $line = substr_replace($line, $cache[$kind][$uri], $offset, $length);
                 }
             }
 
-            $outputBudget -= strlen($line) + ($lineIndex > 0 ? 1 : 0);
-            if ($outputBudget < 0) {
+            $this->outputBudget -= strlen($line) + ($lineIndex > 0 ? 1 : 0);
+            if ($this->outputBudget < 0) {
                 throw MediaException::response('An HLS response exceeds its 16 MiB output limit.', 'artifact');
             }
         }
@@ -242,7 +289,7 @@ class HlsPlaylist implements Responsable
             throw MediaException::response('An HLS resource declaration has no URI.', 'artifact');
         }
 
-        return [implode("\n", $lines), $discovered, $outputBudget];
+        return implode("\n", $lines);
     }
 
     /**

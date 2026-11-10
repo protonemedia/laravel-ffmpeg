@@ -136,6 +136,31 @@ class PendingLiveHls
     protected ?RuntimeException $interrupt = null;
 
     /**
+     * The filesystem the running session publishes to.
+     */
+    protected ?Filesystem $filesystem = null;
+
+    /**
+     * The destination directory of the running session.
+     */
+    protected ?string $directory = null;
+
+    /**
+     * The playlist path of the running session.
+     */
+    protected ?string $playlist = null;
+
+    /**
+     * The workspace of the running session.
+     */
+    protected ?Workspace $workspace = null;
+
+    /**
+     * The segment file name prefix of the running session.
+     */
+    protected ?string $prefix = null;
+
+    /**
      * Create a new pending live HLS instance.
      */
     public function __construct(
@@ -264,7 +289,7 @@ class PendingLiveHls
         $playlist = "{$directory}/index.m3u8";
         $workspace = null;
         $failed = false;
-        $this->beginSession();
+        $this->beginSession($disk, $directory, $playlist);
         $this->running = true;
 
         try {
@@ -277,7 +302,8 @@ class PendingLiveHls
 
             $this->interruptIfNecessary();
             $workspace = new Workspace;
-            $this->supervise($disk, $directory, $playlist, $workspace);
+            $this->workspace = $workspace;
+            $this->supervise();
 
             return $this->snapshot($playlist);
         } catch (Throwable $throwable) {
@@ -326,13 +352,16 @@ class PendingLiveHls
     }
 
     /**
-     * Start the session clock with empty publication state.
+     * Start the session clock with empty publication state for the given destination.
      */
-    protected function beginSession(): void
+    protected function beginSession(Filesystem $filesystem, string $directory, string $playlist): void
     {
         $this->resetSession();
         $this->started = hrtime(true);
         $this->interrupt = new RuntimeException('Live session interrupted.');
+        $this->filesystem = $filesystem;
+        $this->directory = $directory;
+        $this->playlist = $playlist;
     }
 
     /**
@@ -351,6 +380,11 @@ class PendingLiveHls
         $this->applicationFailure = null;
         $this->started = null;
         $this->interrupt = null;
+        $this->filesystem = null;
+        $this->directory = null;
+        $this->playlist = null;
+        $this->workspace = null;
+        $this->prefix = null;
     }
 
     /**
@@ -379,36 +413,36 @@ class PendingLiveHls
     /**
      * Run the encoder, publishing its segments and reconnecting until it ends or gives up.
      */
-    protected function supervise(Filesystem $disk, string $directory, string $playlist, Workspace $workspace): void
+    protected function supervise(): void
     {
+        $workspace = $this->workspace;
         $binary = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
         $workspace->runner->version($binary, 'ffmpeg', $workspace->path);
         $input = $this->stageSource($workspace);
         $workspace->requireProtocols($binary, $input['protocols']);
-        $prefix = 'live-'.bin2hex(random_bytes(12)).'-';
+        $this->prefix = 'live-'.bin2hex(random_bytes(12)).'-';
 
         do {
             $this->interruptIfNecessary();
             $this->attempts++;
             $start = $this->next;
-            $local = "{$workspace->path}/live.m3u8";
-            @unlink($local);
+            @unlink("{$workspace->path}/live.m3u8");
 
             // We will suppress diagnostics that mention the source entirely. Reconnect failures
             // may echo decoded credentials or URL fragments that a simple string replacement misses.
             $result = $workspace->runner->run(
-                $this->encoderCommand($binary, $input, $start, $prefix, $local),
+                $this->encoderCommand($binary, $input, $start),
                 $workspace->path,
                 [$input['path'] => '[live-source]'],
                 phase: 'live',
-                tick: function () use ($disk, $directory, $playlist, $workspace, $prefix, $start): void {
-                    $this->publishPlaylist($disk, $directory, $playlist, $workspace, $prefix, $start);
+                tick: function () use ($start): void {
+                    $this->publishPlaylist($start);
                     $this->interruptIfNecessary();
                 },
             );
 
             $finished = $result->exitCode === 0 && ! $this->reconnectOnEof;
-            $this->publishPlaylist($disk, $directory, $playlist, $workspace, $prefix, $start, $finished);
+            $this->publishPlaylist($start, $finished);
             if ($finished) {
                 if ($this->entries === []) {
                     throw MediaException::live('Live encoder produced no segments.', 'artifact');
@@ -428,7 +462,7 @@ class PendingLiveHls
 
             // Only the generated local files are removed here. The published destination history
             // is owned and pruned by the publication step.
-            $this->pruneLocalSegments($workspace, $prefix);
+            $this->pruneLocalSegments($workspace, $this->prefix);
             $this->waitBeforeReconnecting();
         } while (true);
     }
@@ -460,7 +494,7 @@ class PendingLiveHls
      *
      * @param  array{path: string, protocols: string, options: array}  $input
      */
-    protected function encoderCommand(string $binary, array $input, int $start, string $prefix, string $local): array
+    protected function encoderCommand(string $binary, array $input, int $start): array
     {
         return [
             $binary, '-hide_banner', '-nostdin', '-nostats', '-loglevel', 'error', '-xerror',
@@ -474,29 +508,22 @@ class PendingLiveHls
             '-flags:v', '+cgop', '-f', 'hls', '-hls_time', (string) $this->segmentDuration,
             '-hls_list_size', (string) $this->window, '-hls_delete_threshold', (string) $this->window,
             '-hls_flags', 'delete_segments+temp_file', '-start_number', (string) $start,
-            '-hls_segment_filename', "{$prefix}%012d.ts", $local,
+            '-hls_segment_filename', "{$this->prefix}%012d.ts", "{$this->workspace->path}/live.m3u8",
         ];
     }
 
     /**
      * Publish new encoder segments, then replace the playlist and prune expired segments.
      */
-    protected function publishPlaylist(
-        Filesystem $disk,
-        string $directory,
-        string $playlist,
-        Workspace $workspace,
-        string $prefix,
-        int $start,
-        bool $finished = false,
-    ): void {
-        $local = "{$workspace->path}/live.m3u8";
+    protected function publishPlaylist(int $start, bool $finished = false): void
+    {
+        $local = "{$this->workspace->path}/live.m3u8";
         if (! is_file($local)) {
             return;
         }
 
         [$lines, $number] = $this->readEncoderPlaylist($local, $start);
-        $changed = $this->publishSegments($disk, $directory, $workspace, $prefix, $start, $lines, $number);
+        $changed = $this->publishSegments($start, $lines, $number);
         if ($this->entries === [] || (! $changed && ! $finished)) {
             return;
         }
@@ -506,17 +533,17 @@ class PendingLiveHls
             $this->discontinuities += (int) $removed['discontinuity'];
         }
 
-        if (! $disk->put($playlist, $this->renderPlaylist($finished))) {
+        if (! $this->filesystem->put($this->playlist, $this->renderPlaylist($finished))) {
             throw MediaException::publication('Cannot replace the live playlist.', 'transfer');
         }
 
         $this->playlistPublished = true;
         // The playlist is committed before we prune, so we never delete a segment that the
         // last visible playlist still references.
-        $this->pruneRetention($disk);
+        $this->pruneRetention($this->filesystem);
 
         if ($changed && $this->publication instanceof Closure) {
-            $this->notifyPublication($playlist);
+            $this->notifyPublication($this->playlist);
         }
     }
 
@@ -546,15 +573,8 @@ class PendingLiveHls
      *
      * @param  list<string>  $lines
      */
-    protected function publishSegments(
-        Filesystem $disk,
-        string $directory,
-        Workspace $workspace,
-        string $prefix,
-        int $start,
-        array $lines,
-        int $number,
-    ): bool {
+    protected function publishSegments(int $start, array $lines, int $number): bool
+    {
         $duration = null;
         $changed = false;
         foreach ($lines as $line) {
@@ -568,14 +588,14 @@ class PendingLiveHls
             } elseif ($line !== '' && $line[0] !== '#') {
                 // Ownership derives from our generated prefix and contiguous counter, never from
                 // arbitrary, changing playlist references or from scanning the destination.
-                $name = $prefix.sprintf('%012d', $number).'.ts';
+                $name = $this->prefix.sprintf('%012d', $number).'.ts';
                 if ($duration === null || $line !== $name) {
                     throw MediaException::publication('Unowned live segment reference.', 'ownership');
                 }
 
                 if ($number >= $this->next) {
-                    $key = "{$directory}/{$name}";
-                    $this->uploadSegment($disk, "{$workspace->path}/{$name}", $key);
+                    $key = "{$this->directory}/{$name}";
+                    $this->uploadSegment($this->filesystem, "{$this->workspace->path}/{$name}", $key);
                     $this->owned[$key] = $number;
                     $this->entries[] = [
                         'number' => $number,

@@ -49,7 +49,7 @@ trait PackagesHlsSegments
             '#EXTINF:'.sprintf('%.6f', $duration).',',
             "segment-{$index}-00000000.vtt",
             '#EXT-X-ENDLIST',
-        ], $output->destination()['path'], null, false);
+        ]);
 
         return $path;
     }
@@ -64,7 +64,10 @@ trait PackagesHlsSegments
         $name = array_keys($this->variants)[$index];
         $lines = $this->playlistLines($path);
         $target = $this->ensurePlaylistIsComplete($lines);
-        $media = $this->rewriteMediaLines($index, $output, $path, $lines, $encryption);
+        $media = $this->rewriteMediaLines(
+            ['index' => $index, 'output' => $output, 'path' => $path, 'lines' => $lines],
+            $encryption,
+        );
         $this->ensureSegmentInventoryIsComplete($index, $path, $media);
 
         $destination = $output->destination()['path'];
@@ -131,18 +134,14 @@ trait PackagesHlsSegments
     /**
      * Validate the playlist lines and point their initialization and segment references at the destinations.
      *
-     * @param  list<string>  $lines
+     * The given media holds the variant's output index, output, local playlist path and playlist lines.
+     *
+     * @param  array{index: int, output: ExportOutput, path: string, lines: list<string>}  $media
      * @return array<string, mixed>
      */
-    protected function rewriteMediaLines(
-        int $index,
-        ExportOutput $output,
-        string $path,
-        array $lines,
-        ?HlsEncryption $encryption,
-    ): array {
-        $media = [
-            'lines' => $lines,
+    protected function rewriteMediaLines(array $media, ?HlsEncryption $encryption): array
+    {
+        $media += [
             'segments' => [],
             'duration' => null,
             'longest' => 0,
@@ -157,11 +156,11 @@ trait PackagesHlsSegments
             'streamType' => 'subtitle',
             'subtitle' => null,
         ];
-        foreach ($lines as $lineIndex => $line) {
+        foreach ($media['lines'] as $lineIndex => $line) {
             if (str_starts_with($line, '#EXTINF:')) {
                 $media['duration'] = $this->extinfDuration($line, $media['duration']);
             } elseif (str_starts_with($line, '#EXT-X-MAP:')) {
-                $media = $this->rewriteInitialization($index, $output, $path, $lineIndex, $media);
+                $media = $this->rewriteInitialization($lineIndex, $media);
             } elseif (str_starts_with($line, '#')) {
                 if (! preg_match(
                     '/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+|#EXT-X-MEDIA-SEQUENCE:0|#EXT-X-PLAYLIST-TYPE:(?:VOD|EVENT)|#EXT-X-ENDLIST)\z/',
@@ -170,7 +169,7 @@ trait PackagesHlsSegments
                     throw MediaException::validation('Unexpected HLS playlist directive.', 'artifact');
                 }
             } else {
-                $media = $this->rewriteSegment($index, $output, $path, $lineIndex, $media, $encryption);
+                $media = $this->rewriteSegment($lineIndex, $media, $encryption);
             }
         }
 
@@ -197,13 +196,9 @@ trait PackagesHlsSegments
      * @param  array<string, mixed>  $media
      * @return array<string, mixed>
      */
-    protected function rewriteInitialization(
-        int $index,
-        ExportOutput $output,
-        string $path,
-        int $lineIndex,
-        array $media,
-    ): array {
+    protected function rewriteInitialization(int $lineIndex, array $media): array
+    {
+        ['index' => $index, 'output' => $output, 'path' => $path] = $media;
         if ($this->segmentType !== 'fmp4' || $media['init'] !== null || $media['count'] !== 0
             || $media['lines'][$lineIndex] !== "#EXT-X-MAP:URI=\"init-{$index}.mp4\"") {
             throw MediaException::validation(
@@ -237,14 +232,9 @@ trait PackagesHlsSegments
      * @param  array<string, mixed>  $media
      * @return array<string, mixed>
      */
-    protected function rewriteSegment(
-        int $index,
-        ExportOutput $output,
-        string $path,
-        int $lineIndex,
-        array $media,
-        ?HlsEncryption $encryption,
-    ): array {
+    protected function rewriteSegment(int $lineIndex, array $media, ?HlsEncryption $encryption): array
+    {
+        ['index' => $index, 'output' => $output, 'path' => $path] = $media;
         $name = array_keys($this->variants)[$index];
         $extension = $this->segmentExtension($this->isSubtitle($index));
         $filename = "segment-{$index}-".sprintf('%08d', $media['count']).".{$extension}";
@@ -465,20 +455,21 @@ trait PackagesHlsSegments
 
     /**
      * Write a private playlist after the playlist callback, if any, has added its lines.
+     *
+     * The callback only runs for playlists published to a destination, so intermediate playlists skip it.
      */
     protected function writePlaylist(
         string $path,
         array $lines,
-        string $destination,
-        ?string $variant,
-        bool $hook = true,
+        ?string $destination = null,
+        ?string $variant = null,
     ): void {
         $bytes = implode("\n", $lines)."\n";
         if (strlen($bytes) > Media::MAX_MANIFEST_BYTES) {
             throw MediaException::validation('Finalized HLS playlists must fit within the 16 MiB limit.', 'artifact');
         }
 
-        if ($hook && $this->playlistCallback instanceof Closure) {
+        if ($destination !== null && $this->playlistCallback instanceof Closure) {
             $modified = ($this->playlistCallback)($bytes, $destination, $variant);
             if (! is_string($modified) || strlen($modified) > Media::MAX_MANIFEST_BYTES) {
                 throw MediaException::validation(

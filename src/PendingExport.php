@@ -133,6 +133,21 @@ class PendingExport implements Exportable
     protected array $summaries = [];
 
     /**
+     * The workspace of the running export.
+     */
+    protected ?Workspace $workspace = null;
+
+    /**
+     * The paths the running export hides from its commands and diagnostics, keyed by path.
+     */
+    protected array $redactions = [];
+
+    /**
+     * The callback that reports the progress of the running export.
+     */
+    protected ?Closure $reportProgress = null;
+
+    /**
      * The default role of the generated files, such as image or hls-playlist.
      */
     protected readonly string $outputRole;
@@ -486,7 +501,7 @@ class PendingExport implements Exportable
         $destinations = $contents ? [] : array_map(fn ($output) => $output->destination(), $outputs);
         $this->published = [];
         $this->phase = Progress::STAGING;
-        $onProgress = fn (Progress $progress) => $this->notify($progress, $operationId, $destinations);
+        $this->reportProgress = fn (Progress $progress) => $this->notify($progress, $operationId, $destinations);
 
         try {
             $this->runner = new ProcessRunner($this->timeoutSeconds, $this->idleTimeoutSeconds);
@@ -494,13 +509,12 @@ class PendingExport implements Exportable
                 Event::dispatch(new Events\ExportStarting($operationId, $destinations));
             }
 
-            $onProgress(new Progress($this->phase));
+            ($this->reportProgress)(new Progress($this->phase));
             $result = $this->media->withInput(
                 fn (string $input, Workspace $workspace): string|ExportResult => $this->exportInWorkspace(
                     $workspace,
                     $outputs,
                     $contents,
-                    $onProgress,
                 ),
                 $this->runner,
             );
@@ -514,6 +528,9 @@ class PendingExport implements Exportable
             $this->phase = null;
             $this->published = [];
             $this->summaries = [];
+            $this->workspace = null;
+            $this->redactions = [];
+            $this->reportProgress = null;
         }
 
         if (config('laravel-ffmpeg.enable_events', true)) {
@@ -552,24 +569,21 @@ class PendingExport implements Exportable
     /**
      * Stage, probe, encode, validate, and publish the export inside the workspace.
      */
-    protected function exportInWorkspace(
-        Workspace $workspace,
-        array $outputs,
-        bool $contents,
-        Closure $onProgress,
-    ): string|ExportResult {
-        [$paths, $redactions] = $this->stageInputs($workspace);
+    protected function exportInWorkspace(Workspace $workspace, array $outputs, bool $contents): string|ExportResult
+    {
+        $this->workspace = $workspace;
+        [$paths, $this->redactions] = $this->stageInputs($workspace);
         $resources = $this->resourceNames($outputs);
         $this->stageResources($workspace, $resources);
 
         $this->phase = Progress::PROBING;
-        $onProgress(new Progress($this->phase));
+        ($this->reportProgress)(new Progress($this->phase));
         $metadata = $this->probeInputs($workspace, $resources);
         $expected = $this->expectedStreams($workspace, $outputs, $metadata);
         $outputPaths = $this->outputPaths($outputs, $workspace);
 
         foreach ($outputPaths as $index => $outputPath) {
-            $redactions[$outputPath] = "[output:{$index}]";
+            $this->redactions[$outputPath] = "[output:{$index}]";
         }
 
         $this->prepareOverlays($metadata);
@@ -581,23 +595,12 @@ class PendingExport implements Exportable
         // Next, operations may run analysis passes that replace command tokens. Each
         // analysis reports its own phase and records its summary before the encoding
         // passes, so we return to the encoding phase once the command is prepared.
-        $command = $this->prepareCommand(
-            $workspace,
-            $command,
-            $outputPaths,
-            fn (array $command, string $failure): ProcessResult => $this->runAnalysis(
-                $workspace,
-                $command,
-                $failure,
-                $redactions,
-                $onProgress,
-            ),
-        );
+        $command = $this->prepareCommand($workspace, $command, $outputPaths, $this->runAnalysis(...));
         $this->phase = Progress::ENCODING;
-        $this->runEncodingPasses($workspace, $command, $outputs, $outputPaths, $redactions, $duration, $onProgress);
+        $this->runEncodingPasses($command, $outputs, $outputPaths, $duration);
 
         $this->phase = Progress::VALIDATION;
-        $onProgress(new Progress($this->phase));
+        ($this->reportProgress)(new Progress($this->phase));
         $artifacts = $this->artifacts($outputs, $outputPaths);
         $sizes = $this->validateArtifacts($workspace, $artifacts, $outputs, $expected);
 
@@ -606,7 +609,7 @@ class PendingExport implements Exportable
         }
 
         $this->phase = Progress::PUBLICATION;
-        $onProgress(new Progress($this->phase));
+        ($this->reportProgress)(new Progress($this->phase));
         $files = $this->publishArtifacts($workspace->runner, $artifacts, $outputs, $sizes);
         $workspace->runner->check(Progress::PUBLICATION);
 
@@ -634,21 +637,16 @@ class PendingExport implements Exportable
     /**
      * Run one analysis pass, recording its summary ahead of the encoding passes.
      */
-    protected function runAnalysis(
-        Workspace $workspace,
-        array $command,
-        string $failure,
-        array $redactions,
-        Closure $onProgress,
-    ): ProcessResult {
+    protected function runAnalysis(array $command, string $failure): ProcessResult
+    {
         $this->phase = Progress::ANALYSIS;
-        $onProgress(new Progress($this->phase));
-        $process = $workspace->runner->run(
+        ($this->reportProgress)(new Progress($this->phase));
+        $process = $this->workspace->runner->run(
             $command,
-            $workspace->path,
-            $redactions,
+            $this->workspace->path,
+            $this->redactions,
             phase: Progress::ANALYSIS,
-            progress: new ProgressParser(null, Progress::ANALYSIS, notify: $onProgress),
+            progress: new ProgressParser(null, Progress::ANALYSIS, notify: $this->reportProgress),
         );
 
         if ($process->exitCode !== 0) {
@@ -663,31 +661,24 @@ class PendingExport implements Exportable
     /**
      * Run each encoding pass, recording its summary.
      */
-    protected function runEncodingPasses(
-        Workspace $workspace,
-        array $command,
-        array $outputs,
-        array $outputPaths,
-        array $redactions,
-        ?float $duration,
-        Closure $onProgress,
-    ): void {
+    protected function runEncodingPasses(array $command, array $outputs, array $outputPaths, ?float $duration): void
+    {
         $totalPasses = $this->twoPass ? 2 : 1;
 
         for ($pass = 1; $pass <= $totalPasses; $pass++) {
-            $onProgress(new Progress($this->phase, pass: $pass, totalPasses: $totalPasses));
+            ($this->reportProgress)(new Progress($this->phase, pass: $pass, totalPasses: $totalPasses));
             $passCommand = $command;
 
             if ($totalPasses === 2 && $pass === 1) {
-                $passCommand = $this->firstPassCommand($command, $outputPaths, $workspace, $redactions);
+                $passCommand = $this->firstPassCommand($command, $outputPaths, $this->workspace, $this->redactions);
             }
 
-            $process = $workspace->runner->run(
+            $process = $this->workspace->runner->run(
                 $passCommand,
-                $workspace->path,
-                $redactions,
+                $this->workspace->path,
+                $this->redactions,
                 phase: $this->phase,
-                progress: new ProgressParser($duration, $this->phase, $pass, $totalPasses, $onProgress),
+                progress: new ProgressParser($duration, $this->phase, $pass, $totalPasses, $this->reportProgress),
             );
 
             if ($process->exitCode !== 0) {
@@ -707,7 +698,7 @@ class PendingExport implements Exportable
             $this->summaries[] = $process->summary();
 
             if ($totalPasses === 2 && $pass === 1) {
-                $this->ensurePassStatisticsExist($workspace, $outputs);
+                $this->ensurePassStatisticsExist($this->workspace, $outputs);
             }
         }
     }

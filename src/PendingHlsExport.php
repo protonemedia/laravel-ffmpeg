@@ -644,7 +644,6 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             $paths[$master],
             $this->masterPlaylistLines($streamInfo, $masterPath),
             $masterPath,
-            null,
         );
         $this->keyReferences = $encryption?->references() ?? [];
         $artifacts = [...($encryption?->artifacts() ?? []), ...$segments, ...$playlists, [

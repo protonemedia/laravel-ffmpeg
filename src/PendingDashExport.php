@@ -523,7 +523,13 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $longest = 0;
         foreach (array_keys($this->representations) as $index => $name) {
             $type = $this->type($name);
-            $parsed = DashManifest::read($paths[$index], $type);
+            $parsed = [
+                'index' => $index,
+                'name' => $name,
+                'output' => $outputs[$index],
+                'path' => $paths[$index],
+                ...DashManifest::read($paths[$index], $type),
+            ];
             $total += count($parsed['durations']);
             if ($total > DashManifest::LIMIT) {
                 DashManifest::fail();
@@ -541,13 +547,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             $representation = $this->importRepresentation($document, $parsed['representation'], $name);
             $sets[$setName]->appendChild($representation);
 
-            [$files, $peak, $bytes] = $this->representationArtifacts(
-                $index,
-                $name,
-                $outputs[$index],
-                $paths[$index],
-                $parsed,
-            );
+            [$files, $peak, $bytes] = $this->representationArtifacts($parsed);
             array_push($segments, ...$files);
             $info[$name] = [
                 'type' => $type,
@@ -558,13 +558,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
                 'height' => $representation->getAttribute('height'),
             ];
             if ($this->sharedHls) {
-                $playlists[] = $this->writeRepresentationPlaylist(
-                    $index,
-                    $name,
-                    $outputs[$index],
-                    $paths[$index],
-                    $parsed['durations'],
-                );
+                $playlists[] = $this->writeRepresentationPlaylist($parsed);
             }
         }
 
@@ -671,15 +665,14 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Validate the representation's files and return their artifacts, peak bitrate and media bytes.
      *
+     * The parsed manifest also holds the representation's output index, name, output and local manifest path.
+     *
+     * @param  array<string, mixed>  $parsed
      * @return array{0: list<array<string, mixed>>, 1: int, 2: int}
      */
-    protected function representationArtifacts(
-        int $index,
-        int|string $name,
-        ExportOutput $output,
-        string $path,
-        array $parsed,
-    ): array {
+    protected function representationArtifacts(array $parsed): array
+    {
+        ['index' => $index, 'name' => $name, 'output' => $output, 'path' => $path] = $parsed;
         $destination = $output->destination();
         $prefix = dirname($destination['path']).'/';
         $artifacts = [];
@@ -723,15 +716,19 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Write the clear HLS playlist that references the representation's DASH files.
      *
-     * @param  list<float>  $durations
+     * The parsed manifest also holds the representation's output index, name, output and local manifest path.
+     *
+     * @param  array<string, mixed>  $parsed
      */
-    protected function writeRepresentationPlaylist(
-        int $index,
-        int|string $name,
-        ExportOutput $output,
-        string $path,
-        array $durations,
-    ): array {
+    protected function writeRepresentationPlaylist(array $parsed): array
+    {
+        [
+            'index' => $index,
+            'name' => $name,
+            'output' => $output,
+            'path' => $path,
+            'durations' => $durations,
+        ] = $parsed;
         $lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-TARGETDURATION:'.max(1, (int) ceil(max($durations))),
             '#EXT-X-MEDIA-SEQUENCE:1', '#EXT-X-PLAYLIST-TYPE:VOD', '#EXT-X-MAP:URI="init.mp4"'];
         foreach ($durations as $i => $duration) {
