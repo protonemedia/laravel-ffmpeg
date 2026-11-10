@@ -17,7 +17,7 @@ trait Clips
         float|string|null $duration = null,
         float|string|null $end = null,
         string $seek = 'accurate',
-    ): self {
+    ): static {
         $this->export->clip($start, $duration, $end, $seek);
 
         return $this;

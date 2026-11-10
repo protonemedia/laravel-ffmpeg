@@ -26,7 +26,7 @@ class HlsPlayback
      *
      * Register definitions in a service provider so they also exist when routes are cached.
      */
-    public function define(string $name, callable $resolve, callable $authorize): self
+    public function define(string $name, callable $resolve, callable $authorize): static
     {
         $this->presentations[$name] = [Closure::fromCallable($resolve), Closure::fromCallable($authorize)];
 

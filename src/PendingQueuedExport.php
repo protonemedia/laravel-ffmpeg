@@ -63,7 +63,7 @@ class PendingQueuedExport
     /**
      * Configure the native Laravel job properties, middleware and chains before dispatch.
      */
-    public function configureJob(callable $configure): self
+    public function configureJob(callable $configure): static
     {
         $this->configure = Closure::fromCallable($configure);
 

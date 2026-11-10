@@ -158,7 +158,7 @@ class PendingLiveHls
     /**
      * Set the disk to publish the playlist and segments to.
      */
-    public function toDisk(string|Filesystem $disk): self
+    public function toDisk(string|Filesystem $disk): static
     {
         $this->mutable();
         $this->disk = $disk;
@@ -169,7 +169,7 @@ class PendingLiveHls
     /**
      * Register a callback that receives a running snapshot once the playlist is readable on storage.
      */
-    public function onPublish(callable $callback): self
+    public function onPublish(callable $callback): static
     {
         $this->mutable();
         $this->publication = Closure::fromCallable($callback);
@@ -182,7 +182,7 @@ class PendingLiveHls
      *
      * The callback is polled even while the source is stalled or the session waits to reconnect.
      */
-    public function cancelWhen(callable $callback): self
+    public function cancelWhen(callable $callback): static
     {
         $this->mutable();
         $this->cancellation = Closure::fromCallable($callback);
@@ -203,7 +203,7 @@ class PendingLiveHls
      *
      * The global process limits still apply.
      */
-    public function timeout(float $seconds): self
+    public function timeout(float $seconds): static
     {
         $this->mutable();
         if (! is_finite($seconds) || $seconds <= 0) {
@@ -220,7 +220,7 @@ class PendingLiveHls
      *
      * Retries are never infinite, and every reconnect consumes the finite retry budget.
      */
-    public function retry(int $maxRetries, float $delay = 1, bool $reconnectOnEof = false): self
+    public function retry(int $maxRetries, float $delay = 1, bool $reconnectOnEof = false): static
     {
         $this->mutable();
         if ($maxRetries < 0 || $maxRetries > 10000) {

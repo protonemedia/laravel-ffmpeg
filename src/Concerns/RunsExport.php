@@ -29,7 +29,7 @@ trait RunsExport
      *
      * Passing null restores the configured process limits.
      */
-    public function timeout(?float $seconds): self
+    public function timeout(?float $seconds): static
     {
         $this->export->timeout($seconds);
 
@@ -39,7 +39,7 @@ trait RunsExport
     /**
      * Set how many seconds a process may run without output.
      */
-    public function idleTimeout(?float $seconds): self
+    public function idleTimeout(?float $seconds): static
     {
         $this->export->idleTimeout($seconds);
 
@@ -53,7 +53,7 @@ trait RunsExport
      *
      * @internal
      */
-    public function cancelWhen(callable $callback): self
+    public function cancelWhen(callable $callback): static
     {
         $this->export->cancelWhen($callback);
 
@@ -63,7 +63,7 @@ trait RunsExport
     /**
      * Register a callback that receives the progress of the execution.
      */
-    public function onProgress(callable $callback): self
+    public function onProgress(callable $callback): static
     {
         $this->export->onProgress($callback);
 
@@ -81,7 +81,7 @@ trait RunsExport
     /**
      * Set the disk the output is published to.
      */
-    public function toDisk(string|Filesystem $disk, array $options = []): self
+    public function toDisk(string|Filesystem $disk, array $options = []): static
     {
         $this->export->toDisk($disk, $options);
 
@@ -91,7 +91,7 @@ trait RunsExport
     /**
      * Set the visibility of the published output.
      */
-    public function visibility(string $visibility): self
+    public function visibility(string $visibility): static
     {
         $this->export->visibility($visibility);
 

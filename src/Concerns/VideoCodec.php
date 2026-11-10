@@ -17,7 +17,7 @@ trait VideoCodec
         mixed $bitrate = null,
         ?float $crf = null,
         ?string $preset = null,
-    ): self {
+    ): static {
         $this->export->video($codec, $bitrate, $crf, $preset);
 
         return $this;
@@ -26,7 +26,7 @@ trait VideoCodec
     /**
      * Set allowed encoder options for every output video track.
      */
-    public function videoOptions(array $tokens): self
+    public function videoOptions(array $tokens): static
     {
         $this->export->videoOptions($tokens);
 
@@ -38,7 +38,7 @@ trait VideoCodec
      *
      * Tracks count in mapped output order, not input stream order.
      */
-    public function videoStream(int $track, callable $configure): self
+    public function videoStream(int $track, callable $configure): static
     {
         $this->export->videoStream($track, $configure);
 
@@ -50,7 +50,7 @@ trait VideoCodec
      *
      * This does not transform pixel values.
      */
-    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): self
+    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): static
     {
         $this->export->color($primaries, $transfer, $space, $range);
 

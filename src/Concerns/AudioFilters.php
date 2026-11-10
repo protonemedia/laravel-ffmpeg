@@ -12,7 +12,7 @@ trait AudioFilters
     /**
      * Add a filter to the output audio chain.
      */
-    public function audioFilter(string $expression): self
+    public function audioFilter(string $expression): static
     {
         $this->export->audioFilter($expression);
 
@@ -24,7 +24,7 @@ trait AudioFilters
      *
      * A factor of zero mutes the audio.
      */
-    public function volume(float $multiplier): self
+    public function volume(float $multiplier): static
     {
         $this->export->volume($multiplier);
 
@@ -36,7 +36,7 @@ trait AudioFilters
      *
      * The silence extends the audio rather than shifting its timestamps.
      */
-    public function delayAudio(float $seconds): self
+    public function delayAudio(float $seconds): static
     {
         $this->export->delayAudio($seconds);
 

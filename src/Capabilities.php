@@ -154,7 +154,7 @@ class Capabilities implements Arrayable, JsonSerializable
      *
      * @throws MediaException
      */
-    public function require(array $requirements): self
+    public function require(array $requirements): static
     {
         if ($this->missing($requirements) !== []) {
             throw MediaException::probing('Required compiled-in media capabilities are missing.', 'capability');

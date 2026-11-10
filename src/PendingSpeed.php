@@ -58,7 +58,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
     /**
      * Encode the output in two passes.
      */
-    public function twoPass(): self
+    public function twoPass(): static
     {
         $this->export->twoPass();
 

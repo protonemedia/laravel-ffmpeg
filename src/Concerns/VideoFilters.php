@@ -12,7 +12,7 @@ trait VideoFilters
     /**
      * Add a filter to the output video chain.
      */
-    public function videoFilter(string $expression): self
+    public function videoFilter(string $expression): static
     {
         $this->export->videoFilter($expression);
 
@@ -24,7 +24,7 @@ trait VideoFilters
      *
      * One dimension preserves the display aspect ratio, while two dimensions stretch the video.
      */
-    public function resize(?int $width = null, ?int $height = null): self
+    public function resize(?int $width = null, ?int $height = null): static
     {
         $this->export->resize($width, $height);
 
@@ -34,7 +34,7 @@ trait VideoFilters
     /**
      * Scale the video to fill an exact square-pixel canvas, cropping the centered overflow.
      */
-    public function cover(int $width, int $height): self
+    public function cover(int $width, int $height): static
     {
         $this->export->cover($width, $height);
 
@@ -44,7 +44,7 @@ trait VideoFilters
     /**
      * Scale the video to fit inside an exact square-pixel canvas, padding the centered remainder.
      */
-    public function contain(int $width, int $height, string $background = 'black'): self
+    public function contain(int $width, int $height, string $background = 'black'): static
     {
         $this->export->contain($width, $height, $background);
 
@@ -56,7 +56,7 @@ trait VideoFilters
      *
      * The rotation runs in filter order, after FFmpeg's input autorotation.
      */
-    public function rotate(int $angle): self
+    public function rotate(int $angle): static
     {
         $this->export->rotate($angle);
 
@@ -66,7 +66,7 @@ trait VideoFilters
     /**
      * Crop the video to the given size, centered unless an offset is given.
      */
-    public function crop(int $width, int $height, ?int $x = null, ?int $y = null): self
+    public function crop(int $width, int $height, ?int $x = null, ?int $y = null): static
     {
         $this->export->crop($width, $height, $x, $y);
 
@@ -76,7 +76,7 @@ trait VideoFilters
     /**
      * Pad the video to the given size, centered unless an offset is given.
      */
-    public function pad(int $width, int $height, ?int $x = null, ?int $y = null, string $background = 'black'): self
+    public function pad(int $width, int $height, ?int $x = null, ?int $y = null, string $background = 'black'): static
     {
         $this->export->pad($width, $height, $x, $y, $background);
 
@@ -88,7 +88,7 @@ trait VideoFilters
      *
      * Frames are resampled in filter order without changing the playback speed.
      */
-    public function frameRate(int|float|string $rate): self
+    public function frameRate(int|float|string $rate): static
     {
         $this->export->frameRate($rate);
 
@@ -98,7 +98,7 @@ trait VideoFilters
     /**
      * Flip the video horizontally.
      */
-    public function flipHorizontally(): self
+    public function flipHorizontally(): static
     {
         $this->export->flipHorizontally();
 
@@ -108,7 +108,7 @@ trait VideoFilters
     /**
      * Flip the video vertically.
      */
-    public function flipVertically(): self
+    public function flipVertically(): static
     {
         $this->export->flipVertically();
 
@@ -118,7 +118,7 @@ trait VideoFilters
     /**
      * Convert the video to grayscale.
      */
-    public function grayscale(): self
+    public function grayscale(): static
     {
         $this->export->grayscale();
 
@@ -130,7 +130,7 @@ trait VideoFilters
      *
      * Frame mode keeps the frame count, while FFmpeg's default field mode outputs a frame for each field.
      */
-    public function deinterlace(string $mode = 'frame', string $parity = 'auto', bool $onlyInterlaced = true): self
+    public function deinterlace(string $mode = 'frame', string $parity = 'auto', bool $onlyInterlaced = true): static
     {
         $this->export->deinterlace($mode, $parity, $onlyInterlaced);
 

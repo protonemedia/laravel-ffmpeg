@@ -149,7 +149,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     /**
      * Set the complex filter graph of the export.
      */
-    public function filterComplex(string $expression): self
+    public function filterComplex(string $expression): static
     {
         $this->export->filterComplex($expression);
 
@@ -161,7 +161,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
      *
      * @param  (callable(Watermark): mixed)|null  $configure  Runs immediately; its return value is ignored.
      */
-    public function watermark(Media $image, ?callable $configure = null): self
+    public function watermark(Media $image, ?callable $configure = null): static
     {
         $this->export->watermark($image, $configure);
 
@@ -171,7 +171,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     /**
      * Encode the variants in two passes.
      */
-    public function twoPass(): self
+    public function twoPass(): static
     {
         $this->export->twoPass();
 
@@ -193,7 +193,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     /**
      * Set the playlist type to "vod", "event" or "live".
      */
-    public function playlistType(string $type): self
+    public function playlistType(string $type): static
     {
         $this->export->assertOutputMutable();
         $type = strtolower($type);
@@ -211,7 +211,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
      *
      * AES-128 encryption is only supported for MPEG-TS segments.
      */
-    public function fmp4(): self
+    public function fmp4(): static
     {
         $this->export->assertOutputMutable();
         if ($this->encryption instanceof HlsEncryption) {
@@ -234,7 +234,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         ?string $playlist = null,
         ?string $segments = null,
         ?string $init = null,
-    ): self {
+    ): static {
         $this->export->assertOutputMutable();
 
         $this->ensureSimpleName($name, 'HLS variant name');
@@ -283,7 +283,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
      *
      * @param  callable(string, string, string|null): string  $callback
      */
-    public function playlistUsing(callable $callback): self
+    public function playlistUsing(callable $callback): static
     {
         $this->export->assertOutputMutable();
         $this->playlistCallback = Closure::fromCallable($callback);
@@ -307,7 +307,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         ?string $playlist = null,
         ?string $segments = null,
         ?string $init = null,
-    ): self {
+    ): static {
         return $this->rendition(
             'AUDIO',
             $group,
@@ -339,7 +339,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         bool $forced = false,
         ?string $playlist = null,
         ?string $segments = null,
-    ): self {
+    ): static {
         return $this->rendition(
             'SUBTITLES',
             $group,
@@ -372,7 +372,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         ?string $playlist,
         ?string $segments,
         ?string $init,
-    ): self {
+    ): static {
         $this->export->assertOutputMutable();
         $this->ensureSimpleName($group, 'HLS rendition group');
 
@@ -451,7 +451,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         #[SensitiveParameter] ?string $key = null,
         ?int $rotateEvery = null,
         string $directory = 'hls-keys',
-    ): self {
+    ): static {
         $this->export->assertOutputMutable();
         if ($this->segmentType === 'fmp4') {
             throw new InvalidArgumentException('AES-128 encryption is supported only for MPEG-TS HLS.');

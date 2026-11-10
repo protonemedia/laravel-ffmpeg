@@ -50,7 +50,7 @@ class HlsPlaylist implements Responsable
     /**
      * Set the callback that resolves encryption key URLs.
      */
-    public function keyUrlsUsing(callable $resolver): self
+    public function keyUrlsUsing(callable $resolver): static
     {
         $this->resolvers['key'] = Closure::fromCallable($resolver);
 
@@ -60,7 +60,7 @@ class HlsPlaylist implements Responsable
     /**
      * Set the callback that resolves media segment URLs.
      */
-    public function mediaUrlsUsing(callable $resolver): self
+    public function mediaUrlsUsing(callable $resolver): static
     {
         $this->resolvers['media'] = Closure::fromCallable($resolver);
 
@@ -70,7 +70,7 @@ class HlsPlaylist implements Responsable
     /**
      * Set the callback that resolves nested playlist URLs.
      */
-    public function playlistUrlsUsing(callable $resolver): self
+    public function playlistUrlsUsing(callable $resolver): static
     {
         $this->resolvers['playlist'] = Closure::fromCallable($resolver);
 
@@ -107,7 +107,7 @@ class HlsPlaylist implements Responsable
      *
      * @param  callable(string): bool  $approve
      */
-    public function deleteAllFiles(callable $approve): self
+    public function deleteAllFiles(callable $approve): static
     {
         $paths = [$this->path => true];
         $this->render(true, function (?string $target, string $uri) use (&$paths): void {

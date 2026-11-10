@@ -19,7 +19,7 @@ class AudioStreamSettings
     /**
      * Set the encoder of the track.
      */
-    public function codec(string $codec): self
+    public function codec(string $codec): static
     {
         if (! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
             throw new InvalidArgumentException('Invalid FFmpeg encoder name.');
@@ -33,7 +33,7 @@ class AudioStreamSettings
     /**
      * Set the target bitrate of the track.
      */
-    public function bitrate(int|string $bitrate): self
+    public function bitrate(int|string $bitrate): static
     {
         if ((! is_int($bitrate) || $bitrate <= 0)
             && (! is_string($bitrate)
@@ -50,7 +50,7 @@ class AudioStreamSettings
     /**
      * Set the sample rate of the track in hertz.
      */
-    public function sampleRate(int $rate): self
+    public function sampleRate(int $rate): static
     {
         return $this->options(['-ar', (string) $rate]);
     }
@@ -58,7 +58,7 @@ class AudioStreamSettings
     /**
      * Set the number of channels of the track.
      */
-    public function channels(int $channels): self
+    public function channels(int $channels): static
     {
         return $this->options(['-ac', (string) $channels]);
     }
@@ -66,7 +66,7 @@ class AudioStreamSettings
     /**
      * Set the sample format of the track.
      */
-    public function sampleFormat(string $format): self
+    public function sampleFormat(string $format): static
     {
         return $this->options(['-sample_fmt', $format]);
     }
@@ -74,7 +74,7 @@ class AudioStreamSettings
     /**
      * Set the channel layout of the track.
      */
-    public function channelLayout(string $layout): self
+    public function channelLayout(string $layout): static
     {
         return $this->options(['-channel_layout', $layout]);
     }
@@ -82,7 +82,7 @@ class AudioStreamSettings
     /**
      * Set the encoder compression level of the track.
      */
-    public function compressionLevel(int $level): self
+    public function compressionLevel(int $level): static
     {
         return $this->options(['-compression_level', (string) $level]);
     }
@@ -90,7 +90,7 @@ class AudioStreamSettings
     /**
      * Add a filter to the track, after the output audio filters.
      */
-    public function filter(string $expression): self
+    public function filter(string $expression): static
     {
         FilterGraph::validateExpression($expression);
         $this->settings['filters'][] = $expression;
@@ -101,7 +101,7 @@ class AudioStreamSettings
     /**
      * Set curated, scalar encoder options on the track.
      */
-    public function options(array $tokens): self
+    public function options(array $tokens): static
     {
         CommandCompiler::options($tokens, 'output');
         for ($i = 0; $i < count($tokens); $i += 2) {

@@ -106,7 +106,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Write WebVTT cues for the sheets to the given path, optionally resolving sheet URLs with a callback.
      */
-    public function vtt(string $path, ?callable $imageUrl = null): self
+    public function vtt(string $path, ?callable $imageUrl = null): static
     {
         $this->export->assertOutputMutable();
 

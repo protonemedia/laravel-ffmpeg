@@ -96,7 +96,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         mixed $bitrate = null,
         ?float $crf = null,
         ?string $preset = null,
-    ): self {
+    ): static {
         $this->export->video($codec, $bitrate, $crf, $preset);
 
         return $this;
@@ -105,7 +105,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Set additional video encoder options.
      */
-    public function videoOptions(array $tokens): self
+    public function videoOptions(array $tokens): static
     {
         $this->export->videoOptions($tokens);
 
@@ -115,7 +115,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Set the signaled color characteristics without transforming the pixel values.
      */
-    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): self
+    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): static
     {
         $this->export->color($primaries, $transfer, $space, $range);
 
@@ -125,7 +125,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Set the audio codec and bitrate.
      */
-    public function audio(?string $codec = null, mixed $bitrate = null): self
+    public function audio(?string $codec = null, mixed $bitrate = null): static
     {
         $this->export->audio($codec, $bitrate);
 
@@ -135,7 +135,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Set additional audio encoder options.
      */
-    public function audioOptions(array $tokens): self
+    public function audioOptions(array $tokens): static
     {
         $this->export->audioOptions($tokens);
 
@@ -145,7 +145,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Add an audio filter expression.
      */
-    public function audioFilter(string $expression): self
+    public function audioFilter(string $expression): static
     {
         $this->export->audioFilter($expression);
 
@@ -157,7 +157,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
      *
      * A multiplier of zero mutes the audio.
      */
-    public function volume(float $multiplier): self
+    public function volume(float $multiplier): static
     {
         $this->export->volume($multiplier);
 
@@ -167,7 +167,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Map the streams that match the given FFmpeg specifier.
      */
-    public function map(string $specifier): self
+    public function map(string $specifier): static
     {
         $this->export->map($specifier);
 
@@ -182,7 +182,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         ?int $input = null,
         ?int $track = null,
         bool $optional = false,
-    ): self {
+    ): static {
         $this->export->mapVideo($stream, $input, $track, $optional);
 
         return $this;
@@ -197,7 +197,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         ?int $track = null,
         ?string $language = null,
         bool $optional = false,
-    ): self {
+    ): static {
         $this->export->mapAudio($stream, $input, $track, $language, $optional);
 
         return $this;
@@ -206,7 +206,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Define an adaptation set of the given type.
      */
-    public function adaptationSet(string $name, string $type): self
+    public function adaptationSet(string $name, string $type): static
     {
         $this->export->assertOutputMutable();
         $this->identifier($name);
@@ -228,7 +228,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
      *
      * @param  callable(DashRepresentation): mixed  $configure
      */
-    public function representation(string $name, string $adaptationSet, callable $configure): self
+    public function representation(string $name, string $adaptationSet, callable $configure): static
     {
         $this->export->assertOutputMutable();
         $this->identifier($name);
@@ -255,7 +255,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     /**
      * Write clear HLS VOD playlists that reference the same initialization and media files.
      */
-    public function sharedHls(bool $enabled = true): self
+    public function sharedHls(bool $enabled = true): static
     {
         $this->export->assertOutputMutable();
         $this->sharedHls = $enabled;

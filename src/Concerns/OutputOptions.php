@@ -12,7 +12,7 @@ trait OutputOptions
     /**
      * Add allowed raw FFmpeg options to the output.
      */
-    public function outputOptions(array $tokens): self
+    public function outputOptions(array $tokens): static
     {
         $this->export->outputOptions($tokens);
 

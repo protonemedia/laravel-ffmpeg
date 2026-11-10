@@ -56,7 +56,7 @@ class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
     /**
      * Map the given input stream specifier or graph label to the output.
      */
-    public function map(string $specifier): self
+    public function map(string $specifier): static
     {
         $this->export->map($specifier);
 
@@ -71,7 +71,7 @@ class PendingStill implements Exportable, MeasuresDuration, ShapesCommand
         ?int $input = null,
         ?int $track = null,
         bool $optional = false,
-    ): self {
+    ): static {
         $this->export->mapVideo($stream, $input, $track, $optional);
 
         return $this;

@@ -23,5 +23,5 @@ interface Exportable
      *
      * This is separate from the progress callbacks the application registers.
      */
-    public function cancelWhen(callable $callback): self;
+    public function cancelWhen(callable $callback): static;
 }

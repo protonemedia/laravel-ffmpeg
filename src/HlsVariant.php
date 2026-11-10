@@ -37,7 +37,7 @@ class HlsVariant
     /**
      * Reference the reusable audio renditions declared on the HLS export.
      */
-    public function audioGroup(string $group): self
+    public function audioGroup(string $group): static
     {
         $this->assertOutputMutable();
         $this->audioGroup = $group;
@@ -48,7 +48,7 @@ class HlsVariant
     /**
      * Reference the reusable subtitle renditions declared on the HLS export.
      */
-    public function subtitleGroup(string $group): self
+    public function subtitleGroup(string $group): static
     {
         $this->assertOutputMutable();
         $this->subtitleGroup = $group;

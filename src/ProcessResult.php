@@ -56,7 +56,7 @@ class ProcessResult
     /**
      * Throw an exception if the process failed.
      */
-    public function throw(): self
+    public function throw(): static
     {
         if ($this->failed()) {
             throw new MediaException(

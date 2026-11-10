@@ -75,7 +75,7 @@ class Watermark
     /**
      * Keep the mark the given number of output pixels from the left edge.
      */
-    public function left(int $margin = 0): self
+    public function left(int $margin = 0): static
     {
         return $this->pin('horizontal', 'left', 'right', $margin);
     }
@@ -83,7 +83,7 @@ class Watermark
     /**
      * Keep the mark the given number of output pixels from the right edge.
      */
-    public function right(int $margin = 0): self
+    public function right(int $margin = 0): static
     {
         return $this->pin('horizontal', 'right', 'left', $margin);
     }
@@ -91,7 +91,7 @@ class Watermark
     /**
      * Keep the mark the given number of output pixels from the top edge.
      */
-    public function top(int $margin = 0): self
+    public function top(int $margin = 0): static
     {
         return $this->pin('vertical', 'top', 'bottom', $margin);
     }
@@ -99,7 +99,7 @@ class Watermark
     /**
      * Keep the mark the given number of output pixels from the bottom edge.
      */
-    public function bottom(int $margin = 0): self
+    public function bottom(int $margin = 0): static
     {
         return $this->pin('vertical', 'bottom', 'top', $margin);
     }
@@ -109,7 +109,7 @@ class Watermark
      *
      * For example, center()->bottom(40) places the mark at the bottom center.
      */
-    public function center(): self
+    public function center(): static
     {
         $this->centered = true;
 
@@ -121,7 +121,7 @@ class Watermark
      *
      * One dimension keeps the aspect ratio, while two dimensions stretch the mark.
      */
-    public function size(?int $width = null, ?int $height = null): self
+    public function size(?int $width = null, ?int $height = null): static
     {
         if ($width === null && $height === null) {
             throw new InvalidArgumentException('A watermark size requires a width, a height, or both.');
@@ -142,7 +142,7 @@ class Watermark
     /**
      * Draw the mark with the given opacity, from 0 for invisible to 1 for opaque.
      */
-    public function opacity(float $opacity): self
+    public function opacity(float $opacity): static
     {
         if (! is_finite($opacity) || $opacity < 0 || $opacity > 1) {
             throw new InvalidArgumentException('The watermark opacity must be between 0 and 1.');
@@ -158,7 +158,7 @@ class Watermark
      *
      * The repetition ignores any loop count the GIF embeds.
      */
-    public function loop(bool $loop = true): self
+    public function loop(bool $loop = true): static
     {
         $this->loop = $loop;
 
@@ -168,7 +168,7 @@ class Watermark
     /**
      * Convert the image to grayscale.
      */
-    public function grayscale(): self
+    public function grayscale(): static
     {
         return $this->edit(new Grayscale);
     }
@@ -176,7 +176,7 @@ class Watermark
     /**
      * Blur the image by the given amount, from 0 to 100.
      */
-    public function blur(int $amount = 5): self
+    public function blur(int $amount = 5): static
     {
         return $this->edit(new Blur($this->amount($amount)));
     }
@@ -184,7 +184,7 @@ class Watermark
     /**
      * Sharpen the image by the given amount, from 0 to 100.
      */
-    public function sharpen(int $amount = 10): self
+    public function sharpen(int $amount = 10): static
     {
         return $this->edit(new Sharpen($this->amount($amount)));
     }
@@ -192,7 +192,7 @@ class Watermark
     /**
      * Rotate the image clockwise by any angle, filling the corners with the background color.
      */
-    public function rotate(float $angle, ?string $background = null): self
+    public function rotate(float $angle, ?string $background = null): static
     {
         if (! is_finite($angle)) {
             throw new InvalidArgumentException('A watermark rotation requires a finite angle.');
@@ -207,7 +207,7 @@ class Watermark
      * The offset is required because a video crop() without offsets centers, while Laravel's
      * image crop starts at the top-left corner.
      */
-    public function crop(int $width, int $height, int $x, int $y): self
+    public function crop(int $width, int $height, int $x, int $y): static
     {
         if ($width < 1 || $height < 1) {
             throw new InvalidArgumentException("The watermark crop dimensions [{$width}x{$height}] must be positive.");
@@ -223,7 +223,7 @@ class Watermark
     /**
      * Flip the image horizontally.
      */
-    public function flipHorizontally(): self
+    public function flipHorizontally(): static
     {
         return $this->edit(new FlipHorizontally);
     }
@@ -231,7 +231,7 @@ class Watermark
     /**
      * Flip the image vertically.
      */
-    public function flipVertically(): self
+    public function flipVertically(): static
     {
         return $this->edit(new FlipVertically);
     }
@@ -269,7 +269,7 @@ class Watermark
     /**
      * Pin the mark to the given edge of the given axis.
      */
-    protected function pin(string $axis, string $edge, string $opposite, int $margin): self
+    protected function pin(string $axis, string $edge, string $opposite, int $margin): static
     {
         if ($margin < 0) {
             throw new InvalidArgumentException('Watermark margins must be nonnegative.');
@@ -301,7 +301,7 @@ class Watermark
     /**
      * Add the given edit to the edits applied to the image.
      */
-    protected function edit(Transformation $transformation): self
+    protected function edit(Transformation $transformation): static
     {
         if (! class_exists(ImageManager::class)) {
             throw new InvalidArgumentException('Watermark image edits require intervention/image ^4.2.');

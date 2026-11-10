@@ -92,7 +92,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     /**
      * Read the audio track at the given zero-based ordinal, not the global stream index.
      */
-    public function audioTrack(int $track): self
+    public function audioTrack(int $track): static
     {
         $this->export->assertOutputMutable();
         if ($track < 0) {
@@ -107,7 +107,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     /**
      * Downmix the channels with equal weight before reduction, instead of keeping them separate.
      */
-    public function mono(bool $enabled = true): self
+    public function mono(bool $enabled = true): static
     {
         $this->export->assertOutputMutable();
         $this->mixMono = $enabled;
@@ -118,7 +118,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     /**
      * Request at most the given number of nonempty, evenly partitioned buckets.
      */
-    public function buckets(int $count): self
+    public function buckets(int $count): static
     {
         $this->export->assertOutputMutable();
         if ($count < 1 || $count > self::MAX_CELLS) {

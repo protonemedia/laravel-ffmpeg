@@ -87,7 +87,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     /**
      * Start the added track at the given nonnegative offset in the primary presentation.
      */
-    public function at(float $seconds): self
+    public function at(float $seconds): static
     {
         $this->export->assertOutputMutable();
         if (! is_finite($seconds) || $seconds < 0) {
@@ -102,7 +102,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     /**
      * Repeat the added track from its offset without repeating the initial delay.
      */
-    public function loop(bool $loop = true): self
+    public function loop(bool $loop = true): static
     {
         $this->export->assertOutputMutable();
         $this->loop = $loop;
@@ -113,7 +113,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     /**
      * Set the audio encoder and bitrate.
      */
-    public function audio(?string $codec = null, mixed $bitrate = null): self
+    public function audio(?string $codec = null, mixed $bitrate = null): static
     {
         $this->export->audio($codec, $bitrate);
 
@@ -123,7 +123,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     /**
      * Set allowed encoder options for every output audio track.
      */
-    public function audioOptions(array $tokens): self
+    public function audioOptions(array $tokens): static
     {
         $this->export->audioOptions($tokens);
 
@@ -133,7 +133,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     /**
      * Omit the video from the output.
      */
-    public function withoutVideo(): self
+    public function withoutVideo(): static
     {
         $this->export->withoutVideo();
 

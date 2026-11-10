@@ -59,7 +59,7 @@ class ExportOutput
      *
      * @internal
      */
-    public function configure(array $configuration): self
+    public function configure(array $configuration): static
     {
         $this->assertOutputMutable();
         $properties = array_keys($this->outputConfiguration());

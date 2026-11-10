@@ -121,7 +121,7 @@ trait ConfiguresOutput
      *
      * Tracks count in mapped output order, not input stream order.
      */
-    public function videoStream(int $track, callable $configure): self
+    public function videoStream(int $track, callable $configure): static
     {
         $this->assertOutputMutable();
         $this->ensureIndexIsNotNegative('video track', $track);
@@ -142,7 +142,7 @@ trait ConfiguresOutput
      *
      * Tracks count in mapped output order, not input stream order.
      */
-    public function audioStream(int $track, callable $configure): self
+    public function audioStream(int $track, callable $configure): static
     {
         $this->assertOutputMutable();
         $this->ensureIndexIsNotNegative('audio track', $track);
@@ -161,7 +161,7 @@ trait ConfiguresOutput
     /**
      * Set allowed encoder options for every output video track.
      */
-    public function videoOptions(array $tokens): self
+    public function videoOptions(array $tokens): static
     {
         $this->assertOutputMutable();
         $this->video = array_replace($this->video, (new VideoStreamSettings)->options($tokens)->settings());
@@ -172,7 +172,7 @@ trait ConfiguresOutput
     /**
      * Set allowed encoder options for every output audio track.
      */
-    public function audioOptions(array $tokens): self
+    public function audioOptions(array $tokens): static
     {
         $this->assertOutputMutable();
         $this->audio = array_replace($this->audio, (new AudioStreamSettings)->options($tokens)->settings());
@@ -185,7 +185,7 @@ trait ConfiguresOutput
      *
      * This does not transform pixel values.
      */
-    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): self
+    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): static
     {
         $this->videoOptions([
             '-color_primaries', $primaries,
@@ -205,7 +205,7 @@ trait ConfiguresOutput
         mixed $bitrate = null,
         ?float $crf = null,
         ?string $preset = null,
-    ): self {
+    ): static {
         $this->assertOutputMutable();
         $this->codec($codec);
         $this->bitrate($bitrate);
@@ -228,7 +228,7 @@ trait ConfiguresOutput
     /**
      * Set the audio encoder and bitrate.
      */
-    public function audio(?string $codec = null, mixed $bitrate = null): self
+    public function audio(?string $codec = null, mixed $bitrate = null): static
     {
         $this->assertOutputMutable();
         $this->codec($codec);
@@ -268,7 +268,7 @@ trait ConfiguresOutput
     /**
      * Map the given input stream specifier or graph label to the output.
      */
-    public function map(string $specifier): self
+    public function map(string $specifier): static
     {
         $this->assertOutputMutable();
 
@@ -292,7 +292,7 @@ trait ConfiguresOutput
         ?int $input = null,
         ?int $track = null,
         bool $optional = false,
-    ): self {
+    ): static {
         $this->assertOutputMutable();
 
         if (is_int($stream)) {
@@ -327,7 +327,7 @@ trait ConfiguresOutput
         ?int $track = null,
         ?string $language = null,
         bool $optional = false,
-    ): self {
+    ): static {
         $this->assertOutputMutable();
 
         if (is_int($stream)) {
@@ -368,7 +368,7 @@ trait ConfiguresOutput
     /**
      * Map the given probed stream, resolving its input when the command compiles.
      */
-    protected function mapProbedStream(Stream $stream, string $type, ?int $input, bool $optional): self
+    protected function mapProbedStream(Stream $stream, string $type, ?int $input, bool $optional): static
     {
         if ($stream->get('codec_type') !== $type) {
             throw new InvalidArgumentException("The mapped stream is not a {$type} stream.");
@@ -396,7 +396,7 @@ trait ConfiguresOutput
     /**
      * Omit the audio from the output.
      */
-    public function withoutAudio(): self
+    public function withoutAudio(): static
     {
         $this->assertOutputMutable();
         $this->omitAudio = true;
@@ -407,7 +407,7 @@ trait ConfiguresOutput
     /**
      * Omit the video from the output.
      */
-    public function withoutVideo(): self
+    public function withoutVideo(): static
     {
         $this->assertOutputMutable();
         $this->omitVideo = true;
@@ -418,7 +418,7 @@ trait ConfiguresOutput
     /**
      * Add a filter to the output video chain.
      */
-    public function videoFilter(string $expression): self
+    public function videoFilter(string $expression): static
     {
         $this->assertOutputMutable();
         FilterGraph::validateExpression($expression);
@@ -432,7 +432,7 @@ trait ConfiguresOutput
      *
      * One dimension preserves the display aspect ratio, while two dimensions stretch the video.
      */
-    public function resize(?int $width = null, ?int $height = null): self
+    public function resize(?int $width = null, ?int $height = null): static
     {
         $this->assertOutputMutable();
 
@@ -454,7 +454,7 @@ trait ConfiguresOutput
     /**
      * Scale the video to fill an exact square-pixel canvas, cropping the centered overflow.
      */
-    public function cover(int $width, int $height): self
+    public function cover(int $width, int $height): static
     {
         return $this->canvas($width, $height, null);
     }
@@ -462,7 +462,7 @@ trait ConfiguresOutput
     /**
      * Scale the video to fit inside an exact square-pixel canvas, padding the centered remainder.
      */
-    public function contain(int $width, int $height, string $background = 'black'): self
+    public function contain(int $width, int $height, string $background = 'black'): static
     {
         return $this->canvas($width, $height, $background);
     }
@@ -470,7 +470,7 @@ trait ConfiguresOutput
     /**
      * Scale the video onto an exact canvas, cropping without a background or padding with one.
      */
-    protected function canvas(int $width, int $height, ?string $background): self
+    protected function canvas(int $width, int $height, ?string $background): static
     {
         $this->assertOutputMutable();
         $this->ensureEvenDimensions($width, $height);
@@ -494,7 +494,7 @@ trait ConfiguresOutput
      *
      * The rotation runs in filter order, after FFmpeg's input autorotation.
      */
-    public function rotate(int $angle): self
+    public function rotate(int $angle): static
     {
         return $this->videoFilter(match ($angle) {
             90, -270 => 'transpose=clock',
@@ -509,7 +509,7 @@ trait ConfiguresOutput
     /**
      * Crop the video to the given size, centered unless an offset is given.
      */
-    public function crop(int $width, int $height, ?int $x = null, ?int $y = null): self
+    public function crop(int $width, int $height, ?int $x = null, ?int $y = null): static
     {
         $this->ensureEvenDimensions($width, $height);
         $this->ensureOffsetIsNotNegative($x, $y);
@@ -522,7 +522,7 @@ trait ConfiguresOutput
     /**
      * Pad the video to the given size, centered unless an offset is given.
      */
-    public function pad(int $width, int $height, ?int $x = null, ?int $y = null, string $background = 'black'): self
+    public function pad(int $width, int $height, ?int $x = null, ?int $y = null, string $background = 'black'): static
     {
         $this->ensureEvenDimensions($width, $height);
         $this->ensureOffsetIsNotNegative($x, $y);
@@ -565,7 +565,7 @@ trait ConfiguresOutput
         int $x = 0,
         int $y = 0,
         string $color = 'white',
-    ): self {
+    ): static {
         $this->assertOutputMutable();
         $this->videoFilters[] = ResourceFilter::drawText($text, $font, $size, $x, $y, $color);
 
@@ -575,7 +575,7 @@ trait ConfiguresOutput
     /**
      * Burn the given subtitles into the video.
      */
-    public function burnSubtitles(Media $subtitles): self
+    public function burnSubtitles(Media $subtitles): static
     {
         $this->assertOutputMutable();
         $this->videoFilters[] = ResourceFilter::burnSubtitles($subtitles);
@@ -586,7 +586,7 @@ trait ConfiguresOutput
     /**
      * Apply the given 3D LUT file to the video.
      */
-    public function lut3d(Media $look): self
+    public function lut3d(Media $look): static
     {
         $this->assertOutputMutable();
         $this->videoFilters[] = ResourceFilter::lut3d($look);
@@ -607,7 +607,7 @@ trait ConfiguresOutput
     /**
      * Add a filter to the output audio chain.
      */
-    public function audioFilter(string $expression): self
+    public function audioFilter(string $expression): static
     {
         $this->assertOutputMutable();
         FilterGraph::validateExpression($expression);
@@ -621,7 +621,7 @@ trait ConfiguresOutput
      *
      * Frames are resampled in filter order without changing the playback speed.
      */
-    public function frameRate(int|float|string $rate): self
+    public function frameRate(int|float|string $rate): static
     {
         if (is_float($rate) && ! is_finite($rate)) {
             throw new InvalidArgumentException('Frame rate requires a finite positive number or positive rational.');
@@ -648,7 +648,7 @@ trait ConfiguresOutput
     /**
      * Flip the video horizontally.
      */
-    public function flipHorizontally(): self
+    public function flipHorizontally(): static
     {
         return $this->videoFilter('hflip');
     }
@@ -656,7 +656,7 @@ trait ConfiguresOutput
     /**
      * Flip the video vertically.
      */
-    public function flipVertically(): self
+    public function flipVertically(): static
     {
         return $this->videoFilter('vflip');
     }
@@ -664,7 +664,7 @@ trait ConfiguresOutput
     /**
      * Convert the video to grayscale.
      */
-    public function grayscale(): self
+    public function grayscale(): static
     {
         return $this->videoFilter('hue=s=0');
     }
@@ -674,7 +674,7 @@ trait ConfiguresOutput
      *
      * Frame mode keeps the frame count, while FFmpeg's default field mode outputs a frame for each field.
      */
-    public function deinterlace(string $mode = 'frame', string $parity = 'auto', bool $onlyInterlaced = true): self
+    public function deinterlace(string $mode = 'frame', string $parity = 'auto', bool $onlyInterlaced = true): static
     {
         if (! in_array($mode, ['frame', 'field'], true)) {
             throw new InvalidArgumentException("The deinterlace mode [{$mode}] must be frame or field.");
@@ -694,7 +694,7 @@ trait ConfiguresOutput
      *
      * A factor of zero mutes the audio.
      */
-    public function volume(float $multiplier): self
+    public function volume(float $multiplier): static
     {
         if (! is_finite($multiplier) || $multiplier < 0) {
             throw new InvalidArgumentException('Volume requires a finite nonnegative multiplier.');
@@ -708,7 +708,7 @@ trait ConfiguresOutput
      *
      * The silence extends the audio rather than shifting its timestamps.
      */
-    public function delayAudio(float $seconds): self
+    public function delayAudio(float $seconds): static
     {
         if (! is_finite($seconds) || $seconds < 0) {
             throw new InvalidArgumentException('Audio delay requires finite nonnegative seconds.');
@@ -726,7 +726,7 @@ trait ConfiguresOutput
     /**
      * Fade the video and audio in, starting at zero seconds by default.
      */
-    public function fadeIn(float $duration, float $start = 0, bool $video = true, bool $audio = true): self
+    public function fadeIn(float $duration, float $start = 0, bool $video = true, bool $audio = true): static
     {
         return $this->fade('in', $duration, $start, $video, $audio);
     }
@@ -734,7 +734,7 @@ trait ConfiguresOutput
     /**
      * Fade the video and audio out from the given start time in seconds.
      */
-    public function fadeOut(float $duration, float $start, bool $video = true, bool $audio = true): self
+    public function fadeOut(float $duration, float $start, bool $video = true, bool $audio = true): static
     {
         return $this->fade('out', $duration, $start, $video, $audio);
     }
@@ -742,7 +742,7 @@ trait ConfiguresOutput
     /**
      * Add the video and audio filters of a fade in the given direction.
      */
-    protected function fade(string $type, float $duration, float $start, bool $video, bool $audio): self
+    protected function fade(string $type, float $duration, float $start, bool $video, bool $audio): static
     {
         $this->assertOutputMutable();
 
@@ -776,7 +776,7 @@ trait ConfiguresOutput
     /**
      * Add allowed raw FFmpeg options to the output.
      */
-    public function outputOptions(array $tokens): self
+    public function outputOptions(array $tokens): static
     {
         $this->assertOutputMutable();
         $this->outputOptions = CommandCompiler::options([...$this->outputOptions, ...$tokens], 'output');
@@ -787,7 +787,7 @@ trait ConfiguresOutput
     /**
      * Omit the container metadata, and optionally the chapters, from the output.
      */
-    public function withoutMetadata(bool $chapters = false): self
+    public function withoutMetadata(bool $chapters = false): static
     {
         $this->assertOutputMutable();
         $this->metadataSource = -1;
@@ -802,7 +802,7 @@ trait ConfiguresOutput
     /**
      * Copy the container metadata from the given input, or omit it when the input is null.
      */
-    public function metadataFrom(?int $input): self
+    public function metadataFrom(?int $input): static
     {
         $this->assertOutputMutable();
 
@@ -820,7 +820,7 @@ trait ConfiguresOutput
     /**
      * Set a container metadata tag on the output.
      */
-    public function metadata(string $key, string $value): self
+    public function metadata(string $key, string $value): static
     {
         $this->assertOutputMutable();
         $this->metadataTag($key, $value);
@@ -833,7 +833,7 @@ trait ConfiguresOutput
     /**
      * Set a metadata tag on the given output stream.
      */
-    public function streamMetadata(string|int $stream, string $key, string $value): self
+    public function streamMetadata(string|int $stream, string $key, string $value): static
     {
         $this->assertOutputMutable();
         $this->outputStream($stream);
@@ -849,7 +849,7 @@ trait ConfiguresOutput
      *
      * An empty list clears the flags.
      */
-    public function disposition(string|int $stream, string|array $flags): self
+    public function disposition(string|int $stream, string|array $flags): static
     {
         $this->assertOutputMutable();
         $this->outputStream($stream);
@@ -909,7 +909,7 @@ trait ConfiguresOutput
     /**
      * Copy the chapters from the given input, or omit them when the input is null.
      */
-    public function chaptersFrom(?int $input): self
+    public function chaptersFrom(?int $input): static
     {
         $this->assertOutputMutable();
 
@@ -932,7 +932,7 @@ trait ConfiguresOutput
         float|string|null $duration = null,
         float|string|null $end = null,
         string $seek = 'accurate',
-    ): self {
+    ): static {
         $this->assertOutputMutable();
         $start = CommandCompiler::seconds($start);
         $duration = $duration === null ? null : CommandCompiler::seconds($duration);
@@ -966,7 +966,7 @@ trait ConfiguresOutput
     /**
      * Set the disk the output is published to.
      */
-    public function toDisk(string|Filesystem $disk, array $options = []): self
+    public function toDisk(string|Filesystem $disk, array $options = []): static
     {
         $this->assertOutputMutable();
         $this->disk = $disk;
@@ -979,7 +979,7 @@ trait ConfiguresOutput
     /**
      * Set the visibility of the published output.
      */
-    public function visibility(string $visibility): self
+    public function visibility(string $visibility): static
     {
         $this->assertOutputMutable();
         $this->writeOptions['visibility'] = $visibility;

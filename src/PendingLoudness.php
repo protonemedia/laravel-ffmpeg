@@ -89,7 +89,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
     /**
      * Set the audio encoder and bitrate.
      */
-    public function audio(?string $codec = null, mixed $bitrate = null): self
+    public function audio(?string $codec = null, mixed $bitrate = null): static
     {
         $this->export->audio($codec, $bitrate);
 
@@ -99,7 +99,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
     /**
      * Set allowed encoder options for every output audio track.
      */
-    public function audioOptions(array $tokens): self
+    public function audioOptions(array $tokens): static
     {
         $this->export->audioOptions($tokens);
 

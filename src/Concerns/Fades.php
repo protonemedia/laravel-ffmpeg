@@ -12,7 +12,7 @@ trait Fades
     /**
      * Fade the video and audio in, starting at zero seconds by default.
      */
-    public function fadeIn(float $duration, float $start = 0, bool $video = true, bool $audio = true): self
+    public function fadeIn(float $duration, float $start = 0, bool $video = true, bool $audio = true): static
     {
         $this->export->fadeIn($duration, $start, $video, $audio);
 
@@ -22,7 +22,7 @@ trait Fades
     /**
      * Fade the video and audio out from the given start time in seconds.
      */
-    public function fadeOut(float $duration, float $start, bool $video = true, bool $audio = true): self
+    public function fadeOut(float $duration, float $start, bool $video = true, bool $audio = true): static
     {
         $this->export->fadeOut($duration, $start, $video, $audio);
 

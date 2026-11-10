@@ -18,7 +18,7 @@ class VideoStreamSettings
     /**
      * Set the encoder of the track.
      */
-    public function codec(string $codec): self
+    public function codec(string $codec): static
     {
         if (! preg_match('/^[a-zA-Z0-9_]+$/D', $codec)) {
             throw new InvalidArgumentException('Invalid FFmpeg encoder name.');
@@ -32,7 +32,7 @@ class VideoStreamSettings
     /**
      * Set the target bitrate of the track.
      */
-    public function bitrate(int|string $bitrate): self
+    public function bitrate(int|string $bitrate): static
     {
         if ((! is_int($bitrate) || $bitrate <= 0)
             && (! is_string($bitrate)
@@ -49,7 +49,7 @@ class VideoStreamSettings
     /**
      * Set the constant rate factor of the track.
      */
-    public function crf(float $crf): self
+    public function crf(float $crf): static
     {
         if (! is_finite($crf) || $crf < 0) {
             throw new InvalidArgumentException('CRF must be finite and nonnegative.');
@@ -63,7 +63,7 @@ class VideoStreamSettings
     /**
      * Set the encoder preset of the track.
      */
-    public function preset(string $preset): self
+    public function preset(string $preset): static
     {
         if (! preg_match('/^[a-zA-Z0-9_-]+$/D', $preset)) {
             throw new InvalidArgumentException('Invalid encoder preset.');
@@ -77,7 +77,7 @@ class VideoStreamSettings
     /**
      * Set curated, scalar encoder options on the track, never arbitrary command arguments.
      */
-    public function options(array $tokens): self
+    public function options(array $tokens): static
     {
         CommandCompiler::options($tokens, 'output');
         for ($i = 0; $i < count($tokens); $i += 2) {
@@ -100,7 +100,7 @@ class VideoStreamSettings
      *
      * This does not transform pixel values.
      */
-    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): self
+    public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): static
     {
         $this->options([
             '-color_primaries', $primaries,

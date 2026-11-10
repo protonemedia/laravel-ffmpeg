@@ -21,7 +21,7 @@ trait ResourceFilters
         int $x = 0,
         int $y = 0,
         string $color = 'white',
-    ): self {
+    ): static {
         $this->export->drawText($text, $font, $size, $x, $y, $color);
 
         return $this;
@@ -30,7 +30,7 @@ trait ResourceFilters
     /**
      * Burn the given subtitles into the video.
      */
-    public function burnSubtitles(Media $subtitles): self
+    public function burnSubtitles(Media $subtitles): static
     {
         $this->export->burnSubtitles($subtitles);
 
@@ -40,7 +40,7 @@ trait ResourceFilters
     /**
      * Apply the given 3D LUT file to the video.
      */
-    public function lut3d(Media $look): self
+    public function lut3d(Media $look): static
     {
         $this->export->lut3d($look);
 

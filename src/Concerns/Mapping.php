@@ -14,7 +14,7 @@ trait Mapping
     /**
      * Map the given input stream specifier or graph label to the output.
      */
-    public function map(string $specifier): self
+    public function map(string $specifier): static
     {
         $this->export->map($specifier);
 
@@ -29,7 +29,7 @@ trait Mapping
         ?int $input = null,
         ?int $track = null,
         bool $optional = false,
-    ): self {
+    ): static {
         $this->export->mapVideo($stream, $input, $track, $optional);
 
         return $this;
@@ -44,7 +44,7 @@ trait Mapping
         ?int $track = null,
         ?string $language = null,
         bool $optional = false,
-    ): self {
+    ): static {
         $this->export->mapAudio($stream, $input, $track, $language, $optional);
 
         return $this;
@@ -53,7 +53,7 @@ trait Mapping
     /**
      * Omit the audio from the output.
      */
-    public function withoutAudio(): self
+    public function withoutAudio(): static
     {
         $this->export->withoutAudio();
 
@@ -63,7 +63,7 @@ trait Mapping
     /**
      * Omit the video from the output.
      */
-    public function withoutVideo(): self
+    public function withoutVideo(): static
     {
         $this->export->withoutVideo();
 

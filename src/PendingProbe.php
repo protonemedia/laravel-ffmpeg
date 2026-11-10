@@ -76,7 +76,7 @@ class PendingProbe
     /**
      * Limit the query to a global stream index, or to a type and optional zero-based ordinal such as v:0.
      */
-    public function selectStreams(string $selector): self
+    public function selectStreams(string $selector): static
     {
         if (! preg_match('/\A(?:[0-9]{1,6}|[vVasdt](?::[0-9]{1,6})?)\z/', $selector)) {
             throw new InvalidArgumentException(
@@ -94,7 +94,7 @@ class PendingProbe
      *
      * @param  array<string, list<string>>  $entries  Field names keyed by section.
      */
-    public function entries(array $entries): self
+    public function entries(array $entries): static
     {
         if ($entries === [] || count($entries) > 9) {
             throw new InvalidArgumentException('Probe entries must select between 1 and 9 sections.');
@@ -127,7 +127,7 @@ class PendingProbe
     /**
      * Read packets in addition to streams.
      */
-    public function packets(): self
+    public function packets(): static
     {
         $this->mode = 'packets';
         $this->onlyKeyframes = false;
@@ -138,7 +138,7 @@ class PendingProbe
     /**
      * Read decoded frames in addition to streams.
      */
-    public function frames(): self
+    public function frames(): static
     {
         $this->mode = 'frames';
         $this->onlyKeyframes = false;
@@ -150,7 +150,7 @@ class PendingProbe
      * Read only decoded keyframes.
      * These are decoder keyframes, not a claim that every returned timestamp is an exact seek point.
      */
-    public function keyframes(): self
+    public function keyframes(): static
     {
         $this->mode = 'frames';
         $this->onlyKeyframes = true;
@@ -161,7 +161,7 @@ class PendingProbe
     /**
      * Count the frames of each stream.
      */
-    public function countFrames(bool $enabled = true): self
+    public function countFrames(bool $enabled = true): static
     {
         $this->countFrames = $enabled;
 
@@ -171,7 +171,7 @@ class PendingProbe
     /**
      * Count the packets of each stream.
      */
-    public function countPackets(bool $enabled = true): self
+    public function countPackets(bool $enabled = true): static
     {
         $this->countPackets = $enabled;
 
@@ -182,7 +182,7 @@ class PendingProbe
      * Read the given interval in seconds.
      * FFprobe starts at a nearby seek point instead of trimming exactly, and times round to microseconds.
      */
-    public function readInterval(float $start, float $duration): self
+    public function readInterval(float $start, float $duration): static
     {
         $this->validateStart($start);
         if (! is_finite($duration) || $duration < 0.000001 || $duration > 300) {
@@ -200,7 +200,7 @@ class PendingProbe
      * Read the given number of demuxed packets from the start time.
      * The limit bounds packets, not decoded frames, so B-frame decoder delay can affect frame counts.
      */
-    public function readPackets(int $count, float $start = 0): self
+    public function readPackets(int $count, float $start = 0): static
     {
         $this->validateStart($start);
         if ($count < 1 || $count > 100000) {
@@ -216,7 +216,7 @@ class PendingProbe
     /**
      * Set the maximum output size in bytes and the timeout in seconds.
      */
-    public function limits(int $outputBytes = 4194304, float $timeout = 30): self
+    public function limits(int $outputBytes = 4194304, float $timeout = 30): static
     {
         if ($outputBytes < 1 || $outputBytes > ProcessRunner::MAX_OUTPUT_BYTES) {
             throw new InvalidArgumentException(

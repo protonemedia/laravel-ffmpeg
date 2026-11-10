@@ -181,7 +181,7 @@ class PendingExport implements Exportable
      *
      * Passing null restores the configured process limits.
      */
-    public function timeout(?float $seconds): self
+    public function timeout(?float $seconds): static
     {
         $this->assertMutable();
         $this->ensureTimeoutIsPositive('operation', $seconds);
@@ -194,7 +194,7 @@ class PendingExport implements Exportable
     /**
      * Set how many seconds a process may run without output.
      */
-    public function idleTimeout(?float $seconds): self
+    public function idleTimeout(?float $seconds): static
     {
         $this->assertMutable();
         $this->ensureTimeoutIsPositive('idle', $seconds);
@@ -221,7 +221,7 @@ class PendingExport implements Exportable
      *
      * @internal
      */
-    public function cancelWhen(callable $callback): self
+    public function cancelWhen(callable $callback): static
     {
         $this->cancellation = Closure::fromCallable($callback);
 
@@ -278,7 +278,7 @@ class PendingExport implements Exportable
     /**
      * Declare a file that video filters reference by the given name.
      */
-    public function resource(string $name, Media $media): self
+    public function resource(string $name, Media $media): static
     {
         return $this->addResource($name, 'file', $media);
     }
@@ -286,7 +286,7 @@ class PendingExport implements Exportable
     /**
      * Declare a UTF-8 text file that video filters reference by the given name.
      */
-    public function textResource(string $name, string $text): self
+    public function textResource(string $name, string $text): static
     {
         if (! mb_check_encoding($text, 'UTF-8')) {
             throw new InvalidArgumentException("The text resource [{$name}] must be valid UTF-8.");
@@ -302,7 +302,7 @@ class PendingExport implements Exportable
     /**
      * Declare a subtitle file that video filters reference by the given name.
      */
-    public function subtitleResource(string $name, Media $media): self
+    public function subtitleResource(string $name, Media $media): static
     {
         if ($media->inputOptions() !== []) {
             throw new InvalidArgumentException("The subtitle resource [{$name}] does not accept input options.");
@@ -314,7 +314,7 @@ class PendingExport implements Exportable
     /**
      * Declare a named resource of the given type.
      */
-    protected function addResource(string $name, string $type, Media|string $source): self
+    protected function addResource(string $name, string $type, Media|string $source): static
     {
         $this->assertMutable();
 
@@ -334,7 +334,7 @@ class PendingExport implements Exportable
     /**
      * Set the complex filter graph of the export.
      */
-    public function filterComplex(string $expression): self
+    public function filterComplex(string $expression): static
     {
         $this->assertMutable();
         FilterGraph::validateExpression($expression);
@@ -353,7 +353,7 @@ class PendingExport implements Exportable
      *
      * @param  (callable(Watermark): mixed)|null  $configure  Runs immediately; its return value is ignored.
      */
-    public function watermark(Media $image, ?callable $configure = null): self
+    public function watermark(Media $image, ?callable $configure = null): static
     {
         $this->assertMutable();
 
@@ -380,7 +380,7 @@ class PendingExport implements Exportable
      *
      * The motion video and audio are copied unchanged.
      */
-    public function coverArt(Media $image): self
+    public function coverArt(Media $image): static
     {
         $this->assertMutable();
         if ($this->coverInput !== null) {
@@ -400,7 +400,7 @@ class PendingExport implements Exportable
     /**
      * Declare an output and configure it in the given callback.
      */
-    public function output(string $path, callable $configure): self
+    public function output(string $path, callable $configure): static
     {
         $this->assertMutable();
 
@@ -418,7 +418,7 @@ class PendingExport implements Exportable
     /**
      * Add allowed global FFmpeg options to the command.
      */
-    public function globalOptions(array $tokens): self
+    public function globalOptions(array $tokens): static
     {
         $this->assertMutable();
         $this->globalOptions = CommandCompiler::options([...$this->globalOptions, ...$tokens], 'global');
@@ -429,7 +429,7 @@ class PendingExport implements Exportable
     /**
      * Register a callback that receives the progress of the execution.
      */
-    public function onProgress(callable $callback): self
+    public function onProgress(callable $callback): static
     {
         $this->assertMutable();
         $this->progress = Closure::fromCallable($callback);
@@ -451,7 +451,7 @@ class PendingExport implements Exportable
     /**
      * Encode the video in two passes.
      */
-    public function twoPass(): self
+    public function twoPass(): static
     {
         $this->assertMutable();
 

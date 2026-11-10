@@ -67,7 +67,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Conform the video of every source to the given dimensions and frame rate.
      */
-    public function conformVideo(int $width, int $height, int|float|string $frameRate, string $fit = 'contain'): self
+    public function conformVideo(int $width, int $height, int|float|string $frameRate, string $fit = 'contain'): static
     {
         $this->export->assertOutputMutable();
 
@@ -100,7 +100,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Conform the audio of every source to the given sample rate, channel count and source channel.
      */
-    public function conformAudio(int $sampleRate = 48000, int $channels = 2, ?int $channel = null): self
+    public function conformAudio(int $sampleRate = 48000, int $channels = 2, ?int $channel = null): static
     {
         $this->export->assertOutputMutable();
 
@@ -129,7 +129,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         mixed $bitrate = null,
         ?float $crf = null,
         ?string $preset = null,
-    ): self {
+    ): static {
         $this->export->video($codec, $bitrate, $crf, $preset);
 
         return $this;
@@ -138,7 +138,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Set allowed encoder options for every output video track.
      */
-    public function videoOptions(array $tokens): self
+    public function videoOptions(array $tokens): static
     {
         $this->export->videoOptions($tokens);
 
@@ -148,7 +148,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Set the audio encoder and bitrate.
      */
-    public function audio(?string $codec = null, mixed $bitrate = null): self
+    public function audio(?string $codec = null, mixed $bitrate = null): static
     {
         $this->export->audio($codec, $bitrate);
 
@@ -158,7 +158,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Set allowed encoder options for every output audio track.
      */
-    public function audioOptions(array $tokens): self
+    public function audioOptions(array $tokens): static
     {
         $this->export->audioOptions($tokens);
 
@@ -168,7 +168,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Omit the audio from the output.
      */
-    public function withoutAudio(): self
+    public function withoutAudio(): static
     {
         $this->export->withoutAudio();
 
@@ -178,7 +178,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Set a container metadata tag on the output.
      */
-    public function metadata(string $key, string $value): self
+    public function metadata(string $key, string $value): static
     {
         $this->export->metadata($key, $value);
 
@@ -188,7 +188,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Set a metadata tag on the given output stream.
      */
-    public function streamMetadata(string|int $stream, string $key, string $value): self
+    public function streamMetadata(string|int $stream, string $key, string $value): static
     {
         $this->export->streamMetadata($stream, $key, $value);
 
@@ -198,7 +198,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Set the disposition flags of the given output stream.
      */
-    public function disposition(string|int $stream, string|array $flags): self
+    public function disposition(string|int $stream, string|array $flags): static
     {
         $this->export->disposition($stream, $flags);
 
@@ -208,7 +208,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     /**
      * Encode the output in two passes.
      */
-    public function twoPass(): self
+    public function twoPass(): static
     {
         $this->export->twoPass();
 

@@ -118,7 +118,7 @@ class PendingHlsMerge
     /**
      * Set the disk to write the composed master to.
      */
-    public function toDisk(string $disk): self
+    public function toDisk(string $disk): static
     {
         $this->disk = $disk;
 

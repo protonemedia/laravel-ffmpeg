@@ -12,7 +12,7 @@ trait AudioCodec
     /**
      * Set the audio encoder and bitrate.
      */
-    public function audio(?string $codec = null, mixed $bitrate = null): self
+    public function audio(?string $codec = null, mixed $bitrate = null): static
     {
         $this->export->audio($codec, $bitrate);
 
@@ -22,7 +22,7 @@ trait AudioCodec
     /**
      * Set allowed encoder options for every output audio track.
      */
-    public function audioOptions(array $tokens): self
+    public function audioOptions(array $tokens): static
     {
         $this->export->audioOptions($tokens);
 
@@ -34,7 +34,7 @@ trait AudioCodec
      *
      * Tracks count in mapped output order, not input stream order.
      */
-    public function audioStream(int $track, callable $configure): self
+    public function audioStream(int $track, callable $configure): static
     {
         $this->export->audioStream($track, $configure);
 
