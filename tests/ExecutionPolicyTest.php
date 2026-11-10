@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use ProtoneMedia\LaravelFFMpeg\Events;
 use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -207,7 +208,7 @@ class ExecutionPolicyTest extends TestCase
 
         $this->assertThrows(fn () => $gif->save('out.gif'), ExportCancelled::class);
         Event::assertDispatched(
-            \ProtoneMedia\LaravelFFMpeg\Events\ExportCancelled::class,
+            Events\ExportCancelled::class,
             fn ($event) => $event->phase === 'analysis',
         );
     }

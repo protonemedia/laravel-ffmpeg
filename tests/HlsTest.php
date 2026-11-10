@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use League\Flysystem\PathTraversalDetected;
+use LogicException;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\TestWith;
@@ -22,6 +23,8 @@ use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsExport;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use RuntimeException;
+use Throwable;
 
 class HlsTest extends TestCase
 {
@@ -810,7 +813,7 @@ class HlsTest extends TestCase
             })
             ->onProgress(function (Progress $progress) use (&$held) {
                 if ($progress->phase === Progress::STAGING) {
-                    $this->assertThrows(fn () => $held->resize(width: 42), \LogicException::class);
+                    $this->assertThrows(fn () => $held->resize(width: 42), LogicException::class);
 
                     throw new ExportCancelled;
                 }
@@ -1216,7 +1219,7 @@ class HlsTest extends TestCase
             'protocol relative key url' => ['//example.test/key'],
             'invalid utf-8' => ["/keys/\xff.key"],
             'unicode control character' => ["/keys/\u{0085}.key"],
-            'key url failure' => [new \RuntimeException('key URL failure')],
+            'key url failure' => [new RuntimeException('key URL failure')],
             'cancellation' => [new ExportCancelled],
             'tampered playlist' => ['tamper'],
             'reused key url' => ['reuse'],
@@ -1244,7 +1247,7 @@ class HlsTest extends TestCase
             ->hls()
             ->variant('test', fn () => null)
             ->encrypt('secrets', function () use ($case) {
-                if ($case instanceof \Throwable) {
+                if ($case instanceof Throwable) {
                     throw $case;
                 }
 
@@ -1271,8 +1274,8 @@ class HlsTest extends TestCase
     {
         $this->assertThrows(function () use ($export) {
             $export->save('out/master.m3u8');
-        }, function (\RuntimeException $exception) use ($case) {
-            if ($case instanceof \Throwable) {
+        }, function (RuntimeException $exception) use ($case) {
+            if ($case instanceof Throwable) {
                 $this->assertSame($case, $exception);
             } else {
                 $this->assertInstanceOf(MediaException::class, $exception);
@@ -1407,7 +1410,7 @@ class HlsTest extends TestCase
     {
         return [
             'application failure' => [
-                new \RuntimeException('application failure'),
+                new RuntimeException('application failure'),
                 Events\ExportFailed::class,
                 Events\ExportCancelled::class,
             ],
@@ -1417,7 +1420,7 @@ class HlsTest extends TestCase
 
     #[DataProvider('hookFailureProvider')]
     public function test_playlist_hooks_freeze_configuration_and_propagate_failures_without_publication(
-        \RuntimeException $failure,
+        RuntimeException $failure,
         string $dispatched,
         string $notDispatched,
     ): void {
@@ -1438,7 +1441,7 @@ class HlsTest extends TestCase
 
         $this->assertThrows(function () use ($export) {
             $export->save('out/master.m3u8');
-        }, function (\RuntimeException $exception) use ($failure) {
+        }, function (RuntimeException $exception) use ($failure) {
             $this->assertSame($failure, $exception);
 
             return true;

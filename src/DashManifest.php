@@ -2,7 +2,9 @@
 
 namespace ProtoneMedia\LaravelFFMpeg;
 
+use DirectoryIterator;
 use DOMDocument;
+use DOMDocumentType;
 use DOMElement;
 use DOMXPath;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -70,7 +72,7 @@ class DashManifest
         $previous = libxml_use_internal_errors(true);
 
         try {
-            if (! $document->loadXML($bytes, LIBXML_NONET) || $document->doctype instanceof \DOMDocumentType) {
+            if (! $document->loadXML($bytes, LIBXML_NONET) || $document->doctype instanceof DOMDocumentType) {
                 self::fail();
             }
         } finally {
@@ -212,7 +214,7 @@ class DashManifest
         sort($expected);
         $actual = [];
 
-        foreach (new \DirectoryIterator(dirname($path)) as $file) {
+        foreach (new DirectoryIterator(dirname($path)) as $file) {
             if ($file->isDot()) {
                 continue;
             }

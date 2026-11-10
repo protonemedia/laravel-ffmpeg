@@ -19,6 +19,7 @@ use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Support\Hls;
+use Throwable;
 
 #[RequiresEnv('FFMPEG_9_FFPROBE')]
 class HlsSelectionTest extends TestCase
@@ -380,7 +381,7 @@ class HlsSelectionTest extends TestCase
 
         $this->assertThrows(function () use ($presentation, $names) {
             $presentation->playbackForVariants($names);
-        }, function (\Throwable $thrown) use ($exception) {
+        }, function (Throwable $thrown) use ($exception) {
             $this->assertInstanceOf($exception, $thrown);
             $this->assertNotEmpty($thrown->getMessage());
 

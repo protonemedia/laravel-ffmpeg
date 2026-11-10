@@ -2,6 +2,8 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
+use DateInterval;
+use DateTimeInterface;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use ProtoneMedia\LaravelFFMpeg\PendingQueuedExport;
 
@@ -18,7 +20,7 @@ trait RunsExport
     public function queued(
         ?string $connection = null,
         ?string $queue = null,
-        \DateTimeInterface|\DateInterval|int|null $delay = null,
+        DateTimeInterface|DateInterval|int|null $delay = null,
         bool $parallel = false,
     ): PendingQueuedExport {
         return $this->export->queued($connection, $queue, $delay, $parallel);

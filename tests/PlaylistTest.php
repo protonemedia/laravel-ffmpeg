@@ -7,10 +7,12 @@ use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use RuntimeException;
 
 class PlaylistTest extends TestCase
 {
@@ -198,7 +200,7 @@ class PlaylistTest extends TestCase
         $disk->put('show/unrelated.ts', 'keep');
         $disk->put('other/master.m3u8', 'keep');
         $playlist = FFMpeg::disk('memory')->playlist('show/master.m3u8');
-        $resolver = fn () => throw new \RuntimeException('Deletion must not invoke URL resolvers.');
+        $resolver = fn () => throw new RuntimeException('Deletion must not invoke URL resolvers.');
         $playlist->playlistUrlsUsing($resolver)
             ->keyUrlsUsing($resolver)
             ->mediaUrlsUsing($resolver);
@@ -275,7 +277,7 @@ class PlaylistTest extends TestCase
     public function test_throwing_during_approval_deletes_nothing(): void
     {
         $disk = $this->sharedFilePlaylist();
-        $failure = new \RuntimeException('Application approval failed.');
+        $failure = new RuntimeException('Application approval failed.');
         $seen = [];
 
         $this->assertThrows(
@@ -288,7 +290,7 @@ class PlaylistTest extends TestCase
                         return $path === 'shared.ts' ? throw $failure : true;
                     });
             },
-            fn (\RuntimeException $exception) => $exception === $failure,
+            fn (RuntimeException $exception) => $exception === $failure,
         );
 
         $this->assertSame(['show/master.m3u8', 'show/child.m3u8', 'shared.ts'], $seen);
@@ -390,7 +392,7 @@ class PlaylistTest extends TestCase
     #[TestWith([true], 'thrown exception')]
     public function test_deletion_deduplicates_reads_and_deletes_and_stops_on_adapter_failure(bool $throws): void
     {
-        $disk = \Mockery::mock(Filesystem::class);
+        $disk = Mockery::mock(Filesystem::class);
 
         foreach (['master.m3u8' => 'child.m3u8', 'child.m3u8' => 'master.m3u8'] as $path => $child) {
             $stream = fopen('php://temp', 'w+');
@@ -420,7 +422,7 @@ class PlaylistTest extends TestCase
             ->with('child.m3u8');
 
         if ($throws) {
-            $expectation->andThrow(new \RuntimeException('secret adapter details'));
+            $expectation->andThrow(new RuntimeException('secret adapter details'));
         } else {
             $expectation->andReturn(false);
         }
@@ -450,7 +452,7 @@ class PlaylistTest extends TestCase
 
     public function test_an_unreadable_child_prevents_all_approval_and_deletion(): void
     {
-        $disk = \Mockery::mock(Filesystem::class);
+        $disk = Mockery::mock(Filesystem::class);
         $stream = fopen('php://temp', 'w+');
         fwrite($stream, <<<'M3U8'
             #EXTM3U
@@ -615,11 +617,11 @@ class PlaylistTest extends TestCase
             part.ts
 
             M3U8);
-        $failure = new \RuntimeException('application failure');
+        $failure = new RuntimeException('application failure');
 
         $this->assertThrows(
             fn () => FFMpeg::disk('memory')->playlist('index.m3u8')->mediaUrlsUsing(fn () => throw $failure)->get(),
-            fn (\RuntimeException $exception) => $exception === $failure,
+            fn (RuntimeException $exception) => $exception === $failure,
         );
     }
 

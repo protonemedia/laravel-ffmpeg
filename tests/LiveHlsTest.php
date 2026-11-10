@@ -15,6 +15,7 @@ use ProtoneMedia\LaravelFFMpeg\LiveHlsSource;
 use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\PendingLiveHls;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use RuntimeException;
 use Symfony\Component\Process\Process as Server;
 
 #[RequiresEnv('FFMPEG_9_FFPROBE')]
@@ -178,10 +179,10 @@ class LiveHlsTest extends TestCase
                     rename($workspace, $this->root.'/workspaces/moved-'.basename($workspace));
                 }
 
-                throw new \RuntimeException('Application publication hook failed.');
+                throw new RuntimeException('Application publication hook failed.');
             });
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Application publication hook failed.');
 
         $live->run('cleanup');

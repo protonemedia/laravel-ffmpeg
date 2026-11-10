@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
+use InvalidArgumentException;
 use League\Flysystem\PathTraversalDetected;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -15,6 +16,7 @@ use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Stream;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use RuntimeException;
 
 class ProbeTest extends TestCase
 {
@@ -415,20 +417,20 @@ class ProbeTest extends TestCase
     public static function invalidKeys(): array
     {
         return [
-            ['', \InvalidArgumentException::class],
-            ['/etc/passwd', \InvalidArgumentException::class],
+            ['', InvalidArgumentException::class],
+            ['/etc/passwd', InvalidArgumentException::class],
             ['../outside.mp4', PathTraversalDetected::class],
             ['nested/../../outside.mp4', PathTraversalDetected::class],
-            ['https://example.com/video.mp4', \InvalidArgumentException::class],
-            ['C:\\video.mp4', \InvalidArgumentException::class],
-            ['\\\\server\\video.mp4', \InvalidArgumentException::class],
+            ['https://example.com/video.mp4', InvalidArgumentException::class],
+            ['C:\\video.mp4', InvalidArgumentException::class],
+            ['\\\\server\\video.mp4', InvalidArgumentException::class],
         ];
     }
 
     public function test_it_sanitizes_a_launch_failure_and_releases_its_workspace(): void
     {
         Process::fake(function () {
-            throw new \RuntimeException('Upstream private connection details');
+            throw new RuntimeException('Upstream private connection details');
         });
 
         $this->assertThrows(

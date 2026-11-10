@@ -11,6 +11,7 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\ProcessRunner;
 use ProtoneMedia\LaravelFFMpeg\GeneratedFile;
 use ProtoneMedia\LaravelFFMpeg\Progress;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -39,13 +40,13 @@ trait PublishesArtifacts
                 $stream = fopen($artifact['path'], 'rb');
 
                 if ($stream === false || ! $disk->put($destination['path'], $stream, $output->storageOptions())) {
-                    throw new \RuntimeException('Publication failed.');
+                    throw new RuntimeException('Publication failed.');
                 }
 
                 $this->published[] = $destination;
 
                 if ($disk->size($destination['path']) !== $sizes[$index]) {
-                    throw new \RuntimeException('Published size mismatch.');
+                    throw new RuntimeException('Published size mismatch.');
                 }
             } catch (Throwable) {
                 throw new MediaException(

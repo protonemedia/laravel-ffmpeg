@@ -7,6 +7,7 @@ use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -48,7 +49,7 @@ class ProbeQueryTest extends TestCase
         Process::preventStrayProcesses();
         Process::fake(fn (PendingProcess $process) => in_array('-version', $process->command, true)
             ? Process::result(output: 'ffprobe version 5.1.9')
-            : throw new \LogicException('Only the version check may run.'));
+            : throw new LogicException('Only the version check may run.'));
 
         $this->assertThrows(
             fn () => $this->pendingQuery()->get(),

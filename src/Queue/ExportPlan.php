@@ -4,14 +4,15 @@ namespace ProtoneMedia\LaravelFFMpeg\Queue;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Http\File;
 use InvalidArgumentException;
 use Laravel\SerializableClosure\SerializableClosure;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
 use ReflectionClass;
 use ReflectionFunction;
+use ReflectionProperty;
 use SplObjectStorage;
+use Symfony\Component\HttpFoundation\File\File;
 use Throwable;
 
 /**
@@ -58,8 +59,7 @@ class ExportPlan
     {
         if (is_resource($value)
             || $value instanceof Filesystem
-            || $value instanceof File
-            || $value instanceof \Symfony\Component\HttpFoundation\File\File) {
+            || $value instanceof File) {
             throw new InvalidArgumentException(
                 'Queued exports require durable named disks, not filesystem objects, uploads, local File inputs, or open streams.'
             );
@@ -176,7 +176,7 @@ class ExportPlan
         $objects[$value['id']] = $object;
 
         foreach ($value['properties'] as [$class, $name, $item]) {
-            new \ReflectionProperty($class, $name)->setValue($object, $this->decode($item, $objects));
+            new ReflectionProperty($class, $name)->setValue($object, $this->decode($item, $objects));
         }
 
         return $object;

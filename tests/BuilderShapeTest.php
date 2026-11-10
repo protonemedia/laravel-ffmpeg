@@ -19,6 +19,8 @@ use ProtoneMedia\LaravelFFMpeg\PendingStill;
 use ProtoneMedia\LaravelFFMpeg\PendingStoryboard;
 use ProtoneMedia\LaravelFFMpeg\PendingWaveform;
 use ProtoneMedia\LaravelFFMpeg\PendingWaveformPeaks;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionParameter;
@@ -119,7 +121,7 @@ class BuilderShapeTest extends TestCase
     {
         $classes = 0;
 
-        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(dirname(__DIR__).'/src')) as $file) {
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(dirname(__DIR__).'/src')) as $file) {
             if ($file->getExtension() !== 'php') {
                 continue;
             }

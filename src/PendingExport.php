@@ -3,6 +3,8 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
+use DateInterval;
+use DateTimeInterface;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Event;
@@ -176,7 +178,7 @@ class PendingExport implements Exportable
     public function queued(
         ?string $connection = null,
         ?string $queue = null,
-        \DateTimeInterface|\DateInterval|int|null $delay = null,
+        DateTimeInterface|DateInterval|int|null $delay = null,
         bool $parallel = false,
     ): PendingQueuedExport {
         $this->assertMutable();
