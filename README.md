@@ -960,6 +960,9 @@ $result->files()
     ->where('role', 'hls-key');
 ```
 
+> [!NOTE]
+> The `RESOLUTION` and `CODECS` attributes of each variant come from FFmpeg, which only measures a variant's bandwidth from segments longer than half a second. With a segment duration of 0.5 seconds or less, the master playlist lists the variants without these attributes, whatever the codec, so you should keep the duration above that. Apple's HLS authoring guidelines recommend 6 seconds.
+
 <a name="playlist-types"></a>
 #### Playlist Types
 
