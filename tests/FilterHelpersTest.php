@@ -5,6 +5,8 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class FilterHelpersTest extends TestCase
@@ -86,19 +88,26 @@ class FilterHelpersTest extends TestCase
         $this->assertLessThan(20, $red[1]);
     }
 
-    public function test_frame_rates_resample_real_frames_without_changing_duration(): void
+    #[DataProvider('frameRateProvider')]
+    public function test_frame_rates_resample_real_frames_without_changing_duration(int|float|string $rate, float $expected): void
     {
         $this->fixture();
-        foreach ([10, 12.5, '30000/1001', '1e1'] as $index => $rate) {
-            $name = 'rate-'.$index.'.mkv';
-            $this->export()->frameRate($rate)->save($name);
-            $probe = FFMpeg::disk('filter-helpers')->open($name)->probe();
-            $expected = [10, 12.5, 30000 / 1001, 10][$index];
-            [$numerator, $denominator] = explode('/', $probe->video()->get('avg_frame_rate'));
-            $this->assertEqualsWithDelta($expected, $numerator / $denominator, 0.001);
-            $this->assertEqualsWithDelta(round(3 * $expected), strlen($this->pixels($name)) / (32 * 32 * 3), 1);
-            $this->assertCount(24000, $this->samples($name));
-        }
+        $this->export()->frameRate($rate)->save('rate.mkv');
+        $probe = FFMpeg::disk('filter-helpers')->open('rate.mkv')->probe();
+        [$numerator, $denominator] = explode('/', $probe->video()->get('avg_frame_rate'));
+        $this->assertEqualsWithDelta($expected, $numerator / $denominator, 0.001);
+        $this->assertEqualsWithDelta(round(3 * $expected), strlen($this->pixels('rate.mkv')) / (32 * 32 * 3), 1);
+        $this->assertCount(24000, $this->samples('rate.mkv'));
+    }
+
+    public static function frameRateProvider(): array
+    {
+        return [
+            'integer' => [10, 10],
+            'decimal' => [12.5, 12.5],
+            'fraction' => ['30000/1001', 30000 / 1001],
+            'exponent' => ['1e1', 10],
+        ];
     }
 
     public function test_volume_and_fades_change_real_pcm_and_video_at_requested_times(): void
@@ -139,99 +148,243 @@ class FilterHelpersTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_audio_delay_inserts_silence_in_every_channel_and_keeps_all_original_samples(): void
+    #[DataProvider('audioDelayProvider')]
+    public function test_audio_delay_inserts_silence_in_every_channel_and_keeps_all_original_samples(float $seconds): void
     {
-        $this->fixture();
+        $this->useRealFFMpeg();
         $this->ffmpeg(['-f', 'lavfi', '-i', 'aevalsrc=0.25|-0.5:s=8000:d=1', '-c:a', 'pcm_f64le', Storage::disk('filter-helpers')->path('stereo.wav')]);
         $media = FFMpeg::disk('filter-helpers')->open('stereo.wav');
         $original = $this->samples('stereo.wav');
 
-        foreach ([0, 0.125, 0.25, 1] as $index => $seconds) {
-            $name = 'delayed-'.$index.'.wav';
-            $percentages = [];
-            $media->export()->delayAudio($seconds)->audio('pcm_f64le')
-                ->onProgress(function ($progress) use (&$percentages) {
-                    if ($progress->isEncoding()) {
-                        $percentages[] = $progress->percentage;
-                    }
-                })->save($name);
-            $this->assertNotEmpty($percentages);
-            $this->assertSame([null], array_values(array_unique($percentages)));
-            $samples = $this->samples($name);
-            $silenceSamples = (int) ($seconds * 8000) * 2;
-            $this->assertCount(16000 + $silenceSamples, $samples);
-            $this->assertSame(array_fill(0, $silenceSamples, 0.0), array_slice($samples, 0, $silenceSamples));
-            $this->assertSame($original, array_slice($samples, $silenceSamples));
-            $this->assertSame([0.25, -0.5], array_slice($samples, $silenceSamples, 2));
-            $probe = FFMpeg::disk('filter-helpers')->open($name)->probe();
-            $this->assertEqualsWithDelta(1 + $seconds, $probe->duration(), 0.0001);
-            $this->assertSame(2, $probe->audio()->get('channels'));
-        }
+        $percentages = [];
+        $media->export()->delayAudio($seconds)->audio('pcm_f64le')
+            ->onProgress(function ($progress) use (&$percentages) {
+                if ($progress->isEncoding()) {
+                    $percentages[] = $progress->percentage;
+                }
+            })->save('delayed.wav');
+        $this->assertNotEmpty($percentages);
+        $this->assertSame([null], array_values(array_unique($percentages)));
+        $samples = $this->samples('delayed.wav');
+        $silenceSamples = (int) ($seconds * 8000) * 2;
+        $this->assertCount(16000 + $silenceSamples, $samples);
+        $this->assertSame(array_fill(0, $silenceSamples, 0.0), array_slice($samples, 0, $silenceSamples));
+        $this->assertSame($original, array_slice($samples, $silenceSamples));
+        $this->assertSame([0.25, -0.5], array_slice($samples, $silenceSamples, 2));
+        $probe = FFMpeg::disk('filter-helpers')->open('delayed.wav')->probe();
+        $this->assertEqualsWithDelta(1 + $seconds, $probe->duration(), 0.0001);
+        $this->assertSame(2, $probe->audio()->get('channels'));
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_deinterlace_outputs_progressive_frames_with_explicit_frame_or_field_cadence(): void
+    public static function audioDelayProvider(): array
     {
-        $this->fixture();
+        return [
+            'no delay' => [0],
+            'an eighth of a second' => [0.125],
+            'a quarter of a second' => [0.25],
+            'one second' => [1],
+        ];
+    }
+
+    #[DataProvider('deinterlaceProvider')]
+    public function test_deinterlace_outputs_progressive_frames_with_explicit_frame_or_field_cadence(array $arguments, int $count): void
+    {
+        $this->useRealFFMpeg();
         $this->ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=s=64x48:r=40:d=1,tinterlace=mode=interleave_top',
             '-c:v', 'ffv1', Storage::disk('filter-helpers')->path('interlaced.mkv')]);
-        $frames = function (string $name): array {
-            $result = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'v:0',
-                '-show_frames', '-show_entries', 'frame=interlaced_frame,width,height', '-of', 'json', Storage::disk('filter-helpers')->path($name)]);
-            $this->assertProcessSucceeded($result);
-
-            return json_decode($result->output(), true, flags: JSON_THROW_ON_ERROR)['frames'];
-        };
-        $input = $frames('interlaced.mkv');
+        $input = $this->frameFlags('interlaced.mkv');
         $this->assertCount(20, $input);
         $this->assertSame([1], array_values(array_unique(array_column($input, 'interlaced_frame'))));
         $media = FFMpeg::disk('filter-helpers')->open('interlaced.mkv');
-        foreach (['frame' => [[], 20], 'field' => [['field', 'tff'], 40], 'forced' => [['frame', 'bff', false], 20]] as $name => [$arguments, $count]) {
-            $media->export()->deinterlace(...$arguments)->resize(32, 24)->video('ffv1')->save($name.'.mkv');
-            $output = $frames($name.'.mkv');
-            $this->assertCount($count, $output);
-            $this->assertSame([0], array_values(array_unique(array_column($output, 'interlaced_frame'))));
-            $this->assertSame([32], array_values(array_unique(array_column($output, 'width'))));
-            $this->assertSame([24], array_values(array_unique(array_column($output, 'height'))));
-        }
-
-        // The default interlaced-only setting must not double progressive frames.
-        $this->export()->deinterlace('field')->save('progressive.mkv');
-        $this->export()->deinterlace('field', onlyInterlaced: false)->save('force-progressive.mkv');
-        $this->assertCount(60, $frames('progressive.mkv'));
-        $this->assertCount(120, $frames('force-progressive.mkv'));
+        $media->export()->deinterlace(...$arguments)->resize(32, 24)->video('ffv1')->save('deinterlaced.mkv');
+        $output = $this->frameFlags('deinterlaced.mkv');
+        $this->assertCount($count, $output);
+        $this->assertSame([0], array_values(array_unique(array_column($output, 'interlaced_frame'))));
+        $this->assertSame([32], array_values(array_unique(array_column($output, 'width'))));
+        $this->assertSame([24], array_values(array_unique(array_column($output, 'height'))));
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_invalid_inputs_copy_conflicts_and_mutation_after_outputs_are_rejected_before_io(): void
+    public static function deinterlaceProvider(): array
+    {
+        return [
+            'frame' => [[], 20],
+            'field' => [['field', 'tff'], 40],
+            'forced' => [['frame', 'bff', false], 20],
+        ];
+    }
+
+    public function test_field_deinterlacing_only_doubles_interlaced_frames_by_default(): void
+    {
+        $this->fixture();
+        // The default interlaced-only setting must not double progressive frames.
+        $this->export()->deinterlace('field')->save('progressive.mkv');
+        $this->export()->deinterlace('field', onlyInterlaced: false)->save('force-progressive.mkv');
+        $this->assertCount(60, $this->frameFlags('progressive.mkv'));
+        $this->assertCount(120, $this->frameFlags('force-progressive.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Get the interlacing flag and size of every video frame in the given file.
+     */
+    protected function frameFlags(string $name): array
+    {
+        $result = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'v:0',
+            '-show_frames', '-show_entries', 'frame=interlaced_frame,width,height', '-of', 'json', Storage::disk('filter-helpers')->path($name)]);
+        $this->assertProcessSucceeded($result);
+
+        return json_decode($result->output(), true, flags: JSON_THROW_ON_ERROR)['frames'];
+    }
+
+    #[DataProvider('invalidAudioDelayProvider')]
+    public function test_invalid_audio_delays_are_rejected_before_io(float $seconds): void
     {
         Process::fake();
-        $media = FFMpeg::disk('missing')->open('absent.mkv');
-        $attempts = [];
-        foreach ([-1, INF, -INF, NAN] as $seconds) {
-            $attempts[] = fn () => $media->export()->delayAudio($seconds);
-        }
-        foreach ([[''], ['send_frame'], ['field,hflip'], ['frame', ''], ['frame', 'top'], ['frame', "auto\n"]] as $arguments) {
-            $attempts[] = fn () => $media->export()->deinterlace(...$arguments);
-        }
-        foreach ([0, -1, INF, NAN, '', '0/1', '1/0', '-1/2', '1/2/3', '25,hflip', "25\n", '1e999', '1e-999'] as $rate) {
-            $attempts[] = fn () => $media->export()->frameRate($rate);
-        }
-        foreach ([-1, INF, NAN] as $volume) {
-            $attempts[] = fn () => $media->export()->volume($volume);
-        }
-        foreach (['fadeIn', 'fadeOut'] as $method) {
-            foreach ([[0, 0], [-1, 0], [INF, 0], [NAN, 0], [1, -1], [1, INF], [1, NAN], [1, 0, false, false]] as $arguments) {
-                $attempts[] = fn () => $media->export()->{$method}(...$arguments);
-            }
-        }
-        foreach (['frameRate' => [25], 'flipHorizontally' => [], 'flipVertically' => [], 'grayscale' => [], 'deinterlace' => [], 'volume' => [0.5], 'delayAudio' => [0.5], 'fadeIn' => [1], 'fadeOut' => [1, 2]] as $method => $arguments) {
-            $attempts[] = fn () => $media->export()->{$method}(...$arguments)->video('copy')->audio('copy')->inspect();
-            $attempts[] = fn () => $media->export()->output('one.mkv', fn () => null)->{$method}(...$arguments);
-        }
-        foreach ($attempts as $attempt) {
-            $this->assertThrows($attempt, InvalidArgumentException::class);
-        }
+        $this->assertThrows(fn () => $this->missingExport()->delayAudio($seconds), InvalidArgumentException::class);
         Process::assertNothingRan();
+    }
+
+    public static function invalidAudioDelayProvider(): array
+    {
+        return [
+            'negative' => [-1],
+            'infinite' => [INF],
+            'negative infinite' => [-INF],
+            'not a number' => [NAN],
+        ];
+    }
+
+    #[DataProvider('invalidDeinterlaceProvider')]
+    public function test_invalid_deinterlace_settings_are_rejected_before_io(array $arguments): void
+    {
+        Process::fake();
+        $this->assertThrows(fn () => $this->missingExport()->deinterlace(...$arguments), InvalidArgumentException::class);
+        Process::assertNothingRan();
+    }
+
+    public static function invalidDeinterlaceProvider(): array
+    {
+        return [
+            'empty mode' => [['']],
+            'unknown mode' => [['send_frame']],
+            'filter in mode' => [['field,hflip']],
+            'empty parity' => [['frame', '']],
+            'unknown parity' => [['frame', 'top']],
+            'newline in parity' => [['frame', "auto\n"]],
+        ];
+    }
+
+    #[DataProvider('invalidFrameRateProvider')]
+    public function test_invalid_frame_rates_are_rejected_before_io(int|float|string $rate): void
+    {
+        Process::fake();
+        $this->assertThrows(fn () => $this->missingExport()->frameRate($rate), InvalidArgumentException::class);
+        Process::assertNothingRan();
+    }
+
+    public static function invalidFrameRateProvider(): array
+    {
+        return [
+            'zero' => [0],
+            'negative' => [-1],
+            'infinite' => [INF],
+            'not a number' => [NAN],
+            'empty' => [''],
+            'zero fraction' => ['0/1'],
+            'zero denominator' => ['1/0'],
+            'negative fraction' => ['-1/2'],
+            'three parts' => ['1/2/3'],
+            'filter injection' => ['25,hflip'],
+            'trailing newline' => ["25\n"],
+            'overflowing exponent' => ['1e999'],
+            'underflowing exponent' => ['1e-999'],
+        ];
+    }
+
+    #[DataProvider('invalidVolumeProvider')]
+    public function test_invalid_volumes_are_rejected_before_io(float $volume): void
+    {
+        Process::fake();
+        $this->assertThrows(fn () => $this->missingExport()->volume($volume), InvalidArgumentException::class);
+        Process::assertNothingRan();
+    }
+
+    public static function invalidVolumeProvider(): array
+    {
+        return [
+            'negative' => [-1],
+            'infinite' => [INF],
+            'not a number' => [NAN],
+        ];
+    }
+
+    #[DataProvider('invalidFadeProvider')]
+    public function test_invalid_fades_are_rejected_before_io(array $arguments): void
+    {
+        Process::fake();
+        $this->assertThrows(fn () => $this->missingExport()->fadeIn(...$arguments), InvalidArgumentException::class);
+        $this->assertThrows(fn () => $this->missingExport()->fadeOut(...$arguments), InvalidArgumentException::class);
+        Process::assertNothingRan();
+    }
+
+    public static function invalidFadeProvider(): array
+    {
+        return [
+            'zero duration' => [[0, 0]],
+            'negative duration' => [[-1, 0]],
+            'infinite duration' => [[INF, 0]],
+            'duration not a number' => [[NAN, 0]],
+            'negative start' => [[1, -1]],
+            'infinite start' => [[1, INF]],
+            'start not a number' => [[1, NAN]],
+            'no streams' => [[1, 0, false, false]],
+        ];
+    }
+
+    #[DataProvider('helperProvider')]
+    public function test_helpers_conflict_with_stream_copy(string $method, array $arguments): void
+    {
+        Process::fake();
+        $this->assertThrows(
+            fn () => $this->missingExport()->{$method}(...$arguments)->video('copy')->audio('copy')->inspect(),
+            InvalidArgumentException::class,
+        );
+        Process::assertNothingRan();
+    }
+
+    #[DataProvider('helperProvider')]
+    public function test_helpers_cannot_change_an_export_after_outputs_are_added(string $method, array $arguments): void
+    {
+        Process::fake();
+        $this->assertThrows(
+            fn () => $this->missingExport()->output('one.mkv', fn () => null)->{$method}(...$arguments),
+            InvalidArgumentException::class,
+        );
+        Process::assertNothingRan();
+    }
+
+    public static function helperProvider(): array
+    {
+        return [
+            'frameRate' => ['frameRate', [25]],
+            'flipHorizontally' => ['flipHorizontally', []],
+            'flipVertically' => ['flipVertically', []],
+            'grayscale' => ['grayscale', []],
+            'deinterlace' => ['deinterlace', []],
+            'volume' => ['volume', [0.5]],
+            'delayAudio' => ['delayAudio', [0.5]],
+            'fadeIn' => ['fadeIn', [1]],
+            'fadeOut' => ['fadeOut', [1, 2]],
+        ];
+    }
+
+    /**
+     * Get an export of a file that does not exist, to prove validation happens before any I/O.
+     */
+    protected function missingExport(): PendingExport
+    {
+        return FFMpeg::disk('missing')->open('absent.mkv')->export();
     }
 }

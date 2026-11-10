@@ -2,10 +2,13 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\PendingProbe;
 use ProtoneMedia\LaravelFFMpeg\ProbeResult;
@@ -93,32 +96,56 @@ class ProbeQueryTest extends TestCase
         $this->assertSame(['3.5%+#7', '0%+1', '0.000001%+0.000001'], $intervals);
     }
 
-    public function test_invalid_or_unbounded_requests_are_rejected_before_any_process(): void
+    #[DataProvider('invalidQueryProvider')]
+    public function test_invalid_or_unbounded_requests_are_rejected_before_any_process(Closure $configure): void
     {
         Process::fake();
-        foreach ([fn () => $this->pendingQuery()->readInterval(0, INF), fn () => $this->pendingQuery()->readInterval(NAN, 1),
-            fn () => $this->pendingQuery()->readInterval(0, 301), fn () => $this->pendingQuery()->readPackets(0),
-            fn () => $this->pendingQuery()->readPackets(100001), fn () => $this->pendingQuery()->selectStreams('v:0 -i evil'),
-            fn () => $this->pendingQuery()->entries(['packet' => ['pts:stream=codec_name']]),
-            fn () => $this->pendingQuery()->entries(['program' => ['id']]), fn () => $this->pendingQuery()->entries([]),
-            fn () => $this->pendingQuery()->limits(16777217), fn () => $this->pendingQuery()->limits(timeout: 121),
-            fn () => $this->pendingQuery()->limits(timeout: NAN)] as $invalid) {
-            $this->assertThrows($invalid, InvalidArgumentException::class);
-        }
+        $this->assertThrows(fn () => $configure($this->pendingQuery()), InvalidArgumentException::class);
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_malformed_and_failed_queries_are_sanitized_and_cleaned(): void
+    public static function invalidQueryProvider(): array
     {
-        foreach (['not json', '[]', '{"frames":[1]}', '{"frames":null}'] as $output) {
-            $this->fakeProbe(fn () => Process::result(output: $output));
-            $this->assertThrows(
-                fn () => $this->pendingQuery()->frames()->get(),
-                fn (MediaException $exception) => $exception->category === 'metadata',
-            );
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        return [
+            'infinite interval' => [fn (PendingProbe $query) => $query->readInterval(0, INF)],
+            'interval start not a number' => [fn (PendingProbe $query) => $query->readInterval(NAN, 1)],
+            'interval too long' => [fn (PendingProbe $query) => $query->readInterval(0, 301)],
+            'no packets' => [fn (PendingProbe $query) => $query->readPackets(0)],
+            'too many packets' => [fn (PendingProbe $query) => $query->readPackets(100001)],
+            'option in stream specifier' => [fn (PendingProbe $query) => $query->selectStreams('v:0 -i evil')],
+            'nested entry section' => [fn (PendingProbe $query) => $query->entries(['packet' => ['pts:stream=codec_name']])],
+            'unsupported entry section' => [fn (PendingProbe $query) => $query->entries(['program' => ['id']])],
+            'no entries' => [fn (PendingProbe $query) => $query->entries([])],
+            'output limit too high' => [fn (PendingProbe $query) => $query->limits(16777217)],
+            'timeout too long' => [fn (PendingProbe $query) => $query->limits(timeout: 121)],
+            'timeout not a number' => [fn (PendingProbe $query) => $query->limits(timeout: NAN)],
+        ];
+    }
+
+    #[DataProvider('malformedOutputProvider')]
+    public function test_malformed_query_output_is_rejected_and_cleaned(string $output): void
+    {
+        $this->fakeProbe(fn () => Process::result(output: $output));
+        $this->assertThrows(
+            fn () => $this->pendingQuery()->frames()->get(),
+            fn (MediaException $exception) => $exception->category === 'metadata',
+        );
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public static function malformedOutputProvider(): array
+    {
+        return [
+            'not json' => ['not json'],
+            'list' => ['[]'],
+            'scalar frame' => ['{"frames":[1]}'],
+            'null section' => ['{"frames":null}'],
+        ];
+    }
+
+    public function test_failed_queries_are_sanitized_and_cleaned(): void
+    {
         $this->fakeProbe(fn (PendingProcess $process) => Process::result(exitCode: 1, errorOutput: end($process->command)));
         $this->assertThrows(
             fn () => $this->pendingQuery()->get(),
@@ -153,21 +180,21 @@ class ProbeQueryTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_real_process_output_and_total_timeout_caps_are_enforced(): void
+    #[TestWith(['echo str_repeat("X", 100000);', 'output_limit'])]
+    #[TestWith(['usleep(400000); echo "{}";', 'timeout'])]
+    public function test_real_process_output_and_total_timeout_caps_are_enforced(string $body, string $category): void
     {
         $binary = $this->root.'/probe';
-        foreach (['echo str_repeat("X", 100000);' => 'output_limit', 'usleep(400000); echo "{}";' => 'timeout'] as $body => $category) {
-            file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\n".
-                'if (in_array("-version", $argv, true)) { echo "ffprobe version 9.0.2"; exit; }'.$body);
-            chmod($binary, 0700);
-            config(['laravel-ffmpeg.ffprobe.binaries' => $binary]);
-            $this->assertThrows(
-                fn () => $this->pendingQuery()->limits(1024, 0.15)->get(),
-                fn (MediaException $exception) => $exception->category === $category
-                    && ! str_contains($exception->getMessage(), $this->root),
-            );
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\n".
+            'if (in_array("-version", $argv, true)) { echo "ffprobe version 9.0.2"; exit; }'.$body);
+        chmod($binary, 0700);
+        config(['laravel-ffmpeg.ffprobe.binaries' => $binary]);
+        $this->assertThrows(
+            fn () => $this->pendingQuery()->limits(1024, 0.15)->get(),
+            fn (MediaException $exception) => $exception->category === $category
+                && ! str_contains($exception->getMessage(), $this->root),
+        );
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_real_vfr_b_frames_keyframes_intervals_and_counts_preserve_native_timestamps(): void

@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
@@ -10,9 +11,12 @@ use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Events;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Media;
+use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use RuntimeException;
@@ -103,27 +107,35 @@ class ExportTest extends TestCase
         $this->assertContains('scale=w=80:h=80:force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1,pad=w=80:h=80:x=(ow-iw)/2:y=(oh-ih)/2:color=black', array_slice($command, $boundary));
         $this->assertContains('scale=w=80:h=80:force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1,pad=w=80:h=80:x=(ow-iw)/2:y=(oh-ih)/2:color=#ffffff',
             $media->export()->contain(80, 80, background: '#ffffff')->inspect());
+        Process::assertNothingRan();
+    }
 
-        foreach ([
-            fn () => $media->export()->resize(),
-            fn () => $media->export()->resize(width: 0),
-            fn () => $media->export()->resize(height: -2),
-            fn () => $media->export()->contain(0, 80),
-            fn () => $media->export()->cover(81, 80),
-            fn () => $media->export()->contain(80, 80, background: 'red:movie=/secret'),
-            fn () => $media->export()->resize(width: 80)->video('copy')->inspect(),
-            fn () => $media->export()->cover(80, 80)->video('copy')->inspect(),
-            fn () => $media->export()->output('one.mkv', fn () => null)->resize(width: 80),
-        ] as $attempt) {
-            try {
-                $attempt();
-                $this->fail('Invalid geometry configuration was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+    #[DataProvider('invalidGeometryProvider')]
+    public function test_invalid_geometry_is_rejected_before_any_process(Closure $configure): void
+    {
+        Process::fake();
+
+        $this->assertThrows(
+            fn () => $configure(FFMpeg::disk('missing')->open('absent.mkv')->export()),
+            InvalidArgumentException::class,
+        );
 
         Process::assertNothingRan();
+    }
+
+    public static function invalidGeometryProvider(): array
+    {
+        return [
+            'resize without dimensions' => [fn (PendingExport $export) => $export->resize()],
+            'zero width' => [fn (PendingExport $export) => $export->resize(width: 0)],
+            'negative height' => [fn (PendingExport $export) => $export->resize(height: -2)],
+            'zero contain width' => [fn (PendingExport $export) => $export->contain(0, 80)],
+            'odd cover width' => [fn (PendingExport $export) => $export->cover(81, 80)],
+            'filter syntax in the background' => [fn (PendingExport $export) => $export->contain(80, 80, background: 'red:movie=/secret')],
+            'resize with copied video' => [fn (PendingExport $export) => $export->resize(width: 80)->video('copy')->inspect()],
+            'cover with copied video' => [fn (PendingExport $export) => $export->cover(80, 80)->video('copy')->inspect()],
+            'resize after outputs' => [fn (PendingExport $export) => $export->output('one.mkv', fn () => null)->resize(width: 80)],
+        ];
     }
 
     public function test_real_geometry_helpers_preserve_display_aspect_or_explicitly_stretch_and_center(): void
@@ -199,87 +211,137 @@ class ExportTest extends TestCase
         ];
     }
 
-    public function test_stream_tag_helpers_reject_invalid_output_selectors_and_values_without_io(): void
+    #[DataProvider('invalidStreamTagProvider')]
+    public function test_stream_tag_helpers_reject_invalid_output_selectors_and_values_without_io(Closure $configure): void
     {
         Process::fake();
-        $media = FFMpeg::disk('missing')->open('absent.mkv');
 
-        foreach ([
-            fn () => $media->export()->streamMetadata('0:a:0', 'language', 'eng'),
-            fn () => $media->export()->streamMetadata('[audio]', 'language', 'eng'),
-            fn () => $media->export()->streamMetadata('a:0?', 'language', 'eng'),
-            fn () => $media->export()->streamMetadata('a:0', 'bad=key', 'value'),
-            fn () => $media->export()->streamMetadata('a:0', 'title', "bad\0value"),
-            fn () => $media->export()->disposition(-1, 'default'),
-            fn () => $media->export()->disposition('a', 'not_a_flag'),
-            fn () => $media->export()->disposition('a', '+default'),
-            fn () => $media->export()->disposition('a', ['default', '-forced']),
-            fn () => $media->export()->disposition('a', ['default' => true]),
-            fn () => $media->export()->output('one.mkv', fn () => null)->streamMetadata('a', 'language', 'eng'),
-            fn () => $media->export()->disposition('a', 'default')->output('one.mkv', fn () => null),
-        ] as $attempt) {
-            try {
-                $attempt();
-                $this->fail('Invalid stream metadata or disposition settings were accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+        $this->assertThrows(
+            fn () => $configure(FFMpeg::disk('missing')->open('absent.mkv')->export()),
+            InvalidArgumentException::class,
+        );
 
         Process::assertNothingRan();
     }
 
-    public function test_rate_control_copy_and_clip_conflicts_fail_before_execution(): void
+    public static function invalidStreamTagProvider(): array
+    {
+        return [
+            'input stream selector' => [fn (PendingExport $export) => $export->streamMetadata('0:a:0', 'language', 'eng')],
+            'graph label selector' => [fn (PendingExport $export) => $export->streamMetadata('[audio]', 'language', 'eng')],
+            'optional selector' => [fn (PendingExport $export) => $export->streamMetadata('a:0?', 'language', 'eng')],
+            'key with an equals sign' => [fn (PendingExport $export) => $export->streamMetadata('a:0', 'bad=key', 'value')],
+            'value with a null byte' => [fn (PendingExport $export) => $export->streamMetadata('a:0', 'title', "bad\0value")],
+            'negative disposition index' => [fn (PendingExport $export) => $export->disposition(-1, 'default')],
+            'unknown disposition flag' => [fn (PendingExport $export) => $export->disposition('a', 'not_a_flag')],
+            'relative disposition flag' => [fn (PendingExport $export) => $export->disposition('a', '+default')],
+            'negated flag in a list' => [fn (PendingExport $export) => $export->disposition('a', ['default', '-forced'])],
+            'keyed flag list' => [fn (PendingExport $export) => $export->disposition('a', ['default' => true])],
+            'stream metadata after outputs' => [fn (PendingExport $export) => $export->output('one.mkv', fn () => null)->streamMetadata('a', 'language', 'eng')],
+            'outputs after a disposition' => [fn (PendingExport $export) => $export->disposition('a', 'default')->output('one.mkv', fn () => null)],
+        ];
+    }
+
+    #[DataProvider('conflictingConfigurationProvider')]
+    public function test_rate_control_copy_and_clip_conflicts_fail_before_execution(Closure $configure): void
     {
         Process::fake();
-        $media = FFMpeg::disk('memory')->open('source.mp4');
 
-        foreach ([
-            fn () => $media->export()->video('libx264', bitrate: 800_000, crf: 23)->inspect(),
-            fn () => $media->export()->video('libx264', bitrate: '2500k', crf: 23)->inspect(),
-            fn () => $media->export()->video('copy')->videoFilter('hflip')->inspect(),
-            fn () => $media->export()->audio('copy')->clip(1, duration: 2)->inspect(),
-            fn () => $media->export()->clip(1, duration: 2, end: 3)->inspect(),
-            fn () => $media->export()->clip(1, end: 0.5)->inspect(),
-            fn () => $media->export()->withoutAudio()->map('0:a:0')->inspect(),
-            fn () => $media->export()->map('1:a:0?')->inspect(),
-        ] as $attempt) {
-            try {
-                $attempt();
-                $this->fail('A conflicting configuration was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+        $this->assertThrows(
+            fn () => $configure(FFMpeg::disk('memory')->open('source.mp4')->export()),
+            InvalidArgumentException::class,
+        );
 
-        $command = $media->export()->video('copy')->audio('copy')->clip(1.5, duration: 2, seek: 'keyframe')->inspect();
+        Process::assertNothingRan();
+    }
+
+    public static function conflictingConfigurationProvider(): array
+    {
+        return [
+            'integer bitrate and crf' => [fn (PendingExport $export) => $export->video('libx264', bitrate: 800_000, crf: 23)->inspect()],
+            'unit bitrate and crf' => [fn (PendingExport $export) => $export->video('libx264', bitrate: '2500k', crf: 23)->inspect()],
+            'filter on copied video' => [fn (PendingExport $export) => $export->video('copy')->videoFilter('hflip')->inspect()],
+            'accurate clip of copied audio' => [fn (PendingExport $export) => $export->audio('copy')->clip(1, duration: 2)->inspect()],
+            'clip duration and end' => [fn (PendingExport $export) => $export->clip(1, duration: 2, end: 3)->inspect()],
+            'clip ending before its start' => [fn (PendingExport $export) => $export->clip(1, end: 0.5)->inspect()],
+            'audio map without audio' => [fn (PendingExport $export) => $export->withoutAudio()->map('0:a:0')->inspect()],
+            'map from a missing input' => [fn (PendingExport $export) => $export->map('1:a:0?')->inspect()],
+        ];
+    }
+
+    public function test_keyframe_clips_of_copied_streams_seek_before_the_input(): void
+    {
+        Process::fake();
+
+        $command = FFMpeg::disk('memory')->open('source.mp4')->export()
+            ->video('copy')->audio('copy')->clip(1.5, duration: 2, seek: 'keyframe')->inspect();
+
         $this->assertLessThan(array_search('-i', $command), array_search('-ss', $command));
         $this->assertContains('-noaccurate_seek', $command);
         Process::assertNothingRan();
     }
 
-    public function test_bitrates_accept_positive_integer_bits_per_second_and_preserve_explicit_units(): void
+    #[DataProvider('validBitrateProvider')]
+    public function test_bitrates_accept_positive_integer_bits_per_second_and_preserve_explicit_units(int|string $bitrate): void
+    {
+        Process::fake();
+
+        $command = FFMpeg::disk('missing')->open('absent.mkv')->export()
+            ->video('libx264', bitrate: $bitrate)->audio('aac', bitrate: $bitrate)->inspect();
+
+        $this->assertSame((string) $bitrate, $command[array_search('-b:v', $command, true) + 1]);
+        $this->assertSame((string) $bitrate, $command[array_search('-b:a', $command, true) + 1]);
+        Process::assertNothingRan();
+    }
+
+    public static function validBitrateProvider(): array
+    {
+        return [
+            'one bit per second' => [1],
+            'bits per second' => [2500],
+            'large bits per second' => [800_000],
+            'largest integer' => [PHP_INT_MAX],
+            'kilobits' => ['800k'],
+            'fractional megabits' => ['1.5M'],
+            'gigabits' => ['2G'],
+            'uppercase kilobits' => ['96K'],
+            'lowercase megabits' => ['0.5m'],
+            'lowercase gigabits' => ['0.1g'],
+        ];
+    }
+
+    #[DataProvider('invalidBitrateProvider')]
+    public function test_invalid_bitrates_are_rejected_for_video_and_audio(mixed $bitrate): void
     {
         Process::fake();
         $media = FFMpeg::disk('missing')->open('absent.mkv');
 
-        foreach ([1, 2500, 800_000, PHP_INT_MAX, '800k', '1.5M', '2G', '96K', '0.5m', '0.1g'] as $bitrate) {
-            $command = $media->export()->video('libx264', bitrate: $bitrate)->audio('aac', bitrate: $bitrate)->inspect();
-            $this->assertSame((string) $bitrate, $command[array_search('-b:v', $command, true) + 1]);
-            $this->assertSame((string) $bitrate, $command[array_search('-b:a', $command, true) + 1]);
-        }
+        $this->assertThrows(fn () => $media->export()->video(bitrate: $bitrate)->inspect(), InvalidArgumentException::class);
+        $this->assertThrows(fn () => $media->export()->audio(bitrate: $bitrate)->inspect(), InvalidArgumentException::class);
 
-        foreach ([0, -1, 800_000.0, 0.5, INF, NAN, true, false, [], '', '800000', '0k', '0.0M', '-1k', '1e3k', "800k\n"] as $bitrate) {
-            foreach (['video', 'audio'] as $type) {
-                try {
-                    $media->export()->{$type}(bitrate: $bitrate)->inspect();
-                    $this->fail('An invalid bitrate was accepted.');
-                } catch (InvalidArgumentException) {
-                    $this->addToAssertionCount(1);
-                }
-            }
-        }
         Process::assertNothingRan();
+    }
+
+    public static function invalidBitrateProvider(): array
+    {
+        return [
+            'zero' => [0],
+            'negative' => [-1],
+            'integral float' => [800_000.0],
+            'fraction' => [0.5],
+            'infinity' => [INF],
+            'not a number' => [NAN],
+            'true' => [true],
+            'false' => [false],
+            'array' => [[]],
+            'empty string' => [''],
+            'unitless string' => ['800000'],
+            'zero kilobits' => ['0k'],
+            'zero megabits' => ['0.0M'],
+            'negative kilobits' => ['-1k'],
+            'exponent' => ['1e3k'],
+            'trailing newline' => ["800k\n"],
+        ];
     }
 
     public function test_real_integer_bitrates_encode_identically_to_explicit_unit_strings(): void
@@ -304,57 +366,104 @@ class ExportTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_clip_timecodes_normalize_all_positions_and_mix_with_numeric_seconds(): void
+    #[DataProvider('clipTimecodeProvider')]
+    public function test_clip_timecodes_normalize_all_positions_and_mix_with_numeric_seconds(
+        int|float|string $start,
+        int|string|null $duration,
+        ?string $end,
+        string $expectedStart,
+        string $expectedDuration,
+    ): void {
+        Process::fake();
+
+        $command = FFMpeg::disk('missing')->open('absent.mkv')->export()
+            ->clip($start, duration: $duration, end: $end)->inspect();
+
+        $this->assertSame($expectedStart, $command[array_search('-ss', $command, true) + 1]);
+        $this->assertSame($expectedDuration, $command[array_search('-t', $command, true) + 1]);
+        Process::assertNothingRan();
+    }
+
+    public static function clipTimecodeProvider(): array
+    {
+        return [
+            'hours with an end timecode' => ['01:02:59.75', null, '01:03:01.125', '3779.75', '1.375'],
+            'zero start' => [0, '00:00:00.125', null, '0', '0.125'],
+            'one hundred hours' => ['100:00:00', 2, null, '360000', '2'],
+            'microseconds' => ['00:00:13.000001', '00:00:01.000001', null, '13.000001', '1.000001'],
+            'numeric start with an end timecode' => [1.25, null, '00:00:02.5', '1.25', '1.25'],
+            'smallest timecodes' => ['00:00:00.000001', '00:00:00.000002', null, '0.000001', '0.000002'],
+        ];
+    }
+
+    public function test_keyframe_clips_keep_microsecond_timecodes_before_the_input(): void
     {
         Process::fake();
-        $media = FFMpeg::disk('missing')->open('absent.mkv');
 
-        foreach ([
-            ['01:02:59.75', null, '01:03:01.125', '3779.75', '1.375'],
-            [0, '00:00:00.125', null, '0', '0.125'],
-            ['100:00:00', 2, null, '360000', '2'],
-            ['00:00:13.000001', '00:00:01.000001', null, '13.000001', '1.000001'],
-            [1.25, null, '00:00:02.5', '1.25', '1.25'],
-            ['00:00:00.000001', '00:00:00.000002', null, '0.000001', '0.000002'],
-        ] as [$start, $duration, $end, $expectedStart, $expectedDuration]) {
-            $command = $media->export()->clip($start, duration: $duration, end: $end)->inspect();
-            $this->assertSame($expectedStart, $command[array_search('-ss', $command, true) + 1]);
-            $this->assertSame($expectedDuration, $command[array_search('-t', $command, true) + 1]);
-        }
+        $command = FFMpeg::disk('missing')->open('absent.mkv')->export()
+            ->clip('00:00:00.000001', duration: '00:00:00.000002', seek: 'keyframe')->inspect();
 
-        $command = $media->export()->clip('00:00:00.000001', duration: '00:00:00.000002', seek: 'keyframe')->inspect();
         $this->assertSame('0.000001', $command[array_search('-ss', $command, true) + 1]);
         $this->assertLessThan(array_search('-i', $command, true), array_search('-ss', $command, true));
         Process::assertNothingRan();
     }
 
-    public function test_clip_rejects_invalid_timecodes_and_ranges_before_execution(): void
+    #[DataProvider('invalidTimecodeProvider')]
+    public function test_clip_rejects_invalid_timecodes_in_every_position(string $timecode): void
     {
         Process::fake();
         $media = FFMpeg::disk('missing')->open('absent.mkv');
 
-        foreach (['', '12.5', '1e2', '1s', '1:02:03', '00:60:00', '00:00:60', '-00:00:01',
-            '00:00:01.', '00:00:01.1234567', "00:00:01\n", ' 00:00:01', "00:00:01\0"] as $invalid) {
-            foreach ([[0, $invalid, null], [$invalid, 1, null], [0, null, $invalid]] as [$start, $duration, $end]) {
-                try {
-                    $media->export()->clip($start, duration: $duration, end: $end)->inspect();
-                    $this->fail('An invalid timecode was accepted.');
-                } catch (InvalidArgumentException) {
-                    $this->addToAssertionCount(1);
-                }
-            }
-        }
-
-        foreach ([[0, '00:00:00', null], ['00:00:01', null, 1], [2, null, '00:00:01'], [INF, 1, null]] as [$start, $duration, $end]) {
-            try {
-                $media->export()->clip($start, duration: $duration, end: $end)->inspect();
-                $this->fail('An invalid clip range was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+        $this->assertThrows(fn () => $media->export()->clip(0, duration: $timecode)->inspect(), InvalidArgumentException::class);
+        $this->assertThrows(fn () => $media->export()->clip($timecode, duration: 1)->inspect(), InvalidArgumentException::class);
+        $this->assertThrows(fn () => $media->export()->clip(0, end: $timecode)->inspect(), InvalidArgumentException::class);
 
         Process::assertNothingRan();
+    }
+
+    public static function invalidTimecodeProvider(): array
+    {
+        return [
+            'empty' => [''],
+            'bare seconds' => ['12.5'],
+            'exponent' => ['1e2'],
+            'unit suffix' => ['1s'],
+            'single digit hours' => ['1:02:03'],
+            'sixty minutes' => ['00:60:00'],
+            'sixty seconds' => ['00:00:60'],
+            'negative' => ['-00:00:01'],
+            'trailing dot' => ['00:00:01.'],
+            'seven fractional digits' => ['00:00:01.1234567'],
+            'trailing newline' => ["00:00:01\n"],
+            'leading space' => [' 00:00:01'],
+            'null byte' => ["00:00:01\0"],
+        ];
+    }
+
+    #[DataProvider('invalidClipRangeProvider')]
+    public function test_clip_rejects_invalid_ranges_before_execution(
+        int|float|string $start,
+        int|string|null $duration,
+        int|string|null $end,
+    ): void {
+        Process::fake();
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('missing')->open('absent.mkv')->export()->clip($start, duration: $duration, end: $end)->inspect(),
+            InvalidArgumentException::class,
+        );
+
+        Process::assertNothingRan();
+    }
+
+    public static function invalidClipRangeProvider(): array
+    {
+        return [
+            'zero duration' => [0, '00:00:00', null],
+            'end at the start' => ['00:00:01', null, 1],
+            'end before the start' => [2, null, '00:00:01'],
+            'infinite start' => [INF, 1, null],
+        ];
     }
 
     public function test_frame_exports_validate_image_bytes_before_publishing_and_clean_up_failures(): void
@@ -378,19 +487,27 @@ class ExportTest extends TestCase
         );
         $this->assertFalse(Storage::disk('memory')->exists('invalid.png'));
         $this->assertWorkspacesAreCleanedUp();
+    }
 
-        foreach ([-1, INF, '12.5'] as $invalid) {
-            try {
-                $media->frame(at: $invalid);
-                $this->fail('An invalid frame timestamp was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+    #[DataProvider('invalidFrameProvider')]
+    public function test_frames_require_a_valid_timestamp_and_an_image_destination(Closure $capture): void
+    {
+        $this->fakePipeline();
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->assertThrows(
+            fn () => $capture(FFMpeg::disk('memory')->open('source.mp4')),
+            InvalidArgumentException::class,
+        );
+    }
 
-        $media->frame(at: 0)->save('frame.mp4');
+    public static function invalidFrameProvider(): array
+    {
+        return [
+            'negative timestamp' => [fn (Media $media) => $media->frame(at: -1)],
+            'infinite timestamp' => [fn (Media $media) => $media->frame(at: INF)],
+            'bare seconds string' => [fn (Media $media) => $media->frame(at: '12.5')],
+            'video destination' => [fn (Media $media) => $media->frame(at: 0)->save('frame.mp4')],
+        ];
     }
 
     public function test_real_frames_sample_after_the_timestamp_and_return_or_publish_images(): void
@@ -443,71 +560,97 @@ class ExportTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_image_sequences_require_valid_sampling_and_numbered_destinations(): void
+    #[DataProvider('invalidSamplingProvider')]
+    public function test_image_sequences_require_valid_sampling(Closure $sample): void
     {
         Process::fake();
-        $media = FFMpeg::disk('memory')->open('source.mp4');
 
-        foreach ([
-            fn () => $media->frames(),
-            fn () => $media->frames(every: 1, count: 2),
-            fn () => $media->frames(every: 0),
-            fn () => $media->frames(every: INF),
-            fn () => $media->frames(every: 0.0000001),
-            fn () => $media->frames(count: 0),
-            fn () => $media->frames(count: -1),
-        ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Invalid sequence sampling was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
-
-        foreach ([null, 'still.png', 'frame-%s.png', 'frame-%d-%d.png', 'frame-%010d.png',
-            'frame-%02d/child.png', 'frame-%02d\\child.png', 'frame-%02d.mp4'] as $path) {
-            try {
-                $media->frames(count: 2)->save($path);
-                $this->fail('An invalid sequence destination was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
-        Process::assertNothingRan();
-
-        $this->fakePipeline(metadata: '{"format":{},"streams":[{"index":0,"codec_type":"video"}]}');
         $this->assertThrows(
-            fn () => $media->frames(count: 2)->save('unknown-%d.png'),
+            fn () => $sample(FFMpeg::disk('memory')->open('source.mp4')),
+            InvalidArgumentException::class,
+        );
+
+        Process::assertNothingRan();
+    }
+
+    public static function invalidSamplingProvider(): array
+    {
+        return [
+            'no sampling' => [fn (Media $media) => $media->frames()],
+            'interval and count' => [fn (Media $media) => $media->frames(every: 1, count: 2)],
+            'zero interval' => [fn (Media $media) => $media->frames(every: 0)],
+            'infinite interval' => [fn (Media $media) => $media->frames(every: INF)],
+            'interval below a microsecond' => [fn (Media $media) => $media->frames(every: 0.0000001)],
+            'zero count' => [fn (Media $media) => $media->frames(count: 0)],
+            'negative count' => [fn (Media $media) => $media->frames(count: -1)],
+        ];
+    }
+
+    #[DataProvider('invalidSequenceDestinationProvider')]
+    public function test_image_sequences_require_numbered_image_destinations(?string $path): void
+    {
+        Process::fake();
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->frames(count: 2)->save($path),
+            InvalidArgumentException::class,
+        );
+
+        Process::assertNothingRan();
+    }
+
+    public static function invalidSequenceDestinationProvider(): array
+    {
+        return [
+            'no destination' => [null],
+            'no placeholder' => ['still.png'],
+            'string placeholder' => ['frame-%s.png'],
+            'two placeholders' => ['frame-%d-%d.png'],
+            'ten digit placeholder' => ['frame-%010d.png'],
+            'placeholder in a directory' => ['frame-%02d/child.png'],
+            'placeholder before a backslash' => ['frame-%02d\\child.png'],
+            'video extension' => ['frame-%02d.mp4'],
+        ];
+    }
+
+    public function test_count_sampling_requires_a_known_duration(): void
+    {
+        $this->fakePipeline(metadata: '{"format":{},"streams":[{"index":0,"codec_type":"video"}]}');
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->frames(count: 2)->save('unknown-%d.png'),
             fn (MediaException $exception) => $exception->phase === 'probing' && $exception->category === 'metadata',
         );
+
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_image_sequences_validate_every_image_and_inventory_before_any_publication(): void
+    #[TestWith(['corrupt'], 'corrupt image')]
+    #[TestWith(['missing'], 'missing image')]
+    #[TestWith(['gap'], 'gap in the numbering')]
+    public function test_image_sequences_validate_every_image_and_inventory_before_any_publication(string $failure): void
     {
         $image = file_get_contents(__DIR__.'/src/logo.png');
+        $this->fakePipeline(function (PendingProcess $process) use ($image, $failure) {
+            $pattern = end($process->command);
+            file_put_contents(sprintf($pattern, 1), $image);
 
-        foreach (['corrupt', 'missing', 'gap'] as $failure) {
-            $this->fakePipeline(function (PendingProcess $process) use ($image, $failure) {
-                $pattern = end($process->command);
-                file_put_contents(sprintf($pattern, 1), $image);
-
-                if ($failure !== 'missing') {
-                    file_put_contents(sprintf($pattern, $failure === 'gap' ? 3 : 2), $failure === 'corrupt' ? 'not an image' : $image);
-                }
-
-                return Process::result();
-            });
-            try {
-                FFMpeg::disk('memory')->open('source.mp4')->frames(count: 2)->save('invalid-%02d.png');
-                $this->fail('An invalid sequence was published.');
-            } catch (MediaException $exception) {
-                $this->assertSame(['validation', 'artifact', []], [$exception->phase, $exception->category, $exception->published]);
+            if ($failure !== 'missing') {
+                file_put_contents(sprintf($pattern, $failure === 'gap' ? 3 : 2), $failure === 'corrupt' ? 'not an image' : $image);
             }
-            $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-            $this->assertWorkspacesAreCleanedUp();
-        }
+
+            return Process::result();
+        });
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->frames(count: 2)->save('invalid-%02d.png'),
+            fn (MediaException $exception) => $exception->phase === 'validation'
+                && $exception->category === 'artifact'
+                && $exception->published === [],
+        );
+
+        $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_image_sequences_report_concrete_siblings_after_partial_publication(): void
@@ -580,70 +723,122 @@ class ExportTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_two_pass_encoding_requires_explicit_video_bitrate_without_crf(): void
+    #[DataProvider('invalidTwoPassProvider')]
+    public function test_two_pass_encoding_requires_explicit_video_bitrate_without_crf(Closure $configure): void
     {
         Process::fake();
-        $media = FFMpeg::disk('missing')->open('absent.mp4');
 
-        foreach ([
-            fn () => $media->export()->twoPass()->inspect(),
-            fn () => $media->export()->video('libx264', crf: 23)->twoPass()->inspect(),
-            fn () => $media->export()->video(bitrate: '150k')->twoPass()->inspect(),
-            fn () => $media->export()->video('copy', bitrate: '150k')->twoPass()->inspect(),
-            fn () => $media->export()->video('libx264', bitrate: '150k')->withoutVideo()->twoPass()->inspect(),
-        ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Invalid two-pass encoding was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
-        $this->assertNotContains('-pass:v', $media->export()->video('libx264', bitrate: '150k')->inspect());
+        $this->assertThrows(
+            fn () => $configure(FFMpeg::disk('missing')->open('absent.mp4')->export()),
+            InvalidArgumentException::class,
+        );
+
         Process::assertNothingRan();
+    }
 
+    public static function invalidTwoPassProvider(): array
+    {
+        return [
+            'no bitrate' => [fn (PendingExport $export) => $export->twoPass()->inspect()],
+            'crf' => [fn (PendingExport $export) => $export->video('libx264', crf: 23)->twoPass()->inspect()],
+            'implicit encoder' => [fn (PendingExport $export) => $export->video(bitrate: '150k')->twoPass()->inspect()],
+            'copied video' => [fn (PendingExport $export) => $export->video('copy', bitrate: '150k')->twoPass()->inspect()],
+            'without video' => [fn (PendingExport $export) => $export->video('libx264', bitrate: '150k')->withoutVideo()->twoPass()->inspect()],
+        ];
+    }
+
+    public function test_single_pass_encoding_has_no_pass_arguments(): void
+    {
+        Process::fake();
+
+        $command = FFMpeg::disk('missing')->open('absent.mp4')->export()->video('libx264', bitrate: '150k')->inspect();
+
+        $this->assertNotContains('-pass:v', $command);
+        Process::assertNothingRan();
+    }
+
+    public function test_two_pass_encoding_requires_a_video_stream(): void
+    {
         $this->fakePipeline(metadata: '{"format":{"duration":"1"},"streams":[{"index":0,"codec_type":"audio"}]}');
+
         $this->assertThrows(
             fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->video('libx264', bitrate: '150k')->twoPass()->save('audio.mp4'),
             fn (MediaException $exception) => $exception->phase === 'probing' && $exception->category === 'mapping',
         );
+
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_two_pass_failures_and_cancellation_never_publish_or_retain_statistics(): void
+    #[DataProvider('failedPassProvider')]
+    public function test_failed_passes_never_publish_or_retain_statistics(string $failure, string $category): void
     {
-        foreach (['missing', 'first', 'second', 'cancel-first', 'cancel-second'] as $failure) {
-            $this->fakePipeline(function (PendingProcess $process) use ($failure) {
-                $pass = (int) $process->command[array_search('-pass:v', $process->command, true) + 1];
+        $this->fakeTwoPassPipeline($failure);
 
-                if ($pass === 1 && $failure !== 'missing') {
-                    file_put_contents($process->path.'/pass-0-0.log', 'private statistics');
-                } elseif ($pass === 2) {
-                    file_put_contents(end($process->command), 'encoded media');
-                }
+        $this->assertThrows(
+            fn () => $this->twoPassExport()->save('failed.mp4'),
+            fn (MediaException $exception) => $exception->phase === 'encoding'
+                && $exception->category === $category
+                && $exception->published === [],
+        );
 
-                return Process::result(exitCode: ($failure === 'first' && $pass === 1) || ($failure === 'second' && $pass === 2) ? 7 : 0);
-            });
-
-            try {
-                FFMpeg::disk('memory')->open('source.mp4')->export()->video('libx264', bitrate: '150k')->twoPass()
-                    ->onProgress(function (Progress $progress) use ($failure) {
-                        if ($progress->isEncoding() && (($failure === 'cancel-first' && $progress->pass === 1)
-                            || ($failure === 'cancel-second' && $progress->pass === 2))) {
-                            throw new ExportCancelled('cancel pass');
-                        }
-                    })->save('failed.mp4');
-                $this->fail('A failed or cancelled pass must not publish.');
-            } catch (ExportCancelled $exception) {
-                $this->assertStringStartsWith('cancel-', $failure);
-            } catch (MediaException $exception) {
-                $this->assertSame(['encoding', $failure === 'missing' ? 'artifact' : 'exit'], [$exception->phase, $exception->category]);
-                $this->assertSame([], $exception->published);
-            }
-            $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
+        $this->assertWorkspacesAreCleanedUp();
         Event::assertNotDispatched(Events\ExportCompleted::class);
+    }
+
+    public static function failedPassProvider(): array
+    {
+        return [
+            'missing statistics' => ['missing', 'artifact'],
+            'failed first pass' => ['first', 'exit'],
+            'failed second pass' => ['second', 'exit'],
+        ];
+    }
+
+    #[TestWith([1], 'first pass')]
+    #[TestWith([2], 'second pass')]
+    public function test_cancelled_passes_never_publish_or_retain_statistics(int $pass): void
+    {
+        $this->fakeTwoPassPipeline();
+
+        $this->assertThrows(
+            fn () => $this->twoPassExport()->onProgress(function (Progress $progress) use ($pass) {
+                if ($progress->isEncoding() && $progress->pass === $pass) {
+                    throw new ExportCancelled('cancel pass');
+                }
+            })->save('failed.mp4'),
+            ExportCancelled::class,
+        );
+
+        $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
+        $this->assertWorkspacesAreCleanedUp();
+        Event::assertNotDispatched(Events\ExportCompleted::class);
+    }
+
+    /**
+     * Fake a two-pass encode in which the given step fails.
+     */
+    protected function fakeTwoPassPipeline(?string $failure = null): void
+    {
+        $this->fakePipeline(function (PendingProcess $process) use ($failure) {
+            $pass = (int) $process->command[array_search('-pass:v', $process->command, true) + 1];
+
+            if ($pass === 1 && $failure !== 'missing') {
+                file_put_contents($process->path.'/pass-0-0.log', 'private statistics');
+            } elseif ($pass === 2) {
+                file_put_contents(end($process->command), 'encoded media');
+            }
+
+            return Process::result(exitCode: ($failure === 'first' && $pass === 1) || ($failure === 'second' && $pass === 2) ? 7 : 0);
+        });
+    }
+
+    /**
+     * Get a two-pass export of the source file.
+     */
+    protected function twoPassExport(): PendingExport
+    {
+        return FFMpeg::disk('memory')->open('source.mp4')->export()->video('libx264', bitrate: '150k')->twoPass();
     }
 
     public function test_real_two_pass_exports_keep_independent_output_statistics_and_report_both_passes(): void
@@ -702,42 +897,49 @@ class ExportTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_waveform_arguments_and_invalid_images_fail_without_publication(): void
+    #[DataProvider('invalidWaveformProvider')]
+    public function test_invalid_waveform_requests_are_rejected_before_any_process(Closure $configure): void
     {
         Process::fake();
-        $media = FFMpeg::disk('memory')->open('source.mp4');
 
-        foreach ([
-            fn () => $media->waveform(width: 0),
-            fn () => $media->waveform(height: -1),
-            fn () => $media->waveform(colors: []),
-            fn () => $media->waveform(colors: ['red|blue']),
-            fn () => $media->waveform(colors: ['red:draw=full']),
-            fn () => $media->waveform(colors: ['#fff']),
-            fn () => $media->waveform(colors: [123]),
-            fn () => $media->waveform(colors: ['color' => 'red']),
-            fn () => $media->waveform(colors: ''),
-            fn () => $media->waveform(colors: 'red|blue'),
-            fn () => $media->waveform(colors: 'red:draw=full'),
-            fn () => $media->waveform(colors: '#fff'),
-            fn () => $media->waveform(colors: "blue\n"),
-            fn () => $media->waveform()->clip(0, duration: 1, seek: 'keyframe')->inspect(),
-            fn () => $media->waveform()->videoStream(0, fn ($v) => $v->color('bt709', 'bt709', 'bt709'))->inspect(),
-        ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('An invalid waveform request was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
-        Process::assertNothingRan();
-
-        $this->fakePipeline();
         $this->assertThrows(
-            fn () => $media->waveform()->save('invalid-wave.png'),
+            fn () => $configure(FFMpeg::disk('memory')->open('source.mp4')),
+            InvalidArgumentException::class,
+        );
+
+        Process::assertNothingRan();
+    }
+
+    public static function invalidWaveformProvider(): array
+    {
+        return [
+            'zero width' => [fn (Media $media) => $media->waveform(width: 0)],
+            'negative height' => [fn (Media $media) => $media->waveform(height: -1)],
+            'empty color list' => [fn (Media $media) => $media->waveform(colors: [])],
+            'separator in a color list' => [fn (Media $media) => $media->waveform(colors: ['red|blue'])],
+            'filter options in a color list' => [fn (Media $media) => $media->waveform(colors: ['red:draw=full'])],
+            'short hex color in a list' => [fn (Media $media) => $media->waveform(colors: ['#fff'])],
+            'integer color' => [fn (Media $media) => $media->waveform(colors: [123])],
+            'keyed color list' => [fn (Media $media) => $media->waveform(colors: ['color' => 'red'])],
+            'empty color' => [fn (Media $media) => $media->waveform(colors: '')],
+            'separator in a color' => [fn (Media $media) => $media->waveform(colors: 'red|blue')],
+            'filter options in a color' => [fn (Media $media) => $media->waveform(colors: 'red:draw=full')],
+            'short hex color' => [fn (Media $media) => $media->waveform(colors: '#fff')],
+            'color with a newline' => [fn (Media $media) => $media->waveform(colors: "blue\n")],
+            'keyframe clip' => [fn (Media $media) => $media->waveform()->clip(0, duration: 1, seek: 'keyframe')->inspect()],
+            'video color settings' => [fn (Media $media) => $media->waveform()->videoStream(0, fn ($v) => $v->color('bt709', 'bt709', 'bt709'))->inspect()],
+        ];
+    }
+
+    public function test_invalid_waveform_images_are_not_published(): void
+    {
+        $this->fakePipeline();
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->waveform()->save('invalid-wave.png'),
             fn (MediaException $exception) => $exception->phase === 'validation' && $exception->category === 'artifact',
         );
+
         $this->assertFalse(Storage::disk('memory')->exists('invalid-wave.png'));
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -963,28 +1165,26 @@ class ExportTest extends TestCase
         $this->assertNull($encoding->remainingSeconds);
     }
 
-    public function test_missing_or_empty_artifacts_never_reach_publication(): void
+    #[TestWith([null], 'missing artifact')]
+    #[TestWith([''], 'empty artifact')]
+    public function test_missing_or_empty_artifacts_never_reach_publication(?string $contents): void
     {
-        foreach ([null, ''] as $contents) {
-            $this->fakePipeline(function (PendingProcess $process) use ($contents) {
-                if ($contents !== null) {
-                    file_put_contents(end($process->command), $contents);
-                }
-
-                return Process::result(output: "out_time_us=10000000\nprogress=end\n");
-            });
-
-            try {
-                FFMpeg::disk('memory')->open('source.mp4')->export()->save('missing.mp4');
-                $this->fail('Exit zero without an artifact must not complete.');
-            } catch (MediaException $exception) {
-                $this->assertSame('validation', $exception->phase);
-                $this->assertSame('artifact', $exception->category);
-                $this->assertFalse(Storage::disk('memory')->exists('missing.mp4'));
-                $this->assertWorkspacesAreCleanedUp();
-                Event::assertNotDispatched(Events\ExportCompleted::class);
+        $this->fakePipeline(function (PendingProcess $process) use ($contents) {
+            if ($contents !== null) {
+                file_put_contents(end($process->command), $contents);
             }
-        }
+
+            return Process::result(output: "out_time_us=10000000\nprogress=end\n");
+        });
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->save('missing.mp4'),
+            fn (MediaException $exception) => $exception->phase === 'validation' && $exception->category === 'artifact',
+        );
+
+        $this->assertFalse(Storage::disk('memory')->exists('missing.mp4'));
+        $this->assertWorkspacesAreCleanedUp();
+        Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
     public function test_encoding_failures_do_not_publish_and_report_the_encoding_phase(): void
@@ -1003,27 +1203,28 @@ class ExportTest extends TestCase
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
-    public function test_destination_options_merge_and_the_last_explicit_visibility_wins(): void
+    #[DataProvider('privateDestinationProvider')]
+    public function test_destination_options_merge_and_the_last_explicit_visibility_wins(Closure $configure): void
     {
         $this->fakePipeline();
         $media = FFMpeg::disk('memory')->open('source.mp4');
-        $exports = [
-            $media->export()->visibility('private')->toDisk('memory', ['ContentType' => 'video/mp4']),
-            $media->export()->toDisk('memory', ['visibility' => 'public'])->visibility('private'),
-            $media->export()->visibility('public')->toDisk('memory', ['visibility' => 'private']),
-            $media->export()->toDisk('memory', ['visibility' => 'private'])->toDisk('memory'),
-        ];
 
-        foreach ($exports as $index => $export) {
-            $path = "options-{$index}.mp4";
-            $export->save($path);
-
-            $this->assertSame('encoded media', Storage::disk('memory')->get($path));
-            $this->assertSame('private', Storage::disk('memory')->getVisibility($path));
-        }
-
+        $configure($media->export())->save('options.mp4');
         $media->export()->save('independent.mp4');
+
+        $this->assertSame('encoded media', Storage::disk('memory')->get('options.mp4'));
+        $this->assertSame('private', Storage::disk('memory')->getVisibility('options.mp4'));
         $this->assertSame('public', Storage::disk('memory')->getVisibility('independent.mp4'));
+    }
+
+    public static function privateDestinationProvider(): array
+    {
+        return [
+            'visibility before options' => [fn (PendingExport $export) => $export->visibility('private')->toDisk('memory', ['ContentType' => 'video/mp4'])],
+            'visibility after options' => [fn (PendingExport $export) => $export->toDisk('memory', ['visibility' => 'public'])->visibility('private')],
+            'options after visibility' => [fn (PendingExport $export) => $export->visibility('public')->toDisk('memory', ['visibility' => 'private'])],
+            'options kept by a later disk' => [fn (PendingExport $export) => $export->toDisk('memory', ['visibility' => 'private'])->toDisk('memory')],
+        ];
     }
 
     public function test_false_storage_writes_fail_with_destination_context(): void

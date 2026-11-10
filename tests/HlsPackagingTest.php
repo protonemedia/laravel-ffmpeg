@@ -2,15 +2,18 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\HlsVariant;
+use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
@@ -51,12 +54,18 @@ class HlsPackagingTest extends TestCase
         return $result->output();
     }
 
-    public static function packaging(): array
+    /**
+     * Get the segment formats, as whether the segments are fragmented MP4.
+     */
+    public static function packagingProvider(): array
     {
-        return [[false], [true]];
+        return [
+            'mpeg-ts' => [false],
+            'fmp4' => [true],
+        ];
     }
 
-    #[DataProvider('packaging')]
+    #[DataProvider('packagingProvider')]
     public function test_x265_variants_publish_hevc_playlists_and_decode_without_falling_back_to_h264(bool $fragmented): void
     {
         $export = $this->source()->hls(segmentDuration: 0.7)->video('libx265', crf: 28, preset: 'ultrafast')
@@ -85,7 +94,7 @@ class HlsPackagingTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    #[DataProvider('packaging')]
+    #[DataProvider('packagingProvider')]
     public function test_two_pass_variants_decode_with_private_isolated_statistics_and_no_first_pass_packaging(bool $fragmented): void
     {
         $media = $this->source();
@@ -149,7 +158,7 @@ class HlsPackagingTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    #[DataProvider('packaging')]
+    #[DataProvider('packagingProvider')]
     public function test_reusable_audio_and_subtitle_groups_decode_each_track_and_rewrite_every_owned_playlist(bool $fragmented): void
     {
         $media = $this->source();
@@ -224,44 +233,63 @@ class HlsPackagingTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_invalid_packaging_and_group_settings_fail_before_io(): void
+    #[DataProvider('invalidPackagingProvider')]
+    public function test_invalid_packaging_and_group_settings_fail_before_io(Closure $invalid): void
     {
         Process::fake();
         $media = FFMpeg::disk('absent')->open('unread.mp4');
-        foreach ([
-            fn () => $media->hls()->fmp4()->encrypt('absent', fn () => '/key'),
-            fn () => $media->hls()->encrypt('absent', fn () => '/key')->fmp4(),
-            fn () => $media->hls()->variant('v', fn () => null, init: 'init.mp4')->inspect(),
-            fn () => $media->hls()->fmp4()->variant('v', fn () => null, segments: 'part-%d.ts')->inspect(),
-            fn () => $media->hls()->variant('v', fn ($v) => $v->audioGroup('missing'))->inspect(),
-            fn () => $media->hls()->audioRendition('a', 'one', fn () => null, default: true, autoselect: false),
-            fn () => $media->hls()->audioRendition('a', 'one', fn () => null)->audioRendition('a', 'one', fn () => null),
-            fn () => $media->hls()->audioRendition('a', 'one', fn () => null, default: true)->audioRendition('a', 'two', fn () => null, default: true),
-            fn () => $media->hls()->audioRendition('../a', 'one', fn () => null),
-            fn () => $media->hls()->subtitleRendition('s', 'bad"name', fn () => null),
-            fn () => $media->hls()->variant('v', fn () => null)->audioRendition('a', 'one', fn () => null)->inspect(),
-            fn () => $media->hls()->variant('v', fn () => null)->twoPass()->inspect(),
-            fn () => $media->hls()->variant('v', fn ($v) => $v->subtitleGroup('s'))
-                ->subtitleRendition('s', 'one', fn ($v) => $v->map('0:s:0'))->encrypt('absent', fn () => '/key')->inspect(),
-            fn () => $media->hls()->variant('v', fn ($v) => $v->audioGroup('a'))->clip(0, duration: 1)
-                ->audioRendition('a', 'one', fn ($v) => $v->map('0:a:0')->clip(0, duration: 2))->inspect(),
-        ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Invalid HLS packaging settings were accepted.');
-            } catch (InvalidArgumentException) {
-                $this->assertWorkspacesAreCleanedUp();
-            }
-        }
+
+        $this->assertThrows(fn () => $invalid($media), InvalidArgumentException::class);
+
+        $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
     }
 
-    public static function corruptFragments(): array
+    /**
+     * Get the HLS packaging and rendition group settings that conflict or are incomplete.
+     */
+    public static function invalidPackagingProvider(): array
     {
-        return array_map(fn ($case) => [$case], ['missing-init', 'empty-init', 'extra-init', 'missing-map', 'duplicate-map', 'external-map', 'escape-map', 'missing-segment', 'extra-segment', 'hook-map']);
+        return [
+            'encryption before fmp4' => [fn (Media $media) => $media->hls()->fmp4()->encrypt('absent', fn () => '/key')],
+            'fmp4 after encryption' => [fn (Media $media) => $media->hls()->encrypt('absent', fn () => '/key')->fmp4()],
+            'init path without fmp4' => [fn (Media $media) => $media->hls()->variant('v', fn () => null, init: 'init.mp4')->inspect()],
+            'ts segments with fmp4' => [fn (Media $media) => $media->hls()->fmp4()->variant('v', fn () => null, segments: 'part-%d.ts')->inspect()],
+            'undeclared audio group' => [fn (Media $media) => $media->hls()->variant('v', fn ($v) => $v->audioGroup('missing'))->inspect()],
+            'default without autoselect' => [fn (Media $media) => $media->hls()->audioRendition('a', 'one', fn () => null, default: true, autoselect: false)],
+            'duplicate rendition name' => [fn (Media $media) => $media->hls()->audioRendition('a', 'one', fn () => null)->audioRendition('a', 'one', fn () => null)],
+            'two defaults in a group' => [fn (Media $media) => $media->hls()->audioRendition('a', 'one', fn () => null, default: true)->audioRendition('a', 'two', fn () => null, default: true)],
+            'group id with a path' => [fn (Media $media) => $media->hls()->audioRendition('../a', 'one', fn () => null)],
+            'quote in a name' => [fn (Media $media) => $media->hls()->subtitleRendition('s', 'bad"name', fn () => null)],
+            'unreferenced group' => [fn (Media $media) => $media->hls()->variant('v', fn () => null)->audioRendition('a', 'one', fn () => null)->inspect()],
+            'two-pass inspection' => [fn (Media $media) => $media->hls()->variant('v', fn () => null)->twoPass()->inspect()],
+            'encrypted subtitles' => [fn (Media $media) => $media->hls()->variant('v', fn ($v) => $v->subtitleGroup('s'))
+                ->subtitleRendition('s', 'one', fn ($v) => $v->map('0:s:0'))->encrypt('absent', fn () => '/key')->inspect()],
+            'rendition longer than its variant' => [fn (Media $media) => $media->hls()->variant('v', fn ($v) => $v->audioGroup('a'))->clip(0, duration: 1)
+                ->audioRendition('a', 'one', fn ($v) => $v->map('0:a:0')->clip(0, duration: 2))->inspect()],
+        ];
     }
 
-    #[DataProvider('corruptFragments')]
+    /**
+     * Get the ways FFmpeg's fragment inventory or the playlist hook can break an fMP4 export.
+     */
+    public static function corruptFragmentProvider(): array
+    {
+        return [
+            'missing init' => ['missing-init'],
+            'empty init' => ['empty-init'],
+            'extra init' => ['extra-init'],
+            'missing map' => ['missing-map'],
+            'duplicate map' => ['duplicate-map'],
+            'external map' => ['external-map'],
+            'escaping map' => ['escape-map'],
+            'missing segment' => ['missing-segment'],
+            'extra segment' => ['extra-segment'],
+            'map removed by the hook' => ['hook-map'],
+        ];
+    }
+
+    #[DataProvider('corruptFragmentProvider')]
     public function test_invalid_fragment_inventories_and_map_hook_tampering_prevent_every_write(string $case): void
     {
         $disk = Storage::disk('hls-packaging');
@@ -342,20 +370,19 @@ class HlsPackagingTest extends TestCase
         $this->assertStringContainsString('BYTERANGE="100@0"', $result['video/index.m3u8']);
     }
 
-    public function test_alternate_renditions_require_exactly_one_stream_of_the_declared_type_before_encoding(): void
+    #[TestWith(['0:v:0'])]
+    #[TestWith(['0:a'])]
+    public function test_alternate_renditions_require_exactly_one_stream_of_the_declared_type_before_encoding(string $map): void
     {
         $media = $this->source();
-        foreach (['0:v:0', '0:a'] as $map) {
-            try {
-                $media->hls()->variant('v', fn ($v) => $v->audioGroup('a'))
-                    ->audioRendition('a', 'one', fn ($v) => $v->map($map))->save('out/master.m3u8');
-                $this->fail('An alternate audio rendition accepted a wrong stream type or multiple tracks.');
-            } catch (MediaException $exception) {
-                $this->assertSame(['probing', 'mapping'], [$exception->phase, $exception->category]);
-                $this->assertFalse(Storage::disk('hls-packaging')->exists('out/master.m3u8'));
-                $this->assertWorkspacesAreCleanedUp();
-            }
-        }
+
+        $this->assertThrows(
+            fn () => $media->hls()->variant('v', fn ($v) => $v->audioGroup('a'))
+                ->audioRendition('a', 'one', fn ($v) => $v->map($map))->save('out/master.m3u8'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+        );
+        $this->assertFalse(Storage::disk('hls-packaging')->exists('out/master.m3u8'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_cancelling_between_hls_passes_cleans_logs_without_publishing_media_or_private_keys(): void

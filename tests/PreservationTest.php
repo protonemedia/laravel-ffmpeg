@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
@@ -13,7 +14,9 @@ use League\Flysystem\PathPrefixing\PathPrefixedAdapter;
 use League\Flysystem\PathTraversalDetected;
 use League\Flysystem\ReadOnly\ReadOnlyFilesystemAdapter;
 use Orchestra\Testbench\Attributes\RequiresEnv;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 #[RequiresEnv('FFMPEG_9_FFPROBE')]
@@ -63,11 +66,24 @@ class PreservationTest extends TestCase
                 $this->assertLessThan(15, $pixel[2 - $channel]);
             }
         }
-        foreach ([fn () => $media->export()->rotate(45), fn () => $media->export()->crop(31, 24),
-            fn () => $media->export()->pad(40, 48, background: 'red;movie=/secret'),
-            fn () => $media->export()->crop(32, 24)->video('copy')->inspect()] as $invalid) {
-            $this->assertThrows($invalid, InvalidArgumentException::class);
-        }
+    }
+
+    #[DataProvider('invalidGeometryProvider')]
+    public function test_invalid_geometry_is_rejected(Closure $configure): void
+    {
+        $export = FFMpeg::disk()->open(new File(__DIR__.'/src/video.mp4'))->export();
+        $this->expectException(InvalidArgumentException::class);
+        $configure($export);
+    }
+
+    public static function invalidGeometryProvider(): array
+    {
+        return [
+            'unsupported rotation' => [fn (PendingExport $export) => $export->rotate(45)],
+            'odd crop width' => [fn (PendingExport $export) => $export->crop(31, 24)],
+            'filter in pad color' => [fn (PendingExport $export) => $export->pad(40, 48, background: 'red;movie=/secret')],
+            'crop of copied video' => [fn (PendingExport $export) => $export->crop(32, 24)->video('copy')->inspect()],
+        ];
     }
 
     public function test_scoped_read_only_inputs_and_outputs_keep_their_prefix_and_never_write_the_source(): void

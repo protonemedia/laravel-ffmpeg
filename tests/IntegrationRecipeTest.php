@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\PendingExport;
 use ProtoneMedia\LaravelFFMpeg\Queue\ExportJob;
@@ -123,15 +124,15 @@ class IntegrationRecipeTest extends TestCase
         $this->assertSame(2, DB::table('recipe_conversions')->count());
     }
 
-    public function test_changed_source_or_profile_blocks_publication_even_when_the_export_id_matches(): void
+    #[TestWith(['source_version', 'sha256:revision-2'])]
+    #[TestWith(['profile_version', 'web-v3'])]
+    public function test_changed_source_or_profile_blocks_publication_even_when_the_export_id_matches(string $column, string $value): void
     {
-        foreach (['source_version' => 'sha256:revision-2', 'profile_version' => 'web-v3'] as $column => $value) {
-            $job = $this->request();
-            DB::table('recipe_media')->where('id', 1)->update([$column => $value]);
-            $job->handle();
-            $this->assertSame('stale', DB::table('recipe_conversions')->where('export_id', $job->exportId)->sole()->status);
-            $this->assertNull(DB::table('recipe_media')->sole()->published_export_id);
-        }
+        $job = $this->request();
+        DB::table('recipe_media')->where('id', 1)->update([$column => $value]);
+        $job->handle();
+        $this->assertSame('stale', DB::table('recipe_conversions')->where('export_id', $job->exportId)->sole()->status);
+        $this->assertNull(DB::table('recipe_media')->sole()->published_export_id);
     }
 
     public function test_database_failure_keeps_published_files_and_private_receipt_for_reconciliation(): void

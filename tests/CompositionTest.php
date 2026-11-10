@@ -2,7 +2,9 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\File;
 use Illuminate\Process\Factory;
 use Illuminate\Process\PendingProcess;
@@ -14,11 +16,16 @@ use Illuminate\Support\MultipleItemsFoundException;
 use InvalidArgumentException;
 use LogicException;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Events;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
+use ProtoneMedia\LaravelFFMpeg\ExportResult;
+use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\Progress;
+use ProtoneMedia\LaravelFFMpeg\Stream;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Watermark;
 
@@ -63,6 +70,23 @@ class CompositionTest extends TestCase
         });
     }
 
+    /**
+     * Probe a source with three streams and get it with its last video and audio stream.
+     */
+    protected function probedStreams(): array
+    {
+        $this->fakePipeline(probe: fn () => '{"format":{"duration":"2"},"streams":[{"index":2,"codec_type":"audio","tags":{"language":"fra"}},{"index":7,"codec_type":"video"},{"index":9,"codec_type":"audio","tags":{"language":"eng"}}]}');
+        $media = FFMpeg::disk('memory')->open('source.mkv');
+        $metadata = $media->probe();
+
+        // A fresh fake replaces the probing one, so the tests can assert that
+        // selecting the probed streams runs no process of its own.
+        Process::swap(new Factory);
+        Process::fake();
+
+        return [$media, $metadata->videoStreams()->first(), $metadata->audioStreams()->last()];
+    }
+
     public function test_inspection_preserves_input_positions_and_independent_output_scopes_without_io(): void
     {
         Process::fake();
@@ -86,56 +110,72 @@ class CompositionTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_conflicting_composition_settings_fail_before_execution(): void
+    #[DataProvider('conflictingCompositionProvider')]
+    public function test_conflicting_composition_settings_fail_before_execution(Closure $attempt): void
     {
         Process::fake();
         $media = FFMpeg::disk('memory')->open('source.mkv');
 
-        foreach ([
-            fn () => $media->export()->video('ffv1')->output('one.mkv', fn () => null),
-            fn () => $media->export()->output('one.mkv', fn () => null)->video('ffv1'),
-            fn () => $media->export()->output('one.mkv', fn () => null)->save('two.mkv'),
-            fn () => $media->export()->filterComplex('[0:v]null[out]')->inspect(),
-            fn () => $media->export()->filterComplex('[0:v]null[out]')->map('[missing]')->inspect(),
-            fn () => $media->export()->filterComplex('[9:v]null[out]')->map('[out]')->inspect(),
-            fn () => $media->export()->filterComplex('[0:v]null[out]')->map('[out]')->map('[out]')->inspect(),
-            fn () => $media->export()->output('same.mkv', fn () => null)->output('x/../same.mkv', fn () => null)->save(),
-            fn () => $media->export()->output('source.mkv', fn ($out) => $out->toDisk('memory'))->output('other.mkv', fn () => null)->save(),
-            fn () => $media->export()->output('one.mkv', fn ($out) => $out->clip(1, duration: 1, seek: 'keyframe'))->output('two.mkv', fn () => null)->inspect(),
-        ] as $attempt) {
-            try {
-                $attempt();
-                $this->fail('Ambiguous composition was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
-
-        $export = $media->export();
-        $export->addInput($media);
-
-        $this->assertThrows(fn () => $export->map('1:v')->inspect(), InvalidArgumentException::class);
+        $this->assertThrows(fn () => $attempt($media), InvalidArgumentException::class);
 
         Process::assertNothingRan();
     }
 
-    public function test_metadata_omission_can_include_chapters_without_changing_existing_defaults(): void
+    /**
+     * Get the compositions that are ambiguous or conflict with each other.
+     */
+    public static function conflictingCompositionProvider(): array
+    {
+        return [
+            'codec before outputs' => [fn (Media $media) => $media->export()->video('ffv1')->output('one.mkv', fn () => null)],
+            'codec after outputs' => [fn (Media $media) => $media->export()->output('one.mkv', fn () => null)->video('ffv1')],
+            'path with outputs' => [fn (Media $media) => $media->export()->output('one.mkv', fn () => null)->save('two.mkv')],
+            'unmapped graph' => [fn (Media $media) => $media->export()->filterComplex('[0:v]null[out]')->inspect()],
+            'missing label' => [fn (Media $media) => $media->export()->filterComplex('[0:v]null[out]')->map('[missing]')->inspect()],
+            'missing input' => [fn (Media $media) => $media->export()->filterComplex('[9:v]null[out]')->map('[out]')->inspect()],
+            'label mapped twice' => [fn (Media $media) => $media->export()->filterComplex('[0:v]null[out]')->map('[out]')->map('[out]')->inspect()],
+            'same destination' => [fn (Media $media) => $media->export()->output('same.mkv', fn () => null)->output('x/../same.mkv', fn () => null)->save()],
+            'overwrites the source' => [fn (Media $media) => $media->export()->output('source.mkv', fn ($out) => $out->toDisk('memory'))->output('other.mkv', fn () => null)->save()],
+            'keyframe seek per output' => [fn (Media $media) => $media->export()->output('one.mkv', fn ($out) => $out->clip(1, duration: 1, seek: 'keyframe'))->output('two.mkv', fn () => null)->inspect()],
+            'implicit metadata source' => [function (Media $media) {
+                $export = $media->export();
+                $export->addInput($media);
+
+                return $export->map('1:v')->inspect();
+            }],
+        ];
+    }
+
+    #[DataProvider('metadataOmissionProvider')]
+    public function test_metadata_omission_can_include_chapters_without_changing_existing_defaults(Closure $export, string $chapters): void
     {
         Process::fake();
         $media = FFMpeg::disk('missing')->open('source.mkv');
 
-        foreach ([
-            [$media->export()->withoutMetadata(), '0'],
-            [$media->export()->chaptersFrom(0)->withoutMetadata(chapters: true), '-1'],
-            [$media->export()->withoutMetadata(chapters: true)->chaptersFrom(0), '0'],
-            [$media->export()->withoutMetadata(chapters: true)->withoutMetadata(chapters: false), '-1'],
-            [$media->export()->clip(1, duration: 2)->withoutMetadata(), '-1'],
-        ] as [$export, $chapters]) {
-            $command = $export->inspect();
-            $this->assertSame('-1', $command[array_search('-map_metadata', $command, true) + 1]);
-            $this->assertSame($chapters, $command[array_search('-map_chapters', $command, true) + 1]);
-        }
+        $command = $export($media)->inspect();
+        $this->assertSame('-1', $command[array_search('-map_metadata', $command, true) + 1]);
+        $this->assertSame($chapters, $command[array_search('-map_chapters', $command, true) + 1]);
+        Process::assertNothingRan();
+    }
 
+    /**
+     * Get the exports that omit metadata, with the chapter source each one maps.
+     */
+    public static function metadataOmissionProvider(): array
+    {
+        return [
+            'metadata only' => [fn (Media $media) => $media->export()->withoutMetadata(), '0'],
+            'chapters after explicit chapters' => [fn (Media $media) => $media->export()->chaptersFrom(0)->withoutMetadata(chapters: true), '-1'],
+            'explicit chapters after omission' => [fn (Media $media) => $media->export()->withoutMetadata(chapters: true)->chaptersFrom(0), '0'],
+            'chapters restored' => [fn (Media $media) => $media->export()->withoutMetadata(chapters: true)->withoutMetadata(chapters: false), '-1'],
+            'clipped' => [fn (Media $media) => $media->export()->clip(1, duration: 2)->withoutMetadata(), '-1'],
+        ];
+    }
+
+    public function test_metadata_omission_is_scoped_to_each_output(): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('source.mkv');
         $export = $media->export();
         $export->addInput($media);
         $command = $export
@@ -155,20 +195,42 @@ class CompositionTest extends TestCase
         $this->assertContains('lut3d=file=resource-0.cube', $export->inspect());
         $this->assertSame($export->inspect(), $media->export()->lut3d($lut)->inspect());
 
-        foreach (["lut3d=file='{{look}}'", 'lut3d=file=prefix{{look}}', 'lut3d=file={{look}}suffix', 'movie=filename={{look}}', 'subtitles=filename={{look}}', 'lut3d=file={{missing}}', 'hflip'] as $filter) {
-            try {
-                $media->export()->resource('look', $lut)->videoFilter($filter)->inspect();
-                $this->fail('An unsafe placeholder context was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
-
         // Brackets, commas and semicolons in a quoted filter value are not labels or chains.
         $this->assertContains("[0:v]drawtext=text='[not_a_label],;':fontfile=resource-0.cube[out]", $media->export()
             ->resource('font', $lut)->filterComplex("[0:v]drawtext=text='[not_a_label],;':fontfile={{font}}[out]")
             ->map('[out]')->inspect());
         Process::assertNothingRan();
+    }
+
+    #[DataProvider('unsafePlaceholderProvider')]
+    public function test_resource_placeholders_must_be_whole_unquoted_values(string $filter): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('source.mkv');
+        $lut = FFMpeg::disk('missing')->open("a 'quoted', 日本語: look.cube");
+
+        $this->assertThrows(
+            fn () => $media->export()->resource('look', $lut)->videoFilter($filter)->inspect(),
+            InvalidArgumentException::class,
+        );
+
+        Process::assertNothingRan();
+    }
+
+    /**
+     * Get the filters that use a resource placeholder in an unsafe context.
+     */
+    public static function unsafePlaceholderProvider(): array
+    {
+        return [
+            'quoted' => ["lut3d=file='{{look}}'"],
+            'prefixed' => ['lut3d=file=prefix{{look}}'],
+            'suffixed' => ['lut3d=file={{look}}suffix'],
+            'movie source' => ['movie=filename={{look}}'],
+            'subtitles filter' => ['subtitles=filename={{look}}'],
+            'undeclared resource' => ['lut3d=file={{missing}}'],
+            'unused resource' => ['hflip'],
+        ];
     }
 
     public function test_typed_resources_reject_overrides_expansion_and_input_seeks_without_io(): void
@@ -184,51 +246,97 @@ class CompositionTest extends TestCase
             ->subtitleResource('captions', $subtitle)->filterComplex('[0:v]subtitles=filename={{captions}}[out]')
             ->map('[out]')->inspect());
 
-        foreach ([
-            'drawtext=textfile={{title}}',
-            'drawtext=expansion=none,drawtext=textfile={{title}}',
-            'drawtext=textfile={{title}}:expansion=none:expansion=normal',
-            'drawtext=textfile={{title}}:expansion=none:reload=1',
-            'drawtext=textfile={{title}}:expansion=none:text=override',
-            'drawtext=textfile={{title}}:expansion=none:textfile=override.txt',
-            'drawtext=positional:textfile={{title}}:expansion=none',
-            'lut3d=file={{title}}',
-        ] as $filter) {
-            try {
-                $media->export()->textResource('title', 'literal')->videoFilter($filter)->inspect();
-                $this->fail('Literal text resource restrictions were bypassed.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
 
-        foreach (['subtitles=filename={{captions}}:f=other.ass', 'subtitles=filename={{captions}}:filename=other.ass',
-            'subtitles=other.ass:filename={{captions}}', 'subtitles={{captions}}', 'drawtext=textfile={{captions}}:expansion=none'] as $filter) {
-            try {
-                $media->export()->subtitleResource('captions', $subtitle)->videoFilter($filter)->inspect();
-                $this->fail('A subtitle filename or type restriction was bypassed.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+    #[DataProvider('unsafeTextFilterProvider')]
+    public function test_text_resources_must_be_drawn_literally(string $filter): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('source.mkv');
 
-        foreach ([
-            fn () => $media->export()->textResource('bad', "\xff"),
-            fn () => $media->export()->textResource('bad', "a\0b"),
-            fn () => $media->export()->textResource('name', 'literal')->subtitleResource('name', $subtitle),
-            fn () => $media->export()->subtitleResource('captions', $subtitle)->clip(1, duration: 1, seek: 'keyframe')->inspect(),
-            fn () => $media->export()->subtitleResource('captions', FFMpeg::disk('missing')->open('captions.srt', ['-probesize', '2048'])),
-        ] as $attempt) {
-            try {
-                $attempt();
-                $this->fail('Invalid text or subtitle configuration was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+        $this->assertThrows(
+            fn () => $media->export()->textResource('title', 'literal')->videoFilter($filter)->inspect(),
+            InvalidArgumentException::class,
+        );
 
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Get the filters that would expand, reload or replace a text resource.
+     */
+    public static function unsafeTextFilterProvider(): array
+    {
+        return [
+            'expansion left on' => ['drawtext=textfile={{title}}'],
+            'expansion in another filter' => ['drawtext=expansion=none,drawtext=textfile={{title}}'],
+            'expansion overridden' => ['drawtext=textfile={{title}}:expansion=none:expansion=normal'],
+            'reloaded' => ['drawtext=textfile={{title}}:expansion=none:reload=1'],
+            'text overridden' => ['drawtext=textfile={{title}}:expansion=none:text=override'],
+            'text file overridden' => ['drawtext=textfile={{title}}:expansion=none:textfile=override.txt'],
+            'positional option' => ['drawtext=positional:textfile={{title}}:expansion=none'],
+            'used as a LUT' => ['lut3d=file={{title}}'],
+        ];
+    }
+
+    #[DataProvider('unsafeSubtitleFilterProvider')]
+    public function test_subtitle_resources_must_be_the_only_subtitle_file(string $filter): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('source.mkv');
+        $subtitle = FFMpeg::disk('missing')->open('captions.srt');
+
+        $this->assertThrows(
+            fn () => $media->export()->subtitleResource('captions', $subtitle)->videoFilter($filter)->inspect(),
+            InvalidArgumentException::class,
+        );
+
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Get the filters that would change the file or type of a subtitle resource.
+     */
+    public static function unsafeSubtitleFilterProvider(): array
+    {
+        return [
+            'format overridden' => ['subtitles=filename={{captions}}:f=other.ass'],
+            'filename overridden' => ['subtitles=filename={{captions}}:filename=other.ass'],
+            'positional filename' => ['subtitles=other.ass:filename={{captions}}'],
+            'unnamed option' => ['subtitles={{captions}}'],
+            'drawn as text' => ['drawtext=textfile={{captions}}:expansion=none'],
+        ];
+    }
+
+    #[DataProvider('invalidTypedResourceProvider')]
+    public function test_invalid_text_and_subtitle_resources_are_rejected(Closure $attempt): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('source.mkv');
+        $subtitle = FFMpeg::disk('missing')->open('captions.srt');
+
+        $this->assertThrows(fn () => $attempt($media, $subtitle), InvalidArgumentException::class);
+
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Get the text and subtitle resources that cannot be staged.
+     */
+    public static function invalidTypedResourceProvider(): array
+    {
+        return [
+            'invalid UTF-8' => [fn (Media $media) => $media->export()->textResource('bad', "\xff")],
+            'null byte' => [fn (Media $media) => $media->export()->textResource('bad', "a\0b")],
+            'duplicate name' => [fn (Media $media, Media $subtitle) => $media->export()->textResource('name', 'literal')->subtitleResource('name', $subtitle)],
+            'keyframe seek' => [fn (Media $media, Media $subtitle) => $media->export()->subtitleResource('captions', $subtitle)->clip(1, duration: 1, seek: 'keyframe')->inspect()],
+            'input options' => [fn (Media $media) => $media->export()->subtitleResource('captions', FFMpeg::disk('missing')->open('captions.srt', ['-probesize', '2048']))],
+        ];
     }
 
     public function test_literal_text_is_written_unchanged_and_missing_filter_support_is_typed(): void
@@ -261,14 +369,8 @@ class CompositionTest extends TestCase
 
     public function test_probed_streams_resolve_to_their_source_and_absolute_index_without_more_io(): void
     {
-        $this->fakePipeline(probe: fn () => '{"format":{"duration":"2"},"streams":[{"index":2,"codec_type":"audio","tags":{"language":"fra"}},{"index":7,"codec_type":"video"},{"index":9,"codec_type":"audio","tags":{"language":"eng"}}]}');
-        $media = FFMpeg::disk('memory')->open('source.mkv');
-        $metadata = $media->probe();
-        $video = $metadata->videoStreams()->first();
-        $audio = $metadata->audioStreams()->last();
+        [$media, $video, $audio] = $this->probedStreams();
         $this->assertSame(7, $video->index());
-        Process::swap(new Factory);
-        Process::fake();
         $command = $media->export()->mapAudio($audio)->mapVideo($video)->inspect();
         $positions = array_keys($command, '-map');
         $this->assertSame(['0:9', '0:7'], array_map(fn ($i) => $command[$i + 1], $positions));
@@ -287,43 +389,57 @@ class CompositionTest extends TestCase
         $repeated->addInput($media);
         $this->assertContains('1:7:?', $repeated->output('one.mkv', fn ($out) => $out
             ->mapVideo($video, input: 1, optional: true)->withoutMetadata()->chaptersFrom(null))->inspect());
+        Process::assertNothingRan();
+    }
 
-        foreach ([
-            fn () => $media->export()->mapVideo($audio),
-            fn () => $media->export()->mapAudio($video),
-            fn () => $media->export()->mapVideo($video, track: 1),
-            fn () => $media->export()->mapAudio($audio, language: 'eng'),
-            fn () => $media->export()->mapAudio(track: 0, language: 'eng'),
-            fn () => $media->export()->mapAudio(language: 'eng:0'),
-            fn () => $media->export()->mapVideo(0, input: 1),
-            fn () => $media->export()->mapAudio(0, input: 1),
-            fn () => $media->export()->mapAudio(-1),
-            fn () => $media->export()->mapVideo(input: -1),
-            fn () => $media->export()->mapAudio(track: -1),
-            fn () => $other->export()->mapVideo($video, optional: true)->inspect(),
-            fn () => $export->output('one.mkv', fn () => null),
-            fn () => $media->export()->mapVideo($video, input: 9)->inspect(),
-            fn () => $other->export()->mapVideo($video, input: 0)->inspect(),
-            function () use ($media, $video) {
-                $ambiguous = $media->export();
-                $ambiguous->addInput($media);
-                $ambiguous->mapVideo($video)->withoutMetadata()->chaptersFrom(null)->inspect();
-            },
-        ] as $attempt) {
-            try {
-                $attempt();
-                $this->fail('An ambiguous or invalid stream selection was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+    #[DataProvider('invalidStreamSelectionProvider')]
+    public function test_ambiguous_or_invalid_stream_selections_are_rejected(Closure $attempt): void
+    {
+        [$media, $video, $audio] = $this->probedStreams();
+
+        $this->assertThrows(fn () => $attempt($media, $video, $audio), InvalidArgumentException::class);
 
         Process::assertNothingRan();
     }
 
-    public function test_filter_shortcuts_keep_order_and_output_owned_resources_private_and_shared(): void
+    /**
+     * Get the stream selections that are ambiguous or point at the wrong stream.
+     */
+    public static function invalidStreamSelectionProvider(): array
     {
-        $font = FFMpeg::disk('memory')->open('font.ttf');
+        return [
+            'audio stream as video' => [fn (Media $media, Stream $video, Stream $audio) => $media->export()->mapVideo($audio)],
+            'video stream as audio' => [fn (Media $media, Stream $video) => $media->export()->mapAudio($video)],
+            'stream with a track' => [fn (Media $media, Stream $video) => $media->export()->mapVideo($video, track: 1)],
+            'stream with a language' => [fn (Media $media, Stream $video, Stream $audio) => $media->export()->mapAudio($audio, language: 'eng')],
+            'track with a language' => [fn (Media $media) => $media->export()->mapAudio(track: 0, language: 'eng')],
+            'language with a specifier' => [fn (Media $media) => $media->export()->mapAudio(language: 'eng:0')],
+            'video input given twice' => [fn (Media $media) => $media->export()->mapVideo(0, input: 1)],
+            'audio input given twice' => [fn (Media $media) => $media->export()->mapAudio(0, input: 1)],
+            'negative input' => [fn (Media $media) => $media->export()->mapAudio(-1)],
+            'negative named input' => [fn (Media $media) => $media->export()->mapVideo(input: -1)],
+            'negative track' => [fn (Media $media) => $media->export()->mapAudio(track: -1)],
+            'stream of an absent source' => [fn (Media $media, Stream $video) => FFMpeg::disk('missing')->open('other.mkv')->export()->mapVideo($video, optional: true)->inspect()],
+            'output after top-level maps' => [function (Media $media, Stream $video) {
+                $export = FFMpeg::disk('missing')->open('other.mkv')->export();
+                $export->addInput($media);
+                $export->mapVideo($video)->withoutMetadata()->chaptersFrom(null)->mapVideo(1, track: 2)->mapAudio(1, language: 'eng', optional: true);
+
+                return $export->output('one.mkv', fn () => null);
+            }],
+            'missing input' => [fn (Media $media, Stream $video) => $media->export()->mapVideo($video, input: 9)->inspect()],
+            'input of another source' => [fn (Media $media, Stream $video) => FFMpeg::disk('missing')->open('other.mkv')->export()->mapVideo($video, input: 0)->inspect()],
+            'source opened twice' => [function (Media $media, Stream $video) {
+                $ambiguous = $media->export();
+                $ambiguous->addInput($media);
+
+                return $ambiguous->mapVideo($video)->withoutMetadata()->chaptersFrom(null)->inspect();
+            }],
+        ];
+    }
+
+    public function test_filter_shortcuts_keep_their_order_in_each_output(): void
+    {
         $captions = FFMpeg::disk('missing')->open('captions.srt');
         $media = FFMpeg::disk('memory')->open('source.mkv');
         Process::fake();
@@ -334,25 +450,42 @@ class CompositionTest extends TestCase
         $this->assertSame($command, $export->inspect());
         $this->assertContains('subtitles=filename=resource-0.srt,scale=w=80:h=-2:reset_sar=1', $command);
         $this->assertContains('scale=w=80:h=-2:reset_sar=1,subtitles=filename=resource-0.srt', $command);
-
-        foreach ([
-            fn () => $media->export()->drawText("\xff", $font),
-            fn () => $media->export()->drawText('text', $font, size: 0),
-            fn () => $media->export()->drawText('text', $font, color: 'white:reload=1'),
-            fn () => $media->export()->burnSubtitles($captions)->clip(1, duration: 1, seek: 'keyframe')->inspect(),
-            fn () => $media->export()->burnSubtitles($captions)->video('copy')->inspect(),
-            fn () => $media->export()->output('one.mkv', fn () => null)->drawText('text', $font),
-            fn () => $media->export()->output('one.mkv', fn () => null)->burnSubtitles($captions),
-        ] as $attempt) {
-            try {
-                $attempt();
-                $this->fail('Invalid resource helper configuration was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
         Process::assertNothingRan();
+    }
 
+    #[DataProvider('invalidResourceHelperProvider')]
+    public function test_resource_helpers_reject_invalid_settings(Closure $attempt): void
+    {
+        $font = FFMpeg::disk('memory')->open('font.ttf');
+        $captions = FFMpeg::disk('missing')->open('captions.srt');
+        $media = FFMpeg::disk('memory')->open('source.mkv');
+        Process::fake();
+
+        $this->assertThrows(fn () => $attempt($media, $font, $captions), InvalidArgumentException::class);
+
+        Process::assertNothingRan();
+    }
+
+    /**
+     * Get the text and subtitle helper calls that cannot be drawn.
+     */
+    public static function invalidResourceHelperProvider(): array
+    {
+        return [
+            'invalid UTF-8 text' => [fn (Media $media, Media $font) => $media->export()->drawText("\xff", $font)],
+            'zero font size' => [fn (Media $media, Media $font) => $media->export()->drawText('text', $font, size: 0)],
+            'option in the color' => [fn (Media $media, Media $font) => $media->export()->drawText('text', $font, color: 'white:reload=1')],
+            'subtitles with a keyframe seek' => [fn (Media $media, Media $font, Media $captions) => $media->export()->burnSubtitles($captions)->clip(1, duration: 1, seek: 'keyframe')->inspect()],
+            'subtitles with a copied video' => [fn (Media $media, Media $font, Media $captions) => $media->export()->burnSubtitles($captions)->video('copy')->inspect()],
+            'text after outputs' => [fn (Media $media, Media $font) => $media->export()->output('one.mkv', fn () => null)->drawText('text', $font)],
+            'subtitles after outputs' => [fn (Media $media, Media $font, Media $captions) => $media->export()->output('one.mkv', fn () => null)->burnSubtitles($captions)],
+        ];
+    }
+
+    public function test_output_owned_resources_are_private_and_shared_fonts_are_staged_once(): void
+    {
+        $font = FFMpeg::disk('memory')->open('font.ttf');
+        $media = FFMpeg::disk('memory')->open('source.mkv');
         Storage::disk('memory')->put('font.ttf', 'font bytes');
         $texts = ["100% {{font}}: café \\ ' [x],; %{not_a_function}", 'different output'];
         $retained = null;
@@ -380,27 +513,30 @@ class CompositionTest extends TestCase
 
         $this->assertThrows(fn () => $retained->drawText('late change', $font), LogicException::class);
         $this->assertWorkspacesAreCleanedUp();
+    }
 
+    #[TestWith(['drawText', 'staging'])]
+    #[TestWith(['burnSubtitles', 'probing'])]
+    public function test_unreadable_helper_resources_fail_without_publishing(string $helper, string $phase): void
+    {
+        $media = FFMpeg::disk('memory')->open('source.mkv');
         Storage::disk('memory')->put('invalid.srt', "\xff");
         $this->fakePipeline();
-        foreach (['drawText', 'burnSubtitles'] as $helper) {
-            try {
-                $media->export()->output('failed-'.$helper.'.mkv', function ($out) use ($helper) {
-                    $out->toDisk('memory');
-                    if ($helper === 'drawText') {
-                        $out->drawText('text', FFMpeg::disk('memory')->open('missing-font.ttf'));
-                    } else {
-                        $out->burnSubtitles(FFMpeg::disk('memory')->open('invalid.srt'));
-                    }
-                })->save();
-                $this->fail('An unreadable or invalid helper resource was accepted.');
-            } catch (MediaException $exception) {
-                $this->assertStringContainsString('output 0 '.$helper, $exception->getMessage());
-                $this->assertSame($helper === 'drawText' ? 'staging' : 'probing', $exception->phase);
-                $this->assertFalse(Storage::disk('memory')->exists('failed-'.$helper.'.mkv'));
-                $this->assertWorkspacesAreCleanedUp();
-            }
-        }
+
+        $this->assertThrows(
+            fn () => $media->export()->output('failed-'.$helper.'.mkv', function ($out) use ($helper) {
+                $out->toDisk('memory');
+                if ($helper === 'drawText') {
+                    $out->drawText('text', FFMpeg::disk('memory')->open('missing-font.ttf'));
+                } else {
+                    $out->burnSubtitles(FFMpeg::disk('memory')->open('invalid.srt'));
+                }
+            })->save(),
+            fn (MediaException $exception) => str_contains($exception->getMessage(), 'output 0 '.$helper)
+                && $exception->phase === $phase,
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('failed-'.$helper.'.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_repeated_inputs_share_a_transfer_but_keep_their_input_ids(): void
@@ -426,38 +562,36 @@ class CompositionTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_every_output_is_validated_before_the_first_publication(): void
+    #[TestWith(['missing', 'artifact'])]
+    #[TestWith(['extra-stream', 'mapping'])]
+    #[TestWith(['wrong-type', 'mapping'])]
+    public function test_every_output_is_validated_before_the_first_publication(string $failure, string $category): void
     {
-        foreach (['missing', 'extra-stream', 'wrong-type'] as $failure) {
-            $this->fakePipeline(function (PendingProcess $process) use ($failure) {
-                file_put_contents($process->path.'/output-0.mkv', 'valid');
+        $this->fakePipeline(function (PendingProcess $process) use ($failure) {
+            file_put_contents($process->path.'/output-0.mkv', 'valid');
 
-                if ($failure !== 'missing') {
-                    file_put_contents($process->path.'/output-1.mkv', 'invalid');
-                }
-
-                return Process::result();
-            }, function (PendingProcess $process) use ($failure) {
-                $second = str_ends_with(end($process->command), 'output-1.mkv');
-
-                return json_encode(['format' => ['duration' => '2'], 'streams' => $second && $failure === 'extra-stream'
-                    ? [['index' => 0, 'codec_type' => 'video'], ['index' => 1, 'codec_type' => 'audio']]
-                    : [['index' => 0, 'codec_type' => $second && $failure === 'wrong-type' ? 'audio' : 'video']]]);
-            });
-
-            try {
-                FFMpeg::disk('memory')->open('source.mkv')->export()
-                    ->output('first.mkv', fn ($out) => $out->map('0:v')->toDisk('memory'))
-                    ->output('second.mkv', fn ($out) => $out->map('0:v')->toDisk('memory'))->save();
-                $this->fail('Invalid sibling output reached publication.');
-            } catch (MediaException $exception) {
-                $this->assertSame('validation', $exception->phase);
-                $this->assertSame($failure === 'missing' ? 'artifact' : 'mapping', $exception->category);
-                $this->assertFalse(Storage::disk('memory')->exists('first.mkv'));
-                $this->assertFalse(Storage::disk('memory')->exists('second.mkv'));
-                $this->assertWorkspacesAreCleanedUp();
+            if ($failure !== 'missing') {
+                file_put_contents($process->path.'/output-1.mkv', 'invalid');
             }
-        }
+
+            return Process::result();
+        }, function (PendingProcess $process) use ($failure) {
+            $second = str_ends_with(end($process->command), 'output-1.mkv');
+
+            return json_encode(['format' => ['duration' => '2'], 'streams' => $second && $failure === 'extra-stream'
+                ? [['index' => 0, 'codec_type' => 'video'], ['index' => 1, 'codec_type' => 'audio']]
+                : [['index' => 0, 'codec_type' => $second && $failure === 'wrong-type' ? 'audio' : 'video']]]);
+        });
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mkv')->export()
+                ->output('first.mkv', fn ($out) => $out->map('0:v')->toDisk('memory'))
+                ->output('second.mkv', fn ($out) => $out->map('0:v')->toDisk('memory'))->save(),
+            fn (MediaException $exception) => $exception->phase === 'validation' && $exception->category === $category,
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('first.mkv'));
+        $this->assertFalse(Storage::disk('memory')->exists('second.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_partial_publication_reports_the_successful_sibling_without_deleting_it(): void
@@ -504,15 +638,24 @@ class CompositionTest extends TestCase
         Event::assertDispatched(Events\ExportCancelled::class);
     }
 
-    public function test_generated_files_can_be_selected_by_path_and_disk_without_ambiguous_matches(): void
+    /**
+     * Save two outputs with the same path on different disks and a third nested output.
+     */
+    protected function saveGeneratedFiles(): ExportResult
     {
         $this->fakePipeline();
         $this->fakeLocalDisk();
-        $result = FFMpeg::disk('memory')->open('source.mkv')->export()
+
+        return FFMpeg::disk('memory')->open('source.mkv')->export()
             ->output('full.mkv', fn ($out) => $out->mapVideo(0)->toDisk('memory'))
             ->output('full.mkv', fn ($out) => $out->mapVideo(0)->toDisk('local'))
             ->output('nested/preview.mkv', fn ($out) => $out->mapVideo(0)->toDisk('memory'))
             ->save();
+    }
+
+    public function test_generated_files_can_be_selected_by_path_and_disk_without_ambiguous_matches(): void
+    {
+        $result = $this->saveGeneratedFiles();
 
         $this->assertSame('full.mkv', $result->file()->path);
         $this->assertSame('memory', $result->file()->disk);
@@ -520,24 +663,32 @@ class CompositionTest extends TestCase
         $this->assertSame('local', $result->file('full.mkv', disk: 'local')->disk);
         $this->assertSame('memory', $result->file('full.mkv', disk: 'memory')->disk);
         $this->assertSame('full.mkv', $result->file(disk: 'local')->path);
-
-        foreach ([
-            [fn () => $result->file('missing.mkv'), ItemNotFoundException::class],
-            [fn () => $result->file('nested/preview.mkv', disk: 'local'), ItemNotFoundException::class],
-            [fn () => $result->file('full.mkv'), MultipleItemsFoundException::class],
-            [fn () => $result->file(disk: 'memory'), MultipleItemsFoundException::class],
-        ] as [$lookup, $exceptionClass]) {
-            try {
-                $lookup();
-                $this->fail('A lookup must identify exactly one generated file.');
-            } catch (ItemNotFoundException|MultipleItemsFoundException $exception) {
-                $this->assertInstanceOf($exceptionClass, $exception);
-            }
-        }
-
         $this->assertCount(3, $result->files());
         $this->assertSame('memory', $result->file()->disk);
         $this->assertSame('encoded', Storage::disk('local')->get($result->file('full.mkv', disk: 'local')->path));
+    }
+
+    #[DataProvider('ambiguousFileLookupProvider')]
+    public function test_file_lookups_must_identify_exactly_one_generated_file(array $arguments, string $exception): void
+    {
+        $result = $this->saveGeneratedFiles();
+
+        $this->expectException($exception);
+
+        $result->file(...$arguments);
+    }
+
+    /**
+     * Get the file lookups that match no generated file or more than one.
+     */
+    public static function ambiguousFileLookupProvider(): array
+    {
+        return [
+            'unknown path' => [['missing.mkv'], ItemNotFoundException::class],
+            'path on another disk' => [['nested/preview.mkv', 'disk' => 'local'], ItemNotFoundException::class],
+            'path on two disks' => [['full.mkv'], MultipleItemsFoundException::class],
+            'disk with two files' => [['disk' => 'memory'], MultipleItemsFoundException::class],
+        ];
     }
 
     public function test_watermark_edits_are_deferred_and_failures_cannot_mutate_originals_or_publish(): void
@@ -588,27 +739,40 @@ class CompositionTest extends TestCase
 
             return 'ignored';
         }));
-        foreach ([
-            fn (Watermark $watermark) => $watermark->left()->right(),
-            fn (Watermark $watermark) => $watermark->bottom()->top(),
-            fn (Watermark $watermark) => $watermark->left(-1),
-            fn (Watermark $watermark) => $watermark->size(),
-            fn (Watermark $watermark) => $watermark->size(width: 0),
-            fn (Watermark $watermark) => $watermark->opacity(1.5),
-            fn (Watermark $watermark) => $watermark->blur(101),
-            fn (Watermark $watermark) => $watermark->crop(0, 10, 0, 0),
-            fn (Watermark $watermark) => $watermark->rotate(INF),
-        ] as $invalid) {
-            try {
-                $media->export()->watermark($logo, $invalid);
-                $this->fail('Expected invalid watermark settings to fail.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
     }
 
-    public function test_image_watermarks_preserve_alpha_offsets_duration_and_audio_with_optional_edits(): void
+    #[DataProvider('invalidWatermarkProvider')]
+    public function test_invalid_watermark_settings_are_rejected(Closure $invalid): void
+    {
+        $this->fakeLocalDisk();
+        $media = FFMpeg::disk('local')->open('video.mp4');
+        $logo = FFMpeg::disk('local')->open('logo.png');
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $media->export()->watermark($logo, $invalid);
+    }
+
+    /**
+     * Get the watermark settings that conflict or fall outside their range.
+     */
+    public static function invalidWatermarkProvider(): array
+    {
+        return [
+            'left and right' => [fn (Watermark $watermark) => $watermark->left()->right()],
+            'bottom and top' => [fn (Watermark $watermark) => $watermark->bottom()->top()],
+            'negative margin' => [fn (Watermark $watermark) => $watermark->left(-1)],
+            'size without dimensions' => [fn (Watermark $watermark) => $watermark->size()],
+            'zero width' => [fn (Watermark $watermark) => $watermark->size(width: 0)],
+            'opacity above one' => [fn (Watermark $watermark) => $watermark->opacity(1.5)],
+            'blur above 100' => [fn (Watermark $watermark) => $watermark->blur(101)],
+            'empty crop' => [fn (Watermark $watermark) => $watermark->crop(0, 10, 0, 0)],
+            'infinite rotation' => [fn (Watermark $watermark) => $watermark->rotate(INF)],
+        ];
+    }
+
+    #[DataProvider('imageWatermarkProvider')]
+    public function test_image_watermarks_preserve_alpha_offsets_duration_and_audio_with_optional_edits(string $disk, bool $flipped): void
     {
         $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
@@ -621,42 +785,59 @@ class CompositionTest extends TestCase
         imagefill($bitmap, 0, 0, imagecolorallocatealpha($bitmap, 0, 0, 0, 127));
         imagefilledrectangle($bitmap, 0, 0, 15, 15, imagecolorallocatealpha($bitmap, 0, 0, 255, 0));
         imagepng($bitmap, $this->root.'/logo.png');
-        imagedestroy($bitmap);
         $bytes = file_get_contents($this->root.'/logo.png');
         $key = "logos/blue 'é.png";
-        foreach (['local', 'memory'] as $disk) {
-            Storage::disk($disk)->put($key, $bytes);
-            foreach ([false, true] as $flipped) {
-                $logo = FFMpeg::disk($disk)->open($key);
-                $export = FFMpeg::disk('local')->open('source.mkv')->export();
-                $export->resize(width: 80, height: 60)
-                    ->watermark($logo, fn (Watermark $watermark) => $watermark->right(7)->bottom(5)->size(16, 8)
-                        ->when($flipped, fn (Watermark $watermark) => $watermark->flipHorizontally()))
-                    ->video('ffv1')->audio('copy')->withoutMetadata(chapters: true)
-                    ->toDisk('memory')->save('watermarked.mkv');
-                $output = FFMpeg::disk('memory')->open('watermarked.mkv');
-                $this->assertEqualsWithDelta(2, $output->probe()->duration(), 0.001);
-                foreach ([0.2, 1.7] as $at) {
-                    $frame = imagecreatefromstring($output->frame(at: $at)->get());
-                    // The opaque half of the logo lands left of the transparent half unless the edit flips it.
-                    [$opaque, $transparent] = $flipped ? [69, 59] : [59, 69];
-                    foreach ([[$opaque, 49, 'blue'], [$transparent, 49, 'red'], [53, 49, 'red'], [59, 43, 'red'], [59, 57, 'red']] as [$x, $y, $channel]) {
-                        $pixel = imagecolorsforindex($frame, imagecolorat($frame, $x, $y));
-                        $this->assertGreaterThan(220, $pixel[$channel]);
-                        $this->assertLessThan(35, $pixel[$channel === 'blue' ? 'red' : 'blue']);
-                    }
-                    imagedestroy($frame);
-                }
-                $local->put('watermarked.mkv', Storage::disk('memory')->get('watermarked.mkv'));
-                $original = Process::run([$binary, '-v', 'error', '-i', $local->path('source.mkv'), '-map', '0:a', '-f', 'md5', '-']);
-                $audio = Process::run([$binary, '-v', 'error', '-i', $local->path('watermarked.mkv'), '-map', '0:a', '-f', 'md5', '-']);
-                $this->assertProcessSucceeded($original);
-                $this->assertProcessSucceeded($audio);
-                $this->assertSame($original->output(), $audio->output());
-                $this->assertSame($bytes, Storage::disk($disk)->get($key));
-                $this->assertWorkspacesAreCleanedUp();
+        Storage::disk($disk)->put($key, $bytes);
+        $logo = FFMpeg::disk($disk)->open($key);
+        $export = FFMpeg::disk('local')->open('source.mkv')->export();
+        $export->resize(width: 80, height: 60)
+            ->watermark($logo, fn (Watermark $watermark) => $watermark->right(7)->bottom(5)->size(16, 8)
+                ->when($flipped, fn (Watermark $watermark) => $watermark->flipHorizontally()))
+            ->video('ffv1')->audio('copy')->withoutMetadata(chapters: true)
+            ->toDisk('memory')->save('watermarked.mkv');
+        $output = FFMpeg::disk('memory')->open('watermarked.mkv');
+        $this->assertEqualsWithDelta(2, $output->probe()->duration(), 0.001);
+        foreach ([0.2, 1.7] as $at) {
+            $frame = imagecreatefromstring($output->frame(at: $at)->get());
+            // The opaque half of the logo lands left of the transparent half unless the edit flips it.
+            [$opaque, $transparent] = $flipped ? [69, 59] : [59, 69];
+            foreach ([[$opaque, 49, 'blue'], [$transparent, 49, 'red'], [53, 49, 'red'], [59, 43, 'red'], [59, 57, 'red']] as [$x, $y, $channel]) {
+                $pixel = imagecolorsforindex($frame, imagecolorat($frame, $x, $y));
+                $this->assertGreaterThan(220, $pixel[$channel]);
+                $this->assertLessThan(35, $pixel[$channel === 'blue' ? 'red' : 'blue']);
             }
         }
+        $local->put('watermarked.mkv', Storage::disk('memory')->get('watermarked.mkv'));
+        $original = Process::run([$binary, '-v', 'error', '-i', $local->path('source.mkv'), '-map', '0:a', '-f', 'md5', '-']);
+        $audio = Process::run([$binary, '-v', 'error', '-i', $local->path('watermarked.mkv'), '-map', '0:a', '-f', 'md5', '-']);
+        $this->assertProcessSucceeded($original);
+        $this->assertProcessSucceeded($audio);
+        $this->assertSame($original->output(), $audio->output());
+        $this->assertSame($bytes, Storage::disk($disk)->get($key));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Get the disks the logo is read from, with and without a horizontal flip.
+     */
+    public static function imageWatermarkProvider(): array
+    {
+        return [
+            'local logo' => ['local', false],
+            'flipped local logo' => ['local', true],
+            'memory logo' => ['memory', false],
+            'flipped memory logo' => ['memory', true],
+        ];
+    }
+
+    /**
+     * Write a solid blue square logo to the given path.
+     */
+    protected function createBlueLogo(string $path): void
+    {
+        $bitmap = imagecreatetruecolor(8, 8);
+        imagefill($bitmap, 0, 0, imagecolorallocate($bitmap, 0, 0, 255));
+        imagepng($bitmap, $path);
     }
 
     public function test_watermark_helpers_compose_images_after_each_outputs_geometry_and_reject_conflicts(): void
@@ -666,10 +847,7 @@ class CompositionTest extends TestCase
         $generation = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=1',
             '-c:v', 'ffv1', $local->path('source.mkv')]);
         $this->assertProcessSucceeded($generation);
-        $bitmap = imagecreatetruecolor(8, 8);
-        imagefill($bitmap, 0, 0, imagecolorallocate($bitmap, 0, 0, 255));
-        imagepng($bitmap, $local->path('logo.png'));
-        imagedestroy($bitmap);
+        $this->createBlueLogo($local->path('logo.png'));
         $media = FFMpeg::disk('local')->open('source.mkv');
         $logo = FFMpeg::disk('local')->open('logo.png');
         $export = $media->export()->watermark($logo, fn (Watermark $watermark) => $watermark->left(4)->top(2))
@@ -691,7 +869,6 @@ class CompositionTest extends TestCase
             $this->assertEqualsWithDelta(127, $mixed['blue'], 15);
             $red = imagecolorsforindex($frame, imagecolorat($frame, $width - 2, $height - 2));
             $this->assertGreaterThan(220, $red['red']);
-            imagedestroy($frame);
         }
         // Per-track video filters run with the output filters, before the overlay.
         $colored = $media->export()->watermark($logo)->video('libx264')->toDisk('memory')
@@ -699,27 +876,40 @@ class CompositionTest extends TestCase
         $this->assertNotContains('-filter:v:0', $colored->inspect());
         $colored->save('colored.mp4');
         $this->assertSame('bt709', FFMpeg::disk('memory')->open('colored.mp4')->probe()->video()->get('color_primaries'));
-        foreach ([
-            fn () => $media->export()->watermark($logo)->video('copy')->inspect(),
-            fn () => $media->export()->watermark($logo)->withoutVideo()->inspect(),
-            fn () => $media->export()->watermark($logo)->map('0:v')->inspect(),
-            fn () => $media->export()->watermark($logo)->filterComplex('[0:v]null[v]')->inspect(),
-            fn () => $media->export()->watermark($logo, fn (Watermark $watermark) => $watermark->opacity(NAN)),
-            fn () => $media->export()->watermark(FFMpeg::disk('local')->open('logo.png', ['-ignore_loop', '0'])),
-        ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Expected invalid watermark settings to fail.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
         $this->assertThrows(
             fn () => $media->export()->watermark($media)->video('ffv1')->save('invalid.mkv'),
             fn (MediaException $exception) => $exception->category === 'watermark',
         );
         $this->assertFalse($local->exists('invalid.mkv'));
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    #[DataProvider('conflictingWatermarkProvider')]
+    public function test_watermarks_reject_outputs_without_a_filtered_video(Closure $invalid): void
+    {
+        $local = $this->fakeLocalDisk();
+        $this->createBlueLogo($local->path('logo.png'));
+        $media = FFMpeg::disk('local')->open('source.mkv');
+        $logo = FFMpeg::disk('local')->open('logo.png');
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $invalid($media, $logo);
+    }
+
+    /**
+     * Get the watermarks that conflict with the video settings of their export.
+     */
+    public static function conflictingWatermarkProvider(): array
+    {
+        return [
+            'copied video' => [fn (Media $media, Media $logo) => $media->export()->watermark($logo)->video('copy')->inspect()],
+            'no video' => [fn (Media $media, Media $logo) => $media->export()->watermark($logo)->withoutVideo()->inspect()],
+            'explicit map' => [fn (Media $media, Media $logo) => $media->export()->watermark($logo)->map('0:v')->inspect()],
+            'complex graph' => [fn (Media $media, Media $logo) => $media->export()->watermark($logo)->filterComplex('[0:v]null[v]')->inspect()],
+            'undefined opacity' => [fn (Media $media, Media $logo) => $media->export()->watermark($logo, fn (Watermark $watermark) => $watermark->opacity(NAN))],
+            'looping image input' => [fn (Media $media) => $media->export()->watermark(FFMpeg::disk('local')->open('logo.png', ['-ignore_loop', '0']))],
+        ];
     }
 
     public function test_real_graphs_stage_luts_compose_mixed_disks_and_keep_output_timelines_independent(): void
@@ -878,86 +1068,110 @@ class CompositionTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_real_subtitles_validate_content_and_keep_cue_timing_through_accurate_clips(): void
+    /**
+     * Generate a six second black video to burn subtitles into on the local disk.
+     */
+    protected function createSubtitleCanvas(string $ffmpeg): FilesystemAdapter
     {
-        $ffmpeg = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=black:size=160x90:rate=10:duration=6',
             '-c:v', 'ffv1', $local->path('black.mkv')]);
         $this->assertProcessSucceeded($generation);
-        $formats = [
-            'srt' => "1\n00:00:05,000 --> 00:00:05,500\nCaption café\n",
-            'vtt' => "WEBVTT\n\n00:05.000 --> 00:05.500\nCaption café\n",
-            'ass' => "[Script Info]\nScriptType: v4.00+\nPlayResX: 160\nPlayResY: 90\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, Alignment\nStyle: Default,DejaVu Sans,14,&H00FFFFFF,2\n[Events]\nFormat: Layer, Start, End, Style, Text\nDialogue: 0,0:00:05.00,0:00:05.50,Default,Caption café\n",
-        ];
 
-        foreach ($formats as $extension => $content) {
-            $key = "captions/a 'quoted', café.".$extension;
-            Storage::disk('memory')->put($key, $content);
-            FFMpeg::disk('local')->open('black.mkv')->export()
-                ->subtitleResource('captions', FFMpeg::disk('memory')->open($key))
-                ->videoFilter('subtitles=filename={{captions}}')->video('ffv1')->clip(4, duration: 2)
-                ->toDisk('local')->save('caption-'.$extension.'.mkv');
-            $frames = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('caption-'.$extension.'.mkv'), '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
-            $this->assertProcessSucceeded($frames);
-            $this->assertSame(20 * 160 * 90, strlen($frames->output()));
-            foreach ([2 => false, 12 => true, 18 => false] as $index => $visible) {
-                $pixels = unpack('C*', substr($frames->output(), $index * 160 * 90, 160 * 90));
-                $this->assertSame($visible, count(array_filter($pixels, fn ($pixel) => $pixel > 100)) > 10, $extension.' frame '.$index);
-            }
-            $this->assertSame($content, Storage::disk('memory')->get($key));
-
-            FFMpeg::disk('local')->open('black.mkv')->export()
-                ->burnSubtitles(FFMpeg::disk('memory')->open($key))->video('ffv1')->clip(4, duration: 2)
-                ->toDisk('local')->save('caption-helper-'.$extension.'.mkv');
-            $helper = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('caption-helper-'.$extension.'.mkv'), '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
-            $this->assertProcessSucceeded($helper);
-            $this->assertSame($frames->output(), $helper->output());
-        }
-
-        foreach (["#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nsibling.ts\n", "ffconcat version 1.0\nfile 'sibling.ts'\n", "1\n00:00:00,000 --> 00:00:01,000\n\xff\n"] as $invalid) {
-            Storage::disk('memory')->put('forged.srt', $invalid);
-            try {
-                FFMpeg::disk('local')->open('black.mkv')->export()
-                    ->subtitleResource('captions', FFMpeg::disk('memory')->open('forged.srt'))
-                    ->videoFilter('subtitles=filename={{captions}}')->video('ffv1')->toDisk('memory')->save('rejected.mkv');
-                $this->fail('A non-subtitle resource was accepted.');
-            } catch (MediaException $exception) {
-                $this->assertSame('probing', $exception->phase);
-                $this->assertSame('resource', $exception->category);
-                $this->assertFalse(Storage::disk('memory')->exists('rejected.mkv'));
-                $this->assertWorkspacesAreCleanedUp();
-            }
-        }
+        return $local;
     }
 
-    public function test_real_type_scoped_graph_conflicts_fail_without_publishing(): void
+    #[DataProvider('subtitleFormatProvider')]
+    public function test_real_subtitles_validate_content_and_keep_cue_timing_through_accurate_clips(string $extension, string $content): void
+    {
+        $ffmpeg = $this->useRealFFMpeg();
+        $local = $this->createSubtitleCanvas($ffmpeg);
+        $key = "captions/a 'quoted', café.".$extension;
+        Storage::disk('memory')->put($key, $content);
+        FFMpeg::disk('local')->open('black.mkv')->export()
+            ->subtitleResource('captions', FFMpeg::disk('memory')->open($key))
+            ->videoFilter('subtitles=filename={{captions}}')->video('ffv1')->clip(4, duration: 2)
+            ->toDisk('local')->save('caption-'.$extension.'.mkv');
+        $frames = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('caption-'.$extension.'.mkv'), '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
+        $this->assertProcessSucceeded($frames);
+        $this->assertSame(20 * 160 * 90, strlen($frames->output()));
+        foreach ([2 => false, 12 => true, 18 => false] as $index => $visible) {
+            $pixels = unpack('C*', substr($frames->output(), $index * 160 * 90, 160 * 90));
+            $this->assertSame($visible, count(array_filter($pixels, fn ($pixel) => $pixel > 100)) > 10, $extension.' frame '.$index);
+        }
+        $this->assertSame($content, Storage::disk('memory')->get($key));
+
+        FFMpeg::disk('local')->open('black.mkv')->export()
+            ->burnSubtitles(FFMpeg::disk('memory')->open($key))->video('ffv1')->clip(4, duration: 2)
+            ->toDisk('local')->save('caption-helper-'.$extension.'.mkv');
+        $helper = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('caption-helper-'.$extension.'.mkv'), '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
+        $this->assertProcessSucceeded($helper);
+        $this->assertSame($frames->output(), $helper->output());
+    }
+
+    /**
+     * Get the subtitle formats with a single cue from five to five and a half seconds.
+     */
+    public static function subtitleFormatProvider(): array
+    {
+        return [
+            'srt' => ['srt', "1\n00:00:05,000 --> 00:00:05,500\nCaption café\n"],
+            'vtt' => ['vtt', "WEBVTT\n\n00:05.000 --> 00:05.500\nCaption café\n"],
+            'ass' => ['ass', "[Script Info]\nScriptType: v4.00+\nPlayResX: 160\nPlayResY: 90\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, Alignment\nStyle: Default,DejaVu Sans,14,&H00FFFFFF,2\n[Events]\nFormat: Layer, Start, End, Style, Text\nDialogue: 0,0:00:05.00,0:00:05.50,Default,Caption café\n"],
+        ];
+    }
+
+    #[DataProvider('forgedSubtitleProvider')]
+    public function test_real_subtitle_resources_reject_content_that_is_not_subtitles(string $invalid): void
+    {
+        $this->createSubtitleCanvas($this->useRealFFMpeg());
+        Storage::disk('memory')->put('forged.srt', $invalid);
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('local')->open('black.mkv')->export()
+                ->subtitleResource('captions', FFMpeg::disk('memory')->open('forged.srt'))
+                ->videoFilter('subtitles=filename={{captions}}')->video('ffv1')->toDisk('memory')->save('rejected.mkv'),
+            fn (MediaException $exception) => $exception->phase === 'probing' && $exception->category === 'resource',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('rejected.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Get the files that carry a subtitle extension without valid subtitle content.
+     */
+    public static function forgedSubtitleProvider(): array
+    {
+        return [
+            'playlist' => ["#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nsibling.ts\n"],
+            'concat list' => ["ffconcat version 1.0\nfile 'sibling.ts'\n"],
+            'invalid UTF-8' => ["1\n00:00:00,000 --> 00:00:01,000\n\xff\n"],
+        ];
+    }
+
+    #[TestWith(['copy', 'Streamcopy requested for output stream fed from a complex filtergraph'])]
+    #[TestWith(['filter', 'Simple and complex filtering cannot be used together'])]
+    public function test_real_type_scoped_graph_conflicts_fail_without_publishing(string $conflict, string $diagnostic): void
     {
         $this->useRealFFMpeg();
         $media = FFMpeg::disk('local')->open(new File(__DIR__.'/src/guitar.m4a'));
+        $export = $media->export()->filterComplex('[0:a]anull[a]')->map('[a]')->toDisk('memory');
 
-        foreach (['copy', 'filter'] as $conflict) {
-            $export = $media->export()->filterComplex('[0:a]anull[a]')->map('[a]')->toDisk('memory');
-
-            if ($conflict === 'copy') {
-                $export->audio('copy');
-            } else {
-                $export->audio('flac')->audioFilter('volume=0.5');
-            }
-
-            try {
-                $export->save('conflict.mkv');
-                $this->fail('A filtergraph conflict was accepted by FFmpeg.');
-            } catch (MediaException $exception) {
-                $this->assertSame('encoding', $exception->phase);
-                $this->assertSame('configuration', $exception->category, $exception->diagnostics);
-                $this->assertStringContainsString($conflict === 'copy'
-                    ? 'Streamcopy requested for output stream fed from a complex filtergraph'
-                    : 'Simple and complex filtering cannot be used together', $exception->diagnostics);
-                $this->assertFalse(Storage::disk('memory')->exists('conflict.mkv'));
-                $this->assertWorkspacesAreCleanedUp();
-            }
+        if ($conflict === 'copy') {
+            $export->audio('copy');
+        } else {
+            $export->audio('flac')->audioFilter('volume=0.5');
         }
+
+        $this->assertThrows(fn () => $export->save('conflict.mkv'), function (MediaException $exception) use ($diagnostic) {
+            $this->assertSame('encoding', $exception->phase);
+            $this->assertSame('configuration', $exception->category, $exception->diagnostics);
+            $this->assertStringContainsString($diagnostic, $exception->diagnostics);
+
+            return true;
+        });
+        $this->assertFalse(Storage::disk('memory')->exists('conflict.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_real_unlabeled_graph_pads_are_rejected_before_publication(): void

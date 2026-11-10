@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Watermark;
@@ -67,15 +69,29 @@ class UrlTest extends TestCase
         Process::assertNothingRan();
         Http::assertNothingSent();
 
-        foreach (['file:///tmp/video', 'ftp://media.example/video', 'https://user:password@media.example/video', "https://media.example/\nvideo"] as $invalid) {
-            $this->assertThrows(
-                fn () => FFMpeg::openUrl($invalid),
-                fn (InvalidArgumentException $exception) => ! str_contains($exception->getMessage(), $invalid),
-            );
-        }
-
         $this->expectException(InvalidArgumentException::class);
         FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer secret']);
+    }
+
+    #[DataProvider('invalidUrlProvider')]
+    public function test_invalid_direct_urls_are_rejected_without_echoing_them(string $invalid): void
+    {
+        Http::preventStrayRequests();
+        Process::fake();
+        $this->assertThrows(
+            fn () => FFMpeg::openUrl($invalid),
+            fn (InvalidArgumentException $exception) => ! str_contains($exception->getMessage(), $invalid),
+        );
+    }
+
+    public static function invalidUrlProvider(): array
+    {
+        return [
+            'file scheme' => ['file:///tmp/video'],
+            'ftp scheme' => ['ftp://media.example/video'],
+            'credentials' => ['https://user:password@media.example/video'],
+            'newline' => ["https://media.example/\nvideo"],
+        ];
     }
 
     public function test_public_urls_probe_export_and_redact_signed_queries_without_downloading(): void
@@ -144,57 +160,72 @@ class UrlTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_edited_url_watermarks_download_once_per_execution_without_exposing_urls_to_processes(): void
+    #[TestWith([false, null])]
+    #[TestWith([true, 'first'])]
+    public function test_edited_url_watermarks_download_once_per_execution_without_exposing_urls_to_processes(bool $authenticated, ?string $source): void
     {
         $this->useRealFFMpeg();
         $base = $this->server(fixture: __DIR__.'/src/logo.png');
-        foreach ([false, true] as $authenticated) {
-            $url = $base.($authenticated ? '/private' : '/public').'?signature=private-image-signature';
-            $logo = FFMpeg::openUrl($url, $authenticated ? ['Authorization' => 'Bearer first-secret'] : [], download: $authenticated);
-            $result = FFMpeg::open(new File(__DIR__.'/src/video.mp4'))->export()->clip(0, 0.2)
-                ->watermark($logo, fn (Watermark $watermark) => $watermark->flipHorizontally())
-                ->video('ffv1')->withoutAudio()->toDisk('memory')->save('logo.mkv');
-            $this->assertStringNotContainsString($base, json_encode($result->processes()));
-            $this->assertStringNotContainsString('private-image-signature', json_encode($result->processes()));
-            $this->assertStringNotContainsString('first-secret', json_encode($result->processes()));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $url = $base.($authenticated ? '/private' : '/public').'?signature=private-image-signature';
+        $logo = FFMpeg::openUrl($url, $authenticated ? ['Authorization' => 'Bearer first-secret'] : [], download: $authenticated);
+        $result = FFMpeg::open(new File(__DIR__.'/src/video.mp4'))->export()->clip(0, 0.2)
+            ->watermark($logo, fn (Watermark $watermark) => $watermark->flipHorizontally())
+            ->video('ffv1')->withoutAudio()->toDisk('memory')->save('logo.mkv');
+        $this->assertStringNotContainsString($base, json_encode($result->processes()));
+        $this->assertStringNotContainsString('private-image-signature', json_encode($result->processes()));
+        $this->assertStringNotContainsString('first-secret', json_encode($result->processes()));
+        $this->assertWorkspacesAreCleanedUp();
         $requests = array_map(fn ($line) => json_decode($line, true), file($this->root.'/requests'));
-        $this->assertSame([null, 'first'], array_column($requests, 'source'));
+        $this->assertSame([$source], array_column($requests, 'source'));
     }
 
-    public function test_failed_downloads_do_not_follow_redirects_publish_or_leak_exception_details(): void
+    #[TestWith(['/redirect'])]
+    #[TestWith(['/truncated'])]
+    #[TestWith(['/first'])]
+    public function test_failed_downloads_do_not_follow_redirects_publish_or_leak_exception_details(string $path): void
     {
         $base = $this->server();
 
-        foreach (['/redirect', '/truncated', '/first'] as $path) {
-            $this->assertThrows(
-                fn () => FFMpeg::openUrl($base.$path.'?signature=hidden-signature', ['Authorization' => 'Bearer wrong-secret'], download: true)
-                    ->export()->toDisk('memory')->save('never.m4a'),
-                fn (MediaException $exception) => $exception->phase === 'staging'
-                    && $exception->category === 'transfer'
-                    && $exception->getPrevious() === null
-                    && ! str_contains((string) $exception, 'hidden-signature')
-                    && ! str_contains((string) $exception, 'wrong-secret'),
-            );
-            $this->assertFalse(Storage::disk('memory')->exists('never.m4a'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::openUrl($base.$path.'?signature=hidden-signature', ['Authorization' => 'Bearer wrong-secret'], download: true)
+                ->export()->toDisk('memory')->save('never.m4a'),
+            fn (MediaException $exception) => $exception->phase === 'staging'
+                && $exception->category === 'transfer'
+                && $exception->getPrevious() === null
+                && ! str_contains((string) $exception, 'hidden-signature')
+                && ! str_contains((string) $exception, 'wrong-secret'),
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('never.m4a'));
+        $this->assertWorkspacesAreCleanedUp();
 
         $this->assertStringNotContainsString('/stolen', file_get_contents($this->root.'/requests'));
     }
 
-    public function test_download_validation_rejects_header_injection_and_staged_manifests_before_probing(): void
+    #[DataProvider('invalidHeaderProvider')]
+    public function test_download_validation_rejects_header_injection(array $headers): void
     {
         Process::preventStrayProcesses();
         Http::fake(['*' => Http::response("#EXTM3U\nhttps://elsewhere.example/segment.ts", 200)]);
 
-        foreach ([["X-Test\r\nAuthorization" => 'secret'], ['Authorization' => "secret\r\nX-Test: value"], ['X-Test' => ['array']]] as $headers) {
-            $this->assertThrows(
-                fn () => FFMpeg::openUrl('https://media.example/input', $headers, download: true),
-                fn (InvalidArgumentException $exception) => ! str_contains($exception->getMessage(), 'secret'),
-            );
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::openUrl('https://media.example/input', $headers, download: true),
+            fn (InvalidArgumentException $exception) => ! str_contains($exception->getMessage(), 'secret'),
+        );
+    }
+
+    public static function invalidHeaderProvider(): array
+    {
+        return [
+            'newline in name' => [["X-Test\r\nAuthorization" => 'secret']],
+            'newline in value' => [['Authorization' => "secret\r\nX-Test: value"]],
+            'array value' => [['X-Test' => ['array']]],
+        ];
+    }
+
+    public function test_download_validation_rejects_staged_manifests_before_probing(): void
+    {
+        Process::preventStrayProcesses();
+        Http::fake(['*' => Http::response("#EXTM3U\nhttps://elsewhere.example/segment.ts", 200)]);
 
         $this->assertThrows(
             fn () => FFMpeg::openUrl('https://media.example/disguised.mp4', download: true)->probe(),
@@ -219,18 +250,18 @@ class UrlTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_https_rejects_an_untrusted_certificate_in_both_transport_modes(): void
+    #[TestWith([false])]
+    #[TestWith([true])]
+    public function test_https_rejects_an_untrusted_certificate_in_both_transport_modes(bool $download): void
     {
         $this->useRealFFMpeg();
         $url = $this->server(tls: true).'/public';
 
-        foreach ([false, true] as $download) {
-            $this->assertThrows(
-                fn () => FFMpeg::openUrl($url, download: $download)->probe(),
-                fn (MediaException $exception) => $exception->phase === ($download ? 'staging' : 'probing')
-                    && ($download || str_contains(strtolower($exception->diagnostics), 'certificate')),
-            );
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::openUrl($url, download: $download)->probe(),
+            fn (MediaException $exception) => $exception->phase === ($download ? 'staging' : 'probing')
+                && ($download || str_contains(strtolower($exception->diagnostics), 'certificate')),
+        );
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

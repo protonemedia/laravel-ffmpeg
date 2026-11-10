@@ -2,9 +2,11 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ProtoneMedia\LaravelFFMpeg\AudioStreamSettings;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
@@ -71,50 +73,70 @@ class EncodingOptionsTest extends TestCase
         $flags = ['-movflags', '+faststart', '-disposition:a:0', 'default+forced', '-preset', 'ultra-fast'];
         $this->assertSame($flags, CommandCompiler::options($flags, 'output'));
         $this->assertSame(['-hwaccel_device', '/dev/dri/render-D128'], CommandCompiler::options(['-hwaccel_device', '/dev/dri/render-D128'], 'input'));
-        foreach ([
-            ['output', ['-x264-params', 'stats=/tmp/stats']],
-            ['output', ['-x265-params', 'csv=/tmp/stats']],
-            ['output', ['-x265-params', 'analysis-save=1']],
-            ['output', ['-x264-params', 'keyint=10:keyint=20']],
-            ['output', ['-x264-params', 'keyint=10:zones=0,10,q=20']],
-            ['output', ['-bsf:v', 'trace_headers']],
-            ['output', ['-bsf:v', 'h264_metadata=sei_user_data=/tmp/file']],
-            ['output', ['-bsf:v', 'h264_mp4toannexb', '-y']],
-            ['output', ['-cpu-used:a', '6']],
-            ['output', ['-sample_fmt:v', 's16']],
-            ['output', ['-frag_duration:v', '1000']],
-            ['output', ['-color_trc', 'unknown']],
-            ['output', ['-sample_fmt', 'file:/tmp/file']],
-            ['output', ['-segment_list', 'sidecar']],
-            ['output', ['-progress', 'pipe:2']],
-            ['input', ['-x264-params', 'keyint=10']],
-            ['global', ['-init_hw_device', 'cuda=gpu:0,primary_ctx=1']],
-            ['global', ['-init_hw_device', 'vaapi=gpu:/tmp/file']],
-            ['global', ['-init_hw_device', 'cuda=gpu:0', '-init_hw_device', 'cuda=gpu:1']],
-            ['global', ['-init_hw_device', 'qsv=derived@missing']],
-            ['global', ['-filter_hw_device', 'missing']],
-            // Option-shaped values would be found by later argv token searches.
-            ['input', ['-hwaccel_device', '-i']],
-            ['input', ['-hwaccel_output_format', '-t']],
-            ['output', ['-preset', '-ss']],
-            ['output', ['-disposition:a:0', '-filter_complex']],
-        ] as [$scope, $invalid]) {
-            $this->assertThrows(fn () => CommandCompiler::options($invalid, $scope), InvalidArgumentException::class);
-        }
     }
 
-    public function test_rejects_copy_filters_and_encoder_options_but_allows_bitstream_remux(): void
+    #[DataProvider('unsafeOptionProvider')]
+    public function test_rejects_unsafe_options(string $scope, array $options): void
     {
-        foreach ([
-            fn () => $this->destination()->audioStream(0, fn ($audio) => $audio->codec('copy')->filter('volume=0')),
-            fn () => $this->destination()->audio('copy')->audioStream(0, fn ($audio) => $audio->sampleRate(48000)),
-            fn () => $this->destination()->audio('copy')->outputOptions(['-sample_fmt:a:0', 's16']),
-            fn () => $this->destination()->video('copy')->outputOptions(['-x264-params:v', 'keyint=10']),
-            fn () => $this->destination()->audioStream(-1, fn ($audio) => $audio->codec('aac')),
-            fn () => $this->destination()->audioStream(0, fn ($audio) => null)->audioStream(0, fn ($audio) => null),
-        ] as $configure) {
-            $this->assertThrows(fn () => $this->arguments($configure()), InvalidArgumentException::class);
-        }
+        $this->expectException(InvalidArgumentException::class);
+
+        CommandCompiler::options($options, $scope);
+    }
+
+    public static function unsafeOptionProvider(): array
+    {
+        return [
+            'x264 stats file' => ['output', ['-x264-params', 'stats=/tmp/stats']],
+            'x265 csv file' => ['output', ['-x265-params', 'csv=/tmp/stats']],
+            'x265 analysis file' => ['output', ['-x265-params', 'analysis-save=1']],
+            'repeated x264 key' => ['output', ['-x264-params', 'keyint=10:keyint=20']],
+            'x264 zones' => ['output', ['-x264-params', 'keyint=10:zones=0,10,q=20']],
+            'tracing bitstream filter' => ['output', ['-bsf:v', 'trace_headers']],
+            'bitstream filter file' => ['output', ['-bsf:v', 'h264_metadata=sei_user_data=/tmp/file']],
+            'trailing overwrite flag' => ['output', ['-bsf:v', 'h264_mp4toannexb', '-y']],
+            'video option on audio' => ['output', ['-cpu-used:a', '6']],
+            'audio option on video' => ['output', ['-sample_fmt:v', 's16']],
+            'muxer option on a stream' => ['output', ['-frag_duration:v', '1000']],
+            'unknown color transfer' => ['output', ['-color_trc', 'unknown']],
+            'file value' => ['output', ['-sample_fmt', 'file:/tmp/file']],
+            'segment list sidecar' => ['output', ['-segment_list', 'sidecar']],
+            'progress target' => ['output', ['-progress', 'pipe:2']],
+            'encoder option on input' => ['input', ['-x264-params', 'keyint=10']],
+            'device option' => ['global', ['-init_hw_device', 'cuda=gpu:0,primary_ctx=1']],
+            'device path' => ['global', ['-init_hw_device', 'vaapi=gpu:/tmp/file']],
+            'duplicate device name' => ['global', ['-init_hw_device', 'cuda=gpu:0', '-init_hw_device', 'cuda=gpu:1']],
+            'unknown parent device' => ['global', ['-init_hw_device', 'qsv=derived@missing']],
+            'unknown filter device' => ['global', ['-filter_hw_device', 'missing']],
+            // Option-shaped values would be found by later argv token searches.
+            'input option as device' => ['input', ['-hwaccel_device', '-i']],
+            'option as output format' => ['input', ['-hwaccel_output_format', '-t']],
+            'option as preset' => ['output', ['-preset', '-ss']],
+            'option as disposition' => ['output', ['-disposition:a:0', '-filter_complex']],
+        ];
+    }
+
+    #[DataProvider('incompatibleTrackProvider')]
+    public function test_rejects_copy_filters_and_encoder_options(Closure $configure): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->arguments($configure($this->destination()));
+    }
+
+    public static function incompatibleTrackProvider(): array
+    {
+        return [
+            'filter on a copied track' => [fn (ExportOutput $output) => $output->audioStream(0, fn ($audio) => $audio->codec('copy')->filter('volume=0'))],
+            'sample rate on copied audio' => [fn (ExportOutput $output) => $output->audio('copy')->audioStream(0, fn ($audio) => $audio->sampleRate(48000))],
+            'sample format on copied audio' => [fn (ExportOutput $output) => $output->audio('copy')->outputOptions(['-sample_fmt:a:0', 's16'])],
+            'encoder options on copied video' => [fn (ExportOutput $output) => $output->video('copy')->outputOptions(['-x264-params:v', 'keyint=10'])],
+            'negative track' => [fn (ExportOutput $output) => $output->audioStream(-1, fn ($audio) => $audio->codec('aac'))],
+            'track configured twice' => [fn (ExportOutput $output) => $output->audioStream(0, fn ($audio) => null)->audioStream(0, fn ($audio) => null)],
+        ];
+    }
+
+    public function test_allows_bitstream_remux_of_copied_video(): void
+    {
         $this->assertContains('h264_mp4toannexb', $this->arguments($this->destination()->video('copy')->audio('copy')
             ->outputOptions(['-bsf:v', 'h264_mp4toannexb'])));
     }

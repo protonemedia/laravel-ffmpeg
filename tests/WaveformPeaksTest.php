@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Mockery;
 use Orchestra\Testbench\Attributes\RequiresEnv;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\PendingWaveformPeaks;
@@ -71,17 +72,16 @@ class WaveformPeaksTest extends TestCase
         $this->clean();
     }
 
-    public function test_separate_channels_keep_non_default_layouts_without_remixing(): void
+    #[TestWith(['quad'])]
+    #[TestWith(['FL+FR+LFE+BC'])]
+    public function test_separate_channels_keep_non_default_layouts_without_remixing(string $layout): void
     {
         // Quad and a custom layout differ from FFmpeg's default four-channel layout (4.0).
-        foreach (['quad', 'FL+FR+LFE+BC'] as $index => $layout) {
-            $name = 'layout-'.$index.'.wav';
-            $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-f', 'lavfi', '-i',
-                'aevalsrc=0.1|0.2|0.3|0.4:c='.$layout.':s=8000:d=0.1', '-c:a', 'pcm_s16le', Storage::disk('peaks-fixtures')->path($name)]);
-            $this->assertProcessSucceeded($result);
-            $peaks = $this->pending(new Media('peaks-fixtures', $name))->buckets(1)->get();
-            $this->assertSame([[[3277, 3277]], [[6554, 6554]], [[9830, 9830]], [[13107, 13107]]], $peaks->channels, $layout);
-        }
+        $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-f', 'lavfi', '-i',
+            'aevalsrc=0.1|0.2|0.3|0.4:c='.$layout.':s=8000:d=0.1', '-c:a', 'pcm_s16le', Storage::disk('peaks-fixtures')->path('layout.wav')]);
+        $this->assertProcessSucceeded($result);
+        $peaks = $this->pending(new Media('peaks-fixtures', 'layout.wav'))->buckets(1)->get();
+        $this->assertSame([[[3277, 3277]], [[6554, 6554]], [[9830, 9830]], [[13107, 13107]]], $peaks->channels, $layout);
         $this->clean();
     }
 

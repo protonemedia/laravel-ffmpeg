@@ -5,19 +5,19 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class SequenceTest extends TestCase
 {
-    protected function image(array $color, bool $jpeg = false, int $width = 64): string
+    protected static function image(array $color, bool $jpeg = false, int $width = 64): string
     {
         $image = imagecreatetruecolor($width, 48);
         imagefill($image, 0, 0, imagecolorallocate($image, ...$color));
         ob_start();
         $jpeg ? imagejpeg($image, quality: 100) : imagepng($image);
         $bytes = ob_get_clean();
-        imagedestroy($image);
 
         return $bytes;
     }
@@ -32,87 +32,131 @@ class SequenceTest extends TestCase
         $this->assertLessThan(array_search('-i', $command), array_search('-framerate', $command));
         $this->assertThrows(fn () => $selector->open('one.png')->concat($sequence), InvalidArgumentException::class);
         $this->assertWorkspacesAreCleanedUp();
-        foreach ([['plain.png', 3, 2.5, 1], ['%d/%d.png', 3, 2.5, 1], ['%03d/photo.png', 3, 2.5, 1],
-            ['photo-%s.png', 3, 2.5, 1], ['photo-%d.gif', 3, 2.5, 1], ['/photo-%d.png', 3, 2.5, 1],
-            ['photo-%d.png', 0, 2.5, 1], ['photo-%d.png', 3, 2.5, -1], ['photo-%d.png', 3, 2.5, PHP_INT_MAX],
-            ['photo-%d.png', 3, 0, 1], ['photo-%d.png', 3, INF, 1], ['photo-%d.png', 3, '1/0', 1]] as $arguments) {
-            try {
-                $selector->openSequence(...$arguments);
-                $this->fail('An invalid sequence was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->assertWorkspacesAreCleanedUp();
-            }
-        }
         Process::assertNothingRan();
     }
 
-    public function test_local_png_and_remote_jpeg_sequences_preserve_exact_order_count_rate_and_source_bytes(): void
+    #[DataProvider('invalidSequenceProvider')]
+    public function test_ambiguous_patterns_rates_and_ranges_are_rejected(string $pattern, int $count, float|string $framerate, int $start): void
+    {
+        Process::fake();
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('missing')->openSequence($pattern, $count, $framerate, $start),
+            InvalidArgumentException::class,
+        );
+        $this->assertWorkspacesAreCleanedUp();
+        Process::assertNothingRan();
+    }
+
+    /**
+     * Get the sequence patterns, counts, rates and start numbers that cannot be opened.
+     */
+    public static function invalidSequenceProvider(): array
+    {
+        return [
+            'no placeholder' => ['plain.png', 3, 2.5, 1],
+            'two placeholders' => ['%d/%d.png', 3, 2.5, 1],
+            'placeholder in a directory' => ['%03d/photo.png', 3, 2.5, 1],
+            'string placeholder' => ['photo-%s.png', 3, 2.5, 1],
+            'unsupported image type' => ['photo-%d.gif', 3, 2.5, 1],
+            'absolute path' => ['/photo-%d.png', 3, 2.5, 1],
+            'no images' => ['photo-%d.png', 0, 2.5, 1],
+            'negative start' => ['photo-%d.png', 3, 2.5, -1],
+            'start overflows' => ['photo-%d.png', 3, 2.5, PHP_INT_MAX],
+            'zero rate' => ['photo-%d.png', 3, 0, 1],
+            'infinite rate' => ['photo-%d.png', 3, INF, 1],
+            'zero denominator' => ['photo-%d.png', 3, '1/0', 1],
+        ];
+    }
+
+    #[DataProvider('sequenceProvider')]
+    public function test_local_png_and_remote_jpeg_sequences_preserve_exact_order_count_rate_and_source_bytes(string $disk, string $suffix, int $start, float|string $rate): void
     {
         $binary = $this->useRealFFMpeg();
         $this->fakeLocalDisk();
-        foreach ([['local', 'png', 7, 2.5], ['memory', 'jpg', 0, '5/2']] as [$disk, $suffix, $start, $rate]) {
-            $pattern = "photos/é 'quoted'/frame-%04d.$suffix";
-            $hashes = [];
-            foreach ([[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255]] as $index => $color) {
-                $key = sprintf($pattern, $start + $index);
-                $bytes = $this->image($color, $suffix === 'jpg');
-                Storage::disk($disk)->put($key, $bytes);
-                $hashes[$key] = hash('sha256', $bytes);
-            }
-            $media = FFMpeg::disk($disk)->openSequence($pattern, count: 3, framerate: $rate, start: $start);
-            $this->assertEqualsWithDelta(1.2, $media->probe()->duration(), 0.000001);
-            $this->assertSame('[image sequence]', $media->probe()->get('format.filename'));
-            $media->export()->video('libx264', crf: 18)->outputOptions(['-pix_fmt', 'yuv420p'])->save('timelapse.mp4');
-            $metadata = FFMpeg::disk($disk)->open('timelapse.mp4')->probe();
-            $this->assertSame('5/2', $metadata->video()->get('r_frame_rate'));
-            $this->assertSame('3', $metadata->video()->get('nb_frames'));
-            $this->assertSame(64, $metadata->video()->get('width'));
-            $this->assertSame(48, $metadata->video()->get('height'));
-            $this->assertEqualsWithDelta(1.2, $metadata->duration(), 0.000001);
-
-            file_put_contents($this->root.'/timelapse.mp4', Storage::disk($disk)->get('timelapse.mp4'));
-            $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/timelapse.mp4', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
-            $this->assertProcessSucceeded($decoded);
-            $this->assertSame(3 * 64 * 48 * 3, strlen($decoded->output()));
-            foreach ([0, 1, 2] as $frame) {
-                $pixel = array_values(unpack('C3', substr($decoded->output(), $frame * 64 * 48 * 3, 3)));
-                $this->assertGreaterThan(200, $pixel[$frame]);
-                $this->assertLessThan(40, $pixel[($frame + 1) % 3]);
-            }
-            foreach ($hashes as $key => $hash) {
-                $this->assertSame($hash, hash('sha256', Storage::disk($disk)->get($key)));
-            }
-            $this->assertWorkspacesAreCleanedUp();
+        $pattern = "photos/é 'quoted'/frame-%04d.$suffix";
+        $hashes = [];
+        foreach ([[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255]] as $index => $color) {
+            $key = sprintf($pattern, $start + $index);
+            $bytes = static::image($color, $suffix === 'jpg');
+            Storage::disk($disk)->put($key, $bytes);
+            $hashes[$key] = hash('sha256', $bytes);
         }
+        $media = FFMpeg::disk($disk)->openSequence($pattern, count: 3, framerate: $rate, start: $start);
+        $this->assertEqualsWithDelta(1.2, $media->probe()->duration(), 0.000001);
+        $this->assertSame('[image sequence]', $media->probe()->get('format.filename'));
+        $media->export()->video('libx264', crf: 18)->outputOptions(['-pix_fmt', 'yuv420p'])->save('timelapse.mp4');
+        $metadata = FFMpeg::disk($disk)->open('timelapse.mp4')->probe();
+        $this->assertSame('5/2', $metadata->video()->get('r_frame_rate'));
+        $this->assertSame('3', $metadata->video()->get('nb_frames'));
+        $this->assertSame(64, $metadata->video()->get('width'));
+        $this->assertSame(48, $metadata->video()->get('height'));
+        $this->assertEqualsWithDelta(1.2, $metadata->duration(), 0.000001);
+
+        file_put_contents($this->root.'/timelapse.mp4', Storage::disk($disk)->get('timelapse.mp4'));
+        $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/timelapse.mp4', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
+        $this->assertProcessSucceeded($decoded);
+        $this->assertSame(3 * 64 * 48 * 3, strlen($decoded->output()));
+        foreach ([0, 1, 2] as $frame) {
+            $pixel = array_values(unpack('C3', substr($decoded->output(), $frame * 64 * 48 * 3, 3)));
+            $this->assertGreaterThan(200, $pixel[$frame]);
+            $this->assertLessThan(40, $pixel[($frame + 1) % 3]);
+        }
+        foreach ($hashes as $key => $hash) {
+            $this->assertSame($hash, hash('sha256', Storage::disk($disk)->get($key)));
+        }
+        $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_missing_mismatched_and_disguised_images_fail_without_partial_publication(): void
+    /**
+     * Get the disks, image types, start numbers and rates of the sequences to encode.
+     */
+    public static function sequenceProvider(): array
+    {
+        return [
+            'local png' => ['local', 'png', 7, 2.5],
+            'memory jpeg' => ['memory', 'jpg', 0, '5/2'],
+        ];
+    }
+
+    #[DataProvider('invalidMiddleImageProvider')]
+    public function test_missing_mismatched_and_disguised_images_fail_without_partial_publication(?string $bytes): void
     {
         $this->useRealFFMpeg();
-        Storage::disk('memory')->put('photo-07.png', $this->image([255, 0, 0]));
-        Storage::disk('memory')->put('photo-09.png', $this->image([0, 0, 255]));
-        foreach ([null, $this->image([0, 255, 0], width: 80), 'not an image', $this->image([0, 255, 0], jpeg: true)] as $bytes) {
-            if ($bytes !== null) {
-                Storage::disk('memory')->put('photo-08.png', $bytes);
-            }
-            try {
-                FFMpeg::disk('memory')->openSequence('photo-%02d.png', count: 3, framerate: 2, start: 7)
-                    ->export()->video('libx264', crf: 23)->save('invalid.mp4');
-                $this->fail('An incomplete or invalid sequence was accepted.');
-            } catch (MediaException $exception) {
-                $this->assertSame('staging', $exception->phase);
-                $this->assertFalse(Storage::disk('memory')->exists('invalid.mp4'));
-                $this->assertWorkspacesAreCleanedUp();
-            }
+        Storage::disk('memory')->put('photo-07.png', static::image([255, 0, 0]));
+        Storage::disk('memory')->put('photo-09.png', static::image([0, 0, 255]));
+        if ($bytes !== null) {
+            Storage::disk('memory')->put('photo-08.png', $bytes);
         }
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->openSequence('photo-%02d.png', count: 3, framerate: 2, start: 7)
+                ->export()->video('libx264', crf: 23)->save('invalid.mp4'),
+            fn (MediaException $exception) => $exception->phase === 'staging',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('invalid.mp4'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Get the middle images that are missing, wider than their neighbours, or not PNG images.
+     */
+    public static function invalidMiddleImageProvider(): array
+    {
+        return [
+            'missing' => [null],
+            'mismatched size' => [static::image([0, 255, 0], width: 80)],
+            'not an image' => ['not an image'],
+            'jpeg disguised as png' => [static::image([0, 255, 0], jpeg: true)],
+        ];
     }
 
     public function test_a_valid_header_with_corrupt_image_data_cannot_publish_a_shorter_timelapse(): void
     {
         $this->useRealFFMpeg();
-        Storage::disk('memory')->put('photo-0.png', $this->image([255, 0, 0]));
-        Storage::disk('memory')->put('photo-1.png', substr($this->image([0, 255, 0]), 0, 33));
-        Storage::disk('memory')->put('photo-2.png', $this->image([0, 0, 255]));
+        Storage::disk('memory')->put('photo-0.png', static::image([255, 0, 0]));
+        Storage::disk('memory')->put('photo-1.png', substr(static::image([0, 255, 0]), 0, 33));
+        Storage::disk('memory')->put('photo-2.png', static::image([0, 0, 255]));
         $this->assertThrows(
             fn () => FFMpeg::disk('memory')->openSequence('photo-%d.png', count: 3, framerate: 2, start: 0)
                 ->export()->video('libx264', crf: 23)->save('corrupt.mp4'),

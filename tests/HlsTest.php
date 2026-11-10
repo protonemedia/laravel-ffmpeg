@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
@@ -11,11 +12,13 @@ use InvalidArgumentException;
 use League\Flysystem\PathTraversalDetected;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Events;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\HlsVariant;
 use ProtoneMedia\LaravelFFMpeg\Media;
+use ProtoneMedia\LaravelFFMpeg\PendingHlsExport;
 use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
@@ -218,58 +221,72 @@ class HlsTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_invalid_playlist_types_and_non_vod_parallel_work_are_rejected_before_dispatch(): void
+    #[TestWith([''])]
+    #[TestWith(['other'])]
+    #[TestWith([' vod '])]
+    public function test_invalid_playlist_types_are_rejected(string $type): void
     {
-        foreach (['', 'other', ' vod '] as $type) {
-            $this->assertThrows(
-                fn () => FFMpeg::disk('absent')->open('source.mp4')->hls()->playlistType($type),
-                InvalidArgumentException::class,
-                'playlist type',
-            );
-        }
-        foreach (['event', 'live'] as $type) {
-            $this->assertThrows(function () use ($type) {
-                FFMpeg::disk('absent')->open('source.mp4')->hls()->playlistType($type)
-                    ->variant('low', fn () => null)->variant('high', fn () => null)
-                    ->queued(parallel: true)->job('master.m3u8');
-            }, InvalidArgumentException::class, 'requires VOD');
-        }
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('playlist type');
+
+        FFMpeg::disk('absent')->open('source.mp4')->hls()->playlistType($type);
     }
 
-    public function test_audio_only_silent_video_copy_and_all_audio_selection_are_preserved(): void
+    #[TestWith(['event'])]
+    #[TestWith(['live'])]
+    public function test_non_vod_parallel_work_is_rejected_before_dispatch(string $type): void
     {
-        foreach ([[false, true, 'audio'], [true, false, 'video'], [true, true, 'both']] as [$video, $audio, $name]) {
-            $media = $this->source($video, $audio);
-            if (! $video) {
-                $disk = Storage::disk('local');
-                $attached = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-i', $disk->path('source.mkv'),
-                    '-f', 'lavfi', '-i', 'color=red:size=32x32:duration=0.05', '-map', '0:a', '-map', '1:v',
-                    '-c:a', 'copy', '-c:v', 'mjpeg', '-frames:v', '1', '-disposition:v', 'attached_pic', '-threads', '1', $disk->path('artwork.m4a')]);
-                $this->assertProcessSucceeded($attached);
-                $media = FFMpeg::disk('local')->open('artwork.m4a');
-                $this->assertCount(1, $media->probe()->coverArt());
-            }
-            $result = $media->hls(segmentDuration: 0.7)->video('copy')->audio('copy')
-                ->variant($name, fn () => null)->save('default/master.m3u8');
-            $this->assertSame('default/master.m3u8', $result->playlist()->path);
-            $first = $result->variant($name)->files()->where('role', 'hls-segment')->first();
-            $streams = $this->probe(Storage::disk('local')->path($first->path));
-            $this->assertSame($video ? ($audio ? ['video', 'audio'] : ['video']) : ['audio'], array_column($streams, 'codec_type'));
-            $this->assertStringNotContainsString('#EXT-X-INDEPENDENT-SEGMENTS', Storage::disk('local')->get($result->playlist()->path));
-            if ($video && $audio) {
-                $result = $media->hls(segmentDuration: 0.7)->video('copy')->audio('copy')->map('0:V:0')->map('0:a')
-                    ->variant('all', fn () => null)->save('all/master.m3u8');
-                $first = $result->variant('all')->files()->where('role', 'hls-segment')->first();
-                $this->assertSame(['video', 'audio', 'audio'], array_column($this->probe(Storage::disk('local')->path($first->path)), 'codec_type'));
-            }
-            $encoded = $media->hls(segmentDuration: 0.2)->variant('encoded', fn () => null)->save('encoded/master.m3u8');
-            $playlist = Storage::disk('local')->get($encoded->variant('encoded')->playlist()->path);
-            $this->assertStringContainsString('#EXT-X-TARGETDURATION:1', $playlist);
-            $first = $encoded->variant('encoded')->files()->where('role', 'hls-segment')->first();
-            $this->assertSame($video ? ($audio ? ['video', 'audio'] : ['video']) : ['audio'],
-                array_column($this->probe(Storage::disk('local')->path($first->path)), 'codec_type'));
-            $this->assertWorkspacesAreCleanedUp();
+        $export = FFMpeg::disk('absent')->open('source.mp4')->hls()->playlistType($type)
+            ->variant('low', fn () => null)->variant('high', fn () => null);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('requires VOD');
+
+        $export->queued(parallel: true)->job('master.m3u8');
+    }
+
+    public static function streamLayoutProvider(): array
+    {
+        return [
+            'audio only' => [false, true, 'audio'],
+            'silent video' => [true, false, 'video'],
+            'video and audio' => [true, true, 'both'],
+        ];
+    }
+
+    #[DataProvider('streamLayoutProvider')]
+    public function test_audio_only_silent_video_copy_and_all_audio_selection_are_preserved(bool $video, bool $audio, string $name): void
+    {
+        $media = $this->source($video, $audio);
+        if (! $video) {
+            $disk = Storage::disk('local');
+            $attached = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-i', $disk->path('source.mkv'),
+                '-f', 'lavfi', '-i', 'color=red:size=32x32:duration=0.05', '-map', '0:a', '-map', '1:v',
+                '-c:a', 'copy', '-c:v', 'mjpeg', '-frames:v', '1', '-disposition:v', 'attached_pic', '-threads', '1', $disk->path('artwork.m4a')]);
+            $this->assertProcessSucceeded($attached);
+            $media = FFMpeg::disk('local')->open('artwork.m4a');
+            $this->assertCount(1, $media->probe()->coverArt());
         }
+        $result = $media->hls(segmentDuration: 0.7)->video('copy')->audio('copy')
+            ->variant($name, fn () => null)->save('default/master.m3u8');
+        $this->assertSame('default/master.m3u8', $result->playlist()->path);
+        $first = $result->variant($name)->files()->where('role', 'hls-segment')->first();
+        $streams = $this->probe(Storage::disk('local')->path($first->path));
+        $this->assertSame($video ? ($audio ? ['video', 'audio'] : ['video']) : ['audio'], array_column($streams, 'codec_type'));
+        $this->assertStringNotContainsString('#EXT-X-INDEPENDENT-SEGMENTS', Storage::disk('local')->get($result->playlist()->path));
+        if ($video && $audio) {
+            $result = $media->hls(segmentDuration: 0.7)->video('copy')->audio('copy')->map('0:V:0')->map('0:a')
+                ->variant('all', fn () => null)->save('all/master.m3u8');
+            $first = $result->variant('all')->files()->where('role', 'hls-segment')->first();
+            $this->assertSame(['video', 'audio', 'audio'], array_column($this->probe(Storage::disk('local')->path($first->path)), 'codec_type'));
+        }
+        $encoded = $media->hls(segmentDuration: 0.2)->variant('encoded', fn () => null)->save('encoded/master.m3u8');
+        $playlist = Storage::disk('local')->get($encoded->variant('encoded')->playlist()->path);
+        $this->assertStringContainsString('#EXT-X-TARGETDURATION:1', $playlist);
+        $first = $encoded->variant('encoded')->files()->where('role', 'hls-segment')->first();
+        $this->assertSame($video ? ($audio ? ['video', 'audio'] : ['video']) : ['audio'],
+            array_column($this->probe(Storage::disk('local')->path($first->path)), 'codec_type'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_a_shared_watermark_graph_feeds_independent_clipped_hls_variants(): void
@@ -641,99 +658,123 @@ class HlsTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_encryption_handles_padding_and_cbc_chaining_across_large_segments(): void
+    #[TestWith([16])]
+    #[TestWith([1048576])]
+    #[TestWith([1048593])]
+    public function test_encryption_handles_padding_and_cbc_chaining_across_large_segments(int $length): void
     {
         $disk = Storage::disk('memory');
         $disk->put('source.mp4', 'source');
-        $secrets = Storage::fake('secrets');
-        foreach ([16, 1048576, 1048593] as $length) {
-            $plain = substr(str_repeat("\x00\x01\x7f\xffasymmetric", 90000), 0, $length);
-            $this->assertSame($length, strlen($plain));
-            $this->fakePipeline(fn ($process) => file_put_contents($process->path.'/segment-0-00000000.ts', $plain));
-            $result = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
-                ->encrypt('secrets', fn ($path) => 'https://keys.example.test/'.$path, key: '0123456789abcdef')->save('out/master.m3u8');
-            preg_match('/IV=0x([0-9a-f]{32})/', $disk->get('out/test/index.m3u8'), $match);
-            $ciphertext = $disk->get('out/test/segment-00000000.ts');
-            $this->assertSame((intdiv($length, 16) + 1) * 16, strlen($ciphertext));
-            $this->assertSame($plain, openssl_decrypt($ciphertext, 'aes-128-cbc', '0123456789abcdef', OPENSSL_RAW_DATA, hex2bin($match[1])));
-        }
+        Storage::fake('secrets');
+        $plain = substr(str_repeat("\x00\x01\x7f\xffasymmetric", 90000), 0, $length);
+        $this->assertSame($length, strlen($plain));
+        $this->fakePipeline(fn ($process) => file_put_contents($process->path.'/segment-0-00000000.ts', $plain));
+        FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
+            ->encrypt('secrets', fn ($path) => 'https://keys.example.test/'.$path, key: '0123456789abcdef')->save('out/master.m3u8');
+        preg_match('/IV=0x([0-9a-f]{32})/', $disk->get('out/test/index.m3u8'), $match);
+        $ciphertext = $disk->get('out/test/segment-00000000.ts');
+        $this->assertSame((intdiv($length, 16) + 1) * 16, strlen($ciphertext));
+        $this->assertSame($plain, openssl_decrypt($ciphertext, 'aes-128-cbc', '0123456789abcdef', OPENSSL_RAW_DATA, hex2bin($match[1])));
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_encryption_failures_and_hook_tampering_publish_nothing_and_clean_private_files(): void
+    public static function encryptionFailureProvider(): array
     {
-        $disk = Storage::disk('memory');
-        $disk->put('source.mp4', 'source');
-        $secrets = Storage::fake('secrets');
-        foreach ([null, '', 'file:///secret', "https://example.test/key\n#EXT-X-KEY:METHOD=NONE", 'https://example.test/"key', 'https://example.test/key#fragment', '//example.test/key',
-            "/keys/\xff.key", "/keys/\u{0085}.key", new \RuntimeException('key URL failure'), new ExportCancelled, 'tamper', 'reuse'] as $case) {
-            $this->fakePipeline(function ($process) use ($case) {
-                if ($case === 'reuse') {
-                    file_put_contents($process->path.'/segment-0-00000001.ts', 'next segment');
-                    $path = $process->path.'/playlist-0.m3u8';
-                    file_put_contents($path, str_replace('#EXT-X-ENDLIST', "#EXTINF:1.000000,\nsegment-0-00000001.ts\n#EXT-X-ENDLIST", file_get_contents($path)));
-                }
-            });
-            $export = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
-                ->encrypt('secrets', function () use ($case) {
-                    if ($case instanceof \Throwable) {
-                        throw $case;
-                    }
-
-                    return in_array($case, ['tamper', 'reuse'], true) ? '/keys/test' : $case;
-                }, rotateEvery: $case === 'reuse' ? 1 : null);
-            if ($case === 'tamper') {
-                $export->playlistUsing(fn ($text) => preg_replace('/#EXT-X-KEY:[^\n]+\n/', '', $text));
-            }
-            foreach ([false, true] as $identityHook) {
-                if ($identityHook && $case !== 'tamper') {
-                    $export->playlistUsing(fn ($text) => $text);
-                }
-                $this->assertThrows(fn () => $export->save('out/master.m3u8'), function (\RuntimeException $exception) use ($case) {
-                    if ($case instanceof \Throwable) {
-                        $this->assertSame($case, $exception);
-                    } else {
-                        $this->assertInstanceOf(MediaException::class, $exception);
-                        $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
-                    }
-
-                    return true;
-                });
-                $this->assertSame(['source.mp4'], $disk->allFiles());
-                $this->assertSame([], $secrets->allFiles());
-                $this->assertWorkspacesAreCleanedUp();
-            }
-        }
+        return [
+            'missing key url' => [null],
+            'empty key url' => [''],
+            'file key url' => ['file:///secret'],
+            'injected tag' => ["https://example.test/key\n#EXT-X-KEY:METHOD=NONE"],
+            'quoted key url' => ['https://example.test/"key'],
+            'fragment' => ['https://example.test/key#fragment'],
+            'protocol relative key url' => ['//example.test/key'],
+            'invalid utf-8' => ["/keys/\xff.key"],
+            'unicode control character' => ["/keys/\u{0085}.key"],
+            'key url failure' => [new \RuntimeException('key URL failure')],
+            'cancellation' => [new ExportCancelled],
+            'tampered playlist' => ['tamper'],
+            'reused key url' => ['reuse'],
+        ];
     }
 
-    public function test_failed_private_key_publication_precedes_media_and_reports_successful_keys(): void
+    #[DataProvider('encryptionFailureProvider')]
+    public function test_encryption_failures_and_hook_tampering_publish_nothing_and_clean_private_files(mixed $case): void
+    {
+        Storage::disk('memory')->put('source.mp4', 'source');
+        Storage::fake('secrets');
+        $this->fakePipeline(function ($process) use ($case) {
+            if ($case === 'reuse') {
+                file_put_contents($process->path.'/segment-0-00000001.ts', 'next segment');
+                $path = $process->path.'/playlist-0.m3u8';
+                file_put_contents($path, str_replace('#EXT-X-ENDLIST', "#EXTINF:1.000000,\nsegment-0-00000001.ts\n#EXT-X-ENDLIST", file_get_contents($path)));
+            }
+        });
+        $export = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
+            ->encrypt('secrets', function () use ($case) {
+                if ($case instanceof \Throwable) {
+                    throw $case;
+                }
+
+                return in_array($case, ['tamper', 'reuse'], true) ? '/keys/test' : $case;
+            }, rotateEvery: $case === 'reuse' ? 1 : null);
+        if ($case === 'tamper') {
+            $export->playlistUsing(fn ($text) => preg_replace('/#EXT-X-KEY:[^\n]+\n/', '', $text));
+        }
+        $this->assertEncryptedSaveFails($export, $case);
+        if ($case !== 'tamper') {
+            $export->playlistUsing(fn ($text) => $text);
+        }
+        $this->assertEncryptedSaveFails($export, $case);
+    }
+
+    /**
+     * Assert that saving the given encrypted export fails without publishing anything.
+     */
+    protected function assertEncryptedSaveFails(PendingHlsExport $export, mixed $case): void
+    {
+        $this->assertThrows(fn () => $export->save('out/master.m3u8'), function (\RuntimeException $exception) use ($case) {
+            if ($case instanceof \Throwable) {
+                $this->assertSame($case, $exception);
+            } else {
+                $this->assertInstanceOf(MediaException::class, $exception);
+                $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
+            }
+
+            return true;
+        });
+        $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+        $this->assertSame([], Storage::disk('secrets')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    #[TestWith([false])]
+    #[TestWith([true])]
+    public function test_failed_private_key_publication_precedes_media_and_reports_successful_keys(bool $keysSucceed): void
     {
         $disk = Storage::disk('memory');
         $disk->put('source.mp4', 'source');
         $storedKeys = Storage::fake('secrets');
         $this->fakePipeline();
-        foreach ([false, true] as $keysSucceed) {
-            $secrets = Mockery::mock(Filesystem::class);
-            $secrets->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $keysSucceed && $storedKeys->put($path, $stream, $options));
-            $secrets->shouldReceive('size')->andReturnUsing(fn ($path) => $storedKeys->size($path));
-            $failedMedia = Mockery::mock(Filesystem::class);
-            $failedMedia->shouldReceive('put')->andReturnFalse();
-            $this->assertThrows(function () use ($secrets, $failedMedia) {
-                FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
-                    ->encrypt($secrets, fn ($path) => '/keys/'.$path)->toDisk($failedMedia)->save('out/master.m3u8');
-            }, function (MediaException $exception) use ($keysSucceed, $storedKeys) {
-                $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
-                $this->assertCount($keysSucceed ? 1 : 0, $exception->published);
-                if ($keysSucceed) {
-                    $this->assertSame(16, $storedKeys->size($exception->published[0]['path']));
-                    $this->assertSame('out/test/segment-00000000.ts', $exception->destination['path']);
-                } else {
-                    $this->assertStringEndsWith('.key', $exception->destination['path']);
-                }
+        $secrets = Mockery::mock(Filesystem::class);
+        $secrets->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $keysSucceed && $storedKeys->put($path, $stream, $options));
+        $secrets->shouldReceive('size')->andReturnUsing(fn ($path) => $storedKeys->size($path));
+        $failedMedia = Mockery::mock(Filesystem::class);
+        $failedMedia->shouldReceive('put')->andReturnFalse();
+        $this->assertThrows(function () use ($secrets, $failedMedia) {
+            FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
+                ->encrypt($secrets, fn ($path) => '/keys/'.$path)->toDisk($failedMedia)->save('out/master.m3u8');
+        }, function (MediaException $exception) use ($keysSucceed, $storedKeys) {
+            $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
+            $this->assertCount($keysSucceed ? 1 : 0, $exception->published);
+            if ($keysSucceed) {
+                $this->assertSame(16, $storedKeys->size($exception->published[0]['path']));
+                $this->assertSame('out/test/segment-00000000.ts', $exception->destination['path']);
+            } else {
+                $this->assertStringEndsWith('.key', $exception->destination['path']);
+            }
 
-                return true;
-            });
-        }
+            return true;
+        });
         $this->assertSame(['source.mp4'], $disk->allFiles());
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -783,27 +824,37 @@ class HlsTest extends TestCase
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
-    public function test_playlist_hooks_freeze_configuration_and_propagate_failures_without_publication(): void
+    public static function hookFailureProvider(): array
     {
+        return [
+            'application failure' => [new \RuntimeException('application failure'), Events\ExportFailed::class, Events\ExportCancelled::class],
+            'cancellation' => [new ExportCancelled, Events\ExportCancelled::class, Events\ExportFailed::class],
+        ];
+    }
+
+    #[DataProvider('hookFailureProvider')]
+    public function test_playlist_hooks_freeze_configuration_and_propagate_failures_without_publication(
+        \RuntimeException $failure,
+        string $dispatched,
+        string $notDispatched,
+    ): void {
         Storage::disk('memory')->put('source.mp4', 'source');
         $this->fakePipeline();
-        foreach ([new \RuntimeException('application failure'), new ExportCancelled] as $failure) {
-            $export = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null);
-            $export->playlistUsing(function () use ($export, $failure) {
-                $this->assertThrows(fn () => $export->playlistUsing(fn ($contents) => $contents), InvalidArgumentException::class);
+        $export = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null);
+        $export->playlistUsing(function () use ($export, $failure) {
+            $this->assertThrows(fn () => $export->playlistUsing(fn ($contents) => $contents), InvalidArgumentException::class);
 
-                throw $failure;
-            });
-            $this->assertThrows(fn () => $export->save('out/master.m3u8'), function (\RuntimeException $exception) use ($failure) {
-                $this->assertSame($failure, $exception);
+            throw $failure;
+        });
+        $this->assertThrows(fn () => $export->save('out/master.m3u8'), function (\RuntimeException $exception) use ($failure) {
+            $this->assertSame($failure, $exception);
 
-                return true;
-            });
-            $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-            $this->assertWorkspacesAreCleanedUp();
-        }
-        Event::assertDispatchedTimes(Events\ExportFailed::class, 1);
-        Event::assertDispatchedTimes(Events\ExportCancelled::class, 1);
+            return true;
+        });
+        $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
+        Event::assertDispatchedTimes($dispatched, 1);
+        Event::assertNotDispatched($notDispatched);
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
@@ -821,35 +872,54 @@ class HlsTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_invalid_settings_fail_before_io(): void
+    public static function invalidSettingsProvider(): array
+    {
+        return [
+            'zero segment duration' => [fn (Media $media) => $media->hls(segmentDuration: 0)],
+            'infinite segment duration' => [fn (Media $media) => $media->hls(segmentDuration: INF)],
+            'no variants' => [fn (Media $media) => $media->hls()->inspect()],
+            'variant name traversal' => [fn (Media $media) => $media->hls()->variant('../escape', fn () => null)],
+            'duplicate variant' => [fn (Media $media) => $media->hls()->variant('same', fn () => null)->variant('same', fn () => null)],
+            'non-playlist destination' => [fn (Media $media) => $media->hls()->variant('valid', fn () => null)->save('out.mp4')],
+            'muxer override' => [fn (Media $media) => $media->hls()->variant('valid', fn ($variant) => $variant->outputOptions(['-f', 'mp4']))->inspect()],
+            'two pass' => [fn (Media $media) => $media->hls()->variant('valid', fn () => null)->twoPass()->inspect()],
+            'remote playlist' => [fn (Media $media) => $media->hls()->variant('valid', fn () => null, playlist: 'https://example.test/list.m3u8')],
+            'segments without number' => [fn (Media $media) => $media->hls()->variant('valid', fn () => null, segments: 'segment.ts')],
+            'segments with two numbers' => [fn (Media $media) => $media->hls()->variant('valid', fn () => null, segments: 'seg-%d-%d.ts')],
+            'numbered segment directory' => [fn (Media $media) => $media->hls()->variant('valid', fn () => null, segments: '%d/segment.ts')],
+            'wide segment number' => [fn (Media $media) => $media->hls()->variant('valid', fn () => null, segments: 'seg-%10d.ts')],
+            'short key' => [fn (Media $media) => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: 'short')],
+            'long key' => [fn (Media $media) => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: str_repeat('x', 17))],
+            'zero rotation' => [fn (Media $media) => $media->hls()->encrypt('secrets', fn () => '/keys/key', rotateEvery: 0)],
+            'rotation with a fixed key' => [fn (Media $media) => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: str_repeat('x', 16), rotateEvery: 2)],
+        ];
+    }
+
+    #[DataProvider('invalidSettingsProvider')]
+    public function test_invalid_settings_fail_before_io(Closure $invalid): void
     {
         Process::fake();
         $media = FFMpeg::disk('missing')->open('unread.mp4');
-        foreach ([
-            fn () => $media->hls(segmentDuration: 0),
-            fn () => $media->hls(segmentDuration: INF),
-            fn () => $media->hls()->inspect(),
-            fn () => $media->hls()->variant('../escape', fn () => null),
-            fn () => $media->hls()->variant('same', fn () => null)->variant('same', fn () => null),
-            fn () => $media->hls()->variant('valid', fn () => null)->save('out.mp4'),
-            fn () => $media->hls()->variant('valid', fn ($variant) => $variant->outputOptions(['-f', 'mp4']))->inspect(),
-            fn () => $media->hls()->variant('valid', fn () => null)->twoPass()->inspect(),
-            fn () => $media->hls()->variant('valid', fn () => null, playlist: '../outside.m3u8'),
-            fn () => $media->hls()->variant('valid', fn () => null, playlist: 'https://example.test/list.m3u8'),
-            fn () => $media->hls()->variant('valid', fn () => null, segments: 'segment.ts'),
-            fn () => $media->hls()->variant('valid', fn () => null, segments: 'seg-%d-%d.ts'),
-            fn () => $media->hls()->variant('valid', fn () => null, segments: '%d/segment.ts'),
-            fn () => $media->hls()->variant('valid', fn () => null, segments: 'seg-%10d.ts'),
-            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: 'short'),
-            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: str_repeat('x', 17)),
-            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', rotateEvery: 0),
-            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: str_repeat('x', 16), rotateEvery: 2),
-            fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', directory: '../escape'),
-        ] as $invalid) {
-            $this->assertThrows($invalid, fn (\Throwable $exception) => $exception instanceof InvalidArgumentException
-                || $exception instanceof PathTraversalDetected);
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(fn () => $invalid($media), InvalidArgumentException::class);
+        $this->assertWorkspacesAreCleanedUp();
+        Process::assertNothingRan();
+    }
+
+    public static function traversingSettingsProvider(): array
+    {
+        return [
+            'playlist' => [fn (Media $media) => $media->hls()->variant('valid', fn () => null, playlist: '../outside.m3u8')],
+            'key directory' => [fn (Media $media) => $media->hls()->encrypt('secrets', fn () => '/keys/key', directory: '../escape')],
+        ];
+    }
+
+    #[DataProvider('traversingSettingsProvider')]
+    public function test_traversing_paths_fail_before_io(Closure $invalid): void
+    {
+        Process::fake();
+        $media = FFMpeg::disk('missing')->open('unread.mp4');
+        $this->assertThrows(fn () => $invalid($media), PathTraversalDetected::class);
+        $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
     }
 }

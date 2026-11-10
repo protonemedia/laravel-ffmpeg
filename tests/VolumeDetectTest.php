@@ -2,16 +2,66 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class VolumeDetectTest extends TestCase
 {
-    public function test_native_analysis_measures_selected_tracks_and_filters_without_publishing_media(): void
+    #[DataProvider('trackProvider')]
+    public function test_native_analysis_measures_selected_tracks_without_publishing_media(string $disk, int $track, float $mean, float $max): void
+    {
+        $bytes = $this->tracksFixture();
+        $media = FFMpeg::disk($disk)->open('tracks.mka');
+        $result = $track === 0 ? $media->analyze() : $media->analyze(audio: $track);
+        $this->assertProcessSucceeded($result);
+        $this->assertFalse($result->failed());
+        $this->assertSame(0, $result->exitCode);
+        $this->assertSame($result, $result->throw());
+        $this->assertSame('', $result->output());
+        $this->assertStringContainsString('n_samples: 12000', $result->errorOutput());
+        preg_match('/mean_volume: (-?[0-9.]+) dB/', $result->errorOutput(), $meanMatch);
+        preg_match('/max_volume: (-?[0-9.]+) dB/', $result->errorOutput(), $maxMatch);
+        $this->assertEqualsWithDelta($mean, (float) ($meanMatch[1] ?? INF), 0.1);
+        $this->assertEqualsWithDelta($max, (float) ($maxMatch[1] ?? INF), 0.1);
+        $this->assertStringNotContainsString(Storage::disk('local')->path('tracks.mka'), $result->errorOutput());
+        $this->assertSame(['tracks.mka'], Storage::disk($disk)->allFiles());
+        $this->assertSame($bytes, Storage::disk($disk)->get('tracks.mka'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public static function trackProvider(): array
+    {
+        return [
+            'first track on a local disk' => ['local', 0, -21.1, -18.1],
+            'second track on a local disk' => ['local', 1, -9.0, -6.0],
+            'first track on a remote disk' => ['memory', 0, -21.1, -18.1],
+            'second track on a remote disk' => ['memory', 1, -9.0, -6.0],
+        ];
+    }
+
+    #[TestWith(['local'])]
+    #[TestWith(['memory'])]
+    public function test_native_analysis_applies_custom_filters_without_publishing_media(string $disk): void
+    {
+        $bytes = $this->tracksFixture();
+        $filtered = FFMpeg::disk($disk)->open('tracks.mka')->analyze('volume=0.25,volumedetect', audio: 1)->throw();
+        $this->assertStringContainsString('max_volume: -18.1 dB', $filtered->errorOutput());
+        $this->assertSame(['tracks.mka'], Storage::disk($disk)->allFiles());
+        $this->assertSame($bytes, Storage::disk($disk)->get('tracks.mka'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    /**
+     * Write a file with a quiet and a loud audio track to the local and memory disks and get its contents.
+     */
+    protected function tracksFixture(): string
     {
         $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
@@ -22,56 +72,59 @@ class VolumeDetectTest extends TestCase
         $this->assertProcessSucceeded($fixture);
         $bytes = $local->get('tracks.mka');
         Storage::disk('memory')->put('tracks.mka', $bytes);
-        foreach (['local', 'memory'] as $disk) {
-            $media = FFMpeg::disk($disk)->open('tracks.mka');
-            foreach ([[0, -21.1, -18.1], [1, -9.0, -6.0]] as [$track, $mean, $max]) {
-                $result = $track === 0 ? $media->analyze() : $media->analyze(audio: $track);
-                $this->assertProcessSucceeded($result);
-                $this->assertFalse($result->failed());
-                $this->assertSame(0, $result->exitCode);
-                $this->assertSame($result, $result->throw());
-                $this->assertSame('', $result->output());
-                $this->assertStringContainsString('n_samples: 12000', $result->errorOutput());
-                preg_match('/mean_volume: (-?[0-9.]+) dB/', $result->errorOutput(), $meanMatch);
-                preg_match('/max_volume: (-?[0-9.]+) dB/', $result->errorOutput(), $maxMatch);
-                $this->assertEqualsWithDelta($mean, (float) ($meanMatch[1] ?? INF), 0.1);
-                $this->assertEqualsWithDelta($max, (float) ($maxMatch[1] ?? INF), 0.1);
-                $this->assertStringNotContainsString($local->path('tracks.mka'), $result->errorOutput());
-            }
-            $filtered = $media->analyze('volume=0.25,volumedetect', audio: 1)->throw();
-            $this->assertStringContainsString('max_volume: -18.1 dB', $filtered->errorOutput());
-            $this->assertSame(['tracks.mka'], Storage::disk($disk)->allFiles());
-            $this->assertSame($bytes, Storage::disk($disk)->get('tracks.mka'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+
+        return $bytes;
     }
 
-    public function test_silence_is_successful_but_missing_tracks_and_bad_filters_are_inspectable_failures(): void
+    public function test_silence_is_a_successful_analysis(): void
+    {
+        $this->silenceFixture();
+        $result = FFMpeg::disk('local')->open('silence.wav')->analyze()->throw();
+        $this->assertStringContainsString('n_samples: 800', $result->errorOutput());
+        $this->assertStringContainsString('max_volume: -91.0 dB', $result->errorOutput());
+        $this->assertSame(['silence.wav'], Storage::disk('local')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    #[DataProvider('failedAnalysisProvider')]
+    public function test_missing_tracks_bad_filters_and_broken_sources_are_inspectable_failures(Closure $analyze): void
+    {
+        $this->silenceFixture();
+        Storage::disk('local')->put('broken.wav', 'not audio');
+        $failure = $analyze();
+        $this->assertTrue($failure->failed());
+        $this->assertFalse($failure->successful());
+        $this->assertNotSame(0, $failure->exitCode);
+        $this->assertNotEmpty($failure->errorOutput());
+        $this->assertSame('analysis', $failure->phase);
+        $this->assertThrows(
+            fn () => $failure->throw(),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['analysis', 'exit']
+                && $exception->diagnostics === $failure->errorOutput()
+                && $exception->getPrevious() === null,
+        );
+        $this->assertSame(['broken.wav', 'silence.wav'], Storage::disk('local')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public static function failedAnalysisProvider(): array
+    {
+        return [
+            'missing track' => [fn () => FFMpeg::disk('local')->open('silence.wav')->analyze(audio: 1)],
+            'unknown filter' => [fn () => FFMpeg::disk('local')->open('silence.wav')->analyze('not_an_audio_filter')],
+            'broken source' => [fn () => FFMpeg::disk('local')->open('broken.wav')->analyze()],
+        ];
+    }
+
+    /**
+     * Write a tenth of a second of silence to the local disk.
+     */
+    protected function silenceFixture(): void
     {
         $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $fixture = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=8000:cl=mono:d=0.1', $local->path('silence.wav')]);
         $this->assertProcessSucceeded($fixture);
-        $media = FFMpeg::disk('local')->open('silence.wav');
-        $result = $media->analyze()->throw();
-        $this->assertStringContainsString('n_samples: 800', $result->errorOutput());
-        $this->assertStringContainsString('max_volume: -91.0 dB', $result->errorOutput());
-        $local->put('broken.wav', 'not audio');
-        foreach ([$media->analyze(audio: 1), $media->analyze('not_an_audio_filter'), FFMpeg::disk('local')->open('broken.wav')->analyze()] as $failure) {
-            $this->assertTrue($failure->failed());
-            $this->assertFalse($failure->successful());
-            $this->assertNotSame(0, $failure->exitCode);
-            $this->assertNotEmpty($failure->errorOutput());
-            $this->assertSame('analysis', $failure->phase);
-            $this->assertThrows(
-                fn () => $failure->throw(),
-                fn (MediaException $exception) => [$exception->phase, $exception->category] === ['analysis', 'exit']
-                    && $exception->diagnostics === $failure->errorOutput()
-                    && $exception->getPrevious() === null,
-            );
-        }
-        $this->assertSame(['broken.wav', 'silence.wav'], $local->allFiles());
-        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_signed_urls_are_redacted_in_both_output_streams_commands_and_explicit_exceptions(): void
@@ -136,17 +189,26 @@ class VolumeDetectTest extends TestCase
         );
     }
 
-    public function test_invalid_analysis_requests_fail_before_staging_or_process_execution(): void
+    #[DataProvider('invalidAnalysisProvider')]
+    public function test_invalid_analysis_requests_fail_before_staging_or_process_execution(string $filter, int $audio): void
     {
         Process::fake();
-        foreach ([['', 0], ["volumedetect\0", 0], ['amovie=https://example.invalid/audio.wav', 0], ['volumedetect', -1]] as [$filter, $audio]) {
-            $this->assertThrows(
-                fn () => FFMpeg::disk('missing')->open('missing.wav')->analyze($filter, $audio),
-                InvalidArgumentException::class,
-            );
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('missing')->open('missing.wav')->analyze($filter, $audio),
+            InvalidArgumentException::class,
+        );
+        $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
+    }
+
+    public static function invalidAnalysisProvider(): array
+    {
+        return [
+            'empty filter' => ['', 0],
+            'null byte' => ["volumedetect\0", 0],
+            'source filter' => ['amovie=https://example.invalid/audio.wav', 0],
+            'negative track' => ['volumedetect', -1],
+        ];
     }
 
     public function test_launch_errors_and_timeouts_throw_and_clean_up_instead_of_returning_a_failed_result(): void

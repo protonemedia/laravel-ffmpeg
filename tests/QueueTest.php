@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Orchestra\Testbench\Attributes\RequiresEnv;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
@@ -194,7 +195,6 @@ class QueueTest extends TestCase
         ob_start();
         imagepng($bitmap);
         Storage::disk('queued')->put('logo.png', ob_get_clean());
-        imagedestroy($bitmap);
         $hash = hash('sha256', Storage::disk('queued')->get('logo.png'));
         $logo = FFMpeg::disk('queued')->open('logo.png');
         Bus::batch([
@@ -212,7 +212,6 @@ class QueueTest extends TestCase
         // The recorded edit survives the queue: the red mark in the bottom-right corner is gray.
         $frame = imagecreatefromstring(FFMpeg::disk('queued')->open('watermarked.mp4')->frame(0.5)->get());
         $pixel = imagecolorsforindex($frame, imagecolorat($frame, 92, 60));
-        imagedestroy($frame);
         $this->assertLessThan(30, abs($pixel['red'] - $pixel['blue']), json_encode($pixel));
         $this->assertLessThan(150, $pixel['red'], json_encode($pixel));
         $this->assertSame($hash, hash('sha256', Storage::disk('queued')->get('logo.png')));
@@ -325,24 +324,24 @@ class QueueTest extends TestCase
         $this->assertSame(0, DB::table('jobs')->count());
     }
 
-    public function test_ordinary_queued_hls_preserves_non_vod_types_and_encryption(): void
+    #[TestWith(['event', true])]
+    #[TestWith(['live', false])]
+    public function test_ordinary_queued_hls_preserves_non_vod_types_and_encryption(string $type, bool $tagged): void
     {
-        foreach (['event', 'live'] as $type) {
-            $this->source()->hls(segmentDuration: 0.5)->playlistType($type)->video(bitrate: '100k', preset: 'ultrafast')
-                ->variant('main', fn ($variant) => $variant->resize(width: 48))
-                ->encrypt('queued', static fn ($key) => 'https://keys.invalid/'.$key, rotateEvery: 1)
-                ->queued(connection: 'database', queue: 'media')->save($type.'/master.m3u8');
-            $this->work();
-            $playlist = Storage::disk('queued')->get($type.'/main/index.m3u8');
-            if ($type === 'event') {
-                $this->assertStringContainsString('#EXT-X-PLAYLIST-TYPE:EVENT', $playlist);
-            } else {
-                $this->assertStringNotContainsString('#EXT-X-PLAYLIST-TYPE:', $playlist);
-            }
-            $this->assertStringContainsString('#EXT-X-KEY:METHOD=AES-128', $playlist);
-            $this->assertStringEndsWith("#EXT-X-ENDLIST\n", $playlist);
+        $this->source()->hls(segmentDuration: 0.5)->playlistType($type)->video(bitrate: '100k', preset: 'ultrafast')
+            ->variant('main', fn ($variant) => $variant->resize(width: 48))
+            ->encrypt('queued', static fn ($key) => 'https://keys.invalid/'.$key, rotateEvery: 1)
+            ->queued(connection: 'database', queue: 'media')->save($type.'/master.m3u8');
+        $this->work();
+        $playlist = Storage::disk('queued')->get($type.'/main/index.m3u8');
+        if ($tagged) {
+            $this->assertStringContainsString('#EXT-X-PLAYLIST-TYPE:EVENT', $playlist);
+        } else {
+            $this->assertStringNotContainsString('#EXT-X-PLAYLIST-TYPE:', $playlist);
         }
-        $this->assertCount(2, $this->completed);
+        $this->assertStringContainsString('#EXT-X-KEY:METHOD=AES-128', $playlist);
+        $this->assertStringEndsWith("#EXT-X-ENDLIST\n", $playlist);
+        $this->assertCount(1, $this->completed);
         $this->assertSame([], $this->errors);
         $this->assertSame(0, DB::table('jobs')->count());
         $this->assertWorkspacesAreCleanedUp();

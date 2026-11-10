@@ -2,11 +2,15 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class AudioMixTest extends TestCase
@@ -60,7 +64,7 @@ class AudioMixTest extends TestCase
         $this->assertEqualsWithDelta($right, $samples[$offset + 1], 0.0001);
     }
 
-    public function test_inspection_is_pure_and_conflicting_settings_fail_before_io(): void
+    public function test_inspection_is_pure(): void
     {
         Process::fake();
         $source = $this->media();
@@ -75,67 +79,89 @@ class AudioMixTest extends TestCase
         $this->assertSame($delayed, $delayed->at(0.625));
         $this->assertSame($delayed->inspect(), $delayed->inspect());
         $this->assertSame($source->mixAudio($music)->inspect(), $delayed->at(0)->inspect());
-        foreach ([
-            fn () => $source->mixAudio($music)->at(-0.1),
-            fn () => $source->mixAudio($music)->at(NAN),
-            fn () => $source->mixAudio($music)->at(INF),
-            fn () => $source->mixAudio($music)->at(-INF),
-            fn () => $source->mixAudio($music, volume: NAN),
-            fn () => $source->mixAudio($music, originalVolume: -1),
-            fn () => $source->mixAudio($music, volume: INF),
-            fn () => $source->mixAudio($music)->audio('copy')->inspect(),
-            fn () => $source->backgroundMusic(FFMpeg::disk()->openUrl('https://media.example/music.mp3'))->inspect(),
-        ] as $invalid) {
-            $this->assertThrows($invalid, InvalidArgumentException::class);
-        }
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_offsets_delay_only_added_samples_and_loop_without_repeating_the_delay(): void
+    public static function invalidSettingsProvider(): array
     {
-        $this->fixture();
-        foreach ([false, true] as $loop) {
-            $name = $loop ? 'delayed-loop.mkv' : 'delayed-once.mkv';
-            $result = $this->media()->mixAudio($this->media('music.wav'), volume: 0.25, originalVolume: 0.5)
-                ->at(0.625)->loop($loop)->video('copy')->audio('pcm_f64le')->save($name);
-            $commands = $result->processes()->pluck('command')->all();
-            $this->assertCount($loop ? 2 : 1, $commands);
-            $this->assertSame($loop ? 'audio-mix-loop.wav' : '[output:0]', end($commands[0]));
-            $samples = $this->samples($name);
-            $this->assertCount(3 * 48000 * 2, $samples);
-            $this->assertSame(3.0, $this->media($name)->probe()->duration());
-            $this->assertSample($samples, 0.1, 0, 0);
-            $this->assertSample($samples, 0.3, 0.05, -0.1);
-            $this->assertSample($samples, 0.625 - 1 / 48000, 0.05, -0.1);
-            $this->assertSample($samples, 0.625, 0.1, 0);
-            $this->assertSample($samples, 0.9, -0.05, -0.05);
-            $this->assertSample($samples, 1.125 - 1 / 48000, -0.05, -0.05);
-            $this->assertSample($samples, 1.125, $loop ? 0.1 : 0.05, $loop ? 0 : -0.1);
-            $this->assertSample($samples, 1.3, $loop ? 0.1 : 0.05, $loop ? 0 : -0.1);
-            $this->assertSample($samples, 2.7, $loop ? 0.05 : 0, $loop ? 0.1 : 0);
-            $this->assertSame(
-                $this->ffmpeg(['-i', $this->path('source.mkv'), '-map', '0:v', '-f', 'framemd5', '-']),
-                $this->ffmpeg(['-i', $this->path($name), '-map', '0:v', '-f', 'framemd5', '-']),
-            );
-        }
+        return [
+            'negative offset' => [fn (Media $source, Media $music) => $source->mixAudio($music)->at(-0.1)],
+            'NaN offset' => [fn (Media $source, Media $music) => $source->mixAudio($music)->at(NAN)],
+            'infinite offset' => [fn (Media $source, Media $music) => $source->mixAudio($music)->at(INF)],
+            'negative infinite offset' => [fn (Media $source, Media $music) => $source->mixAudio($music)->at(-INF)],
+            'NaN volume' => [fn (Media $source, Media $music) => $source->mixAudio($music, volume: NAN)],
+            'negative original volume' => [fn (Media $source, Media $music) => $source->mixAudio($music, originalVolume: -1)],
+            'infinite volume' => [fn (Media $source, Media $music) => $source->mixAudio($music, volume: INF)],
+            'copied audio' => [fn (Media $source, Media $music) => $source->mixAudio($music)->audio('copy')->inspect()],
+            'remote music' => [fn (Media $source) => $source->backgroundMusic(FFMpeg::disk()->openUrl('https://media.example/music.mp3'))->inspect()],
+        ];
+    }
+
+    #[DataProvider('invalidSettingsProvider')]
+    public function test_conflicting_settings_fail_before_io(Closure $invalid): void
+    {
+        Process::fake();
+
+        $this->assertThrows(fn () => $invalid($this->media(), $this->media('music.wav')), InvalidArgumentException::class);
+
+        Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_offsets_beyond_the_presentation_add_no_audio_and_silent_sources_keep_the_delay(): void
+    #[TestWith([false])]
+    #[TestWith([true])]
+    public function test_offsets_delay_only_added_samples_and_loop_without_repeating_the_delay(bool $loop): void
+    {
+        $this->fixture();
+        $name = $loop ? 'delayed-loop.mkv' : 'delayed-once.mkv';
+        $result = $this->media()->mixAudio($this->media('music.wav'), volume: 0.25, originalVolume: 0.5)
+            ->at(0.625)->loop($loop)->video('copy')->audio('pcm_f64le')->save($name);
+        $commands = $result->processes()->pluck('command')->all();
+        $this->assertCount($loop ? 2 : 1, $commands);
+        $this->assertSame($loop ? 'audio-mix-loop.wav' : '[output:0]', end($commands[0]));
+        $samples = $this->samples($name);
+        $this->assertCount(3 * 48000 * 2, $samples);
+        $this->assertSame(3.0, $this->media($name)->probe()->duration());
+        $this->assertSample($samples, 0.1, 0, 0);
+        $this->assertSample($samples, 0.3, 0.05, -0.1);
+        $this->assertSample($samples, 0.625 - 1 / 48000, 0.05, -0.1);
+        $this->assertSample($samples, 0.625, 0.1, 0);
+        $this->assertSample($samples, 0.9, -0.05, -0.05);
+        $this->assertSample($samples, 1.125 - 1 / 48000, -0.05, -0.05);
+        $this->assertSample($samples, 1.125, $loop ? 0.1 : 0.05, $loop ? 0 : -0.1);
+        $this->assertSample($samples, 1.3, $loop ? 0.1 : 0.05, $loop ? 0 : -0.1);
+        $this->assertSample($samples, 2.7, $loop ? 0.05 : 0, $loop ? 0.1 : 0);
+        $this->assertSame(
+            $this->ffmpeg(['-i', $this->path('source.mkv'), '-map', '0:v', '-f', 'framemd5', '-']),
+            $this->ffmpeg(['-i', $this->path($name), '-map', '0:v', '-f', 'framemd5', '-']),
+        );
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public static function offsetProvider(): array
+    {
+        return [
+            'inside the presentation' => [0.625],
+            'at the end' => [3.0],
+            'beyond the end' => [4.0],
+            'largest float' => [PHP_FLOAT_MAX],
+        ];
+    }
+
+    #[DataProvider('offsetProvider')]
+    public function test_offsets_beyond_the_presentation_add_no_audio_and_silent_sources_keep_the_delay(float $offset): void
     {
         $this->fixture(audio: false);
-        foreach ([0.625, 3.0, 4.0, PHP_FLOAT_MAX] as $offset) {
-            $name = 'silent-offset-'.$offset.'.wav';
-            $this->media()->backgroundMusic($this->media('music.wav'), volume: 0.25)->at($offset)
-                ->withoutVideo()->audio('pcm_f64le')->save($name);
-            $samples = $this->samples($name);
-            $this->assertCount(3 * 48000 * 2, $samples);
-            $this->assertSample($samples, 0.1, 0, 0);
-            $this->assertSample($samples, 0.625 - 1 / 48000, 0, 0);
-            $this->assertSample($samples, 0.625, $offset < 3 ? 0.05 : 0, $offset < 3 ? 0.1 : 0);
-            $this->assertSample($samples, 2.7, $offset < 3 ? 0.05 : 0, $offset < 3 ? 0.1 : 0);
-        }
+        $name = 'silent-offset-'.$offset.'.wav';
+        $this->media()->backgroundMusic($this->media('music.wav'), volume: 0.25)->at($offset)
+            ->withoutVideo()->audio('pcm_f64le')->save($name);
+        $samples = $this->samples($name);
+        $this->assertCount(3 * 48000 * 2, $samples);
+        $this->assertSample($samples, 0.1, 0, 0);
+        $this->assertSample($samples, 0.625 - 1 / 48000, 0, 0);
+        $this->assertSample($samples, 0.625, $offset < 3 ? 0.05 : 0, $offset < 3 ? 0.1 : 0);
+        $this->assertSample($samples, 2.7, $offset < 3 ? 0.05 : 0, $offset < 3 ? 0.1 : 0);
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -239,42 +265,59 @@ class AudioMixTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_invalid_audio_failed_filters_and_cancellation_preserve_inputs_and_existing_destinations(): void
+    public static function invalidMixProvider(): array
     {
+        return [
+            'music without audio' => ['source.mkv', 'no-audio.mkv', null, 'mapping'],
+            'shifted source' => ['shifted.mkv', 'music.wav', null, 'metadata'],
+            'unknown filter' => ['source.mkv', 'music.wav', 'not_a_real_filter', null],
+        ];
+    }
+
+    #[DataProvider('invalidMixProvider')]
+    public function test_invalid_audio_and_failed_filters_preserve_inputs_and_existing_destinations(
+        string $source,
+        string $music,
+        ?string $filter,
+        ?string $category,
+    ): void {
         $this->fixture();
-        $source = $this->media();
-        $music = $this->media('music.wav');
         $hash = hash_file('sha256', $this->path('source.mkv'));
         Storage::disk('audio-mix')->put('retained.mkv', 'existing destination');
         $this->ffmpeg(['-f', 'lavfi', '-i', 'color=blue:s=48x32:r=10:d=1', '-c:v', 'ffv1', $this->path('no-audio.mkv')]);
         $this->ffmpeg(['-i', $this->path('source.mkv'), '-c', 'copy', '-output_ts_offset', '1', $this->path('shifted.mkv')]);
-        foreach ([
-            [$source->backgroundMusic($this->media('no-audio.mkv')), 'mapping'],
-            [$this->media('shifted.mkv')->backgroundMusic($music), 'metadata'],
-            [$source->backgroundMusic($music)->audioFilter('not_a_real_filter'), null],
-        ] as [$invalid, $category]) {
-            $this->assertThrows(fn () => $invalid->video('copy')->audio('pcm_f64le')->save('retained.mkv'), function (MediaException $exception) use ($category) {
-                if ($category !== null) {
-                    $this->assertSame($category, $exception->category);
-                }
+        $invalid = $this->media($source)->backgroundMusic($this->media($music));
+        if ($filter !== null) {
+            $invalid = $invalid->audioFilter($filter);
+        }
+        $this->assertThrows(fn () => $invalid->video('copy')->audio('pcm_f64le')->save('retained.mkv'), function (MediaException $exception) use ($category) {
+            if ($category !== null) {
+                $this->assertSame($category, $exception->category);
+            }
 
-                return true;
-            });
-            $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
-        foreach (['analysis', 'encoding'] as $phase) {
-            $this->assertThrows(function () use ($source, $music, $phase) {
-                $source->backgroundMusic($music)->video('copy')->audio('pcm_f64le')
-                    ->onProgress(function ($progress) use ($phase) {
-                        if ($progress->phase === $phase) {
-                            throw new ExportCancelled('Stop mixing.');
-                        }
-                    })->save('retained.mkv');
-            }, ExportCancelled::class);
-            $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+            return true;
+        });
+        $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
+        $this->assertSame($hash, hash_file('sha256', $this->path('source.mkv')));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    #[TestWith(['analysis'])]
+    #[TestWith(['encoding'])]
+    public function test_cancellation_preserves_inputs_and_existing_destinations(string $phase): void
+    {
+        $this->fixture();
+        $hash = hash_file('sha256', $this->path('source.mkv'));
+        Storage::disk('audio-mix')->put('retained.mkv', 'existing destination');
+        $this->assertThrows(function () use ($phase) {
+            $this->media()->backgroundMusic($this->media('music.wav'))->video('copy')->audio('pcm_f64le')
+                ->onProgress(function ($progress) use ($phase) {
+                    if ($progress->phase === $phase) {
+                        throw new ExportCancelled('Stop mixing.');
+                    }
+                })->save('retained.mkv');
+        }, ExportCancelled::class);
+        $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
         $this->assertSame($hash, hash_file('sha256', $this->path('source.mkv')));
         $this->assertWorkspacesAreCleanedUp();
     }

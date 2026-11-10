@@ -2,10 +2,14 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\PendingSpeed;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class SpeedTest extends TestCase
@@ -52,40 +56,77 @@ class SpeedTest extends TestCase
         $this->assertStringContainsString('hflip,settb=AVTB,setpts=PTS/3', $text);
         $this->assertStringContainsString('volume=0.5,asetpts=PTS-STARTPTS+STARTPTS/3,atempo=2,atempo=1.5', $text);
         $this->assertStringContainsString('atempo=0.5,atempo=0.5', implode(' ', $this->media()->speed(0.25)->inspect()));
-        foreach ([0, -1, INF, NAN] as $factor) {
-            $this->assertThrows(fn () => $this->media()->speed($factor), InvalidArgumentException::class);
-        }
-        foreach ([
-            fn () => $this->media()->speed(1.5)->video('copy')->inspect(),
-            fn () => $this->media()->speed(1.5)->audio('copy')->inspect(),
-            fn () => $this->media()->speed(1.5)->withoutAudio()->withoutVideo()->inspect(),
-        ] as $invalid) {
-            $this->assertThrows($invalid, InvalidArgumentException::class);
-        }
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_asymmetric_factors_retime_decoded_video_and_audio_without_changing_pitch(): void
+    #[DataProvider('invalidFactorProvider')]
+    public function test_invalid_speed_factors_are_rejected(float $factor): void
+    {
+        Process::fake();
+        $this->assertThrows(fn () => $this->media()->speed($factor), InvalidArgumentException::class);
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public static function invalidFactorProvider(): array
+    {
+        return [
+            'zero' => [0],
+            'negative' => [-1],
+            'infinite' => [INF],
+            'not a number' => [NAN],
+        ];
+    }
+
+    #[DataProvider('unsupportedConfigurationProvider')]
+    public function test_unsupported_speed_configurations_are_rejected(Closure $configure): void
+    {
+        Process::fake();
+        $this->assertThrows(fn () => $configure($this->media()->speed(1.5))->inspect(), InvalidArgumentException::class);
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public static function unsupportedConfigurationProvider(): array
+    {
+        return [
+            'copied video' => [fn (PendingSpeed $operation) => $operation->video('copy')],
+            'copied audio' => [fn (PendingSpeed $operation) => $operation->audio('copy')],
+            'no streams' => [fn (PendingSpeed $operation) => $operation->withoutAudio()->withoutVideo()],
+        ];
+    }
+
+    #[DataProvider('factorProvider')]
+    public function test_asymmetric_factors_retime_decoded_video_and_audio_without_changing_pitch(float $factor): void
     {
         $source = $this->fixture();
         $hash = hash_file('sha256', $source);
-        foreach ([1.5, 0.75, 3.0] as $factor) {
-            $result = $this->media()->speed($factor)->video('ffv1')->audio('pcm_s16le')->save('speed-'.$factor.'.mkv');
-            $path = Storage::disk('speed')->path($result->file()->path);
-            $frames = $this->frames($path);
-            $video = array_values(array_filter($frames, fn ($f) => $f['media_type'] === 'video'));
-            $audio = array_values(array_filter($frames, fn ($f) => $f['media_type'] === 'audio'));
-            $this->assertEqualsWithDelta(6 / $factor, (float) end($video)['best_effort_timestamp_time'] + 1 / 30, 0.08);
-            $samples = array_sum(array_column($audio, 'nb_samples'));
-            $this->assertEqualsWithDelta(6 / $factor, $samples / 48000, 0.08);
-            $this->assertPitch($path);
-        }
+        $result = $this->media()->speed($factor)->video('ffv1')->audio('pcm_s16le')->save('speed-'.$factor.'.mkv');
+        $path = Storage::disk('speed')->path($result->file()->path);
+        $frames = $this->frames($path);
+        $video = array_values(array_filter($frames, fn ($f) => $f['media_type'] === 'video'));
+        $audio = array_values(array_filter($frames, fn ($f) => $f['media_type'] === 'audio'));
+        $this->assertEqualsWithDelta(6 / $factor, (float) end($video)['best_effort_timestamp_time'] + 1 / 30, 0.08);
+        $samples = array_sum(array_column($audio, 'nb_samples'));
+        $this->assertEqualsWithDelta(6 / $factor, $samples / 48000, 0.08);
+        $this->assertPitch($path);
         $this->assertSame($hash, hash_file('sha256', $source));
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_speeding_up_h264_with_a_frame_rate_time_base_keeps_every_frame(): void
+    public static function factorProvider(): array
+    {
+        return [
+            'faster' => [1.5],
+            'slower' => [0.75],
+            'three times faster' => [3.0],
+        ];
+    }
+
+    #[TestWith([2.0])]
+    #[TestWith([3.0])]
+    public function test_speeding_up_h264_with_a_frame_rate_time_base_keeps_every_frame(float $factor): void
     {
         $binary = $this->useRealFFMpeg();
         $result = Process::run([$binary, '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=25:d=2',
@@ -93,81 +134,103 @@ class SpeedTest extends TestCase
             '-c:a', 'aac', '-video_track_timescale', '25', Storage::disk('speed')->path('h264.mp4')]);
         $this->assertProcessSucceeded($result);
 
-        foreach ([2.0, 3.0] as $factor) {
-            $result = $this->media('h264.mp4')->speed($factor)->save("h264-{$factor}.mp4");
-            $frames = $this->frames(Storage::disk('speed')->path($result->file()->path));
-            $times = array_map(
-                fn ($frame) => (float) $frame['best_effort_timestamp_time'],
-                array_values(array_filter($frames, fn ($frame) => $frame['media_type'] === 'video')),
-            );
-            $this->assertCount(50, $times);
-            $this->assertSame($times, array_values(array_unique($times, SORT_NUMERIC)));
-            $this->assertEqualsWithDelta(49 / 25 / $factor, end($times), 0.01);
-        }
+        $result = $this->media('h264.mp4')->speed($factor)->save("h264-{$factor}.mp4");
+        $frames = $this->frames(Storage::disk('speed')->path($result->file()->path));
+        $times = array_map(
+            fn ($frame) => (float) $frame['best_effort_timestamp_time'],
+            array_values(array_filter($frames, fn ($frame) => $frame['media_type'] === 'video')),
+        );
+        $this->assertCount(50, $times);
+        $this->assertSame($times, array_values(array_unique($times, SORT_NUMERIC)));
+        $this->assertEqualsWithDelta(49 / 25 / $factor, end($times), 0.01);
     }
 
-    public function test_delayed_audio_initial_offset_is_scaled_with_video_not_discarded(): void
+    #[DataProvider('factorProvider')]
+    public function test_delayed_audio_initial_offset_is_scaled_with_video_not_discarded(float $factor): void
     {
         $this->fixture(1.2);
-        foreach ([1.5, 0.75, 3.0] as $factor) {
-            $result = $this->media()->speed($factor)->video('ffv1')->audio('pcm_s16le')->save('delayed-'.$factor.'.mkv');
-            $frames = $this->frames(Storage::disk('speed')->path($result->file()->path));
-            $audio = array_values(array_filter($frames, fn ($f) => $f['media_type'] === 'audio'));
-            $this->assertEqualsWithDelta(1.2 / $factor, (float) $audio[0]['best_effort_timestamp_time'], 0.025);
-            $last = end($audio);
-            $this->assertEqualsWithDelta(6 / $factor, (float) $last['best_effort_timestamp_time'] + $last['nb_samples'] / 48000, 0.08);
-        }
+        $result = $this->media()->speed($factor)->video('ffv1')->audio('pcm_s16le')->save('delayed-'.$factor.'.mkv');
+        $frames = $this->frames(Storage::disk('speed')->path($result->file()->path));
+        $audio = array_values(array_filter($frames, fn ($f) => $f['media_type'] === 'audio'));
+        $this->assertEqualsWithDelta(1.2 / $factor, (float) $audio[0]['best_effort_timestamp_time'], 0.025);
+        $last = end($audio);
+        $this->assertEqualsWithDelta(6 / $factor, (float) $last['best_effort_timestamp_time'] + $last['nb_samples'] / 48000, 0.08);
     }
 
-    public function test_audio_only_and_video_only_sources_and_explicit_omission_work(): void
+    #[DataProvider('streamSelectionProvider')]
+    public function test_only_the_selected_stream_is_retimed(string $kind, string $select): void
     {
-        foreach (['audio', 'video', 'both'] as $kind) {
-            $this->fixture(kind: $kind);
-            foreach (['audio', 'video'] as $select) {
-                if ($kind !== 'both' && $kind !== $select) {
-                    continue;
-                }
-                $operation = $this->media()->speed(1.5)->video('ffv1')->audio('pcm_s16le');
-                $select === 'audio' ? $operation->withoutVideo() : $operation->withoutAudio();
-                $operation->save('only.mkv');
-                $types = array_unique(array_column($this->frames(Storage::disk('speed')->path('only.mkv')), 'media_type'));
-                $this->assertSame([$select], array_values($types));
-            }
-            if ($kind !== 'both') {
-                $operation = $this->media()->speed(1.5);
-                $kind === 'audio' ? $operation->withoutAudio() : $operation->withoutVideo();
-                $this->assertThrows(
-                    fn () => $operation->save('missing.mkv'),
-                    fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
-                );
-            }
-        }
+        $this->fixture(kind: $kind);
+        $operation = $this->media()->speed(1.5)->video('ffv1')->audio('pcm_s16le');
+        $select === 'audio' ? $operation->withoutVideo() : $operation->withoutAudio();
+        $operation->save('only.mkv');
+        $types = array_unique(array_column($this->frames(Storage::disk('speed')->path('only.mkv')), 'media_type'));
+        $this->assertSame([$select], array_values($types));
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_progress_uses_retimed_duration_and_stays_indeterminate_for_trusted_filters(): void
+    public static function streamSelectionProvider(): array
+    {
+        return [
+            'audio-only source' => ['audio', 'audio'],
+            'video-only source' => ['video', 'video'],
+            'audio of both' => ['both', 'audio'],
+            'video of both' => ['both', 'video'],
+        ];
+    }
+
+    #[TestWith(['audio'])]
+    #[TestWith(['video'])]
+    public function test_omitting_the_only_stream_fails_while_mapping(string $kind): void
+    {
+        $this->fixture(kind: $kind);
+        $operation = $this->media()->speed(1.5);
+        $kind === 'audio' ? $operation->withoutAudio() : $operation->withoutVideo();
+        $this->assertThrows(
+            fn () => $operation->save('missing.mkv'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+        );
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_progress_uses_the_retimed_duration(): void
     {
         $this->fixture();
-        $percentages = function ($operation, string $path): array {
-            $percentages = [];
-            $operation->audio('pcm_s16le')->onProgress(function ($progress) use (&$percentages) {
-                if ($progress->isEncoding()) {
-                    $percentages[] = $progress->percentage;
-                }
-            })->save($path);
-            $this->assertNotEmpty($percentages);
-
-            return $percentages;
-        };
         // Against the 6 second source duration the final percentage would stop near 67.
-        $retimed = $percentages($this->media()->speed(1.5)->video('ffv1'), 'retimed.mkv');
+        $retimed = $this->encodingPercentages($this->media()->speed(1.5)->video('ffv1'), 'retimed.mkv');
         $this->assertEqualsWithDelta(100, end($retimed), 1);
-        foreach ([
-            'filtered.mkv' => $this->media()->speed(1.5)->video('ffv1')->audioFilter('atempo=1.1'),
-            'mapped.mkv' => $this->media()->speed(1.5)->mapAudio(),
-        ] as $path => $operation) {
-            $this->assertSame([null], array_values(array_unique($percentages($operation, $path))));
-        }
+    }
+
+    #[DataProvider('indeterminateProgressProvider')]
+    public function test_progress_stays_indeterminate_for_trusted_filters(Closure $configure): void
+    {
+        $this->fixture();
+        $percentages = $this->encodingPercentages($configure($this->media()->speed(1.5)), 'output.mkv');
+        $this->assertSame([null], array_values(array_unique($percentages)));
+    }
+
+    public static function indeterminateProgressProvider(): array
+    {
+        return [
+            'audio filter' => [fn (PendingSpeed $operation) => $operation->video('ffv1')->audioFilter('atempo=1.1')],
+            'mapped audio' => [fn (PendingSpeed $operation) => $operation->mapAudio()],
+        ];
+    }
+
+    /**
+     * Encode the given operation and get the percentages it reported while encoding.
+     */
+    protected function encodingPercentages(PendingSpeed $operation, string $path): array
+    {
+        $percentages = [];
+        $operation->audio('pcm_s16le')->onProgress(function ($progress) use (&$percentages) {
+            if ($progress->isEncoding()) {
+                $percentages[] = $progress->percentage;
+            }
+        })->save($path);
+        $this->assertNotEmpty($percentages);
+
+        return $percentages;
     }
 
     public function test_audio_only_sources_with_a_later_start_are_retimed_from_their_first_sample(): void

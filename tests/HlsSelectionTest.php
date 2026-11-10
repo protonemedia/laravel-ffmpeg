@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
 use Illuminate\Auth\GenericUser;
+use Illuminate\Filesystem\Filesystem as LocalFilesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
@@ -12,6 +13,7 @@ use League\Flysystem\Filesystem;
 use League\Flysystem\ReadOnly\ReadOnlyFilesystemAdapter;
 use Orchestra\Testbench\Attributes\RequiresEnv;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
@@ -21,6 +23,16 @@ use ProtoneMedia\LaravelFFMpeg\Support\Hls;
 #[RequiresEnv('FFMPEG_9_FFPROBE')]
 class HlsSelectionTest extends TestCase
 {
+    /**
+     * The directory that holds the completed exports shared by the tests of this class.
+     */
+    protected static ?string $completed = null;
+
+    /**
+     * The playback inventories of the shared completed exports.
+     */
+    protected static array $completedInventories = [];
+
     protected array $inventory;
 
     protected bool $allowed = true;
@@ -72,6 +84,46 @@ class HlsSelectionTest extends TestCase
         }
 
         return $export->save($directory.'/master.m3u8');
+    }
+
+    /**
+     * Get the playback inventories of the plain "first" and "second" exports.
+     */
+    protected function completedExports(): array
+    {
+        // Many tests only need two completed exports to reject or compose, so we
+        // encode them once for the class and copy the files into the private
+        // storage of each test. The inventories only hold disk-relative paths.
+        $this->useRealFFMpeg();
+
+        if (static::$completed === null) {
+            static::$completedInventories = [
+                $this->export('first')->playback()->toArray(),
+                $this->export('second')->playback()->toArray(),
+            ];
+
+            static::$completed = sys_get_temp_dir().'/laravel-ffmpeg-selection-'.bin2hex(random_bytes(8));
+
+            (new LocalFilesystem)->copyDirectory($this->root.'/storage', static::$completed);
+        } else {
+            (new LocalFilesystem)->copyDirectory(static::$completed, $this->root.'/storage');
+        }
+
+        return static::$completedInventories;
+    }
+
+    /**
+     * Remove the shared completed exports after the last test of the class.
+     */
+    public static function tearDownAfterClass(): void
+    {
+        if (static::$completed !== null) {
+            (new LocalFilesystem)->deleteDirectory(static::$completed);
+
+            static::$completed = null;
+        }
+
+        parent::tearDownAfterClass();
     }
 
     protected function decode(HlsPresentation $presentation): void
@@ -200,8 +252,7 @@ class HlsSelectionTest extends TestCase
 
     public function test_failed_master_publication_preserves_completed_inputs(): void
     {
-        $first = $this->export('first');
-        $second = $this->export('second');
+        [$first, $second] = $this->completedExports();
         $disk = Storage::disk('selection');
         $before = [];
         foreach ($disk->allFiles() as $path) {
@@ -225,44 +276,75 @@ class HlsSelectionTest extends TestCase
         }
     }
 
-    public function test_empty_unknown_duplicate_and_reexpanded_selections_are_rejected(): void
+    public static function invalidSelectionProvider(): array
     {
-        $presentation = $this->export('original')->playback();
-        foreach ([[], ['small', 'small'], ['unknown'], [123]] as $names) {
-            $this->assertThrows(fn () => $presentation->playbackForVariants($names), function (\Throwable $exception) {
-                $this->assertTrue($exception instanceof InvalidArgumentException || $exception instanceof ItemNotFoundException);
-                $this->assertNotEmpty($exception->getMessage());
+        return [
+            'empty' => [[], InvalidArgumentException::class],
+            'duplicate' => [['small', 'small'], InvalidArgumentException::class],
+            'unknown' => [['unknown'], ItemNotFoundException::class],
+            'not a name' => [[123], ItemNotFoundException::class],
+        ];
+    }
 
-                return true;
-            });
-        }
+    #[DataProvider('invalidSelectionProvider')]
+    public function test_empty_unknown_and_duplicate_selections_are_rejected(array $names, string $exception): void
+    {
+        $presentation = HlsPresentation::fromArray($this->completedExports()[0]);
+
+        $this->assertThrows(fn () => $presentation->playbackForVariants($names), function (\Throwable $thrown) use ($exception) {
+            $this->assertInstanceOf($exception, $thrown);
+            $this->assertNotEmpty($thrown->getMessage());
+
+            return true;
+        });
+    }
+
+    public function test_reexpanded_selections_are_rejected(): void
+    {
+        $presentation = HlsPresentation::fromArray($this->completedExports()[0]);
+
         $this->expectException(ItemNotFoundException::class);
+
         $presentation->playbackForVariants(['small'])->playbackForVariants(['large']);
     }
 
-    public function test_invalid_compositions_fail_without_a_master_write(): void
+    public static function invalidCompositionProvider(): array
     {
-        $first = $this->export('first')->playback()->toArray();
-        $second = $this->export('second')->playback()->toArray();
-        $badClock = $second;
-        foreach ($badClock['provenance'] as &$metadata) {
-            $metadata['start'] = 50;
-        }
-        unset($metadata);
-        $noProvenance = $second;
-        $noProvenance['provenance'] = [];
-        $badPath = $second;
-        $badPath['files'][0]['path'] = '../escape';
+        return [
+            'same presentation twice' => ['same'],
+            'shifted clock' => ['clock'],
+            'missing provenance' => ['provenance'],
+            'traversing path' => ['path'],
+            'colliding variant names' => ['unnamed'],
+        ];
+    }
+
+    #[DataProvider('invalidCompositionProvider')]
+    public function test_invalid_compositions_fail_without_a_master_write(string $case): void
+    {
+        [$first, $second] = $this->completedExports();
+        $invalid = $second;
+        match ($case) {
+            'clock' => $invalid['provenance'] = array_map(fn ($metadata) => ['start' => 50] + $metadata, $second['provenance']),
+            'provenance' => $invalid['provenance'] = [],
+            'path' => $invalid['files'][0]['path'] = '../escape',
+            default => null,
+        };
         $disk = Storage::disk('selection');
         $before = $disk->allFiles();
-        foreach ([[$first, $first], [$first, $badClock], [$first, $noProvenance], [$first, $badPath], [$first, $second]] as $inputs) {
-            $this->assertThrows(fn () => (new PendingHlsMerge($inputs))->save('catalog/master.m3u8'), function (InvalidArgumentException $exception) {
-                $this->assertNotEmpty($exception->getMessage());
+        $this->assertThrows(fn () => (new PendingHlsMerge([$first, $case === 'same' ? $first : $invalid]))->save('catalog/master.m3u8'), function (InvalidArgumentException $exception) {
+            $this->assertNotEmpty($exception->getMessage());
 
-                return true;
-            });
-            $this->assertSame($before, $disk->allFiles());
-        }
+            return true;
+        });
+        $this->assertSame($before, $disk->allFiles());
+    }
+
+    public function test_unsafe_composition_destinations_and_inventories_fail_without_a_master_write(): void
+    {
+        [$first, $second] = $this->completedExports();
+        $disk = Storage::disk('selection');
+        $before = $disk->allFiles();
         $this->assertThrows(function () use ($first, $second) {
             (new PendingHlsMerge(['one' => $first, 'two' => $second]))->save('first/small/segment-00000000.ts/master.m3u8');
         }, InvalidArgumentException::class, 'prefix');
@@ -286,24 +368,25 @@ class HlsSelectionTest extends TestCase
         (new PendingHlsMerge(['one' => $first, 'two' => $second]))->save('catalog/master.m3u8');
     }
 
-    public function test_real_incompatible_segment_grids_clips_and_packaging_are_rejected(): void
+    #[TestWith(['segment grid'])]
+    #[TestWith(['clip'])]
+    #[TestWith(['packaging'])]
+    public function test_real_incompatible_segment_grids_clips_and_packaging_are_rejected(string $difference): void
     {
         $source = $this->source();
         $first = $source->hls(segmentDuration: 0.7)->variant('first', fn ($v) => $v->resize(width: 80))->save('base/master.m3u8');
-        $exports = [
-            $source->hls(segmentDuration: 1.1)->variant('second', fn ($v) => $v->resize(width: 80)),
-            $source->hls(segmentDuration: 0.7)->clip(0.2, duration: 1.6)->variant('second', fn ($v) => $v->resize(width: 80)),
-            $source->hls(segmentDuration: 0.7)->fmp4()->variant('second', fn ($v) => $v->resize(width: 80)),
-        ];
-        foreach ($exports as $index => $export) {
-            $second = $export->save('incompatible-'.$index.'/master.m3u8');
-            $before = Storage::disk('selection')->allFiles();
-            $this->assertThrows(fn () => (new PendingHlsMerge([$first, $second]))->save('catalog/master.m3u8'), function (InvalidArgumentException $exception) {
-                $this->assertNotEmpty($exception->getMessage());
+        $export = match ($difference) {
+            'segment grid' => $source->hls(segmentDuration: 1.1),
+            'clip' => $source->hls(segmentDuration: 0.7)->clip(0.2, duration: 1.6),
+            'packaging' => $source->hls(segmentDuration: 0.7)->fmp4(),
+        };
+        $second = $export->variant('second', fn ($v) => $v->resize(width: 80))->save('incompatible/master.m3u8');
+        $before = Storage::disk('selection')->allFiles();
+        $this->assertThrows(fn () => (new PendingHlsMerge([$first, $second]))->save('catalog/master.m3u8'), function (InvalidArgumentException $exception) {
+            $this->assertNotEmpty($exception->getMessage());
 
-                return true;
-            });
-            $this->assertSame($before, Storage::disk('selection')->allFiles());
-        }
+            return true;
+        });
+        $this->assertSame($before, Storage::disk('selection')->allFiles());
     }
 }

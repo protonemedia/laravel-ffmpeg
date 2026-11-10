@@ -94,17 +94,28 @@ class ExecutionPolicyTest extends TestCase
         FFMpeg::disk('memory')->open('source.mp4')->export()->timeout(10)->save('late.mp4');
     }
 
-    public function test_deadlines_reject_nonpositive_and_nonfinite_values_without_staging(): void
+    #[DataProvider('invalidDeadlineProvider')]
+    public function test_deadlines_reject_nonpositive_and_nonfinite_values_without_staging(string $method, float $seconds): void
     {
-        foreach (['timeout', 'idleTimeout'] as $method) {
-            foreach ([0, -1, INF, NAN] as $seconds) {
-                $this->assertThrows(
-                    fn () => FFMpeg::disk('missing')->open('source.mp4')->export()->{$method}($seconds),
-                    InvalidArgumentException::class,
-                );
-                $this->assertWorkspacesAreCleanedUp();
-            }
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('missing')->open('source.mp4')->export()->{$method}($seconds),
+            InvalidArgumentException::class,
+        );
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public static function invalidDeadlineProvider(): array
+    {
+        return [
+            'zero timeout' => ['timeout', 0],
+            'negative timeout' => ['timeout', -1],
+            'infinite timeout' => ['timeout', INF],
+            'timeout not a number' => ['timeout', NAN],
+            'zero idle timeout' => ['idleTimeout', 0],
+            'negative idle timeout' => ['idleTimeout', -1],
+            'infinite idle timeout' => ['idleTimeout', INF],
+            'idle timeout not a number' => ['idleTimeout', NAN],
+        ];
     }
 
     public function test_queue_defaults_are_overridden_by_dispatch_and_job_configuration(): void

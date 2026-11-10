@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Storage;
 use League\Flysystem\PathTraversalDetected;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Stream;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -206,7 +207,7 @@ class ProbeTest extends TestCase
         $this->assertFalse($metadata->audio()->isCoverArt());
     }
 
-    public function test_typed_probe_accessors_keep_cover_art_separate_and_do_not_coerce_unknown_values(): void
+    public function test_typed_probe_accessors_keep_cover_art_separate(): void
     {
         $stream = ['codec_type' => 'video', 'disposition' => ['attached_pic' => 1]];
         $this->fakeProbe(Process::result(output: json_encode(['format' => [], 'streams' => [$stream]])));
@@ -215,16 +216,34 @@ class ProbeTest extends TestCase
         $this->assertFalse($metadata->hasAudio());
         $this->assertCount(1, $metadata->coverArt());
         $this->assertSame($stream, $metadata->coverArt()->first()->toArray());
+    }
 
-        foreach ([null, 'N/A', 0, -1, '1.5', '1e3', (string) PHP_INT_MAX.'0', true, []] as $unknown) {
-            $stream = new Stream([
-                'channels' => $unknown, 'sample_rate' => $unknown, 'bit_rate' => $unknown,
-            ]);
-            $this->assertNull($stream->channels());
-            $this->assertNull($stream->sampleRate());
-            $this->assertNull($stream->bitrate());
-            $this->assertSame($unknown, $stream->get('bit_rate'));
-        }
+    #[DataProvider('unknownNumberProvider')]
+    public function test_typed_probe_accessors_do_not_coerce_unknown_values(mixed $unknown): void
+    {
+        $stream = new Stream([
+            'channels' => $unknown, 'sample_rate' => $unknown, 'bit_rate' => $unknown,
+        ]);
+
+        $this->assertNull($stream->channels());
+        $this->assertNull($stream->sampleRate());
+        $this->assertNull($stream->bitrate());
+        $this->assertSame($unknown, $stream->get('bit_rate'));
+    }
+
+    public static function unknownNumberProvider(): array
+    {
+        return [
+            'null' => [null],
+            'not available' => ['N/A'],
+            'zero' => [0],
+            'negative' => [-1],
+            'fraction' => ['1.5'],
+            'exponent' => ['1e3'],
+            'overflowing integer' => [(string) PHP_INT_MAX.'0'],
+            'boolean' => [true],
+            'array' => [[]],
+        ];
     }
 
     #[DataProvider('invalidMetadata')]
@@ -442,22 +461,22 @@ class ProbeTest extends TestCase
         FFMpeg::disk('memory')->open('video.mp4')->probe();
     }
 
-    public function test_it_reads_real_media_through_local_and_non_local_storage(): void
+    #[TestWith(['local'])]
+    #[TestWith(['memory'])]
+    public function test_it_reads_real_media_through_local_and_non_local_storage(string $disk): void
     {
         $this->useRealFFMpeg();
-        $this->addTestFile('video.mp4');
-        $this->addTestFile('video.mp4', 'memory');
+        $this->addTestFile('video.mp4', $disk);
+        config(['filesystems.default' => $disk]);
 
-        foreach (['local', 'memory'] as $disk) {
-            config(['filesystems.default' => $disk]);
-            $metadata = FFMpeg::open('video.mp4')->probe();
-            $this->assertEqualsWithDelta(4.72, $metadata->duration(), 0.001);
-            $this->assertSame(1920, $metadata->video()->width());
-            $this->assertSame(1080, $metadata->video()->height());
-            $this->assertSame('h264', $metadata->video()->codec());
-            $this->assertSame('video', $metadata->video()->type());
-            $this->assertTrue($metadata->hasVideo());
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $metadata = FFMpeg::open('video.mp4')->probe();
+
+        $this->assertEqualsWithDelta(4.72, $metadata->duration(), 0.001);
+        $this->assertSame(1920, $metadata->video()->width());
+        $this->assertSame(1080, $metadata->video()->height());
+        $this->assertSame('h264', $metadata->video()->codec());
+        $this->assertSame('video', $metadata->video()->type());
+        $this->assertTrue($metadata->hasVideo());
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

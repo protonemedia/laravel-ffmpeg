@@ -2,12 +2,15 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
@@ -19,37 +22,39 @@ class InputHelpersTest extends TestCase
         config(['filesystems.disks.input-helpers' => ['driver' => 'local', 'root' => $this->root.'/output']]);
     }
 
-    public function test_still_video_is_finite_and_preserves_local_and_remote_image_content(): void
+    #[TestWith(['file'])]
+    #[TestWith(['disk'])]
+    public function test_still_video_is_finite_and_preserves_local_and_remote_image_content(string $source): void
     {
         $binary = $this->useRealFFMpeg();
         $image = imagecreatetruecolor(80, 48);
         imagefill($image, 0, 0, imagecolorallocate($image, 240, 10, 30));
         imagepng($image, $this->root.'/source.png');
-        imagedestroy($image);
         $bytes = file_get_contents($this->root.'/source.png');
         Storage::disk('memory')->put('source.png', $bytes);
-        foreach ([FFMpeg::open(new File($this->root.'/source.png')), FFMpeg::disk('memory')->open('source.png')] as $index => $image) {
-            $export = $image->still(1.2, frameRate: 10)->toDisk('input-helpers');
-            $command = $export->inspect();
-            $this->assertLessThan(array_search('-i', $command), array_search('-loop', $command));
-            $export->save($index.'.mp4');
-            $result = FFMpeg::disk('input-helpers')->open($index.'.mp4')->probe();
-            $this->assertEqualsWithDelta(1.2, $result->duration(), 0.0001);
-            $this->assertSame('12', $result->video()->get('nb_frames'));
-            $this->assertSame('yuv420p', $result->video()->get('pix_fmt'));
-            $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/output/'.$index.'.mp4',
-                '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
-            $this->assertProcessSucceeded($decoded);
-            $pixel = array_values(unpack('C3', substr($decoded->output(), 0, 3)));
-            $this->assertGreaterThan(220, $pixel[0]);
-            $this->assertLessThan(40, $pixel[1]);
-        }
+        $image = $source === 'file'
+            ? FFMpeg::open(new File($this->root.'/source.png'))
+            : FFMpeg::disk('memory')->open('source.png');
+        $export = $image->still(1.2, frameRate: 10)->toDisk('input-helpers');
+        $command = $export->inspect();
+        $this->assertLessThan(array_search('-i', $command), array_search('-loop', $command));
+        $export->save('still.mp4');
+        $result = FFMpeg::disk('input-helpers')->open('still.mp4')->probe();
+        $this->assertEqualsWithDelta(1.2, $result->duration(), 0.0001);
+        $this->assertSame('12', $result->video()->get('nb_frames'));
+        $this->assertSame('yuv420p', $result->video()->get('pix_fmt'));
+        $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/output/still.mp4',
+            '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
+        $this->assertProcessSucceeded($decoded);
+        $pixel = array_values(unpack('C3', substr($decoded->output(), 0, 3)));
+        $this->assertGreaterThan(220, $pixel[0]);
+        $this->assertLessThan(40, $pixel[1]);
         $this->assertSame($bytes, file_get_contents($this->root.'/source.png'));
         $this->assertSame($bytes, Storage::disk('memory')->get('source.png'));
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_invalid_still_inputs_fail_without_publication(): void
+    public function test_corrupt_still_images_fail_without_publication(): void
     {
         $this->useRealFFMpeg();
         Storage::disk('memory')->put('bad.png', 'not image data');
@@ -61,10 +66,25 @@ class InputHelpersTest extends TestCase
             return true;
         });
         $this->assertFalse(Storage::disk('input-helpers')->exists('bad.mp4'));
-        foreach ([[0, 25], [-1, 25], [INF, 25], [NAN, 25], [1, 0], [1, 241]] as [$duration, $rate]) {
-            $this->assertThrows(fn () => FFMpeg::open('photo.png')->still($duration, $rate), InvalidArgumentException::class);
-            $this->assertWorkspacesAreCleanedUp();
-        }
+    }
+
+    public static function invalidStillProvider(): array
+    {
+        return [
+            'zero duration' => [0, 25],
+            'negative duration' => [-1, 25],
+            'infinite duration' => [INF, 25],
+            'NaN duration' => [NAN, 25],
+            'zero frame rate' => [1, 0],
+            'excessive frame rate' => [1, 241],
+        ];
+    }
+
+    #[DataProvider('invalidStillProvider')]
+    public function test_invalid_still_settings_are_rejected(float $duration, int $rate): void
+    {
+        $this->assertThrows(fn () => FFMpeg::open('photo.png')->still($duration, $rate), InvalidArgumentException::class);
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_cache_hits_preserve_metadata_and_source_bound_stream_selection_and_version_keys_invalidate(): void
@@ -107,38 +127,64 @@ class InputHelpersTest extends TestCase
         foreach (['-hwaccel', '-hwaccel_device', '-hwaccel_output_format', '-ignore_loop'] as $option) {
             $this->assertStringNotContainsString($option, $arguments);
         }
-        foreach ([['-hwaccel', 'auto'], ['-hwaccel', 'bogus'], ['-ignore_loop', '-1'], ['-hwaccel_device', "0\nsecret"]] as $options) {
-            $this->assertThrows(fn () => FFMpeg::open('input', inputOptions: $options), InvalidArgumentException::class);
-        }
     }
 
-    public function test_explicit_hardware_backends_and_encoders_compile_for_exports_and_hls_without_leaking_between_inputs(): void
+    public static function invalidInputOptionsProvider(): array
+    {
+        return [
+            'automatic hardware' => [['-hwaccel', 'auto']],
+            'unknown hardware' => [['-hwaccel', 'bogus']],
+            'negative loop' => [['-ignore_loop', '-1']],
+            'control character' => [['-hwaccel_device', "0\nsecret"]],
+        ];
+    }
+
+    #[DataProvider('invalidInputOptionsProvider')]
+    public function test_invalid_input_options_are_rejected(array $options): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        FFMpeg::open('input', inputOptions: $options);
+    }
+
+    public static function hardwareProvider(): array
+    {
+        return [
+            'cuda h264' => ['cuda', 'h264_nvenc'],
+            'cuda hevc' => ['cuda', 'hevc_nvenc'],
+            'vaapi hevc' => ['vaapi', 'hevc_vaapi'],
+            'qsv hevc' => ['qsv', 'hevc_qsv'],
+        ];
+    }
+
+    #[DataProvider('hardwareProvider')]
+    public function test_explicit_hardware_backends_and_encoders_compile_for_exports_and_hls_without_leaking_between_inputs(string $backend, string $encoder): void
     {
         Process::fake();
-        foreach ([['cuda', 'h264_nvenc'], ['cuda', 'hevc_nvenc'], ['vaapi', 'hevc_vaapi'], ['qsv', 'hevc_qsv']] as [$backend, $encoder]) {
-            $options = ['-hwaccel', $backend, '-hwaccel_device', '0', '-hwaccel_output_format', $backend];
-            $media = FFMpeg::open('hardware.mp4', inputOptions: $options);
-            $export = $media->export()->map('0:v:0')->withoutMetadata(chapters: true)->video($encoder);
-            $export->addInput(FFMpeg::open('software.mp4'));
-            foreach ([$export, $media->hls()->variant('hardware', fn ($variant) => $variant->video($encoder))] as $pending) {
-                $command = $pending->inspect();
-                $input = array_search('-i', $command, true);
-                $hardware = array_search('-hwaccel', $command, true);
-                $this->assertSame($options, array_slice($command, $hardware, count($options)));
-                $this->assertLessThan($input, $hardware + count($options) - 1);
-                $this->assertSame(1, count(array_keys($command, '-hwaccel', true)));
-                $codec = array_search('-c:v', $command, true);
-                $this->assertNotFalse($codec);
-                $this->assertGreaterThan($input, $codec);
-                $this->assertSame($encoder, $command[$codec + 1]);
-                $this->assertNotContains('libx264', $command);
-            }
+        $options = ['-hwaccel', $backend, '-hwaccel_device', '0', '-hwaccel_output_format', $backend];
+        $media = FFMpeg::open('hardware.mp4', inputOptions: $options);
+        $export = $media->export()->map('0:v:0')->withoutMetadata(chapters: true)->video($encoder);
+        $export->addInput(FFMpeg::open('software.mp4'));
+        foreach ([$export, $media->hls()->variant('hardware', fn ($variant) => $variant->video($encoder))] as $pending) {
+            $command = $pending->inspect();
+            $input = array_search('-i', $command, true);
+            $hardware = array_search('-hwaccel', $command, true);
+            $this->assertSame($options, array_slice($command, $hardware, count($options)));
+            $this->assertLessThan($input, $hardware + count($options) - 1);
+            $this->assertSame(1, count(array_keys($command, '-hwaccel', true)));
+            $codec = array_search('-c:v', $command, true);
+            $this->assertNotFalse($codec);
+            $this->assertGreaterThan($input, $codec);
+            $this->assertSame($encoder, $command[$codec + 1]);
+            $this->assertNotContains('libx264', $command);
         }
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_an_unavailable_hardware_encoder_fails_explicitly_without_software_fallback_or_publication(): void
+    #[TestWith(['hardware.mp4'])]
+    #[TestWith(['hardware/master.m3u8'])]
+    public function test_an_unavailable_hardware_encoder_fails_explicitly_without_software_fallback_or_publication(string $output): void
     {
         $binary = $this->useRealFFMpeg();
         $encoders = Process::run([$binary, '-hide_banner', '-encoders']);
@@ -152,20 +198,20 @@ class InputHelpersTest extends TestCase
         $this->assertProcessSucceeded($source);
         $hash = hash_file('sha256', $path);
         $media = FFMpeg::open(new File($path));
-        foreach (['hardware.mp4' => $media->export()->video('h264_nvenc'),
-            'hardware/master.m3u8' => $media->hls()->variant('gpu', fn ($variant) => $variant->video('h264_nvenc'))] as $output => $export) {
-            $this->assertThrows(fn () => $export->toDisk('input-helpers')->save($output), function (MediaException $exception) {
-                $this->assertSame('encoding', $exception->phase);
-                $this->assertSame('exit', $exception->category);
-                $this->assertStringContainsString("Unknown encoder 'h264_nvenc'", $exception->diagnostics);
-                $this->assertStringNotContainsString($this->root, $exception->diagnostics);
+        $export = str_ends_with($output, '.m3u8')
+            ? $media->hls()->variant('gpu', fn ($variant) => $variant->video('h264_nvenc'))
+            : $media->export()->video('h264_nvenc');
+        $this->assertThrows(fn () => $export->toDisk('input-helpers')->save($output), function (MediaException $exception) {
+            $this->assertSame('encoding', $exception->phase);
+            $this->assertSame('exit', $exception->category);
+            $this->assertStringContainsString("Unknown encoder 'h264_nvenc'", $exception->diagnostics);
+            $this->assertStringNotContainsString($this->root, $exception->diagnostics);
 
-                return true;
-            });
-            $this->assertSame([], Storage::disk('input-helpers')->allFiles());
-            $this->assertWorkspacesAreCleanedUp();
-            $this->assertSame($hash, hash_file('sha256', $path));
-        }
+            return true;
+        });
+        $this->assertSame([], Storage::disk('input-helpers')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
+        $this->assertSame($hash, hash_file('sha256', $path));
     }
 
     public function test_an_unavailable_hardware_decoder_fails_instead_of_silently_using_software_decoding(): void
@@ -194,7 +240,47 @@ class InputHelpersTest extends TestCase
         $this->assertSame($hash, hash_file('sha256', $path));
     }
 
-    public function test_rtsp_snapshots_capture_real_tcp_and_udp_frames_and_bound_failed_cameras(): void
+    #[TestWith(['tcp'])]
+    #[TestWith(['udp'])]
+    public function test_rtsp_snapshots_capture_real_frames(string $transport): void
+    {
+        $this->withRtspCamera('ok', function (string $url) use ($transport) {
+            $frame = FFMpeg::openRtsp($url, $transport, timeout: 1.5)->frame()->toDisk('input-helpers');
+            $this->assertCredentialsAreRedacted(json_encode($frame->inspect()));
+            $frame->save('snapshot.png');
+            $image = imagecreatefromstring(Storage::disk('input-helpers')->get('snapshot.png'));
+            $this->assertSame(80, imagesx($image));
+            $this->assertSame(48, imagesy($image));
+            $color = imagecolorsforindex($image, imagecolorat($image, 10, 10));
+            $this->assertGreaterThan(90, $color['green']);
+            $this->assertLessThan(20, $color['red']);
+            $this->assertWorkspacesAreCleanedUp();
+        });
+    }
+
+    #[TestWith(['denied'])]
+    #[TestWith(['stall'])]
+    public function test_failed_rtsp_cameras_fail_within_the_timeout(string $mode): void
+    {
+        $this->withRtspCamera($mode, function (string $url) {
+            $frame = FFMpeg::openRtsp($url, 'tcp', timeout: 1.5)->frame()->toDisk('input-helpers');
+            $this->assertCredentialsAreRedacted(json_encode($frame->inspect()));
+            $started = microtime(true);
+            $this->assertThrows(fn () => $frame->save('snapshot.png'), function (MediaException $exception) use ($started) {
+                $this->assertLessThan(3, microtime(true) - $started);
+                $this->assertCredentialsAreRedacted($exception->diagnostics);
+
+                return true;
+            });
+            $this->assertFalse(Storage::disk('input-helpers')->exists('snapshot.png'));
+            $this->assertWorkspacesAreCleanedUp();
+        });
+    }
+
+    /**
+     * Run the given callback against a local RTSP camera in the given mode.
+     */
+    protected function withRtspCamera(string $mode, Closure $callback): void
     {
         $binary = $this->useRealFFMpeg();
         config(['laravel-ffmpeg.redact_credentials' => true]);
@@ -202,47 +288,30 @@ class InputHelpersTest extends TestCase
             '-t', '1', '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
             '-x264-params', 'aud=1:repeat-headers=1:keyint=1', '-f', 'h264', $this->root.'/frames.h264']);
         $this->assertProcessSucceeded($encoded);
-        foreach ([['tcp', 'ok'], ['udp', 'ok'], ['tcp', 'denied'], ['tcp', 'stall']] as $index => [$transport, $mode]) {
-            $ready = $this->root.'/server-'.$index;
-            $server = Process::start([PHP_BINARY, __DIR__.'/fixtures/rtsp.php', $this->root.'/frames.h264', $ready, $mode]);
-            try {
-                $deadline = microtime(true) + 3;
-                while (! is_file($ready) && $server->running() && microtime(true) < $deadline) {
-                    usleep(10000);
-                }
-                $this->assertFileExists($ready, $server->errorOutput());
-                $url = 'rtsp://camera-user:camera-password@'.file_get_contents($ready).'/camera?grant=camera-token';
-                $frame = FFMpeg::openRtsp($url, $transport, timeout: 1.5)->frame()->toDisk('input-helpers');
-                $inspection = json_encode($frame->inspect());
-                foreach (['camera-user', 'camera-password', 'camera-token'] as $secret) {
-                    $this->assertStringNotContainsString($secret, $inspection);
-                }
-                $started = microtime(true);
-                try {
-                    $frame->save('snapshot-'.$index.'.png');
-                    $this->assertSame('ok', $mode, 'A failing camera published a snapshot.');
-                    $image = imagecreatefromstring(Storage::disk('input-helpers')->get('snapshot-'.$index.'.png'));
-                    $this->assertSame(80, imagesx($image));
-                    $this->assertSame(48, imagesy($image));
-                    $color = imagecolorsforindex($image, imagecolorat($image, 10, 10));
-                    $this->assertGreaterThan(90, $color['green']);
-                    $this->assertLessThan(20, $color['red']);
-                    imagedestroy($image);
-                } catch (MediaException $exception) {
-                    $this->assertNotSame('ok', $mode, $exception->diagnostics);
-                    $this->assertLessThan(3, microtime(true) - $started);
-                    foreach (['camera-user', 'camera-password', 'camera-token'] as $secret) {
-                        $this->assertStringNotContainsString($secret, $exception->diagnostics);
-                    }
-                    $this->assertFalse(Storage::disk('input-helpers')->exists('snapshot-'.$index.'.png'));
-                }
-                $this->assertWorkspacesAreCleanedUp();
-            } finally {
-                if ($server->running()) {
-                    $server->stop();
-                }
-                $server->wait();
+        $ready = $this->root.'/server';
+        $server = Process::start([PHP_BINARY, __DIR__.'/fixtures/rtsp.php', $this->root.'/frames.h264', $ready, $mode]);
+        try {
+            $deadline = microtime(true) + 3;
+            while (! is_file($ready) && $server->running() && microtime(true) < $deadline) {
+                usleep(10000);
             }
+            $this->assertFileExists($ready, $server->errorOutput());
+            $callback('rtsp://camera-user:camera-password@'.file_get_contents($ready).'/camera?grant=camera-token');
+        } finally {
+            if ($server->running()) {
+                $server->stop();
+            }
+            $server->wait();
+        }
+    }
+
+    /**
+     * Assert that the given text contains none of the camera credentials.
+     */
+    protected function assertCredentialsAreRedacted(string $text): void
+    {
+        foreach (['camera-user', 'camera-password', 'camera-token'] as $secret) {
+            $this->assertStringNotContainsString($secret, $text);
         }
     }
 }

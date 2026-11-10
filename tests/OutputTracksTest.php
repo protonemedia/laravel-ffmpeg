@@ -2,9 +2,12 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
@@ -49,21 +52,21 @@ class OutputTracksTest extends TestCase
         return $this->ffmpeg(['-i', $this->path($name), '-map', $map, '-f', 'framemd5', '-']);
     }
 
-    public function test_attaches_png_and_jpeg_without_changing_motion_or_audio(): void
+    #[TestWith(['png', 'png'])]
+    #[TestWith(['jpg', 'mjpeg'])]
+    public function test_attaches_png_and_jpeg_without_changing_motion_or_audio(string $extension, string $codec): void
     {
         $this->fixture();
-        foreach (['png', 'jpg'] as $extension) {
-            $name = 'covered-'.$extension.'.mp4';
-            $this->media('source.mp4')->export()->coverArt($this->media('art.'.$extension))->save($name);
-            $streams = $this->media($name)->probe()->streams();
-            $this->assertCount(3, $streams);
-            $cover = $streams->first(fn ($stream) => $stream->get('disposition.attached_pic') === 1);
-            $this->assertNotNull($cover);
-            $this->assertSame($extension === 'png' ? 'png' : 'mjpeg', $cover->get('codec_name'));
-            $this->assertSame(32, $cover->get('width'));
-            $this->assertSame($this->decoded('source.mp4', '0:V:0'), $this->decoded($name, '0:V:0'));
-            $this->assertSame($this->decoded('source.mp4', '0:a:0'), $this->decoded($name, '0:a:0'));
-        }
+        $name = 'covered-'.$extension.'.mp4';
+        $this->media('source.mp4')->export()->coverArt($this->media('art.'.$extension))->save($name);
+        $streams = $this->media($name)->probe()->streams();
+        $this->assertCount(3, $streams);
+        $cover = $streams->first(fn ($stream) => $stream->get('disposition.attached_pic') === 1);
+        $this->assertNotNull($cover);
+        $this->assertSame($codec, $cover->get('codec_name'));
+        $this->assertSame(32, $cover->get('width'));
+        $this->assertSame($this->decoded('source.mp4', '0:V:0'), $this->decoded($name, '0:V:0'));
+        $this->assertSame($this->decoded('source.mp4', '0:a:0'), $this->decoded($name, '0:a:0'));
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -93,7 +96,9 @@ class OutputTracksTest extends TestCase
         $this->media('source.mp4')->export()->coverArt($this->media('art.png'))->save('unsupported.mov');
     }
 
-    public function test_mp3_cover_art_preserves_decoded_audio(): void
+    #[TestWith(['png'])]
+    #[TestWith(['jpg'])]
+    public function test_mp3_cover_art_preserves_decoded_audio(string $extension): void
     {
         $this->fixture();
         // The minimal FFmpeg 9 acceptance build has an MP3 decoder but no encoder.
@@ -102,28 +107,35 @@ class OutputTracksTest extends TestCase
         if (! $fixture->successful()) {
             $this->markTestSkipped('A system FFmpeg with libmp3lame is needed to generate the MP3 fixture.');
         }
-        foreach (['png', 'jpg'] as $extension) {
-            $name = 'album-'.$extension.'.mp3';
-            $this->media('audio.mp3')->export()->coverArt($this->media('art.'.$extension))->save($name);
-            $this->assertCount(2, $this->media($name)->probe()->streams());
-            $this->assertSame($this->decoded('audio.mp3', '0:a:0'), $this->decoded($name, '0:a:0'));
-        }
+        $name = 'album-'.$extension.'.mp3';
+        $this->media('audio.mp3')->export()->coverArt($this->media('art.'.$extension))->save($name);
+        $this->assertCount(2, $this->media($name)->probe()->streams());
+        $this->assertSame($this->decoded('audio.mp3', '0:a:0'), $this->decoded($name, '0:a:0'));
     }
 
-    public function test_rejects_ambiguous_cover_configuration_and_non_images(): void
+    public static function ambiguousCoverProvider(): array
+    {
+        return [
+            'explicit map' => [fn ($export) => $export->map('0:v:0')],
+            'filter graph' => [fn ($export) => $export->filterComplex('[0:v]null[out]')],
+            'video codec' => [fn ($export) => $export->video('libx264')],
+            'resize' => [fn ($export) => $export->resize(32)],
+        ];
+    }
+
+    #[DataProvider('ambiguousCoverProvider')]
+    public function test_rejects_ambiguous_cover_configuration(Closure $configure): void
     {
         $this->fixture();
-        foreach ([
-            fn ($export) => $export->map('0:v:0'),
-            fn ($export) => $export->filterComplex('[0:v]null[out]'),
-            fn ($export) => $export->video('libx264'),
-            fn ($export) => $export->resize(32),
-        ] as $configure) {
-            $this->assertThrows(
-                fn () => $configure($this->media('source.mp4')->export()->coverArt($this->media('art.png')))->inspect(),
-                InvalidArgumentException::class,
-            );
-        }
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $configure($this->media('source.mp4')->export()->coverArt($this->media('art.png')))->inspect();
+    }
+
+    public function test_rejects_non_image_cover_art(): void
+    {
+        $this->fixture();
         $this->expectException(MediaException::class);
         $this->expectExceptionMessage('standalone PNG or JPEG');
         $this->media('source.mp4')->export()->coverArt($this->media('source.mp4'))->save('invalid.mp4');
@@ -210,36 +222,43 @@ class OutputTracksTest extends TestCase
         $this->assertFalse(Storage::disk('output-tracks')->exists('missing.mp4'));
     }
 
-    public function test_validates_video_track_indexes_settings_and_copy_conflicts(): void
+    public static function invalidTrackProvider(): array
     {
-        foreach ([
-            fn ($e) => $e->videoStream(-1, fn ($s) => $s->codec('libx264')),
-            fn ($e) => $e->videoStream(0, fn ($s) => $s->bitrate(0)),
-            fn ($e) => $e->videoStream(0, fn ($s) => $s->crf(INF)),
-            fn ($e) => $e->videoStream(0, fn ($s) => $s->preset('bad preset')),
-            fn ($e) => $e->videoStream(0, fn ($s) => $s->codec('copy')->crf(10))->inspect(),
-            fn ($e) => $e->videoStream(0, fn ($s) => $s->codec('copy'))->resize(32)->inspect(),
-            fn ($e) => $e->videoStream(0, fn ($s) => $s->codec('libx264'))->videoStream(0, fn ($s) => $s->codec('mpeg4')),
-        ] as $configure) {
-            $this->assertThrows(fn () => $configure($this->media('unopened.mp4')->export()), InvalidArgumentException::class);
-        }
+        return [
+            'negative index' => [fn ($e) => $e->videoStream(-1, fn ($s) => $s->codec('libx264'))],
+            'zero bitrate' => [fn ($e) => $e->videoStream(0, fn ($s) => $s->bitrate(0))],
+            'infinite crf' => [fn ($e) => $e->videoStream(0, fn ($s) => $s->crf(INF))],
+            'invalid preset' => [fn ($e) => $e->videoStream(0, fn ($s) => $s->preset('bad preset'))],
+            'copy with crf' => [fn ($e) => $e->videoStream(0, fn ($s) => $s->codec('copy')->crf(10))->inspect()],
+            'copy with resize' => [fn ($e) => $e->videoStream(0, fn ($s) => $s->codec('copy'))->resize(32)->inspect()],
+            'duplicate index' => [fn ($e) => $e->videoStream(0, fn ($s) => $s->codec('libx264'))->videoStream(0, fn ($s) => $s->codec('mpeg4'))],
+        ];
     }
 
-    public function test_autorotated_portrait_resizes_display_geometry(): void
+    #[DataProvider('invalidTrackProvider')]
+    public function test_validates_video_track_indexes_settings_and_copy_conflicts(Closure $configure): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $configure($this->media('unopened.mp4')->export());
+    }
+
+    #[TestWith([32, null, 32, 48])]
+    #[TestWith([null, 48, 32, 48])]
+    #[TestWith([40, 60, 40, 60])]
+    public function test_autorotated_portrait_resizes_display_geometry(?int $width, ?int $height, int $expectedWidth, int $expectedHeight): void
     {
         $this->fixture();
         $this->ffmpeg(['-display_rotation:v:0', '90', '-i', $this->path('source.mp4'), '-c', 'copy', $this->path('rotated.mp4')]);
         $this->assertSame(90, $this->media('rotated.mp4')->probe()->video()->get('side_data_list.0.rotation'));
-        foreach ([[32, null, 32, 48], [null, 48, 32, 48], [40, 60, 40, 60]] as [$width, $height, $expectedWidth, $expectedHeight]) {
-            $this->media('rotated.mp4')->export()->video('libx264')->audio('copy')->resize($width, $height)->save('portrait.mp4');
-            $video = $this->media('portrait.mp4')->probe()->video();
-            $this->assertSame($expectedWidth, $video->get('width'));
-            $this->assertSame($expectedHeight, $video->get('height'));
-            $this->assertSame('1:1', $video->get('sample_aspect_ratio'));
-            $this->assertSame($expectedWidth * $expectedHeight * 3 * 10, strlen($this->ffmpeg([
-                '-i', $this->path('portrait.mp4'), '-map', '0:v:0', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-',
-            ])));
-        }
+        $this->media('rotated.mp4')->export()->video('libx264')->audio('copy')->resize($width, $height)->save('portrait.mp4');
+        $video = $this->media('portrait.mp4')->probe()->video();
+        $this->assertSame($expectedWidth, $video->get('width'));
+        $this->assertSame($expectedHeight, $video->get('height'));
+        $this->assertSame('1:1', $video->get('sample_aspect_ratio'));
+        $this->assertSame($expectedWidth * $expectedHeight * 3 * 10, strlen($this->ffmpeg([
+            '-i', $this->path('portrait.mp4'), '-map', '0:v:0', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-',
+        ])));
     }
 
     public function test_explicit_subtitle_map_extracts_webvtt_without_new_api(): void

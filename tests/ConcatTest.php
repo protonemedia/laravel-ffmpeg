@@ -2,11 +2,15 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\PendingConcat;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class ConcatTest extends TestCase
@@ -25,73 +29,94 @@ class ConcatTest extends TestCase
         $first->concat(FFMpeg::disk()->openUrl('https://media.example/second.mp4'));
     }
 
-    public function test_transcoded_concat_inspection_owns_the_graph_and_is_pure(): void
+    #[TestWith(['contain'])]
+    #[TestWith(['cover'])]
+    #[TestWith(['stretch'])]
+    public function test_transcoded_concat_inspection_owns_the_graph_and_is_pure(string $fit): void
     {
         Process::fake();
         $first = FFMpeg::disk('missing')->open('first.mp4');
         $second = FFMpeg::disk('missing')->open('second.mp4');
-        foreach (['contain', 'cover', 'stretch'] as $fit) {
-            $export = $first->concatTranscoded($second)->conformVideo(128, 96, '30000/1001', $fit)
-                ->conformAudio()->video('libx264');
-            $command = $export->inspect();
-            $this->assertSame($command, $export->inspect());
-            $graph = $command[array_search('-filter_complex', $command) + 1];
-            $this->assertStringContainsString('[0:V:0]', $graph);
-            $this->assertStringContainsString('[1:V:0]', $graph);
-            $this->assertStringContainsString('fps=fps=30000/1001', $graph);
-            $this->assertStringContainsString('aresample=48000:async=1:first_pts=0', $graph);
-            $this->assertStringNotContainsString('asetpts', $graph);
-            $this->assertContains('[concat_video]', $command);
-            $this->assertContains('[concat_audio]', $command);
-            $this->assertNotContains('99', $command);
-            $this->assertSame('-1', $command[array_search('-map_metadata', $command) + 1]);
-            $this->assertSame('-1', $command[array_search('-map_chapters', $command) + 1]);
-        }
 
-        // The low-level escape hatch remains independent of helper policy.
-        $raw = $first->export();
-        $raw->addInput($second);
-        $raw->filterComplex('[0:v][1:v]concat=n=2:v=1:a=0[joined]')
-            ->map('[joined]')->withoutMetadata(chapters: true)->inspect();
+        $export = $first->concatTranscoded($second)->conformVideo(128, 96, '30000/1001', $fit)
+            ->conformAudio()->video('libx264');
+        $command = $export->inspect();
+        $this->assertSame($command, $export->inspect());
+        $graph = $command[array_search('-filter_complex', $command) + 1];
+        $this->assertStringContainsString('[0:V:0]', $graph);
+        $this->assertStringContainsString('[1:V:0]', $graph);
+        $this->assertStringContainsString('fps=fps=30000/1001', $graph);
+        $this->assertStringContainsString('aresample=48000:async=1:first_pts=0', $graph);
+        $this->assertStringNotContainsString('asetpts', $graph);
+        $this->assertContains('[concat_video]', $command);
+        $this->assertContains('[concat_audio]', $command);
+        $this->assertNotContains('99', $command);
+        $this->assertSame('-1', $command[array_search('-map_metadata', $command) + 1]);
+        $this->assertSame('-1', $command[array_search('-map_chapters', $command) + 1]);
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_transcoded_concat_rejects_ambiguous_or_unsafe_policies_without_io(): void
+    public function test_a_raw_concat_graph_is_independent_of_the_helper_policy(): void
     {
         Process::fake();
         $first = FFMpeg::disk('missing')->open('first.mp4');
         $second = FFMpeg::disk('missing')->open('second.mp4');
-        $new = fn () => $first->concatTranscoded($second);
-        $ready = fn () => $new()->conformVideo(128, 96, 10)->withoutAudio();
-        foreach ([
-            fn () => $first->concatTranscoded(),
-            fn () => $new()->inspect(),
-            fn () => $new()->conformVideo(128, 96, 10)->inspect(),
-            fn () => $new()->conformAudio()->inspect(),
-            fn () => $ready()->video('copy')->inspect(),
-            fn () => $ready()->audio('copy')->inspect(),
-            fn () => $ready()->conformAudio()->inspect(),
-            fn () => $new()->conformVideo(127, 96, 10),
-            fn () => $new()->conformVideo(128, 96, '10/0'),
-            fn () => $new()->conformVideo(128, 96, '10;null'),
-            fn () => $new()->conformVideo(128, 96, NAN),
-            fn () => $new()->conformVideo(128, 96, INF),
-            fn () => $new()->conformVideo(128, 96, 10, 'unknown'),
-            fn () => $new()->conformAudio(0),
-            fn () => $new()->conformAudio(channels: 3),
-            fn () => $new()->conformAudio(channel: -1),
-        ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('An invalid concat policy was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+
+        $raw = $first->export();
+        $raw->addInput($second);
+        $raw->filterComplex('[0:v][1:v]concat=n=2:v=1:a=0[joined]')
+            ->map('[joined]')->withoutMetadata(chapters: true)->inspect();
 
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_transcoded_concat_requires_another_input(): void
+    {
+        Process::fake();
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('missing')->open('first.mp4')->concatTranscoded(),
+            InvalidArgumentException::class,
+        );
+
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    #[DataProvider('invalidConcatPolicyProvider')]
+    public function test_transcoded_concat_rejects_ambiguous_or_unsafe_policies_without_io(Closure $configure): void
+    {
+        Process::fake();
+        $first = FFMpeg::disk('missing')->open('first.mp4');
+        $second = FFMpeg::disk('missing')->open('second.mp4');
+
+        $this->assertThrows(fn () => $configure($first->concatTranscoded($second)), InvalidArgumentException::class);
+
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public static function invalidConcatPolicyProvider(): array
+    {
+        return [
+            'no conform policy' => [fn (PendingConcat $concat) => $concat->inspect()],
+            'no audio policy' => [fn (PendingConcat $concat) => $concat->conformVideo(128, 96, 10)->inspect()],
+            'no video policy' => [fn (PendingConcat $concat) => $concat->conformAudio()->inspect()],
+            'copied video' => [fn (PendingConcat $concat) => $concat->conformVideo(128, 96, 10)->withoutAudio()->video('copy')->inspect()],
+            'copied audio' => [fn (PendingConcat $concat) => $concat->conformVideo(128, 96, 10)->withoutAudio()->audio('copy')->inspect()],
+            'audio policy without audio' => [fn (PendingConcat $concat) => $concat->conformVideo(128, 96, 10)->withoutAudio()->conformAudio()->inspect()],
+            'odd width' => [fn (PendingConcat $concat) => $concat->conformVideo(127, 96, 10)],
+            'zero denominator rate' => [fn (PendingConcat $concat) => $concat->conformVideo(128, 96, '10/0')],
+            'filter syntax in the rate' => [fn (PendingConcat $concat) => $concat->conformVideo(128, 96, '10;null')],
+            'not a number rate' => [fn (PendingConcat $concat) => $concat->conformVideo(128, 96, NAN)],
+            'infinite rate' => [fn (PendingConcat $concat) => $concat->conformVideo(128, 96, INF)],
+            'unknown fit' => [fn (PendingConcat $concat) => $concat->conformVideo(128, 96, 10, 'unknown')],
+            'zero sample rate' => [fn (PendingConcat $concat) => $concat->conformAudio(0)],
+            'three channels' => [fn (PendingConcat $concat) => $concat->conformAudio(channels: 3)],
+            'negative channel' => [fn (PendingConcat $concat) => $concat->conformAudio(channel: -1)],
+        ];
     }
 
     public function test_copy_and_transcoded_concat_preserve_order_and_sources(): void
@@ -159,7 +184,6 @@ class ConcatTest extends TestCase
                 $pixel = imagecolorsforindex($image, imagecolorat($image, 10, 10));
                 $this->assertGreaterThan(200, $pixel[$channel]);
                 $this->assertLessThan(40, $pixel[$channel === 'red' ? 'blue' : 'red']);
-                imagedestroy($image);
             }
         }
 
@@ -236,7 +260,6 @@ class ConcatTest extends TestCase
             $pixel = imagecolorsforindex($image, imagecolorat($image, 10, 10));
             $this->assertGreaterThan(200, $pixel[$channel]);
             $this->assertLessThan(40, $pixel[$channel === 'red' ? 'blue' : 'red']);
-            imagedestroy($image);
         }
 
         // Select the other stereo channel, and repeat an input to catch identity-based collapsing.

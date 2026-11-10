@@ -6,6 +6,8 @@ use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Process;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Capabilities;
 use ProtoneMedia\LaravelFFMpeg\Console\DoctorCommand;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -50,11 +52,6 @@ class CapabilitiesTest extends TestCase
         $capabilities = new Capabilities;
         $this->assertInstanceOf(Capabilities::class, $capabilities);
         $this->assertSame(['ffmpeg' => '9.0.2', 'ffprobe' => '9.0.2'], $capabilities->versions());
-        foreach (['encoders' => 'mpeg4', 'muxers' => 'mp4', 'filters' => 'scale', 'input_protocols' => 'https',
-            'output_protocols' => 'file', 'bitstream_filters' => 'aac_adtstoasc', 'hardware_accelerators' => 'cuda',
-            'ffprobe_input_protocols' => 'file'] as $category => $name) {
-            $this->assertTrue($capabilities->has($category, $name), $category);
-        }
         $this->assertSame(['aac', 'mpeg4'], $capabilities->available('encoders'));
         $this->assertFalse($capabilities->toArray()['hardware']['device_usability_tested']);
         $this->assertTrue($capabilities->toArray()['temporary_root']['writable']);
@@ -65,6 +62,28 @@ class CapabilitiesTest extends TestCase
         $this->assertInstanceOf(Capabilities::class, FFMpeg::capabilities());
         $this->expectException(MediaException::class);
         $capabilities->require(['encoders' => ['absent']]);
+    }
+
+    public static function capabilityProvider(): array
+    {
+        return [
+            'encoders' => ['encoders', 'mpeg4'],
+            'muxers' => ['muxers', 'mp4'],
+            'filters' => ['filters', 'scale'],
+            'input protocols' => ['input_protocols', 'https'],
+            'output protocols' => ['output_protocols', 'file'],
+            'bitstream filters' => ['bitstream_filters', 'aac_adtstoasc'],
+            'hardware accelerators' => ['hardware_accelerators', 'cuda'],
+            'ffprobe input protocols' => ['ffprobe_input_protocols', 'file'],
+        ];
+    }
+
+    #[DataProvider('capabilityProvider')]
+    public function test_capabilities_are_parsed_from_the_binary_listings(string $category, string $name): void
+    {
+        $this->fakeCapabilities();
+
+        $this->assertTrue((new Capabilities)->has($category, $name), $category);
     }
 
     public function test_doctor_has_human_and_json_reports_and_missing_requirements_fail(): void
@@ -79,18 +98,18 @@ class CapabilitiesTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_mismatched_and_wrong_major_versions_fail_sanitized(): void
+    #[TestWith(['9.0.1'])]
+    #[TestWith(['8.0.2'])]
+    public function test_mismatched_and_wrong_major_versions_fail_sanitized(string $version): void
     {
-        foreach (['9.0.1', '8.0.2'] as $version) {
-            $this->fakeCapabilities(probeVersion: $version);
-            $this->assertThrows(fn () => new Capabilities, function (MediaException $exception) {
-                $this->assertSame('version', $exception->category);
-                $this->assertSame('', $exception->diagnostics);
+        $this->fakeCapabilities(probeVersion: $version);
+        $this->assertThrows(fn () => new Capabilities, function (MediaException $exception) {
+            $this->assertSame('version', $exception->category);
+            $this->assertSame('', $exception->diagnostics);
 
-                return true;
-            });
-            $this->assertWorkspacesAreCleanedUp();
-        }
+            return true;
+        });
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_failed_capture_and_missing_temporary_root_are_reported_without_binary_details(): void

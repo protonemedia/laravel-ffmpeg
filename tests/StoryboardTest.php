@@ -2,11 +2,13 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Media;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -41,19 +43,55 @@ class StoryboardTest extends TestCase
         $this->assertNotContains('-ss', $clipped);
         $this->assertNotContains('-t', $clipped);
         $this->assertStringStartsWith('trim=start=1:end=', $clipped[array_search('-filter:v', $clipped) + 1]);
-        foreach ([$media->storyboard(every: 1), $media->frames(every: 1)] as $operation) {
-            // A per-track -filter:v:0 would silently replace or be replaced by the sampling filter.
-            $this->assertThrows(
-                fn () => $operation->videoStream(0, fn ($video) => $video->color('bt709', 'bt709', 'bt709'))->inspect(),
-                InvalidArgumentException::class,
-            );
-        }
-        foreach ([[0, 2, 2, 0, 0], [INF, 2, 2, 0, 0], [0.0001, 2, 2, 0, 0], [0.0015, 2, 2, 0, 0],
-            [1, 0, 2, 0, 0], [1, 2, 0, 0, 0], [1, 2, 2, -1, 0], [1, 2, 2, 0, -1], [1, PHP_INT_MAX, 2, 0, 0]] as $arguments) {
-            $this->assertThrows(fn () => $media->storyboard(...$arguments), InvalidArgumentException::class);
-            $this->assertWorkspacesAreCleanedUp();
-        }
         Process::assertNothingRan();
+    }
+
+    #[DataProvider('sampledOperationProvider')]
+    public function test_sampled_image_operations_reject_per_track_video_filters(Closure $sample): void
+    {
+        Process::fake();
+        $operation = $sample(FFMpeg::disk('missing')->open('video.mp4'));
+        // A per-track -filter:v:0 would silently replace or be replaced by the sampling filter.
+        $this->assertThrows(
+            fn () => $operation->videoStream(0, fn ($video) => $video->color('bt709', 'bt709', 'bt709'))->inspect(),
+            InvalidArgumentException::class,
+        );
+        Process::assertNothingRan();
+    }
+
+    public static function sampledOperationProvider(): array
+    {
+        return [
+            'storyboard' => [fn (Media $media) => $media->storyboard(every: 1)],
+            'frames' => [fn (Media $media) => $media->frames(every: 1)],
+        ];
+    }
+
+    #[DataProvider('invalidStoryboardProvider')]
+    public function test_invalid_intervals_and_layouts_are_rejected(array $arguments): void
+    {
+        Process::fake();
+        $this->assertThrows(
+            fn () => FFMpeg::disk('missing')->open('video.mp4')->storyboard(...$arguments),
+            InvalidArgumentException::class,
+        );
+        $this->assertWorkspacesAreCleanedUp();
+        Process::assertNothingRan();
+    }
+
+    public static function invalidStoryboardProvider(): array
+    {
+        return [
+            'zero interval' => [[0, 2, 2, 0, 0]],
+            'infinite interval' => [[INF, 2, 2, 0, 0]],
+            'interval below a millisecond' => [[0.0001, 2, 2, 0, 0]],
+            'interval between milliseconds' => [[0.0015, 2, 2, 0, 0]],
+            'no columns' => [[1, 0, 2, 0, 0]],
+            'no rows' => [[1, 2, 0, 0, 0]],
+            'negative margin' => [[1, 2, 2, -1, 0]],
+            'negative padding' => [[1, 2, 2, 0, -1]],
+            'overflowing tile count' => [[1, PHP_INT_MAX, 2, 0, 0]],
+        ];
     }
 
     public function test_sheets_and_cues_agree_on_order_spacing_relative_paths_and_the_partial_last_sheet(): void

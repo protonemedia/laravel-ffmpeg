@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Mockery;
 use Orchestra\Testbench\Attributes\RequiresEnv;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\LiveHlsResult;
 use ProtoneMedia\LaravelFFMpeg\LiveHlsSource;
@@ -287,7 +288,7 @@ class LiveHlsTest extends TestCase
         }
     }
 
-    public function test_refuses_preexisting_namespaces_and_untrusted_protocols(): void
+    public function test_refuses_preexisting_namespaces(): void
     {
         Storage::disk('local')->put('owned/keep.ts', 'keep');
         $this->assertThrows(fn () => (new PendingLiveHls(new Media('local', 'missing'), 'local'))->run('owned'), function (MediaException $exception) {
@@ -296,8 +297,23 @@ class LiveHlsTest extends TestCase
             return true;
         });
         $this->assertSame('keep', Storage::disk('local')->get('owned/keep.ts'));
-        foreach (['file:///tmp/private', 'concat:http://example.com', 'rtsp://user:pass@example.com/live', "https://example.com/\n"] as $url) {
-            $this->assertThrows(fn () => new LiveHlsSource($url), InvalidArgumentException::class);
-        }
+    }
+
+    public static function untrustedSourceProvider(): array
+    {
+        return [
+            'local file' => ['file:///tmp/private'],
+            'concat protocol' => ['concat:http://example.com'],
+            'rtsp credentials' => ['rtsp://user:pass@example.com/live'],
+            'control character' => ["https://example.com/\n"],
+        ];
+    }
+
+    #[DataProvider('untrustedSourceProvider')]
+    public function test_refuses_untrusted_protocols(string $url): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        new LiveHlsSource($url);
     }
 }

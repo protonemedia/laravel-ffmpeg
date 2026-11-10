@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Support\Hls;
@@ -107,14 +108,32 @@ class PlaybackTest extends TestCase
         $this->assertSame('34567', $media->streamedContent());
         $this->assertSame('cdef', $this->get($links[2], ['Range' => 'bytes=-4'])->assertStatus(206)->streamedContent());
         $this->assertSame('ef', $this->get($links[2], ['Range' => 'bytes=14-'])->assertStatus(206)->streamedContent());
-        foreach (['bytes=99-', 'bytes=8-2', 'bytes=-0', 'bytes=1-2,4-5', 'invalid', '0'] as $range) {
-            $this->get($links[2], ['Range' => $range])->assertStatus(416)->assertHeader('Content-Range', 'bytes */16');
-        }
         $this->head($links[2])->assertOk()->assertHeader('Content-Length', '16')->assertContent('');
         $this->travel(4)->minutes();
         foreach ([$master, $variant, ...$links] as $url) {
             $this->getJson($url)->assertForbidden();
         }
+    }
+
+    #[DataProvider('unsatisfiableRangeProvider')]
+    public function test_unsatisfiable_ranges_are_rejected(string $range): void
+    {
+        $this->login();
+        $variant = $this->links($this->get($this->url())->assertOk()->getContent())[0];
+        $segment = $this->links($this->get($variant)->assertOk()->getContent())[2];
+        $this->get($segment, ['Range' => $range])->assertStatus(416)->assertHeader('Content-Range', 'bytes */16');
+    }
+
+    public static function unsatisfiableRangeProvider(): array
+    {
+        return [
+            'beyond the end' => ['bytes=99-'],
+            'reversed' => ['bytes=8-2'],
+            'empty suffix' => ['bytes=-0'],
+            'multiple ranges' => ['bytes=1-2,4-5'],
+            'not a range' => ['invalid'],
+            'bare number' => ['0'],
+        ];
     }
 
     public function test_signed_urls_cannot_escape_the_inventory_or_change_resource_roles(): void
