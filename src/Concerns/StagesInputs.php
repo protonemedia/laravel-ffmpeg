@@ -118,6 +118,7 @@ trait StagesInputs
         foreach ($outputs as $index => $output) {
             foreach (['video' => 'videoStreams', 'audio' => 'audioStreams'] as $type => $key) {
                 $tracks = $output->outputConfiguration()[$key];
+
                 if ($tracks !== []
                     && ! in_array(null, $expected[$index], true)
                     && max(array_keys($tracks)) >= collect($expected[$index])
@@ -140,6 +141,7 @@ trait StagesInputs
     public static function fragmentProbe(string $init, string $segment, string $target): string
     {
         $stream = @fopen($target, 'wb');
+
         if ($stream === false) {
             throw MediaException::validation('Cannot prepare fragment validation.', 'filesystem');
         }
@@ -147,6 +149,7 @@ trait StagesInputs
         try {
             foreach ([$init, $segment] as $source) {
                 $input = @fopen($source, 'rb');
+
                 if ($input === false) {
                     throw MediaException::validation('Cannot read fragment validation input.', 'filesystem');
                 }
@@ -180,6 +183,7 @@ trait StagesInputs
     public static function assertZeroOrigins(Metadata $item, string $operation, bool $audioOnlyOffset = false): void
     {
         $origin = $item->get('format.start_time');
+
         if ((! $audioOnlyOffset || $item->hasVideo())
             && (! is_numeric($origin) || ! is_finite((float) $origin) || abs((float) $origin) > 0.000001)) {
             throw MediaException::probing("{$operation} requires a zero presentation origin.", 'metadata');

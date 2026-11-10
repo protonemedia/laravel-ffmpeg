@@ -137,6 +137,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             "atrim=start={$this->number($clip['start'])}:duration={$this->number($clip['duration'])}",
             'asetpts=PTS-STARTPTS',
         ];
+
         if ($filter !== '') {
             $filters[] = $filter;
         }
@@ -255,8 +256,10 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             $command[0], '-hide_banner', '-nostdin', '-nostats', '-y', '-xerror', '-progress', 'pipe:1',
             '-i', $prepared,
         ];
+
         for ($i = $inputEnd; $i < count($command); $i++) {
             $token = $command[$i];
+
             if ($token === '-map') {
                 $final[] = '-map';
                 $final[] = '0:a:0';
@@ -319,6 +322,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
     public function artifact(string $path, string $role, int $size): void
     {
         $this->normalization = $this->readStats("{$this->workspace->path}/loudness-final.json");
+
         try {
             $streams = $this->source->probeArtifact($path, $this->workspace)->streams();
         } catch (MediaException $mediaException) {

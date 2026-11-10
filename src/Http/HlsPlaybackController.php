@@ -29,6 +29,7 @@ class HlsPlaybackController
         $presentation = $playback->resolve($request);
         $file = $presentation->file($request->route('hlsResource'));
         $headers = ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff'];
+
         if (in_array($file['role'], ['hls-master', 'hls-playlist'], true)) {
             return $this->playlistResponse($request, $presentation, $file, $headers);
         }
@@ -86,6 +87,7 @@ class HlsPlaybackController
             $disk = Storage::disk($file['disk']);
             $size = $disk->size($file['path']);
             $stream = $disk->readStream($file['path']);
+
             if (! is_resource($stream)) {
                 abort(404);
             }
@@ -133,8 +135,10 @@ class HlsPlaybackController
             'ts' => 'video/mp2t', 'mp4', 'm4s' => 'video/mp4', 'vtt' => 'text/vtt', 'aac' => 'audio/aac',
             default => 'application/octet-stream',
         };
+
         if (($range = $request->header('Range')) !== null) {
             $bounds = $this->byteRange($range, $size);
+
             if ($bounds === null) {
                 fclose($stream);
 
@@ -147,6 +151,7 @@ class HlsPlaybackController
         }
 
         $headers['Content-Length'] = (string) max(0, $end - $start + 1);
+
         if ($request->isMethod('HEAD')) {
             fclose($stream);
 
@@ -169,6 +174,7 @@ class HlsPlaybackController
 
         $start = $match[1] === '' ? max(0, $size - (int) $match[2]) : (int) $match[1];
         $end = $match[1] === '' || $match[2] === '' ? $size - 1 : min($size - 1, (int) $match[2]);
+
         if ($start > $end || $start >= $size) {
             return null;
         }
@@ -188,8 +194,10 @@ class HlsPlaybackController
             // the prefix in bounded chunks instead of loading the prefix or the whole segment.
             if ($start > 0 && @fseek($stream, $start) !== 0) {
                 $remaining = $start;
+
                 while ($remaining > 0 && ! feof($stream)) {
                     $bytes = fread($stream, min(self::CHUNK_SIZE, $remaining));
+
                     if ($bytes === false || $bytes === '') {
                         break;
                     }
@@ -199,8 +207,10 @@ class HlsPlaybackController
             }
 
             $remaining = $end - $start + 1;
+
             while ($remaining > 0 && ! feof($stream)) {
                 $bytes = fread($stream, min(self::CHUNK_SIZE, $remaining));
+
                 if ($bytes === false || $bytes === '') {
                     break;
                 }

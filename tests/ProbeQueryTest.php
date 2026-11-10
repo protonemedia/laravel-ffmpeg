@@ -197,6 +197,7 @@ class ProbeQueryTest extends TestCase
             if (in_array('-protocols', $process->command, true)) {
                 return Process::result(output: "Input:\n https\n tls\n tcp\nOutput:\n file\n");
             }
+
             $command = $process->command;
             $this->assertSame('https,tls,tcp', $command[array_search('-protocol_whitelist', $command, true) + 1]);
             $this->assertContains('-tls_verify', $command);
@@ -250,6 +251,7 @@ class ProbeQueryTest extends TestCase
             ->map(fn ($time) => (float) $time)
             ->all();
         $deltas = [];
+
         for ($i = 1; $i < count($times); $i++) {
             $deltas[] = round($times[$i] - $times[$i - 1], 3);
         }

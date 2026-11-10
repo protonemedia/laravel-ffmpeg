@@ -61,6 +61,7 @@ class HlsPlayback
         abort_unless(is_string($request->query('expires')) && ctype_digit($request->query('expires'))
             && $request->hasValidSignature(), 403);
         $definition = $this->presentations[$request->route()->defaults['_hlsPlayback'] ?? ''] ?? null;
+
         if ($definition === null) {
             throw new InvalidArgumentException('Register the HLS playback definition in a service provider.');
         }

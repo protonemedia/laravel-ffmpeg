@@ -115,6 +115,7 @@ class GifTest extends TestCase
         $this->assertStringStartsWith('GIF89a', $bytes);
 
         $extension = "\x21\xff\x0bNETSCAPE2.0\x03\x01";
+
         if ($loop === -1) {
             $this->assertStringNotContainsString($extension, $bytes);
         } else {

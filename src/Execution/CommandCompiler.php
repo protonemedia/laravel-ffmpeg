@@ -208,6 +208,7 @@ class CommandCompiler
         $audioOnly = ['compression_level', 'sample_fmt', 'channel_layout'];
         $fileOnly = ['avoid_negative_ts', 'muxdelay', 'muxpreload', 'flush_packets', 'video_track_timescale',
             'frag_duration', 'min_frag_duration', 'cluster_time_limit', 'cluster_size_limit', 'write_crc32'];
+
         if ($stream !== null && (in_array($name, $fileOnly, true)
             || (in_array($name, $videoOnly, true) && $stream !== 'v')
             || (in_array($name, $audioOnly, true) && $stream !== 'a'))) {
@@ -293,6 +294,7 @@ class CommandCompiler
     protected static function declareHardwareDevice(string $value, array $devices): array
     {
         preg_match('/=([a-zA-Z][a-zA-Z0-9_]*)(?:[^@]*@([a-zA-Z][a-zA-Z0-9_]*))?/', $value, $device);
+
         if (isset($devices[$device[1]])) {
             throw new InvalidArgumentException('Hardware device names must be unique.');
         }
@@ -314,6 +316,7 @@ class CommandCompiler
     protected static function ensureFilterDeviceIsDeclared(array $tokens, array $devices): void
     {
         $index = array_search('-filter_hw_device', $tokens, true);
+
         if ($index !== false && ! isset($devices[$tokens[$index + 1]])) {
             throw new InvalidArgumentException('Filter hardware device must name a declared device.');
         }
@@ -329,11 +332,13 @@ class CommandCompiler
         $allowed = ['keyint', 'min-keyint', 'scenecut', 'bframes', 'b-adapt', 'ref', 'rc-lookahead',
             'aq-mode', 'aq-strength', 'qcomp', 'psy-rd', 'deblock', 'vbv-maxrate', 'vbv-bufsize',
             'vbv-init', 'crf', 'qp', 'open-gop', 'repeat-headers', 'aud', 'annexb', 'weightp', 'weightb'];
+
         if ($encoder === 'x265') {
             $allowed = [...$allowed, 'pools', 'frame-threads', 'wpp', 'sao', 'rect', 'amp', 'rd', 'ctu', 'log-level'];
         }
 
         $seen = [];
+
         foreach (explode(':', $value) as $parameter) {
             if (! preg_match('/\A([a-z0-9-]+)=(-?[0-9]+(?:\.[0-9]+)?)\z/', $parameter, $parts)
                 || ! in_array($parts[1], $allowed, true) || isset($seen[$parts[1]]) || ! is_finite((float) $parts[2])) {

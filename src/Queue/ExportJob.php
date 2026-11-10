@@ -114,6 +114,7 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
         // the parts into a single master playlist.
         $presentations = [];
         $batchId = null;
+
         foreach ($this->parts as $part) {
             $manifest = json_decode(
                 Storage::disk($this->manifestDisk)->get($part),
@@ -121,6 +122,7 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
                 flags: JSON_THROW_ON_ERROR,
             );
             $batchId ??= $manifest['batchId'];
+
             if ($manifest['batchId'] !== $batchId) {
                 throw new RuntimeException('Queued HLS inventories must belong to the same batch.');
             }
@@ -129,6 +131,7 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
         }
 
         $batch = Bus::findBatch($batchId);
+
         if ($batch === null || $batch->cancelled() || $batch->pendingJobs !== 0 || $batch->failedJobs !== 0) {
             throw new ExportCancelled('The HLS conversion batch did not complete successfully.');
         }
@@ -155,6 +158,7 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
     protected function dispatchCompletedEvent(Result $result): void
     {
         $playback = null;
+
         if ($result instanceof HlsExportResult
             || ($result instanceof DashExportResult && $result->files()->contains('role', 'hls-master'))) {
             $playback = $result->playback()->toArray();

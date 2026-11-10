@@ -38,6 +38,7 @@ class DashManifest
         $durations = self::durations($xpath, $template);
 
         $files = ['init.mp4'];
+
         foreach ($durations as $index => $duration) {
             $files[] = sprintf('segment-%08d.m4s', $index + 1);
         }
@@ -59,6 +60,7 @@ class DashManifest
     protected static function load(string $path): DOMDocument
     {
         $bytes = @file_get_contents($path, length: Media::MAX_MANIFEST_BYTES + 1);
+
         if ($bytes === false || strlen($bytes) > Media::MAX_MANIFEST_BYTES || str_contains($bytes, "\0")
             || preg_match('/<!|<\?(?!xml\s)/i', $bytes) || ! class_exists(DOMDocument::class)) {
             self::fail();
@@ -66,6 +68,7 @@ class DashManifest
 
         $document = new DOMDocument;
         $previous = libxml_use_internal_errors(true);
+
         try {
             if (! $document->loadXML($bytes, LIBXML_NONET) || $document->doctype instanceof \DOMDocumentType) {
                 self::fail();
@@ -100,6 +103,7 @@ class DashManifest
             'SegmentTemplate' => ['timescale', 'initialization', 'media', 'startNumber'],
             'SegmentTimeline' => [], 'S' => ['t', 'd', 'r'],
         ];
+
         foreach ($document->getElementsByTagName('*') as $element) {
             if ($element->namespaceURI !== self::NS || ! isset($allowed[$element->localName])) {
                 self::fail();
@@ -130,6 +134,7 @@ class DashManifest
         $set = $sets->item(0);
         $representation = $representations->item(0);
         $template = $templates->item(0);
+
         if (! $root instanceof DOMElement || ! $set instanceof DOMElement
             || ! $representation instanceof DOMElement || ! $template instanceof DOMElement
             || $root->localName !== 'MPD' || $root->getAttribute('type') !== 'static'
@@ -165,6 +170,7 @@ class DashManifest
         $scale = self::integer($template, 'timescale', 1);
         $durations = [];
         $time = 0;
+
         foreach ($xpath->query('d:SegmentTimeline/d:S', $template) as $segment) {
             if (! $segment instanceof DOMElement) {
                 self::fail();
@@ -172,6 +178,7 @@ class DashManifest
 
             $duration = self::integer($segment, 'd', 1);
             $repeat = $segment->hasAttribute('r') ? self::integer($segment, 'r', 0) : 0;
+
             if (($segment->hasAttribute('t') && self::integer($segment, 't', 0) !== $time)
                 || $repeat >= self::LIMIT || count($durations) + $repeat + 1 > self::LIMIT) {
                 self::fail();
@@ -180,6 +187,7 @@ class DashManifest
             for ($i = 0; $i <= $repeat; $i++) {
                 $durations[] = $duration / $scale;
                 $time += $duration;
+
                 if ($time > 1000000000000000) {
                     self::fail();
                 }
@@ -203,6 +211,7 @@ class DashManifest
         $expected = ['index.mpd', ...$files];
         sort($expected);
         $actual = [];
+
         foreach (new \DirectoryIterator(dirname($path)) as $file) {
             if ($file->isDot()) {
                 continue;
@@ -216,6 +225,7 @@ class DashManifest
         }
 
         sort($actual);
+
         if ($actual !== $expected) {
             self::fail();
         }
@@ -227,6 +237,7 @@ class DashManifest
     protected static function integer(DOMElement $element, string $name, int $minimum): int
     {
         $value = $element->getAttribute($name);
+
         if (! preg_match('/\A[0-9]{1,13}\z/', $value) || (int) $value < $minimum || (int) $value > 1000000000000) {
             self::fail();
         }

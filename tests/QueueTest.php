@@ -219,6 +219,7 @@ class QueueTest extends TestCase
             if ($file['role'] !== 'hls-playlist') {
                 continue;
             }
+
             $decoded = Process::run([
                 config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-i',
                 Storage::disk('queued')->path($file['path']), '-f', 'framemd5', '-',
@@ -330,6 +331,7 @@ class QueueTest extends TestCase
                     if ($progress->elapsedSeconds !== null) {
                         Storage::disk('queued')->put('progress-after-cancellation', 'unexpected');
                     }
+
                     DB::table('job_batches')->update(['cancelled_at' => time()]);
                 }
             })->queued(connection: 'database', queue: 'media')->job('cancelled.mp4'),
@@ -471,6 +473,7 @@ class QueueTest extends TestCase
             ->save($type.'/master.m3u8');
         $this->work();
         $playlist = Storage::disk('queued')->get($type.'/main/index.m3u8');
+
         if ($tagged) {
             $this->assertStringContainsString('#EXT-X-PLAYLIST-TYPE:EVENT', $playlist);
         } else {
@@ -492,6 +495,7 @@ class QueueFailOnce
     {
         if (! Storage::disk('queued')->exists('attempted')) {
             Storage::disk('queued')->put('attempted', 'yes');
+
             throw new RuntimeException('Retry fixture');
         }
 

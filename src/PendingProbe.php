@@ -185,6 +185,7 @@ class PendingProbe
     public function readInterval(float $start, float $duration): static
     {
         $this->validateStart($start);
+
         if (! is_finite($duration) || $duration < 0.000001 || $duration > 300) {
             throw new InvalidArgumentException('Probe duration must be between one microsecond and 300 seconds.');
         }
@@ -203,6 +204,7 @@ class PendingProbe
     public function readPackets(int $count, float $start = 0): static
     {
         $this->validateStart($start);
+
         if ($count < 1 || $count > 100000) {
             throw new InvalidArgumentException('Probe packet count must be between 1 and 100000.');
         }
@@ -263,6 +265,7 @@ class PendingProbe
         $command = $this->command($binary, $protocols, $path);
         $redactions = [$path => '[input]'] + $this->media->redactions();
         $result = $runner->run($command, $workspace->path, $redactions, $this->outputLimit, timeout: $this->timeout);
+
         if ($result->exitCode !== 0) {
             throw MediaException::probing(
                 "FFprobe query failed (exit {$result->exitCode}).",
@@ -287,6 +290,7 @@ class PendingProbe
     {
         $command = [$binary, '-v', 'error', '-print_format', 'json', '-protocol_whitelist', $protocols,
             ...$this->media->probeOptions(), '-read_intervals', $this->interval(), '-show_streams'];
+
         if ($this->selector !== null) {
             $command[] = '-select_streams';
             $command[] = $this->selector;
@@ -321,8 +325,10 @@ class PendingProbe
 
         $arguments = [];
         $entries = [];
+
         foreach ($this->fields as $section => $fields) {
             $entries[] = "{$section}=".implode(',', $fields);
+
             if ($section === 'format' || $section === 'format_tags') {
                 $arguments[] = '-show_format';
             } elseif ($section === 'chapter' || $section === 'chapter_tags') {

@@ -23,6 +23,7 @@ class RtspCamera implements InputSource
         protected readonly float $timeout = 15,
     ) {
         $parts = parse_url($url);
+
         if ($parts === false || ($parts['scheme'] ?? null) !== 'rtsp' || empty($parts['host'])) {
             throw new InvalidArgumentException('The camera URL must be an absolute rtsp URL.');
         }
@@ -105,6 +106,7 @@ class RtspCamera implements InputSource
 
         $redactions = [$this->url => '[rtsp]'];
         $parts = parse_url($this->url);
+
         // A password is a credential at any length, but a username on its own is not.
         if (($parts['pass'] ?? '') !== '') {
             foreach ([($parts['user'] ?? '').':'.$parts['pass'], $parts['pass']] as $secret) {
@@ -136,6 +138,7 @@ class RtspCamera implements InputSource
             '-i', $this->url, '-map', '0:v:0', '-frames:v', '1', '-an', '-c:v', 'png', '-f', 'image2',
             '-update', '1', $path,
         ], $workspace->path, $this->redactions(), phase: 'staging', timeout: $this->timeout);
+
         if ($result->failed() || ! is_file($path) || @getimagesize($path) === false || ! chmod($path, 0600)) {
             throw MediaException::staging('Cannot capture the RTSP snapshot.', 'capture', $result->errorOutput());
         }

@@ -382,15 +382,18 @@ class InputHelpersTest extends TestCase
 
         try {
             $deadline = microtime(true) + 3;
+
             while (! is_file($ready) && $server->running() && microtime(true) < $deadline) {
                 usleep(10000);
             }
+
             $this->assertFileExists($ready, $server->errorOutput());
             $callback('rtsp://camera-user:camera-password@'.file_get_contents($ready).'/camera?grant=camera-token');
         } finally {
             if ($server->running()) {
                 $server->stop();
             }
+
             $server->wait();
         }
     }

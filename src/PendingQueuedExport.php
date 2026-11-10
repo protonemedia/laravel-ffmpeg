@@ -80,6 +80,7 @@ class PendingQueuedExport
         }
 
         $export = $this->plan->restore();
+
         if (! $export instanceof PendingHlsExport) {
             throw new InvalidArgumentException('Parallel queue exports require an HLS export.');
         }
@@ -89,6 +90,7 @@ class PendingQueuedExport
         }
 
         $disk = $export->filesystem();
+
         if (! is_string($disk)) {
             throw new InvalidArgumentException('Parallel HLS requires a shared named destination disk.');
         }
@@ -97,6 +99,7 @@ class PendingQueuedExport
         // will dispatch it as one ordinary job instead of a batch.
         $prefix = "laravel-ffmpeg/queued/{$this->id}";
         $partExports = $export->queueParts($path, $prefix);
+
         if (count($partExports) === 1) {
             return $this->configure(new ExportJob($this->id, $this->plan, $path));
         }
@@ -106,6 +109,7 @@ class PendingQueuedExport
         // playlist at the requested path.
         $parts = [];
         $jobs = [];
+
         foreach ($partExports as $index => [$part, $destination]) {
             $parts[] = $manifest = "{$prefix}/inventories/{$index}.json";
             $jobs[] = $this->configure(
@@ -116,6 +120,7 @@ class PendingQueuedExport
 
         $finalizer = $this->configure(new ExportJob($this->id, null, $path, $disk, parts: $parts), initial: false);
         $batch = Bus::batch($jobs)->name("FFmpeg {$this->id}");
+
         if ($this->connection !== null) {
             $batch->onConnection($this->connection);
         }
@@ -148,6 +153,7 @@ class PendingQueuedExport
         $job->timeout = config('laravel-ffmpeg.queue.timeout') ?? ($timeout === null ? 0 : (int) ceil($timeout) + 30);
         $job->tries = config('laravel-ffmpeg.queue.tries', 1);
         $job->backoff = config('laravel-ffmpeg.queue.backoff', 0);
+
         if ($this->configure instanceof Closure) {
             ($this->configure)($job);
         }

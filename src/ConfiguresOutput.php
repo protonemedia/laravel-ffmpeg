@@ -307,6 +307,7 @@ trait ConfiguresOutput
 
                 $tokens = $shared[$key];
                 $shared[$key] = [];
+
                 for ($i = 0; $i < count($tokens); $i += 2) {
                     if ($tokens[$i] === '-streamid' || ! in_array($tokens[$i], $overrides, true)) {
                         $shared[$key][] = $tokens[$i];

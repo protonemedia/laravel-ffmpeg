@@ -60,6 +60,7 @@ class LiveHlsTest extends TestCase
         foreach (glob('/proc/[0-9]*/status') ?: [] as $path) {
             $status = @file_get_contents($path);
             $pid = basename(dirname($path));
+
             if ($status !== false && preg_match('/^PPid:\s*'.getmypid().'\s*$/m', $status)
                 && str_contains(@file_get_contents('/proc/'.$pid.'/cmdline') ?: '', $this->binary)) {
                 $children[] = $pid;

@@ -231,6 +231,7 @@ class PendingLiveHls
     public function timeout(float $seconds): static
     {
         $this->mutable();
+
         if (! is_finite($seconds) || $seconds <= 0) {
             throw new InvalidArgumentException('The live timeout must be positive and finite.');
         }
@@ -248,6 +249,7 @@ class PendingLiveHls
     public function retry(int $maxRetries, float $delay = 1, bool $reconnectOnEof = false): static
     {
         $this->mutable();
+
         if ($maxRetries < 0 || $maxRetries > 10000) {
             throw new InvalidArgumentException(
                 "The live reconnect retry count [{$maxRetries}] must be between 0 and 10000."
@@ -312,6 +314,7 @@ class PendingLiveHls
             }
 
             $failed = true;
+
             if ($throwable === $this->applicationFailure) {
                 throw $throwable;
             }
@@ -323,6 +326,7 @@ class PendingLiveHls
             $this->running = false;
             $this->stopped = false;
             $this->resetSession();
+
             try {
                 $workspace?->delete();
             } catch (Throwable $exception) {
@@ -396,16 +400,19 @@ class PendingLiveHls
             $cancelled = $this->stopped || ($this->cancellation instanceof Closure && ($this->cancellation)());
         } catch (Throwable $throwable) {
             $this->applicationFailure = $throwable;
+
             throw $throwable;
         }
 
         if ($cancelled) {
             $this->status = 'cancelled';
+
             throw $this->interrupt;
         }
 
         if ($this->deadline !== null && (hrtime(true) - $this->started) / 1e9 >= $this->deadline) {
             $this->status = 'timed_out';
+
             throw $this->interrupt;
         }
     }
@@ -443,6 +450,7 @@ class PendingLiveHls
 
             $finished = $result->exitCode === 0 && ! $this->reconnectOnEof;
             $this->publishPlaylist($start, $finished);
+
             if ($finished) {
                 if ($this->entries === []) {
                     throw MediaException::live('Live encoder produced no segments.', 'artifact');
@@ -520,12 +528,14 @@ class PendingLiveHls
     protected function publishPlaylist(int $start, bool $finished = false): void
     {
         $local = "{$this->workspace->path}/live.m3u8";
+
         if (! is_file($local)) {
             return;
         }
 
         [$lines, $number] = $this->readEncoderPlaylist($local, $start);
         $changed = $this->publishSegments($start, $lines, $number);
+
         if ($this->entries === [] || (! $changed && ! $finished)) {
             return;
         }
@@ -557,12 +567,14 @@ class PendingLiveHls
     protected function readEncoderPlaylist(string $local, int $start): array
     {
         $bytes = file_get_contents($local, length: self::MAX_ENCODER_PLAYLIST_BYTES + 1);
+
         if ($bytes === false || strlen($bytes) > self::MAX_ENCODER_PLAYLIST_BYTES
             || ! preg_match('/^#EXT-X-MEDIA-SEQUENCE:([0-9]+)$/m', $bytes, $sequence)) {
             throw MediaException::publication('Invalid live encoder playlist.', 'artifact');
         }
 
         $number = (int) $sequence[1];
+
         if ($number < $start || $number > $this->next) {
             throw MediaException::publication('The live publisher missed an encoder window.', 'window');
         }
@@ -579,6 +591,7 @@ class PendingLiveHls
     {
         $duration = null;
         $changed = false;
+
         foreach ($lines as $line) {
             if (str_starts_with($line, '#EXTINF:')) {
                 if ($duration !== null
@@ -591,6 +604,7 @@ class PendingLiveHls
                 // Ownership derives from our generated prefix and contiguous counter, never from
                 // arbitrary, changing playlist references or from scanning the destination.
                 $name = $this->prefix.sprintf('%012d', $number).'.ts';
+
                 if ($duration === null || $line !== $name) {
                     throw MediaException::publication('Unowned live segment reference.', 'ownership');
                 }
@@ -633,6 +647,7 @@ class PendingLiveHls
     protected function uploadSegment(Filesystem $disk, string $source, string $key): void
     {
         $input = @fopen($source, 'rb');
+
         if ($input === false) {
             throw MediaException::publication('Cannot read a completed live segment.', 'artifact');
         }
@@ -656,6 +671,7 @@ class PendingLiveHls
         $text = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:".((int) ceil($this->segmentDuration) + 1)
             ."\n#EXT-X-MEDIA-SEQUENCE:{$this->entries[0]['number']}"
             ."\n#EXT-X-DISCONTINUITY-SEQUENCE:{$this->discontinuities}\n";
+
         foreach ($this->entries as $entry) {
             $text .= ($entry['discontinuity'] ? "#EXT-X-DISCONTINUITY\n" : '')
                 .'#EXTINF:'.sprintf('%.6F', $entry['duration']).",\n".basename($entry['key'])."\n";
@@ -693,6 +709,7 @@ class PendingLiveHls
             ($this->publication)($this->snapshot($playlist));
         } catch (Throwable $throwable) {
             $this->applicationFailure = $throwable;
+
             throw $throwable;
         }
     }
@@ -715,6 +732,7 @@ class PendingLiveHls
     protected function waitBeforeReconnecting(): void
     {
         $until = hrtime(true) + (int) ($this->retryDelay * 1e9);
+
         while (hrtime(true) < $until) {
             $this->interruptIfNecessary();
             usleep(10000);

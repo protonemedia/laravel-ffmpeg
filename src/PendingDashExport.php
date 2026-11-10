@@ -210,6 +210,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $this->export->assertOutputMutable();
         $this->identifier($name);
+
         if (isset($this->sets[$name])) {
             throw new InvalidArgumentException("The DASH adaptation set [{$name}] is already defined.");
         }
@@ -232,6 +233,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $this->export->assertOutputMutable();
         $this->identifier($name);
+
         if (isset($this->representations[$name])) {
             throw new InvalidArgumentException("The DASH representation [{$name}] is already defined.");
         }
@@ -298,6 +300,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
 
         $manifest = new ExportOutput($path ?? 'manifest.mpd', $this->export->filesystem());
         $destination = $manifest->destination()['path'];
+
         if (strtolower(pathinfo($destination, PATHINFO_EXTENSION)) !== 'mpd') {
             throw new InvalidArgumentException('A DASH manifest destination must have an mpd extension.');
         }
@@ -305,6 +308,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $prefix = dirname($destination) === '.' ? '' : dirname($destination).'/';
         $outputs = [];
         $clip = null;
+
         foreach ($this->representations as $name => $representation) {
             $settings = $representation->inherit($this->export->outputConfiguration());
             $type = $this->type($name);
@@ -368,6 +372,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         }
 
         $codec = $type === 'video' ? 'libx264' : 'aac';
+
         if (($settings[$type]['codec'] ?? null) !== $codec) {
             throw new InvalidArgumentException(
                 "The DASH representation [{$name}] must encode {$type} with [{$codec}]."
@@ -422,8 +427,10 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $result = [];
         $targets = $outputPaths ?? array_map(fn (int|string $i): string => "[output:{$i}]", array_keys($outputs));
+
         foreach ($default as $token) {
             $index = array_search($token, $targets, true);
+
             if ($index !== false) {
                 if ($this->type(array_keys($this->representations)[$index]) === 'video') {
                     $result[] = '-force_key_frames:v';
@@ -501,8 +508,10 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     public function outputPaths(array $default, array $outputs, Workspace $workspace): array
     {
         $paths = [];
+
         foreach (array_keys($this->representations) as $name) {
             $directory = "{$workspace->path}/dash-{$name}";
+
             if (! mkdir($directory, 0700)) {
                 throw MediaException::encoding('Cannot create the private DASH workspace.', 'filesystem');
             }
@@ -521,12 +530,14 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     public function save(?string $path = null): DashExportResult
     {
         $this->export->assertOutputMutable();
+
         if ($path === null) {
             throw new InvalidArgumentException('DASH requires a manifest destination.');
         }
 
         $this->outputs([], $path);
         $this->export->inspect();
+
         foreach ($this->representations as $representation) {
             $representation->freeze();
         }
@@ -556,9 +567,11 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $clocks = [];
         $total = 0;
         $longest = 0;
+
         foreach (array_keys($this->representations) as $index => $name) {
             $parsed = $this->readRepresentation($index, $name, $outputs[$index], $paths[$index]);
             $total += count($parsed['durations']);
+
             if ($total > DashManifest::LIMIT) {
                 DashManifest::fail();
             }
@@ -575,6 +588,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             [$files, $peak, $bytes] = $this->representationArtifacts($parsed);
             array_push($segments, ...$files);
             $info[$name] = $this->representationInfo($parsed, $representation, $peak, $bytes);
+
             if ($this->sharedHls) {
                 $playlists[] = $this->writeRepresentationPlaylist($parsed);
             }
@@ -583,6 +597,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $this->setManifestDurations($root, $longest, $clocks);
 
         $master = array_key_last($outputs);
+
         if ($this->sharedHls) {
             $playlists[] = $this->writeSharedHlsMaster($info, $master, $outputs[$master], $paths[$master]);
         }
@@ -680,6 +695,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $period->setAttribute('start', 'PT0S');
 
         $sets = [];
+
         foreach ($this->sets as $name => $set) {
             $node = $period->appendChild($document->createElementNS(DashManifest::NS, 'AdaptationSet'));
             $node->setAttribute('id', (string) count($sets));
@@ -721,12 +737,14 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     protected function importRepresentation(DOMDocument $document, DOMElement $parsed, int|string $name): DOMElement
     {
         $representation = $document->importNode($parsed, true);
+
         if (! $representation instanceof DOMElement) {
             DashManifest::fail();
         }
 
         $representation->setAttribute('id', $name);
         $template = $representation->getElementsByTagNameNS(DashManifest::NS, 'SegmentTemplate')->item(0);
+
         if (! $template instanceof DOMElement) {
             DashManifest::fail();
         }
@@ -753,8 +771,10 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $artifacts = [];
         $peak = 0;
         $bytes = 0;
+
         foreach ($parsed['files'] as $fileIndex => $filename) {
             $local = dirname($path)."/{$filename}";
+
             if ($fileIndex > 0) {
                 $size = $this->export->validateArtifact($local, 'dash-segment');
                 $bytes += $size;
@@ -770,6 +790,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
                 'role' => $fileIndex === 0 ? 'dash-init' : 'dash-segment',
                 'destination' => $target,
             ];
+
             if ($fileIndex === 1) {
                 $directory = dirname($path);
                 $artifact += [
@@ -806,6 +827,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         ] = $parsed;
         $lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-TARGETDURATION:'.max(1, (int) ceil(max($durations))),
             '#EXT-X-MEDIA-SEQUENCE:1', '#EXT-X-PLAYLIST-TYPE:VOD', '#EXT-X-MAP:URI="init.mp4"'];
+
         foreach ($durations as $i => $duration) {
             $lines[] = '#EXTINF:'.sprintf('%.9f', $duration).',';
             $lines[] = sprintf('segment-%08d.m4s', $i + 1);
@@ -830,6 +852,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $lines = ['#EXTM3U', '#EXT-X-VERSION:7'];
         $audio = collect($info)->filter(fn (array $item): bool => $item['type'] === 'audio');
+
         foreach ($audio as $name => $item) {
             $lines[] = "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"{$name}\""
                 .',DEFAULT='.($audio->keys()->first() === $name ? 'YES' : 'NO')
@@ -850,6 +873,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
                 ...($item['type'] === 'video' ? $audio->pluck('codecs')->all() : []),
             ]);
             $video = '';
+
             if ($item['type'] === 'video') {
                 $video = ",RESOLUTION={$item['width']}x{$item['height']}"
                     .($audio->isNotEmpty() ? ',AUDIO="audio"' : '');

@@ -190,9 +190,11 @@ class PlaylistTest extends TestCase
             'show/init.mp4' => 'initialization',
             'show/parts/0.m4s' => 'encrypted media',
         ];
+
         foreach ($files as $path => $contents) {
             $disk->put($path, $contents);
         }
+
         $disk->put('show/unrelated.ts', 'keep');
         $disk->put('other/master.m3u8', 'keep');
         $playlist = FFMpeg::disk('memory')->playlist('show/master.m3u8');
@@ -206,6 +208,7 @@ class PlaylistTest extends TestCase
             foreach (array_keys($files) as $existing) {
                 $this->assertTrue($disk->exists($existing), 'Deletion started before all approvals.');
             }
+
             $approved[] = $path;
 
             return array_key_exists($path, $files);
@@ -388,6 +391,7 @@ class PlaylistTest extends TestCase
     public function test_deletion_deduplicates_reads_and_deletes_and_stops_on_adapter_failure(bool $throws): void
     {
         $disk = \Mockery::mock(Filesystem::class);
+
         foreach (['master.m3u8' => 'child.m3u8', 'child.m3u8' => 'master.m3u8'] as $path => $child) {
             $stream = fopen('php://temp', 'w+');
             fwrite($stream, sprintf(<<<'M3U8'
@@ -406,6 +410,7 @@ class PlaylistTest extends TestCase
                 ->with($path)
                 ->andReturn($stream);
         }
+
         $disk->shouldReceive('delete')
             ->once()
             ->with('master.m3u8')
@@ -413,11 +418,13 @@ class PlaylistTest extends TestCase
         $expectation = $disk->shouldReceive('delete')
             ->once()
             ->with('child.m3u8');
+
         if ($throws) {
             $expectation->andThrow(new \RuntimeException('secret adapter details'));
         } else {
             $expectation->andReturn(false);
         }
+
         $disk->shouldNotReceive('delete')
             ->with('part.ts');
         $approved = [];
@@ -483,6 +490,7 @@ class PlaylistTest extends TestCase
             high/index.m3u8
 
             M3U8);
+
         foreach (['low', 'high'] as $variant) {
             $disk->put($variant.'/index.m3u8', <<<'M3U8'
                 #EXTM3U
@@ -491,6 +499,7 @@ class PlaylistTest extends TestCase
 
                 M3U8);
         }
+
         $all = FFMpeg::disk('memory')
             ->playlist('master.m3u8')
             ->mediaUrlsUsing(fn ($target, $source) => '/signed/'.$target.'?source='.rawurlencode($source))
@@ -659,6 +668,7 @@ class PlaylistTest extends TestCase
     public function test_traversal_follows_at_most_1024_playlists(): void
     {
         $disk = Storage::disk('memory');
+
         for ($index = 0; $index < 1024; $index++) {
             $disk->put($index.'.m3u8', sprintf(<<<'M3U8'
                 #EXTM3U

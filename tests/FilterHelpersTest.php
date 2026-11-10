@@ -105,6 +105,7 @@ class FilterHelpersTest extends TestCase
             $this->assertEqualsWithDelta($red, $green, 2);
             $this->assertEqualsWithDelta($red, $blue, 2);
         }
+
         $this->assertGreaterThan($this->pixel($gray, 8, 8)[0], $this->pixel($gray, 24, 24)[0]);
     }
 
@@ -188,6 +189,7 @@ class FilterHelpersTest extends TestCase
         $samples = $this->samples('both.mkv');
 
         $this->assertCount(24000, $samples);
+
         foreach ([0 => 0, 4000 => 0.2, 12000 => 0.4, 20000 => 0.2, 23999 => 0] as $sample => $expected) {
             $this->assertEqualsWithDelta($expected, $samples[$sample], 0.0001);
         }
@@ -197,6 +199,7 @@ class FilterHelpersTest extends TestCase
         foreach ([0 => 0, 10 => 127, 30 => 255, 50 => 127] as $frame => $expected) {
             $this->assertEqualsWithDelta($expected, $this->pixel($frames, 24, 8, $frame)[0], 4);
         }
+
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -213,9 +216,11 @@ class FilterHelpersTest extends TestCase
         foreach ([5 => 0, 20 => 127, 35 => 255, 45 => 127, 55 => 0] as $frame => $expected) {
             $this->assertEqualsWithDelta($expected, $this->pixel($video, 24, 8, $frame)[0], 4);
         }
+
         foreach ([0, 8000, 20000] as $sample) {
             $this->assertEqualsWithDelta(0.4, $this->samples('video.mkv')[$sample], 0.00001);
         }
+
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -238,6 +243,7 @@ class FilterHelpersTest extends TestCase
         foreach ([0, 20, 50] as $frame) {
             $this->assertGreaterThan(250, $this->pixel($frames, 24, 8, $frame)[0]);
         }
+
         $this->assertWorkspacesAreCleanedUp();
     }
 

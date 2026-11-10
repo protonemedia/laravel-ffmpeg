@@ -62,6 +62,7 @@ class HlsTest extends TestCase
 
         if ($audio) {
             array_push($command, '-map', '1');
+
             if ($video) {
                 array_push($command, '-map', '2');
             }
@@ -283,6 +284,7 @@ class HlsTest extends TestCase
                 ->where('role', 'hls-segment')
                 ->values();
             $this->assertCount(4, $files);
+
             foreach ($files as $file) {
                 $this->assertStringContainsString("\n".basename($file->path)."\n", $playlist);
                 $key = 'playback/'.$name.'/'.basename($file->path);
@@ -301,6 +303,7 @@ class HlsTest extends TestCase
                 $this->assertProcessSucceeded($packet);
                 $this->assertStringContainsString('K', json_decode($packet->output(), true)['packets'][0]['flags']);
             }
+
             $local->put('playback/'.$name.'/index.m3u8', $playlist);
             $decode = Process::run([config(
                 'laravel-ffmpeg.ffmpeg.binaries',
@@ -369,11 +372,13 @@ class HlsTest extends TestCase
 
         foreach ($result->files()->where('role', 'hls-playlist') as $file) {
             $playlist = $disk->get($file->path);
+
             if ($type === 'live') {
                 $this->assertStringNotContainsString('#EXT-X-PLAYLIST-TYPE:', $playlist);
             } else {
                 $this->assertStringContainsString('#EXT-X-PLAYLIST-TYPE:'.strtoupper($type), $playlist);
             }
+
             $this->assertStringEndsWith("#EXT-X-ENDLIST\n", $playlist);
         }
 
@@ -551,9 +556,11 @@ class HlsTest extends TestCase
             $this->assertProcessSucceeded($decoded);
             $this->assertSame($width * (int) ($width * 96 / 160) * 3, strlen($decoded->output()));
             $pixel = substr($decoded->output(), ($y * $width + $x) * 3, 3);
+
             foreach (unpack('C*', $pixel) as $channel) {
                 $this->assertGreaterThan(235, $channel);
             }
+
             $metadata = Process::run(
                 [
                     config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-show_entries', 'format=duration', '-of',
@@ -918,10 +925,12 @@ class HlsTest extends TestCase
             $contents = Storage::disk('local')->get($playlist->path);
             $this->assertStringContainsString('# Prepared for '.$playlist->path, $contents);
             $this->assertStringContainsString('#EXT-X-START:TIME-OFFSET=0.2,PRECISE=YES', $contents);
+
             if ($name === 'high') {
                 $this->assertStringContainsString('#EXT-X-PROGRAM-DATE-TIME:2026-01-01T00:00:00Z', $contents);
                 $this->assertStringContainsString('#EXT-X-DATERANGE:ID="intro"', $contents);
             }
+
             $decoded = Process::run(
                 [
                     config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-xerror', '-i',
@@ -1084,6 +1093,7 @@ class HlsTest extends TestCase
                 [$file->disk, $file->size, $secrets->getVisibility($file->path)],
             );
             $this->assertFalse($disk->exists($file->path));
+
             if ($key !== null) {
                 $this->assertSame($key, $secrets->get($file->path));
             }
@@ -1102,6 +1112,7 @@ class HlsTest extends TestCase
                 PREG_SET_ORDER,
             );
             $this->assertCount(4, $tags);
+
             foreach ($tags as $sequence => $tag) {
                 $index = $rotateEvery === null ? 0 : intdiv($sequence, 2);
                 $this->assertSame($secrets->path($keys[$index]->path), $tag[1]);
@@ -1119,6 +1130,7 @@ class HlsTest extends TestCase
                     ),
                 );
             }
+
             $decoded = Process::run([
                 config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-xerror',
                 '-protocol_whitelist', 'file,crypto', '-allowed_extensions', 'm3u8,ts,key',

@@ -17,6 +17,7 @@ trait WritesHlsMasterPlaylist
     {
         $info = $this->isSubtitle($index) ? [] : $this->playlistLines(dirname($path)."/master-{$index}.m3u8");
         $attributes = '';
+
         foreach ($info as $line) {
             if (str_starts_with($line, '#EXT-X-STREAM-INF:')) {
                 $attributes = trim(preg_replace('/(?:^|,)(?:AVERAGE-)?BANDWIDTH=[0-9]+/', '', substr($line, 18)), ',');
@@ -35,6 +36,7 @@ trait WritesHlsMasterPlaylist
     protected function masterPlaylistLines(array $streamInfo, string $masterPath): array
     {
         $lines = ['#EXTM3U', '#EXT-X-VERSION:'.($this->segmentType === 'fmp4' ? '7' : '3')];
+
         foreach ($this->renditions as $name => $rendition) {
             if ($rendition['type'] === 'SUBTITLES') {
                 $overhead = $this->timestampSubtitleRendition($name, $rendition['group'], $streamInfo);
@@ -66,6 +68,7 @@ trait WritesHlsMasterPlaylist
             .",NAME=\"{$rendition['name']}\""
             .',DEFAULT='.($rendition['default'] ? 'YES' : 'NO')
             .',AUTOSELECT='.($rendition['autoselect'] ? 'YES' : 'NO');
+
         if ($rendition['language'] !== null) {
             $tag .= ",LANGUAGE=\"{$rendition['language']}\"";
         }
@@ -89,6 +92,7 @@ trait WritesHlsMasterPlaylist
     {
         $info = $streamInfo[$name];
         $groups = '';
+
         foreach ($variant->groups() as $type => $group) {
             if ($group === null) {
                 continue;
@@ -104,6 +108,7 @@ trait WritesHlsMasterPlaylist
                 fn (int|string $member): int => $streamInfo[$member]['average'],
                 $members,
             ));
+
             if ($type === 'AUDIO') {
                 $info['attributes'] = $this->withAudioCodecs($info['attributes'], [$name, ...$members], $streamInfo);
             }
@@ -125,6 +130,7 @@ trait WritesHlsMasterPlaylist
     protected function withAudioCodecs(string $attributes, array $members, array $streamInfo): string
     {
         $codecs = [];
+
         foreach ($members as $member) {
             if (preg_match('/(?:^|,)CODECS="([^"]+)"/', $streamInfo[$member]['attributes'], $match)) {
                 array_push($codecs, ...explode(',', $match[1]));
@@ -132,6 +138,7 @@ trait WritesHlsMasterPlaylist
         }
 
         $attributes = trim(preg_replace('/(?:^|,)CODECS="[^"]+"/', '', $attributes), ',');
+
         if ($codecs !== []) {
             $attributes .= ($attributes === '' ? '' : ',').'CODECS="'.implode(',', array_unique($codecs)).'"';
         }

@@ -376,6 +376,7 @@ class PendingExport implements Exportable
         }
 
         $watermark = new Watermark;
+
         if ($configure !== null) {
             $configure($watermark);
         }
@@ -395,6 +396,7 @@ class PendingExport implements Exportable
     public function coverArt(Media $image): static
     {
         $this->assertMutable();
+
         if ($this->coverInput !== null) {
             throw new InvalidArgumentException('An export accepts only one cover art image.');
         }
@@ -505,6 +507,7 @@ class PendingExport implements Exportable
 
         try {
             $this->runner = new ProcessRunner($this->timeoutSeconds, $this->idleTimeoutSeconds);
+
             if (config('laravel-ffmpeg.enable_events', true)) {
                 Event::dispatch(new Events\ExportStarting($operationId, $destinations));
             }

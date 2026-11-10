@@ -54,6 +54,7 @@ class HlsExportResult implements Result
 
         $playlist = $this->playlist();
         $variants = [];
+
         foreach ($this->variants as $name => $paths) {
             // Rendition members are not master entries of their own. Instead, we will add their files
             // to every variant that references their group so each variant owns everything it plays.
@@ -103,6 +104,7 @@ class HlsExportResult implements Result
         $files = $this->files()->filter(fn ($file): bool => isset($this->variants[$name][$file->path]))->values();
         $references = collect($this->keyReferences)->only($files->pluck('path'))->all();
         $needed = [];
+
         foreach ($references as $urls) {
             foreach ($urls as $key) {
                 $needed[HlsPresentation::id($key['disk'] ?? '', $key['path'])] = true;
@@ -141,6 +143,7 @@ class HlsExportResult implements Result
     protected function rendition(string $type, string $group, string $name): self
     {
         $id = $this->renditions[$type][$group][$name] ?? null;
+
         if ($id === null) {
             throw new ItemNotFoundException('Unknown HLS rendition.');
         }

@@ -87,6 +87,7 @@ class StillInput implements InputSource
 
         $path = $workspace->stage($this->image, resource: true);
         $size = @getimagesize($path);
+
         if ($size === false || ! in_array($size[2], [IMAGETYPE_PNG, IMAGETYPE_JPEG], true)) {
             throw MediaException::staging('The still video image must be a PNG or JPEG image.', 'image');
         }

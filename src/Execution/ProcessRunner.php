@@ -321,6 +321,7 @@ class ProcessRunner
     {
         $now = hrtime(true);
         $totalDeadline = config('laravel-ffmpeg.timeout', 3600);
+
         if ($this->processTimeout !== null) {
             $totalDeadline = $totalDeadline === null
                 ? $this->processTimeout
@@ -328,6 +329,7 @@ class ProcessRunner
         }
 
         $idleDeadline = config('laravel-ffmpeg.idle_timeout');
+
         if ($this->idleTimeout !== null) {
             $idleDeadline = $idleDeadline === null ? $this->idleTimeout : min($idleDeadline, $this->idleTimeout);
         }

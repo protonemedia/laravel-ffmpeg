@@ -20,10 +20,12 @@ class StoryboardTest extends TestCase
         $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $command = [$binary, '-v', 'error'];
+
         foreach (['red', 'lime', 'blue', 'yellow', 'magenta', 'cyan', 'white'] as $index => $color) {
             array_push($command, '-f', 'lavfi',
                 '-i', 'color='.$color.':size=80x48:rate=20:duration='.($index === 6 ? '0.15' : '0.2'));
         }
+
         array_push($command, '-filter_complex', '[0:v][1:v][2:v][3:v][4:v][5:v][6:v]concat=n=7:v=1:a=0[video]',
             '-map', '[video]', '-c:v', 'ffv1', '-threads', '1', $local->path('colors.mkv'));
         $result = Process::run($command);
@@ -127,11 +129,13 @@ class StoryboardTest extends TestCase
         );
 
         $sheets = [];
+
         foreach ([1, 2] as $number) {
             $bytes = Storage::disk('memory')->get('images/é #?/sheet_0'.$number.'.png');
             $this->assertSame([70, 32], array_slice(getimagesizefromstring($bytes), 0, 2));
             $sheets[] = imagecreatefromstring($bytes);
         }
+
         $positions = [[3, 3], [25, 3], [47, 3], [3, 17], [25, 17], [47, 17], [3, 3]];
         $colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [255, 0, 255], [0, 255, 255], [255, 255, 255]];
         $times = ['00:00:00.000 --> 00:00:00.200', '00:00:00.200 --> 00:00:00.400',
@@ -141,6 +145,7 @@ class StoryboardTest extends TestCase
 
         $this->assertSame('WEBVTT', array_shift($cues));
         $this->assertCount(7, $cues);
+
         foreach ($positions as $index => [$x, $y]) {
             $sheet = $index === 6 ? 1 : 0;
             $this->assertSame(
@@ -148,14 +153,17 @@ class StoryboardTest extends TestCase
                 $cues[$index],
             );
             $pixel = imagecolorsforindex($sheets[$sheet], imagecolorat($sheets[$sheet], $x + 10, $y + 6));
+
             foreach (['red', 'green', 'blue'] as $channel => $name) {
                 $this->assertEqualsWithDelta($colors[$index][$channel], $pixel[$name], 8);
             }
         }
+
         foreach ([[$sheets[0], 1, 1], [$sheets[0], 23, 10], [$sheets[1], 35, 9]] as [$sheet, $x, $y]) {
             $pixel = imagecolorsforindex($sheet, imagecolorat($sheet, $x, $y));
             $this->assertSame([0, 0, 0], [$pixel['red'], $pixel['green'], $pixel['blue']]);
         }
+
         $this->assertSame($original, Storage::disk('local')->get('colors.mkv'));
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -173,8 +181,10 @@ class StoryboardTest extends TestCase
         $image = imagecreatefromstring(Storage::disk('memory')->get('clip-1.png'));
 
         $tiles = [[10, 6, [0, 255, 0]], [30, 6, [0, 0, 255]], [10, 18, [255, 255, 0]], [30, 18, [0, 0, 0]]];
+
         foreach ($tiles as [$x, $y, $expected]) {
             $pixel = imagecolorsforindex($image, imagecolorat($image, $x, $y));
+
             foreach (['red', 'green', 'blue'] as $channel => $name) {
                 $this->assertEqualsWithDelta($expected[$channel], $pixel[$name], 8);
             }

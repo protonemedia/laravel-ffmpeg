@@ -87,6 +87,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         }
 
         $factor = $this->number($this->factor);
+
         if (! $settings['omitVideo']) {
             // Dividing timestamps in a coarse source time base, such as 1/25, would give two
             // frames the same timestamp. We will retime in microseconds and let the encoder
@@ -101,6 +102,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
             // new sample rate, so we will scale only that initial offset beforehand.
             $settings['audioFilters'][] = "asetpts=PTS-STARTPTS+STARTPTS/{$factor}";
             $remaining = $this->factor;
+
             while ($remaining > 2) {
                 $settings['audioFilters'][] = 'atempo=2';
                 $remaining /= 2;
@@ -161,6 +163,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         }
 
         $settings = $this->export->outputConfiguration();
+
         // Maps can select a shorter track, and raw filters or options can alter the timing.
         if ($settings['maps'] !== []
             || $settings['omitVideo']

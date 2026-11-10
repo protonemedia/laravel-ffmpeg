@@ -55,12 +55,14 @@ class DashExportResult implements Result
     {
         $master = $this->hlsPlaylist();
         $types = [];
+
         foreach ($this->sets as $set) {
             $types += array_fill_keys($set['representations'], $set['type']);
         }
 
         $audio = array_keys($types, 'audio', true);
         $variants = [];
+
         foreach ($types as $name => $type) {
             // Audio is a rendition group of the video entries, so it only becomes a master entry
             // of its own when the export has no video at all.
@@ -69,6 +71,7 @@ class DashExportResult implements Result
             }
 
             $paths = $this->representations[$name];
+
             foreach ($type === 'video' ? $audio : [] as $rendition) {
                 $paths += $this->representations[$rendition];
             }

@@ -1361,6 +1361,7 @@ class ExportTest extends TestCase
         $this->assertNull($file->disk);
 
         $stream = $file->readStream();
+
         try {
             $this->assertSame('encoded media', stream_get_contents($stream));
         } finally {

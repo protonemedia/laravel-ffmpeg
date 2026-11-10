@@ -298,6 +298,7 @@ class RtspServerTest extends TestCase
         $server->start();
 
         $deadline = microtime(true) + 5;
+
         while (! ($socket = @fsockopen('127.0.0.1', static::$port, timeout: 0.1)) && $server->isRunning()
             && microtime(true) < $deadline) {
             usleep(20000);
@@ -371,6 +372,7 @@ class RtspServerTest extends TestCase
         ]);
 
         $deadline = microtime(true) + 5;
+
         while (substr_count(static::$server->getOutput(), $needle) === $published
             && $this->publishers[$path]->running() && microtime(true) < $deadline) {
             usleep(20000);

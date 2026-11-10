@@ -37,6 +37,7 @@ class PreservationTest extends TestCase
         if (isset($this->root)) {
             $this->assertWorkspacesAreCleanedUp();
         }
+
         parent::tearDown();
     }
 
@@ -67,8 +68,10 @@ class PreservationTest extends TestCase
         [$width, $height] = [40, 48];
 
         $this->assertSame($width * $height * 3, strlen($rgb));
+
         foreach ([[0, 0, 0], [10, 8, 2], [10, 28, 0]] as [$x, $y, $channel]) {
             $pixel = array_values(unpack('C3', substr($rgb, ($y * $width + $x) * 3, 3)));
+
             if ($x === 0) {
                 $this->assertSame([0, 0, 0], $pixel);
             } else {

@@ -64,6 +64,7 @@ class HlsPresentation
             }
 
             $id = self::id($file['disk'], $file['path']);
+
             if (isset($this->files[$id])) {
                 throw new InvalidArgumentException('HLS playback inventory contains a duplicate destination.');
             }
@@ -124,6 +125,7 @@ class HlsPresentation
 
         $ids = [$this->playlist => true];
         $variants = [];
+
         foreach ($names as $name) {
             if (! is_string($name) || ! isset($this->variants[$name])) {
                 throw new ItemNotFoundException('Unknown HLS variant.');
@@ -135,9 +137,11 @@ class HlsPresentation
 
         $files = array_intersect_key($this->files, $ids);
         $keys = collect($this->keys)->only(array_column($files, 'path'))->all();
+
         foreach ($keys as $references) {
             foreach ($references as $key) {
                 $id = self::id($key['disk'], $key['path']);
+
                 if (isset($this->files[$id])) {
                     $files[$id] = $this->files[$id];
                 }
@@ -157,6 +161,7 @@ class HlsPresentation
     {
         $playlist = new HlsPlaylist($file['disk'], $file['path']);
         $excluded = 'hls-excluded-'.bin2hex(random_bytes(16));
+
         foreach (['playlist', 'media', 'key'] as $kind) {
             $playlist->{$kind.'UrlsUsing'}(function ($target, $source, $uri) use ($file, $kind, $url, $excluded) {
                 if ($this->selected && $file['role'] === 'hls-master' && $kind === 'playlist'
@@ -169,9 +174,11 @@ class HlsPresentation
         }
 
         $lines = explode("\n", $playlist->get());
+
         foreach ($lines as $index => $line) {
             if ($line === $excluded) {
                 unset($lines[$index]);
+
                 for ($previous = $index - 1; $previous >= 0; $previous--) {
                     if (str_starts_with($lines[$previous] ?? '', '#EXT-X-STREAM-INF:')) {
                         unset($lines[$previous]);
@@ -216,6 +223,7 @@ class HlsPresentation
             // DASH sharedHls() playlists reference the DASH initialization and media files.
             default => ['hls-segment', 'hls-init', 'dash-segment', 'dash-init'],
         };
+
         if ($file === null || ! in_array($file['role'], $roles, true)) {
             throw new HlsResourceNotFoundException("The HLS reference is not an owned {$kind} resource.");
         }
@@ -232,6 +240,7 @@ class HlsPresentation
     {
         $from = dirname($playlist) === '.' ? [] : explode('/', dirname($playlist));
         $to = explode('/', $target);
+
         while ($from !== [] && $to !== [] && $from[0] === $to[0]) {
             array_shift($from);
             array_shift($to);

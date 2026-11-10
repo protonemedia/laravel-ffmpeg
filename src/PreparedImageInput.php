@@ -89,6 +89,7 @@ class PreparedImageInput implements InputSource
         $source = $workspace->stage($this->image, resource: true);
         $this->validate($source);
         $target = "{$workspace->path}/{$name}";
+
         if (! @copy($source, $target) || ! chmod($target, 0600)) {
             throw MediaException::staging('Cannot prepare a private image copy.', 'filesystem');
         }
@@ -113,6 +114,7 @@ class PreparedImageInput implements InputSource
 
         clearstatcache(true, $target);
         $this->validate($target);
+
         if (! chmod($target, 0600)) {
             throw MediaException::staging('Cannot protect the prepared image.', 'filesystem');
         }
@@ -126,6 +128,7 @@ class PreparedImageInput implements InputSource
     protected function validate(string $path): void
     {
         $size = @getimagesize($path);
+
         if ($size === false || $size[0] < 1 || $size[1] < 1) {
             throw MediaException::staging('Image preparation requires readable raster image data.', 'resource');
         }

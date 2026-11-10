@@ -61,6 +61,7 @@ class SequenceInput implements InputSource
 
         $pattern = (new WhitespacePathNormalizer)->normalizePath($pattern);
         $suffix = strtolower(pathinfo($pattern, PATHINFO_EXTENSION));
+
         if (! preg_match('/\A[^%]*%(?:0[1-9][0-9]?)?d[^%]*\z/', $pattern) || str_contains(dirname($pattern), '%')) {
             throw new InvalidArgumentException(
                 'The image sequence pattern must contain one %d or %0Nd placeholder in its filename.'
@@ -72,11 +73,13 @@ class SequenceInput implements InputSource
         }
 
         $rate = (string) $framerate;
+
         if (! preg_match('/\A[0-9]+(?:\.[0-9]+|\/[1-9][0-9]*)?\z/', $rate) || (float) $rate <= 0) {
             throw new InvalidArgumentException('The input frame rate must be a positive decimal or rational rate.');
         }
 
         $images = [];
+
         for ($offset = 0; $offset < $count; $offset++) {
             $images[] = new Media($disk, sprintf($pattern, $start + $offset));
         }
@@ -151,9 +154,11 @@ class SequenceInput implements InputSource
 
         $dimensions = null;
         $type = $this->suffix === 'png' ? IMAGETYPE_PNG : IMAGETYPE_JPEG;
+
         foreach ($this->images as $index => $image) {
             $source = $workspace->stage($image);
             $size = @getimagesize($source);
+
             if ($size === false || $size[2] !== $type) {
                 throw MediaException::staging(
                     "Sequence image [{$index}] does not match the declared image format.",
@@ -170,6 +175,7 @@ class SequenceInput implements InputSource
 
             $dimensions = [$size[0], $size[1]];
             $target = "{$workspace->path}/{$name}-".sprintf('%08d', $index).".{$this->suffix}";
+
             if (! @symlink($source, $target) && (! @copy($source, $target) || ! chmod($target, 0600))) {
                 throw MediaException::staging("Cannot prepare sequence image {$index}.", 'filesystem');
             }

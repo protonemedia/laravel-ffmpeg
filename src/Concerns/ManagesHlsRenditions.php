@@ -32,12 +32,14 @@ trait ManagesHlsRenditions
         }
 
         $paths = ['playlist' => $playlist, 'segments' => $segments, 'init' => $init];
+
         foreach ($paths as $type => $path) {
             if ($path === null) {
                 continue;
             }
 
             $path = new ExportOutput($path, $this->export->filesystem())->destination()['path'];
+
             if (! in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), match ($type) {
                 'playlist' => ['m3u8'], 'init' => ['mp4'], default => ['ts', 'm4s', 'vtt'],
             }, true)) {
@@ -267,6 +269,7 @@ trait ManagesHlsRenditions
     {
         $segments = $this->variantPaths[$name]['segments'];
         $extension = $this->segmentExtension($subtitle);
+
         if ($segments !== null && strtolower(pathinfo($segments, PATHINFO_EXTENSION)) !== $extension) {
             throw new InvalidArgumentException(
                 "The HLS segment path must have the [{$extension}] extension of the selected packaging."
@@ -295,6 +298,7 @@ trait ManagesHlsRenditions
         $settings['omitAudio'] = false;
         $settings['video'] = [];
         $settings['videoFilters'] = [];
+
         if ($subtitle) {
             $settings['audio'] = [];
             $settings['audioFilters'] = [];

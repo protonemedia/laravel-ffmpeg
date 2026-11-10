@@ -19,6 +19,7 @@ class LiveHlsSource
     public function __construct(#[SensitiveParameter] protected readonly string $url)
     {
         $parts = parse_url($url);
+
         if ($parts === false
             || ! in_array($parts['scheme'] ?? '', ['http', 'https', 'rtsp'], true)
             || empty($parts['host'])) {

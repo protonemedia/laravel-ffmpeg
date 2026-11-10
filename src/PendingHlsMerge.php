@@ -148,6 +148,7 @@ class PendingHlsMerge
             $this->ensurePathsDoNotConflict();
 
             $text = $this->renderMaster();
+
             if ($storage->exists($destination)) {
                 throw new InvalidArgumentException('The composition master destination already exists.');
             }
@@ -198,6 +199,7 @@ class PendingHlsMerge
         };
         $inventory = $presentation->toArray();
         $master = $this->owned(fn (): array => $presentation->file());
+
         if ($master['role'] !== 'hls-master') {
             throw new InvalidArgumentException('Each composed presentation must start at a v9 HLS master playlist.');
         }
@@ -207,6 +209,7 @@ class PendingHlsMerge
         }
 
         $this->destinationDisk ??= $master['disk'];
+
         foreach ($inventory['files'] as $file) {
             $this->addFile($presentation, $inventory['provenance'], $file);
         }
@@ -225,18 +228,21 @@ class PendingHlsMerge
     protected function addFile(HlsPresentation $presentation, array $provenance, array $file): void
     {
         $id = HlsPresentation::id($file['disk'], $file['path']);
+
         if (isset($this->destinations[$id])) {
             throw new InvalidArgumentException('Composed inventories must have disjoint destinations.');
         }
 
         $this->destinations[$id] = true;
         $this->paths[$file['disk']][] = $file['path'];
+
         if ($file['role'] !== 'hls-key' && $file['disk'] !== $this->destinationDisk) {
             throw new InvalidArgumentException('Composed playlists and media must share the destination disk.');
         }
 
         $storage = Storage::disk($file['disk']);
         $this->sizes[$id] = $storage->exists($file['path']) ? $storage->size($file['path']) : 0;
+
         if ($this->sizes[$id] <= 0 || ($file['role'] === 'hls-key' && $this->sizes[$id] !== 16)) {
             throw new InvalidArgumentException('A completed HLS inventory artifact is missing or invalid.');
         }
@@ -249,6 +255,7 @@ class PendingHlsMerge
             $metadata = $provenance[$file['path']] ?? [];
             $durations = $this->completedPlaylistDurations($presentation, $file, $metadata);
             $this->ensureClockMatches($metadata);
+
             if (! ($metadata['subtitle'] ?? false)) {
                 $this->ensureStreamIsAligned($metadata, $durations);
             }
@@ -272,6 +279,7 @@ class PendingHlsMerge
 
         $text = $this->owned(fn (): string => $presentation->render($file, fn ($id): string => "owned/{$id}"));
         preg_match_all('/^#EXTINF:([0-9]+(?:\.[0-9]+)?),/m', $text, $durations);
+
         if (substr_count($text, '#EXT-X-ENDLIST') !== 1 || substr_count($text, '#EXT-X-PLAYLIST-TYPE:VOD') !== 1
             || str_contains($text, '#EXT-X-DISCONTINUITY') || str_contains($text, '#EXT-X-BYTERANGE')
             || $durations[1] === [] || abs(array_sum($durations[1]) - $metadata['duration']) > 0.00001) {
@@ -287,6 +295,7 @@ class PendingHlsMerge
     protected function ensureClockMatches(array $metadata): void
     {
         $this->clock ??= $metadata;
+
         if ($metadata['segmentType'] !== $this->clock['segmentType']) {
             throw new InvalidArgumentException('Composed VOD presentations require the same segment packaging.');
         }
@@ -314,6 +323,7 @@ class PendingHlsMerge
         }
 
         $streamType = $metadata['streamType'] ?? '';
+
         if (! in_array($streamType, ['video', 'audio'], true)) {
             throw new InvalidArgumentException('Composition requires retained stream clock types.');
         }
@@ -321,11 +331,13 @@ class PendingHlsMerge
         $this->clocks[$streamType] ??= $metadata['start'];
         $timeline = [];
         $elapsed = 0.0;
+
         foreach ($durations as $duration) {
             $timeline[] = $elapsed += (float) $duration;
         }
 
         $this->timelines[$streamType] ??= $timeline;
+
         if (count($timeline) !== count($this->timelines[$streamType])) {
             throw new InvalidArgumentException('Composed VOD renditions require aligned segment boundaries.');
         }
@@ -348,6 +360,7 @@ class PendingHlsMerge
     {
         foreach ($variants as $name => $ids) {
             $name = (is_string($label) ? $label.'-' : '').$name;
+
             if (isset($this->variants[$name])) {
                 throw new InvalidArgumentException(
                     'Composed variant names must be unique; use aliases to prefix them.'
@@ -371,6 +384,7 @@ class PendingHlsMerge
             $master,
             fn ($id): string => HlsPresentation::relativeUrl($presentation->file($id)['path'], $path),
         ));
+
         foreach (explode("\n", $masterText) as $line) {
             if (str_starts_with($line, '#EXT-X-VERSION:')) {
                 $this->version = max($this->version, (int) substr($line, 15));
@@ -392,6 +406,7 @@ class PendingHlsMerge
         $start = strpos($line, ':') + 1;
         $attributes = HlsPlaylist::attributes(substr($line, $start))
             ?? throw new InvalidArgumentException('Composition cannot safely combine this master directive.');
+
         // We will only prefix the group attribute values, and we will work from the end of the
         // line so the offsets of the earlier attributes stay valid as the line grows.
         foreach (array_reverse(array_intersect_key(
@@ -412,6 +427,7 @@ class PendingHlsMerge
     protected function versionedDestination(string $path): string
     {
         $destination = new ExportOutput($path, $this->destinationDisk)->destination()['path'];
+
         if ($destination !== $path) {
             throw new InvalidArgumentException('The composition destination must be a canonical path.');
         }
@@ -430,6 +446,7 @@ class PendingHlsMerge
     {
         foreach ($this->paths as $diskPaths) {
             $ownedPaths = array_fill_keys($diskPaths, true);
+
             foreach ($diskPaths as $diskPath) {
                 for ($parent = dirname($diskPath); $parent !== '.'; $parent = dirname($parent)) {
                     if (isset($ownedPaths[$parent])) {
@@ -446,6 +463,7 @@ class PendingHlsMerge
     protected function renderMaster(): string
     {
         $text = implode("\n", ['#EXTM3U', "#EXT-X-VERSION:{$this->version}", ...$this->lines, '']);
+
         if (strlen($text) > Media::MAX_MANIFEST_BYTES) {
             throw new InvalidArgumentException('The composition master must fit within the 16 MiB limit.');
         }
@@ -491,12 +509,14 @@ class PendingHlsMerge
     protected function publishMaster(Filesystem $storage, string $destination, string $text): void
     {
         $published = [];
+
         try {
             if (! $storage->put($destination, $text)) {
                 throw new RuntimeException('Publication failed.');
             }
 
             $published[] = ['disk' => $this->destinationDisk, 'path' => $destination];
+
             if ($storage->size($destination) !== strlen($text)) {
                 throw new RuntimeException('Published size mismatch.');
             }

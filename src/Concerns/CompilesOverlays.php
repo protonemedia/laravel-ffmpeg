@@ -95,6 +95,7 @@ trait CompilesOverlays
     protected function coverArtOutput(ExportOutput $output): ExportOutput
     {
         $settings = $output->outputConfiguration();
+
         if (! in_array(
             strtolower(pathinfo($output->destination()['path'], PATHINFO_EXTENSION)),
             ['mp4', 'm4a', 'mp3'],
@@ -151,6 +152,7 @@ trait CompilesOverlays
     protected function watermarkedOutput(ExportOutput $output): ExportOutput
     {
         $settings = $output->outputConfiguration();
+
         if ($output->hasMaps()) {
             throw new InvalidArgumentException(
                 'Watermarked outputs select their video automatically and take no maps.',
@@ -180,6 +182,7 @@ trait CompilesOverlays
     {
         $filter = 'null';
         $processed = [];
+
         for ($i = 0; $i < count($options); $i++) {
             // The per-track chain of the one mapped video stream already includes the
             // output filters and comes after them, so the last chain we see wins.
@@ -205,6 +208,7 @@ trait CompilesOverlays
     protected function overlayWatermarks(string $filter, int|string $index): array
     {
         $branches = ["[0:V:0]{$filter}[watermark_base{$index}_0]"];
+
         foreach ($this->watermarks as $n => $mark) {
             [
                 'input' => $input,
@@ -244,6 +248,7 @@ trait CompilesOverlays
     {
         if ($this->coverInput !== null) {
             $image = $metadata[$this->coverInput];
+
             if (! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true)
                 || $image->streams()->count() !== 1) {
                 throw MediaException::probing('Cover art requires a standalone PNG or JPEG image.', 'cover-art');
@@ -272,6 +277,7 @@ trait CompilesOverlays
         foreach ($this->watermarks as $mark) {
             $image = $metadata[$mark['input']];
             $gif = $image->get('format.format_name') === 'gif' && $image->video()?->get('codec_name') === 'gif';
+
             if ((! $gif && ! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true))
                 || $image->streams()->count() !== 1) {
                 throw MediaException::probing('Watermarks require a standalone PNG, JPEG, or GIF image.', 'watermark');

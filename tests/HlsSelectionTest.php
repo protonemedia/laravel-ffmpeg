@@ -167,6 +167,7 @@ class HlsSelectionTest extends TestCase
             if (! in_array($file['role'], ['hls-master', 'hls-playlist'], true)) {
                 continue;
             }
+
             $id = HlsPresentation::id($file['disk'], $file['path']);
             $text = $presentation->render($file, function ($id) use ($presentation, $disk, $prefix) {
                 $target = $presentation->file($id);

@@ -101,6 +101,7 @@ class HlsEncryption
         $bytes = $this->key ?? random_bytes(16);
         $filename = bin2hex(random_bytes(16)).'.key';
         $local = "{$directory}/{$filename}";
+
         if (@file_put_contents($local, $bytes) !== 16 || ! chmod($local, 0600)) {
             throw MediaException::validation('Cannot prepare the private HLS key.', 'filesystem');
         }
@@ -122,6 +123,7 @@ class HlsEncryption
     protected function resolveKeyUrl(array $key, int $index, string $playlist, string $variant): string
     {
         $url = ($this->keyUrl)($key['artifact']['destination']['path'], $playlist, $variant, $index);
+
         if (! $this->isValidKeyUrl($url)) {
             throw MediaException::validation(
                 'HLS key URLs require an HTTP(S) URL or a relative URI without quotes, backslashes, whitespace, or fragments.',
@@ -159,9 +161,11 @@ class HlsEncryption
     {
         $source = null;
         $destination = null;
+
         try {
             $source = @fopen($path, 'rb');
             $destination = @fopen($encrypted, 'xb');
+
             if ($source === false || $destination === false || ! chmod($encrypted, 0600)) {
                 throw MediaException::validation('Cannot prepare the encrypted HLS segment.', 'filesystem');
             }
@@ -188,20 +192,24 @@ class HlsEncryption
     {
         $chain = $iv;
         $buffer = '';
+
         do {
             $chunk = fread($source, 1048576);
+
             if ($chunk === false || ($chunk === '' && ! feof($source))) {
                 throw MediaException::validation('Cannot read the HLS segment.', 'filesystem');
             }
 
             $buffer .= $chunk;
             $final = feof($source);
+
             if ($final) {
                 $padding = 16 - strlen($buffer) % 16;
                 $buffer .= str_repeat(chr($padding), $padding);
             }
 
             $length = intdiv(strlen($buffer), 16) * 16;
+
             if ($length > 0) {
                 $ciphertext = openssl_encrypt(
                     substr($buffer, 0, $length),
@@ -210,6 +218,7 @@ class HlsEncryption
                     OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
                     $chain,
                 );
+
                 if ($ciphertext === false || fwrite($destination, $ciphertext) !== strlen($ciphertext)) {
                     throw MediaException::validation('Cannot encrypt the HLS segment.', 'filesystem');
                 }
@@ -234,6 +243,7 @@ class HlsEncryption
     public function references(): array
     {
         $references = [];
+
         foreach ($this->urls as $playlist => $urls) {
             foreach ($urls as $index => $uri) {
                 $references[$playlist][$uri] = [

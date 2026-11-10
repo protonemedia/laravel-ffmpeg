@@ -279,6 +279,7 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
     {
         $branches = [];
         $pads = [];
+
         foreach ($this->sources as $index => $source) {
             $branches[] = "[{$index}:V:0]".implode(',', $this->videoConformance ?? [])."[concat_v{$index}]";
             $pads[] = "[concat_v{$index}]";

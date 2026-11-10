@@ -95,6 +95,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     public function audioTrack(int $track): static
     {
         $this->export->assertOutputMutable();
+
         if ($track < 0) {
             throw new InvalidArgumentException('The audio track must be nonnegative.');
         }
@@ -121,6 +122,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     public function buckets(int $count): static
     {
         $this->export->assertOutputMutable();
+
         if ($count < 1 || $count > self::MAX_CELLS) {
             throw new InvalidArgumentException('Bucket count must be between 1 and 100000.');
         }
@@ -159,6 +161,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $stream = $metadata[0]->audioStreams()->get($this->track);
         $this->rate = (int) ($stream?->get('sample_rate') ?? 0);
         $this->inputChannels = (int) ($stream?->get('channels') ?? 0);
+
         if ($stream === null) {
             throw MediaException::probing("The audio track [{$this->track}] does not exist.", 'mapping');
         }
@@ -176,6 +179,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
 
         // FFprobe reports custom orders as "4 channels (FL+FR+LFE+BC)".
         $layout = (string) ($stream->get('channel_layout') ?? '');
+
         if (preg_match('/\A[0-9]+ channels \(([A-Za-z0-9+]+)\)\z/', $layout, $match)) {
             $layout = $match[1];
         }
@@ -197,6 +201,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         }
 
         $command = $default;
+
         // Raw PCM holds a single stream, so we will replace the pipeline's default optional
         // video and audio maps with exactly one required audio track.
         while (($index = array_search('-map', $command, true)) !== false) {
@@ -207,11 +212,13 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         // preprocessing changes the format, because the JSON timing describes these PCM
         // frames. Using -ac alone would remix any layout that is not FFmpeg's default.
         $channels = $this->mixMono ? 1 : ($this->inputChannels ?: 1);
+
         if ($this->mixMono && $this->inputChannels > 0) {
             $pan = 'pan=mono|c0='.collect(range(0, $this->inputChannels - 1))
                 ->map(fn ($i): string => sprintf('%.17g', 1 / $this->inputChannels)."*c{$i}")
                 ->implode('+');
             $index = array_search('-filter:a', $command, true);
+
             if ($index === false) {
                 array_splice($command, -1, 0, ['-filter:a', $pan]);
             } else {
@@ -265,6 +272,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         );
         $json = json_encode($this->peaks, JSON_THROW_ON_ERROR);
         $target = dirname($path).'/peaks.json';
+
         if (@file_put_contents($target, $json) !== strlen($json) || ! chmod($target, 0600)) {
             throw MediaException::validation('Cannot write waveform peaks.', 'filesystem');
         }
@@ -279,6 +287,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     {
         clearstatcache(true, $path);
         $size = is_file($path) ? filesize($path) : false;
+
         if ($size === false || $size % ($channels * 2) !== 0) {
             throw MediaException::validation('The decoded PCM has an incomplete frame.', 'artifact');
         }
@@ -296,6 +305,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
             $this->targetBuckets === null => intdiv($frames - 1, $this->samplesPerBucket) + 1,
             default => min($frames, $this->targetBuckets),
         };
+
         if ($count > intdiv(self::MAX_CELLS, $channels)) {
             throw MediaException::validation(
                 'Peaks exceed 100000 channel buckets; request fewer buckets.',
@@ -316,6 +326,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $data = array_fill(0, $channels, []);
         $lengths = [];
         $file = @fopen($path, 'rb');
+
         if ($file === false) {
             throw MediaException::validation('Cannot read decoded PCM.', 'filesystem');
         }
@@ -331,6 +342,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
 
                 $lengths[] = $length;
                 [$min, $max] = $this->readBucket($file, $length, $channels);
+
                 for ($channel = 0; $channel < $channels; $channel++) {
                     $data[$channel][] = [$min[$channel], $max[$channel]];
                 }
@@ -354,9 +366,11 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         $min = array_fill(0, $channels, 32767);
         $max = array_fill(0, $channels, -32768);
         $remaining = $length;
+
         while ($remaining > 0) {
             $take = min($remaining, 2048);
             $bytes = fread($file, $take * $frameBytes);
+
             if ($bytes === false || strlen($bytes) !== $take * $frameBytes) {
                 throw MediaException::validation('Cannot read complete PCM frames.', 'filesystem');
             }

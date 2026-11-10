@@ -159,6 +159,7 @@ class VolumeDetectTest extends TestCase
             if (in_array('-version', $process->command, true)) {
                 return Process::result(output: 'ffmpeg version 9.0.2');
             }
+
             if (in_array('-protocols', $process->command, true)) {
                 return Process::result(output: "Input:\nhttps\ntls\ntcp\nOutput:\nhttps\n");
             }

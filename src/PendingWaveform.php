@@ -106,6 +106,7 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
+
         if ($this->export->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Waveform clips require accurate audio trimming.');
         }

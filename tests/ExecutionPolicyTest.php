@@ -37,6 +37,7 @@ class ExecutionPolicyTest extends TestCase
             %2$s
             file_put_contents(end($argv), "encoded");
             PHP, $probeDelay, $encode);
+
         foreach (['ffmpeg', 'ffprobe'] as $tool) {
             config(['laravel-ffmpeg.'.$tool.'.binaries' => $this->fakeBinary($this->root.'/'.$tool, $script)]);
         }

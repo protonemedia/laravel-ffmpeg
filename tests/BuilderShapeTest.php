@@ -100,11 +100,13 @@ class BuilderShapeTest extends TestCase
             $parameter->getName(), (string) $parameter->getType(), $parameter->isVariadic(),
             $parameter->isDefaultValueAvailable() ? var_export($parameter->getDefaultValue(), true) : null,
         ], $method->getParameters());
+
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             if ($method->isConstructor() || ! method_exists(PendingExport::class, $method->getName())
                 || ! (new ReflectionMethod(PendingExport::class, $method->getName()))->isPublic()) {
                 continue;
             }
+
             $this->assertSame(
                 $describe(new ReflectionMethod(PendingExport::class, $method->getName())),
                 $describe($method),
@@ -116,18 +118,22 @@ class BuilderShapeTest extends TestCase
     public function test_no_package_class_extends_another(): void
     {
         $classes = 0;
+
         foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(dirname(__DIR__).'/src')) as $file) {
             if ($file->getExtension() !== 'php') {
                 continue;
             }
+
             $class = 'ProtoneMedia\\LaravelFFMpeg\\'.str_replace(
                 ['/', '.php'],
                 ['\\', ''],
                 substr($file->getPathname(), strlen(dirname(__DIR__).'/src/')),
             );
+
             if (! class_exists($class)) {
                 continue;
             }
+
             $classes++;
             $parent = (new ReflectionClass($class))->getParentClass();
             $this->assertFalse(

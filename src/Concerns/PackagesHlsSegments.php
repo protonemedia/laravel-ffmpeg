@@ -35,6 +35,7 @@ trait PackagesHlsSegments
         $duration = $clip === null
             ? $this->presentationDuration
             : min($clip['duration'], $this->presentationDuration - $clip['start']);
+
         if ($duration <= 0) {
             throw MediaException::validation('An HLS subtitle rendition has no presentation duration.', 'artifact');
         }
@@ -114,6 +115,7 @@ trait PackagesHlsSegments
             fn (string $line): bool => str_starts_with($line, '#EXT-X-PLAYLIST-TYPE:'),
         ));
         $expectedTypes = [];
+
         if ($this->playlistType !== 'live') {
             $expectedTypes = ['#EXT-X-PLAYLIST-TYPE:'.strtoupper($this->playlistType)];
         }
@@ -156,6 +158,7 @@ trait PackagesHlsSegments
             'streamType' => 'subtitle',
             'subtitle' => null,
         ];
+
         foreach ($media['lines'] as $lineIndex => $line) {
             if (str_starts_with($line, '#EXTINF:')) {
                 $media['duration'] = $this->extinfDuration($line, $media['duration']);
@@ -199,6 +202,7 @@ trait PackagesHlsSegments
     protected function rewriteInitialization(int $lineIndex, array $media): array
     {
         ['index' => $index, 'output' => $output, 'path' => $path] = $media;
+
         if ($this->segmentType !== 'fmp4' || $media['init'] !== null || $media['count'] !== 0
             || $media['lines'][$lineIndex] !== "#EXT-X-MAP:URI=\"init-{$index}.mp4\"") {
             throw MediaException::validation(
@@ -247,6 +251,7 @@ trait PackagesHlsSegments
         $encrypted = $this->isSubtitle($index)
             ? null
             : $encryption?->segment($local, $media['count'], $output->destination()['path'], $name);
+
         if ($encrypted !== null) {
             $media['keyTags'][$lineIndex] = $encrypted['tag'];
             $size = $this->export->validateArtifact($encrypted['path'], 'hls-segment');
@@ -262,6 +267,7 @@ trait PackagesHlsSegments
         $probePath = $media['count'] === 1 && $media['init'] !== null
             ? PendingExport::fragmentProbe($media['init'], $local, "{$local}.probe.mp4")
             : $local;
+
         if ($this->isSubtitle($index)) {
             $media['subtitle'] = $local;
         } elseif ($media['count'] === 1) {
@@ -368,6 +374,7 @@ trait PackagesHlsSegments
             ->filter(fn (string $file): bool => (bool) preg_match('/\Ainit-'.$index.'(?:-|\.)/', basename($file)))
             ->values()
             ->all();
+
         if ($media['count'] === 0 || $media['duration'] !== null || $actual !== $media['owned']
             || $initializations !== ($media['init'] === null ? [] : [$media['init']])) {
             throw MediaException::validation('The HLS segment inventory is incomplete.', 'artifact');
@@ -384,6 +391,7 @@ trait PackagesHlsSegments
     protected function withKeyTags(array $lines, array $keyTags): array
     {
         $rendered = [];
+
         foreach ($lines as $lineIndex => $line) {
             if (isset($keyTags[$lineIndex])) {
                 $rendered[] = $keyTags[$lineIndex];
@@ -403,9 +411,11 @@ trait PackagesHlsSegments
     protected function timestampSubtitleRendition(int|string $name, string $group, array $streamInfo): int
     {
         $starts = [];
+
         foreach ($this->variants as $variantName => $variant) {
             if (! isset($this->renditions[$variantName]) && $variant->groups()['SUBTITLES'] === $group) {
                 $start = $streamInfo[$variantName]['start'];
+
                 if (! is_numeric($start) || ! is_finite((float) $start)) {
                     throw MediaException::validation(
                         'Cannot establish the HLS subtitle presentation clock.',
@@ -436,6 +446,7 @@ trait PackagesHlsSegments
     {
         $input = @fopen($path, 'rb');
         $output = @fopen("{$path}.timed", 'wb');
+
         try {
             if ($input === false || $output === false || fgets($input) !== "WEBVTT\n") {
                 throw MediaException::validation('Invalid generated WebVTT header.', 'artifact');
@@ -445,6 +456,7 @@ trait PackagesHlsSegments
             // will wrap the ticks into that range before writing the timestamp map.
             $ticks = (($ticks % self::MPEG_CLOCK_WRAP) + self::MPEG_CLOCK_WRAP) % self::MPEG_CLOCK_WRAP;
             $header = "X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:{$ticks}\n";
+
             if (fwrite($output, "WEBVTT\n{$header}") !== 7 + strlen($header)
                 || stream_copy_to_stream($input, $output) !== filesize($path) - 7) {
                 throw MediaException::validation('Cannot prepare timestamped WebVTT.', 'filesystem');
@@ -474,6 +486,7 @@ trait PackagesHlsSegments
     protected function playlistLines(string $path): array
     {
         $bytes = @file_get_contents($path, length: Media::MAX_MANIFEST_BYTES + 1);
+
         if ($bytes === false || trim($bytes) === '' || strlen($bytes) > Media::MAX_MANIFEST_BYTES || str_contains($bytes, "\0")) {
             throw MediaException::validation(
                 'Cannot read the generated HLS playlist within its 16 MiB limit.',
@@ -499,12 +512,14 @@ trait PackagesHlsSegments
         ?string $variant = null,
     ): void {
         $bytes = implode("\n", $lines)."\n";
+
         if (strlen($bytes) > Media::MAX_MANIFEST_BYTES) {
             throw MediaException::validation('Finalized HLS playlists must fit within the 16 MiB limit.', 'artifact');
         }
 
         if ($destination !== null && $this->playlistCallback instanceof Closure) {
             $modified = ($this->playlistCallback)($bytes, $destination, $variant);
+
             if (! is_string($modified) || strlen($modified) > Media::MAX_MANIFEST_BYTES) {
                 throw MediaException::validation(
                     'Playlist hooks must return text within the 16 MiB limit.',
@@ -517,6 +532,7 @@ trait PackagesHlsSegments
                 explode("\n", rtrim($bytes, "\n")),
                 fn ($line): bool => $line !== '',
             ));
+
             if (! str_starts_with($bytes, "#EXTM3U\n")
                 || preg_match('/[\x00-\x09\x0B-\x1F\x7F]/', $bytes)
                 || ! preg_match('//u', $bytes)) {
@@ -527,6 +543,7 @@ trait PackagesHlsSegments
             }
 
             $position = 0;
+
             foreach ($modified as $line) {
                 if ($line === ($lines[$position] ?? null)) {
                     $position++;

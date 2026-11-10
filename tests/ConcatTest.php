@@ -387,7 +387,9 @@ class ConcatTest extends TestCase
         ]);
 
         $this->assertProcessSucceeded($decoded);
+
         $this->assertSame(54400, strlen($decoded->output())); // 1.7 seconds of 16000 Hz mono PCM.
+
         foreach ([[0.05, 0], [0.2, 6554], [0.5, 0], [0.65, 0], [0.85, 22938]] as [$at, $sample]) {
             $this->assertEqualsWithDelta(
                 $sample,

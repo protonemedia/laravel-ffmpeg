@@ -27,11 +27,13 @@ class WaveformPeaksTest extends TestCase
     protected function wav(string $name, array $channels, int $rate = 8000): Media
     {
         $pcm = '';
+
         foreach (array_keys($channels[0]) as $frame) {
             foreach ($channels as $samples) {
                 $pcm .= pack('v', $samples[$frame] & 65535);
             }
         }
+
         $count = count($channels);
         // A canonical 44 byte header: a 16 byte PCM format chunk followed by the data chunk.
         $bytesPerFrame = $count * 2;

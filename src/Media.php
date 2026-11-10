@@ -387,6 +387,7 @@ class Media
             $this->identity(), $versionedKey, config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'),
         ]));
         $data = $cache->get($key);
+
         if (! $this->isProbeData($data)) {
             $data = $this->probe()->toArray();
             $cache->put($key, $data, $ttl);
@@ -401,6 +402,7 @@ class Media
     public function analyze(string $audioFilter = 'volumedetect', int $audio = 0): ProcessResult
     {
         FilterGraph::validateExpression($audioFilter);
+
         if ($audio < 0) {
             throw new InvalidArgumentException("The audio track index [{$audio}] must not be negative.");
         }

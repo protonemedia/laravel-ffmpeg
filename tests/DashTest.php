@@ -181,6 +181,7 @@ class DashTest extends TestCase
                 $files->where('role', 'dash-segment')->map(fn ($file) => basename($file->path))->values()->all(),
                 $matches[0],
             );
+
             foreach ($files->where('role', 'dash-segment')->values() as $i => $file) {
                 $this->assertSame(
                     'nested/é #?/'.str_replace(
@@ -204,14 +205,17 @@ class DashTest extends TestCase
                     [str_starts_with($name, 'audio') ? 'audio' : 'video'],
                     array_column($data['streams'], 'codec_type'),
                 );
+
                 if (! str_starts_with($name, 'audio')) {
                     $this->assertStringContainsString('K', $data['packets'][0]['flags']);
                     $this->assertSame($name === 'low' ? 80 : 160, $data['streams'][0]['width']);
                 }
             }
+
             if (! str_starts_with($name, 'audio')) {
                 $videoTimelines[] = $xml->saveXML($template->getElementsByTagName('SegmentTimeline')->item(0));
             }
+
             $this->decode($local->path('playback/'.$name.'/index.m3u8'), ['-map', '0']);
         }
 

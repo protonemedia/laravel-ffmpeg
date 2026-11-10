@@ -154,6 +154,7 @@ class UrlTest extends TestCase
             if (in_array('-version', $process->command)) {
                 return Process::result(output: 'ffprobe version 9.0.2');
             }
+
             if (in_array('-protocols', $process->command)) {
                 return Process::result(output: "Input:\nhttp\ntcp\nOutput:\nhttp\n");
             }

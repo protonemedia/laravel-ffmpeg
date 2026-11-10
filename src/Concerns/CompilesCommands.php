@@ -267,6 +267,7 @@ trait CompilesCommands
     {
         $settings = $output->outputConfiguration();
         $video = $settings['video'];
+
         if ($settings['omitVideo']) {
             throw new InvalidArgumentException('Two-pass outputs must keep their video.');
         }
@@ -358,8 +359,10 @@ trait CompilesCommands
         }
 
         $result = [];
+
         foreach ($command as $index => $token) {
             $output = array_search($token, $outputPaths, true);
+
             if ($output !== false) {
                 $target = "{$workspace->path}/analysis-{$output}.null";
                 $redactions[$target] = "[analysis:{$output}]";

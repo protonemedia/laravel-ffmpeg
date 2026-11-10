@@ -103,6 +103,7 @@ class ExportPlan
     protected function encodeClosure(Closure $value): array
     {
         $reflection = new ReflectionFunction($value);
+
         if ($reflection->getClosureThis() !== null) {
             throw new InvalidArgumentException(
                 'Queued callbacks must be static closures capturing only scalar values or arrays.'
@@ -115,6 +116,7 @@ class ExportPlan
                 throw new InvalidArgumentException('Queued callbacks must capture only scalar values or arrays.');
             }
         });
+
         try {
             return ['type' => 'closure', 'value' => serialize(new SerializableClosure($value))];
         } catch (Throwable) {
@@ -132,6 +134,7 @@ class ExportPlan
         $id = count($objects);
         $objects[$value] = $id;
         $properties = [];
+
         // Package classes extend nothing, so their own properties hold their entire state.
         foreach (new ReflectionClass($value)->getProperties() as $property) {
             if (! $property->isStatic() && $property->isInitialized($value)) {
@@ -153,6 +156,7 @@ class ExportPlan
 
         if ($value['type'] === 'array') {
             $result = [];
+
             foreach ($value['items'] as $key => $item) {
                 $result[$key] = $this->decode($item, $objects);
             }
@@ -170,6 +174,7 @@ class ExportPlan
 
         $object = new ReflectionClass($value['class'])->newInstanceWithoutConstructor();
         $objects[$value['id']] = $object;
+
         foreach ($value['properties'] as [$class, $name, $item]) {
             new \ReflectionProperty($class, $name)->setValue($object, $this->decode($item, $objects));
         }

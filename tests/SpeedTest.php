@@ -31,13 +31,16 @@ class SpeedTest extends TestCase
         $binary = $this->useRealFFMpeg();
         $path = Storage::disk('speed')->path('source.mkv');
         $command = [$binary, '-v', 'error', '-y'];
+
         if ($kind !== 'audio') {
             array_push($command, '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=30:d=6');
         }
+
         if ($kind !== 'video') {
             array_push($command, '-itsoffset', (string) $delay, '-f', 'lavfi',
                 '-i', 'sine=frequency=440:sample_rate=48000:duration='.(6 - $delay));
         }
+
         array_push($command, '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $path);
         $result = Process::run($command);
         $this->assertProcessSucceeded($result);
@@ -365,13 +368,17 @@ class SpeedTest extends TestCase
         $samples = array_values(unpack('v*', $result->output()));
         $crossings = 0;
         $previous = 0;
+
         foreach ($samples as $sample) {
             $sample = $sample > 32767 ? $sample - 65536 : $sample;
+
             if ($previous < 0 && $sample >= 0) {
                 $crossings++;
             }
+
             $previous = $sample;
         }
+
         $this->assertEqualsWithDelta(440, $crossings / (count($samples) / 48000), 3);
     }
 }

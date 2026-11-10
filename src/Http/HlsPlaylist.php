@@ -78,6 +78,7 @@ class HlsPlaylist implements Responsable
         }
 
         $this->path = (new WhitespacePathNormalizer)->normalizePath($path);
+
         if (strtolower(pathinfo($this->path, PATHINFO_EXTENSION)) !== 'm3u8') {
             throw new InvalidArgumentException('A playlist requires an m3u8 extension.');
         }
@@ -148,6 +149,7 @@ class HlsPlaylist implements Responsable
         $paths = [$this->path => true];
         $this->render(true, function (?string $target, string $uri) use (&$paths): void {
             $decoded = rawurldecode(parse_url($uri, PHP_URL_PATH) ?? '');
+
             if ($target === null || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $decoded)) {
                 throw MediaException::response('HLS deletion requires safe disk-relative references.', 'artifact');
             }
@@ -156,6 +158,7 @@ class HlsPlaylist implements Responsable
         });
 
         $paths = array_map(strval(...), array_keys($paths));
+
         foreach ($paths as $path) {
             if ($approve($path) !== true) {
                 throw MediaException::response('HLS deletion was not approved for every file.', 'authorization');
@@ -164,6 +167,7 @@ class HlsPlaylist implements Responsable
 
         try {
             $disk = is_string($this->disk) ? Storage::disk($this->disk) : $this->disk;
+
             foreach ($paths as $path) {
                 if (! $disk->delete($path)) {
                     throw new InvalidArgumentException;
@@ -199,6 +203,7 @@ class HlsPlaylist implements Responsable
         try {
             $result = [];
             $inputBudget = Media::MAX_MANIFEST_BYTES;
+
             for ($index = 0; $index < count($this->pending); $index++) {
                 $path = $this->pending[$index];
                 $content = $this->read($path, $inputBudget);
@@ -248,6 +253,7 @@ class HlsPlaylist implements Responsable
         $lines = explode("\n", str_replace("\r\n", "\n", $content));
         $cache = [];
         $type = null;
+
         foreach ($lines as $lineIndex => &$line) {
             [$kind, $offset, $length, $type] = $this->classifyLine($line, $type);
 
@@ -279,12 +285,14 @@ class HlsPlaylist implements Responsable
             }
 
             $this->outputBudget -= strlen($line) + ($lineIndex > 0 ? 1 : 0);
+
             if ($this->outputBudget < 0) {
                 throw MediaException::response('An HLS response exceeds its 16 MiB output limit.', 'artifact');
             }
         }
 
         unset($line);
+
         if ($type !== null) {
             throw MediaException::response('An HLS resource declaration has no URI.', 'artifact');
         }
@@ -304,6 +312,7 @@ class HlsPlaylist implements Responsable
         $kind = null;
         $offset = 0;
         $length = strlen($line);
+
         if (str_starts_with($line, '#EXT-X-STREAM-INF:') || str_starts_with($line, '#EXTINF:')) {
             if ($type !== null) {
                 throw MediaException::response('An HLS resource declaration has no URI.', 'artifact');
@@ -312,6 +321,7 @@ class HlsPlaylist implements Responsable
             $type = str_starts_with($line, '#EXTINF:') ? 'media' : 'playlist';
         } elseif (str_starts_with($line, '#EXT-X-KEY:')) {
             $key = $this->keyUri($line);
+
             if ($key !== null) {
                 [$offset, $length] = $key;
                 $kind = 'key';
@@ -319,6 +329,7 @@ class HlsPlaylist implements Responsable
         } elseif (str_starts_with($line, '#EXT-X-MAP:') || str_starts_with($line, '#EXT-X-MEDIA:')) {
             $map = str_starts_with($line, '#EXT-X-MAP:');
             $resource = $this->resourceUri($line, $map);
+
             if ($resource !== null) {
                 [$offset, $length] = $resource;
                 $kind = $map ? 'media' : 'playlist';
@@ -347,9 +358,11 @@ class HlsPlaylist implements Responsable
     {
         $this->validateUri($uri);
         $target = null;
+
         if (! str_starts_with($uri, '/') && parse_url($uri, PHP_URL_SCHEME) === null) {
             try {
                 $decoded = rawurldecode(parse_url($uri, PHP_URL_PATH) ?? '');
+
                 if ($decoded === '' || ! preg_match('//u', $decoded) || str_contains($decoded, '\\')) {
                     throw new InvalidArgumentException;
                 }
@@ -357,6 +370,7 @@ class HlsPlaylist implements Responsable
                 $target = (new WhitespacePathNormalizer)->normalizePath(
                     (dirname($path) === '.' ? '' : dirname($path).'/').$decoded
                 );
+
                 if ($target === '') {
                     throw new InvalidArgumentException;
                 }
@@ -385,9 +399,11 @@ class HlsPlaylist implements Responsable
     protected function read(string $path, int $limit): string
     {
         $stream = null;
+
         try {
             $disk = is_string($this->disk) ? Storage::disk($this->disk) : $this->disk;
             $stream = $disk->readStream($path);
+
             if (! is_resource($stream) || ($content = stream_get_contents($stream, $limit + 1)) === false) {
                 throw new InvalidArgumentException;
             }
@@ -400,6 +416,7 @@ class HlsPlaylist implements Responsable
         }
 
         $normalized = str_replace("\r\n", "\n", $content);
+
         if (strlen($content) > $limit) {
             throw MediaException::response('An HLS response exceeds its 16 MiB input limit.', 'artifact');
         }
@@ -450,6 +467,7 @@ class HlsPlaylist implements Responsable
         );
         $end = 0;
         $values = [];
+
         foreach ($matches as $match) {
             if ($match[0][1] !== $end || isset($values[$match[1][0]])) {
                 return null;
@@ -471,13 +489,16 @@ class HlsPlaylist implements Responsable
     {
         $start = strpos($line, ':') + 1;
         $values = self::attributes(substr($line, $start));
+
         if ($values === null) {
             throw MediaException::response('Invalid HLS resource attributes.', 'artifact');
         }
 
         $uri = null;
+
         if (isset($values['URI'])) {
             [$value, $offset] = $values['URI'];
+
             if (! str_starts_with($value, '"') || ! str_ends_with($value, '"')) {
                 throw MediaException::response('HLS resource URIs must be quoted.', 'artifact');
             }
@@ -503,6 +524,7 @@ class HlsPlaylist implements Responsable
     {
         $values = self::attributes(substr($line, 11));
         $uri = null;
+
         if (isset($values['URI'])
             && str_starts_with($values['URI'][0], '"')
             && str_ends_with($values['URI'][0], '"')) {

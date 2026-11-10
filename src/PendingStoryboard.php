@@ -112,6 +112,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
 
         // We will validate the cue path with the same rules as any output destination.
         $path = new ExportOutput($path, 'local')->destination()['path'];
+
         if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'vtt') {
             throw new InvalidArgumentException('The cue destination must have a vtt extension.');
         }
@@ -146,6 +147,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $duration = $metadata[0]->duration();
         $clip = $this->export->clipSettings();
+
         if ($duration !== null && $clip !== null) {
             $duration = max(0, min($clip['duration'], $duration - $clip['start']));
         }
@@ -179,6 +181,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         $command = $default;
+
         if ($this->export->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Storyboards require accurate clipping, not keyframe seek.');
         }
@@ -191,6 +194,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
             ."tile=layout={$this->columns}x{$this->rows}:nb_frames=".($this->columns * $this->rows)
             .":margin={$this->margin}:padding={$this->padding}:color=black";
         $index = array_search('-filter:v', $command, true);
+
         if ($index === false) {
             array_splice($command, -1, 0, ['-filter:v', $filter]);
         } else {
@@ -230,8 +234,10 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         );
         $dimensions = null;
         $urls = [];
+
         foreach ($artifacts as $index => $artifact) {
             $dimensions = $this->thumbnailSize($artifact['path'], $dimensions);
+
             if ($this->vttPath !== null) {
                 $urls[] = $this->sheetUrl($artifact['destination']['path'], $index + 1);
             }
@@ -267,6 +273,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         // which must divide the grid evenly and match the size on every other sheet.
         $width -= 2 * $this->margin + ($this->columns - 1) * $this->padding;
         $height -= 2 * $this->margin + ($this->rows - 1) * $this->padding;
+
         if ($width <= 0 || $height <= 0 || $width % $this->columns !== 0 || $height % $this->rows !== 0
             || ($expected !== null
                 && $expected !== [intdiv($width, $this->columns), intdiv($height, $this->rows)])) {
@@ -312,6 +319,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     protected function writeCues(string $path, array $dimensions, array $urls): void
     {
         $file = @fopen($path, 'xb');
+
         if ($file === false) {
             throw MediaException::validation('Cannot create storyboard cues.', 'filesystem');
         }
@@ -323,6 +331,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
 
             for ($index = 0; $index < $this->frames; $index++) {
                 $cue = $this->cue($index, $dimensions, $urls);
+
                 if (fwrite($file, $cue) !== strlen($cue)) {
                     throw MediaException::validation('Cannot write storyboard cues.', 'filesystem');
                 }
@@ -372,6 +381,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     {
         $from = dirname($this->vttPath) === '.' ? [] : explode('/', dirname($this->vttPath));
         $to = explode('/', $key);
+
         while ($from !== [] && $to !== [] && $from[0] === $to[0]) {
             array_shift($from);
             array_shift($to);

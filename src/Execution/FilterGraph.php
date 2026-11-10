@@ -210,6 +210,7 @@ class FilterGraph
     {
         $produced = [];
         $consumed = [];
+
         foreach (self::split($expression, ',;') as [$chain]) {
             $labels = [];
             $quoted = false;

@@ -90,6 +90,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     public function at(float $seconds): static
     {
         $this->export->assertOutputMutable();
+
         if (! is_finite($seconds) || $seconds < 0) {
             throw new InvalidArgumentException('Audio mix offsets require finite nonnegative seconds.');
         }
@@ -228,6 +229,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         $command = $default;
+
         if ($this->loop) {
             $inputs = array_keys($command, '-i', true);
             array_splice($command, $inputs[1], 0, ['-stream_loop', '-1']);
@@ -263,6 +265,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
 
         PendingExport::assertZeroOrigins($source, 'Audio mixing', audioOnlyOffset: true);
         $audio = $source->audio();
+
         if ($source->hasVideo() && $audio !== null
             && (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0)) {
             throw MediaException::probing(
@@ -304,6 +307,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
                     .',asetpts=PTS-STARTPTS',
                 '-c:a', 'pcm_f64le', '-f', 'wav', '-rf64', 'auto', $prepared,
             ], 'Audio loop preparation failed.');
+
             try {
                 $duration = $this->added->probeArtifact("{$workspace->path}/{$prepared}", $workspace)->duration();
             } catch (MediaException $exception) {

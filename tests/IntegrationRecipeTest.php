@@ -49,9 +49,11 @@ class IntegrationRecipeTest extends TestCase
         Process::preventStrayProcesses();
         Process::fake(function (PendingProcess $process) {
             $tool = basename($process->command[0]);
+
             if (in_array('-version', $process->command, true)) {
                 return Process::result(output: $tool.' version 9.0.2');
             }
+
             if ($tool === 'ffprobe') {
                 return Process::result(output: json_encode([
                     'format' => ['duration' => '1'],
@@ -59,6 +61,7 @@ class IntegrationRecipeTest extends TestCase
                     'chapters' => [],
                 ]));
             }
+
             file_put_contents(end($process->command), 'encoded application derivative');
 
             return Process::result(output: "out_time_us=1000000\nprogress=end\n");
@@ -255,9 +258,11 @@ class RecipeInventory
         $request = DB::table('recipe_conversions')
             ->where('export_id', $event->exportId)
             ->first();
+
         if ($request === null) {
             throw new RuntimeException('Unknown conversion.');
         }
+
         DB::transaction(function () use ($event, $request) {
             // All receipt writers and publication updates use this same lock.
             DB::table('recipe_media')
@@ -266,12 +271,14 @@ class RecipeInventory
                 ->first();
             $disk = Storage::disk('receipts');
             $path = $event->exportId.'.json';
+
             // Storage is intentionally outside database rollback.
             if (! $disk->exists($path) && ! $disk->put($path, json_encode([
                 'exportId' => $event->exportId, 'files' => $event->files, 'playback' => $event->playback,
             ], JSON_THROW_ON_ERROR), ['visibility' => 'private'])) {
                 throw new RuntimeException('Cannot retain completion receipt.');
             }
+
             $this->reconcile($event->exportId);
         });
     }
@@ -291,9 +298,11 @@ class RecipeInventory
                 ->where('export_id', $exportId)
                 ->lockForUpdate()
                 ->first();
+
             if ($request->status !== 'pending') {
                 return;
             }
+
             $current = $media->current_export_id === $exportId
                 && $media->source_version === $request->source_version
                 && $media->profile_version === $request->profile_version;
@@ -302,6 +311,7 @@ class RecipeInventory
                 ->update([
                     'status' => $current ? 'ready' : 'stale', 'inventory' => json_encode($receipt, JSON_THROW_ON_ERROR),
                 ]);
+
             if ($current) {
                 DB::table('recipe_media')
                     ->where('id', $media->id)
@@ -320,10 +330,12 @@ class RecipeInventory
                 ->where('id', $request->media_id)
                 ->lockForUpdate()
                 ->first();
+
             if ($request->status !== 'stale' || $media->published_export_id === $exportId
                 || $media->current_export_id === $exportId) {
                 return;
             }
+
             foreach (json_decode($request->inventory, true, flags: JSON_THROW_ON_ERROR)['files'] as $file) {
                 if ($file['owned'] === true && $file['disk'] === 'recipes'
                     && str_starts_with($file['path'], 'conversions/'.$exportId.'/')

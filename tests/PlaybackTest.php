@@ -54,9 +54,11 @@ class PlaybackTest extends TestCase
             'lesson/low/init.mp4' => 'hls-init',
             'private/key' => 'hls-key',
         ];
+
         foreach ($roles as $path => $role) {
             $files[] = ['disk' => 'memory', 'path' => $path, 'role' => $role];
         }
+
         $this->inventory = (new HlsPresentation($files, HlsPresentation::id('memory', 'lesson/master.m3u8'), [
             'lesson/low/index.m3u8' => [
                 'https://keys.example/private' => ['disk' => 'memory', 'path' => 'private/key'],
@@ -116,6 +118,7 @@ class PlaybackTest extends TestCase
         $this->assertCount(3, $links);
 
         $this->allowed = false;
+
         foreach ([$master, $variant, ...$links] as $url) {
             $this->getJson($url)->assertForbidden();
         }
@@ -138,6 +141,7 @@ class PlaybackTest extends TestCase
         }
 
         $this->travel(4)->minutes();
+
         foreach ([$master, $variant, ...$links] as $url) {
             $this->getJson($url)->assertForbidden();
         }
@@ -301,6 +305,7 @@ class PlaybackTest extends TestCase
                 && $request->query('grant') === 'edition-a');
         $master = Hls::url('lessons.hls', ['lesson' => 42, 'grant' => 'edition-a']);
         $variant = $this->links($this->get($master)->assertOk()->getContent())[0];
+
         foreach ($this->links($this->get($variant)->assertOk()->getContent()) as $url) {
             parse_str(parse_url($url, PHP_URL_QUERY), $query);
             $this->assertSame('edition-a', $query['grant']);
@@ -361,6 +366,7 @@ class PlaybackTest extends TestCase
 
         $key = $iv = null;
         $decoded = '';
+
         foreach (explode("\n", $response) as $line) {
             if (preg_match('/URI="([^"]+)",IV=0x([a-f0-9]+)/', $line, $match)) {
                 $key = $this->get($match[1])
@@ -389,10 +395,13 @@ class PlaybackTest extends TestCase
         $variantPlaylist = $this->get($this->url())
             ->assertOk()
             ->getContent();
+
         foreach ($this->links($variantPlaylist) as $url) {
             $this->get($url)->assertOk();
         }
+
         $path = tempnam(sys_get_temp_dir(), 'playback-decode-');
+
         try {
             file_put_contents($path, $decoded);
             $process = Process::run([$ffmpeg, '-v', 'error', '-i', $path, '-f', 'null', '-']);

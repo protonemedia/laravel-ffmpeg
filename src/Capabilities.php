@@ -27,11 +27,13 @@ class Capabilities implements Arrayable, JsonSerializable
     public function __construct()
     {
         $workspace = new Workspace(new ProcessRunner(120));
+
         try {
             $ffmpeg = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
             $ffprobe = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
             $version = $workspace->runner->pairVersion($ffmpeg, $ffprobe, $workspace->path);
             $data = ['versions' => ['ffmpeg' => $version, 'ffprobe' => $version]];
+
             foreach (['encoders', 'muxers', 'filters', 'bsfs', 'hwaccels'] as $kind) {
                 $output = $this->capture($workspace, $ffmpeg, "-{$kind}");
                 $data[match ($kind) {
@@ -43,6 +45,7 @@ class Capabilities implements Arrayable, JsonSerializable
             $data['ffprobe_protocols'] = $this->parseProtocols($this->capture($workspace, $ffprobe, '-protocols'));
             // We verify an actual write instead of predicting one from the permission bits.
             $file = "{$workspace->path}/write-check";
+
             if (@file_put_contents($file, 'ok') !== 2 || ! @unlink($file)) {
                 throw MediaException::staging('The temporary media root is not writable.', 'filesystem');
             }
@@ -120,6 +123,7 @@ class Capabilities implements Arrayable, JsonSerializable
     public function missing(array $requirements): array
     {
         $missing = [];
+
         foreach ($requirements as $category => $names) {
             if (! is_string($category)) {
                 throw new InvalidArgumentException('Capability requirement categories must be strings.');
@@ -139,6 +143,7 @@ class Capabilities implements Arrayable, JsonSerializable
             }
 
             $absent = collect($names)->diff($this->available($category))->values()->all();
+
             if ($absent !== []) {
                 $missing[$category] = $absent;
             }
@@ -170,6 +175,7 @@ class Capabilities implements Arrayable, JsonSerializable
     {
         $result = $workspace->runner->run([$binary, '-hide_banner', $option], $workspace->path,
             outputLimit: 2097152, timeout: 15);
+
         if ($result->exitCode !== 0) {
             // We do not include the binary output, since it can contain paths, environment details or credentials.
             throw MediaException::probing('Cannot inspect media binary capabilities.', 'capability');
@@ -189,6 +195,7 @@ class Capabilities implements Arrayable, JsonSerializable
             'encoders' => 'Encoders:', 'muxers' => 'Formats:', 'filters' => 'Filters:',
             'bsfs' => 'Bitstream filters:', 'hwaccels' => 'Hardware acceleration methods:',
         };
+
         if (! str_starts_with(ltrim($output), $header)) {
             throw MediaException::probing('Invalid media capability listing.', 'capability');
         }
@@ -206,6 +213,7 @@ class Capabilities implements Arrayable, JsonSerializable
             ->sort()
             ->values()
             ->all();
+
         if ($names === [] && $kind !== 'hwaccels') {
             throw MediaException::probing('Empty media capability listing.', 'capability');
         }
@@ -223,8 +231,10 @@ class Capabilities implements Arrayable, JsonSerializable
         }
 
         $protocols = [];
+
         foreach (['input' => 1, 'output' => 2] as $direction => $index) {
             $names = preg_split('/\s+/', trim($matches[$index]), flags: PREG_SPLIT_NO_EMPTY);
+
             if ($names === [] || array_any($names, fn ($name): bool => ! preg_match('/\A[a-zA-Z0-9_]+\z/', $name))) {
                 throw MediaException::probing('Invalid media protocol listing.', 'capability');
             }
