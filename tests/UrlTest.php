@@ -94,7 +94,7 @@ class UrlTest extends TestCase
         $result = $media->export()->audio('copy')->toDisk('memory')->save('direct.m4a');
         $this->assertTrue(Storage::disk('memory')->exists('direct.m4a'));
         $this->assertStringNotContainsString('private-signed-value', json_encode($result->processes()));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         Http::assertNothingSent();
 
         // A partial URL in FFmpeg's diagnostics must not expose its query value.
@@ -133,7 +133,7 @@ class UrlTest extends TestCase
         $this->assertStringNotContainsString('first-secret', $debug);
         $this->assertStringNotContainsString('private-download-signature', $debug);
         $this->assertFileDoesNotExist($this->root.'/requests');
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         $export = $first->export();
         $export->addInput($second);
         $result = $export->map('0:a:0')->map('1:a:0')->audio('copy')
@@ -145,7 +145,7 @@ class UrlTest extends TestCase
         $this->assertStringNotContainsString($base, json_encode($result->processes()));
         $requests = array_map(fn ($line) => json_decode($line, true), file($this->root.'/requests'));
         $this->assertSame(['first', 'second'], array_column($requests, 'source'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_edited_url_watermarks_download_once_per_execution_without_exposing_urls_to_processes(): void
@@ -161,7 +161,7 @@ class UrlTest extends TestCase
             $this->assertStringNotContainsString($base, json_encode($result->processes()));
             $this->assertStringNotContainsString('private-image-signature', json_encode($result->processes()));
             $this->assertStringNotContainsString('first-secret', json_encode($result->processes()));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
         $requests = array_map(fn ($line) => json_decode($line, true), file($this->root.'/requests'));
         $this->assertSame([null, 'first'], array_column($requests, 'source'));
@@ -183,7 +183,7 @@ class UrlTest extends TestCase
                 $this->assertStringNotContainsString('hidden-signature', (string) $exception);
                 $this->assertStringNotContainsString('wrong-secret', (string) $exception);
                 $this->assertFalse(Storage::disk('memory')->exists('never.m4a'));
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
 
@@ -209,7 +209,7 @@ class UrlTest extends TestCase
             $this->fail('A downloaded manifest was accepted as a standalone file.');
         } catch (MediaException $exception) {
             $this->assertSame('manifest', $exception->category);
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -227,7 +227,7 @@ class UrlTest extends TestCase
             $this->fail('Missing HTTPS support was accepted.');
         } catch (MediaException $exception) {
             $this->assertSame('capability', $exception->category);
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -245,7 +245,7 @@ class UrlTest extends TestCase
                 if (! $download) {
                     $this->assertStringContainsString('certificate', strtolower($exception->diagnostics));
                 }
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
     }

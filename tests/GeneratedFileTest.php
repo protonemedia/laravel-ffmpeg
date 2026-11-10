@@ -25,7 +25,7 @@ class GeneratedFileTest extends TestCase
         $ffmpeg = $this->useRealFFMpeg();
         $process = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
             'sine=frequency=440:duration=0.1', '-c:a', 'pcm_s16le', $this->root.'/source.wav']);
-        $this->assertTrue($process->successful(), $process->errorOutput());
+        $this->assertProcessSucceeded($process);
         $local = Storage::disk('generated-local');
         $local->put('source.wav', file_get_contents($this->root.'/source.wav'));
         $source = $local->get('source.wav');
@@ -48,7 +48,7 @@ class GeneratedFileTest extends TestCase
             $this->assertSame($metadata, $file->toArray());
             $this->assertSame($source, $local->get('source.wav'));
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_borrowed_files_refuse_deletion_without_calling_the_filesystem(): void

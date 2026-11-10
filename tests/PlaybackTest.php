@@ -225,7 +225,7 @@ class PlaybackTest extends TestCase
         try {
             file_put_contents($path, $decoded);
             $process = Process::run([$ffmpeg, '-v', 'error', '-i', $path, '-f', 'null', '-']);
-            $this->assertTrue($process->successful(), $process->errorOutput());
+            $this->assertProcessSucceeded($process);
         } finally {
             unlink($path);
         }

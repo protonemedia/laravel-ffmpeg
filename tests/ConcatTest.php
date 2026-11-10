@@ -54,7 +54,7 @@ class ConcatTest extends TestCase
         $raw->filterComplex('[0:v][1:v]concat=n=2:v=1:a=0[joined]')
             ->map('[joined]')->withoutMetadata(chapters: true)->inspect();
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_transcoded_concat_rejects_ambiguous_or_unsafe_policies_without_io(): void
@@ -91,7 +91,7 @@ class ConcatTest extends TestCase
         }
 
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_copy_and_transcoded_concat_preserve_order_and_sources(): void
@@ -100,7 +100,7 @@ class ConcatTest extends TestCase
         foreach ([['red', '64x48', '0.6'], ['blue', '64x48', '1.1'], ['blue', '80x60', '1.1']] as $index => [$color, $size, $duration]) {
             $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', "color=$color:size=$size:rate=10:duration=$duration",
                 '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-threads', '1', $this->root.'/'.$index.'.mp4']);
-            $this->assertTrue($result->successful(), $result->errorOutput());
+            $this->assertProcessSucceeded($result);
         }
 
         $unusual = $this->root."/red 'é\n.mp4";
@@ -168,7 +168,7 @@ class ConcatTest extends TestCase
         }
 
         $this->assertSame($hash, hash_file('sha256', $unusual));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_audio_concat_preserves_sample_order_and_rejects_channel_layout_mismatches(): void
@@ -177,7 +177,7 @@ class ConcatTest extends TestCase
         foreach (['0.2:s=8000:d=0.35', '0.7:s=8000:d=0.65', '0.7|0.7:s=8000:d=0.2'] as $index => $signal) {
             $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'aevalsrc='.$signal,
                 '-c:a', 'pcm_s16le', $this->root.'/'.$index.'.wav']);
-            $this->assertTrue($result->successful(), $result->errorOutput());
+            $this->assertProcessSucceeded($result);
         }
 
         $first = FFMpeg::disk()->open(new File($this->root.'/0.wav'));
@@ -185,7 +185,7 @@ class ConcatTest extends TestCase
         $first->concat($second)->export()->audio('copy')->toDisk('memory')->save('joined.wav');
         file_put_contents($this->root.'/joined.wav', Storage::disk('memory')->get('joined.wav'));
         $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/joined.wav', '-f', 's16le', 'pipe:1']);
-        $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+        $this->assertProcessSucceeded($decoded);
         $this->assertSame(16000, strlen($decoded->output())); // 8000 mono 16-bit samples.
         $this->assertEqualsWithDelta(6554, unpack('v', substr($decoded->output(), 200, 2))[1], 1);
         $this->assertEqualsWithDelta(22938, unpack('v', substr($decoded->output(), 8000, 2))[1], 1);
@@ -197,7 +197,7 @@ class ConcatTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('concat', $exception->category);
             $this->assertFalse(Storage::disk('memory')->exists('mismatch.wav'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -209,7 +209,7 @@ class ConcatTest extends TestCase
             $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', "color=$color:size=$size:rate=$rate:duration=$duration",
                 '-itsoffset', $delay, '-f', 'lavfi', '-i', 'aevalsrc='.$signal,
                 '-c:v', 'libx264', '-bf', '0', '-threads', '1', '-c:a', 'pcm_s16le', '-copyts', '-fps_mode:v', 'passthrough', $this->root.'/'.$index.'.mov']);
-            $this->assertTrue($result->successful(), $result->errorOutput());
+            $this->assertProcessSucceeded($result);
         }
 
         $first = FFMpeg::disk()->open(new File($this->root.'/0.mov'));
@@ -230,7 +230,7 @@ class ConcatTest extends TestCase
 
         file_put_contents($this->root.'/normalized.mov', Storage::disk('memory')->get('normalized.mov'));
         $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/normalized.mov', '-map', '0:a', '-f', 's16le', 'pipe:1']);
-        $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+        $this->assertProcessSucceeded($decoded);
         $this->assertSame(54400, strlen($decoded->output())); // 1.7 seconds of 16000 Hz mono PCM.
         foreach ([[0.05, 0], [0.2, 6554], [0.5, 0], [0.65, 0], [0.85, 22938]] as [$at, $sample]) {
             $this->assertEqualsWithDelta($sample, unpack('v', substr($decoded->output(), (int) ($at * 16000) * 2, 2))[1], 2);
@@ -250,7 +250,7 @@ class ConcatTest extends TestCase
             ->toDisk('memory')->save('right.mov');
         file_put_contents($this->root.'/right.mov', Storage::disk('memory')->get('right.mov'));
         $right = Process::run([$binary, '-v', 'error', '-i', $this->root.'/right.mov', '-map', '0:a', '-f', 's16le', 'pipe:1']);
-        $this->assertTrue($right->successful(), $right->errorOutput());
+        $this->assertProcessSucceeded($right);
         foreach ([[0.05, 0], [0.2, 13107], [0.65, 0], [0.8, 13107]] as [$at, $sample]) {
             $this->assertEqualsWithDelta($sample, unpack('v', substr($right->output(), (int) ($at * 16000) * 2, 2))[1], 2);
         }
@@ -271,7 +271,7 @@ class ConcatTest extends TestCase
         }
 
         $this->assertSame($hashes, [hash_file('sha256', $this->root.'/0.mov'), hash_file('sha256', $this->root.'/1.mov')]);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_copy_concat_retains_each_segments_audio_delay_relative_to_video(): void
@@ -281,7 +281,7 @@ class ConcatTest extends TestCase
             $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', "color=$color:size=64x48:rate=10:duration=$duration",
                 '-itsoffset', $delay, '-f', 'lavfi', '-i', 'sine=sample_rate=8000:duration='.$audio,
                 '-c:v', 'libx264', '-bf', '0', '-threads', '1', '-c:a', 'pcm_s16le', '-copyts', '-fps_mode:v', 'passthrough', $this->root.'/'.$index.'.mov']);
-            $this->assertTrue($result->successful(), $result->errorOutput());
+            $this->assertProcessSucceeded($result);
         }
 
         $first = FFMpeg::disk()->open(new File($this->root.'/0.mov'));
@@ -293,13 +293,13 @@ class ConcatTest extends TestCase
         file_put_contents($this->root.'/delayed.mkv', Storage::disk('memory')->get('delayed.mkv'));
         $packets = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'a',
             '-show_packets', '-show_entries', 'packet=pts_time', '-of', 'json', $this->root.'/delayed.mkv']);
-        $this->assertTrue($packets->successful(), $packets->errorOutput());
+        $this->assertProcessSucceeded($packets);
         $times = array_map('floatval', array_column(json_decode($packets->output(), true)['packets'], 'pts_time'));
         $this->assertEqualsWithDelta(0.1, $times[0], 0.001);
         $this->assertContains(0.75, $times); // Second video's 0.6-second boundary plus its 0.15-second delay.
 
         $shifted = Process::run([$binary, '-v', 'error', '-i', $this->root.'/0.mov', '-c', 'copy', '-output_ts_offset', '1', $this->root.'/late.mov']);
-        $this->assertTrue($shifted->successful(), $shifted->errorOutput());
+        $this->assertProcessSucceeded($shifted);
         try {
             $first->concat(FFMpeg::disk()->open(new File($this->root.'/late.mov')))
                 ->export()->video('copy')->audio('copy')->toDisk('memory')->save('late.mov');
@@ -322,7 +322,7 @@ class ConcatTest extends TestCase
         $tracks = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=64x48:rate=10:duration=1',
             '-itsoffset', '1', '-f', 'lavfi', '-i', 'color=blue:size=64x48:rate=10:duration=1', '-f', 'lavfi', '-i', 'sine=sample_rate=48000:duration=1',
             '-map', '0:v', '-map', '1:v', '-map', '2:a', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $this->root.'/late-second-track.mkv']);
-        $this->assertTrue($tracks->successful(), $tracks->errorOutput());
+        $this->assertProcessSucceeded($tracks);
         try {
             $first->concatTranscoded(FFMpeg::disk()->open(new File($this->root.'/late-second-track.mkv')))
                 ->conformVideo(128, 96, 10)->conformAudio()->toDisk('memory')->save('late-track.mov');
@@ -331,6 +331,6 @@ class ConcatTest extends TestCase
             $this->assertSame('metadata', $exception->category);
         }
 
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

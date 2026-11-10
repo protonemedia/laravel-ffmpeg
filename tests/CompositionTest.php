@@ -82,7 +82,7 @@ class CompositionTest extends TestCase
         $this->assertNotContains('ffv1', array_slice($command, 0, $boundary));
         $this->assertContains('ffv1', array_slice($command, $boundary));
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_conflicting_composition_settings_fail_before_execution(): void
@@ -232,7 +232,7 @@ class CompositionTest extends TestCase
         }
 
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_literal_text_is_written_unchanged_and_missing_filter_support_is_typed(): void
@@ -261,7 +261,7 @@ class CompositionTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('capability', $exception->category);
             $this->assertFalse(Storage::disk('memory')->exists('unsupported.mkv'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -390,7 +390,7 @@ class CompositionTest extends TestCase
         } catch (\LogicException) {
             $this->addToAssertionCount(1);
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
 
         Storage::disk('memory')->put('invalid.srt', "\xff");
         $this->fakePipeline();
@@ -409,7 +409,7 @@ class CompositionTest extends TestCase
                 $this->assertStringContainsString('output 0 '.$helper, $exception->getMessage());
                 $this->assertSame($helper === 'drawText' ? 'staging' : 'probing', $exception->phase);
                 $this->assertFalse(Storage::disk('memory')->exists('failed-'.$helper.'.mkv'));
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
     }
@@ -434,7 +434,7 @@ class CompositionTest extends TestCase
         $command = $result->processes()->first()['command'];
         $this->assertCount(2, array_keys($command, '-i'));
         $this->assertContains('1:v', $command);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_every_output_is_validated_before_the_first_publication(): void
@@ -466,7 +466,7 @@ class CompositionTest extends TestCase
                 $this->assertSame($failure === 'missing' ? 'artifact' : 'mapping', $exception->category);
                 $this->assertFalse(Storage::disk('memory')->exists('first.mkv'));
                 $this->assertFalse(Storage::disk('memory')->exists('second.mkv'));
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
     }
@@ -487,7 +487,7 @@ class CompositionTest extends TestCase
             $this->assertSame([['disk' => 'memory', 'path' => 'first.mkv']], $exception->published);
             $this->assertSame(['disk' => null, 'path' => 'second.mkv'], $exception->destination);
             $this->assertSame('encoded', Storage::disk('memory')->get('first.mkv'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
             Event::assertNotDispatched(Events\ExportCompleted::class);
         }
     }
@@ -511,7 +511,7 @@ class CompositionTest extends TestCase
             $this->fail('Cancellation did not propagate.');
         } catch (ExportCancelled $exception) {
             $this->assertSame($cancelled, $exception);
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
             $this->assertFalse(Storage::disk('memory')->exists('first.mkv'));
             $this->assertFalse(Storage::disk('memory')->exists('second.mkv'));
             $this->assertSame('a LUT', Storage::disk('memory')->get('look.cube'));
@@ -578,7 +578,7 @@ class CompositionTest extends TestCase
             $this->assertFalse(Storage::disk('memory')->exists('failed.mkv'));
         }
         $this->assertSame($hash, hash_file('sha256', $local->path('logo.png')));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
     }
 
@@ -631,7 +631,7 @@ class CompositionTest extends TestCase
         $local = $this->fakeLocalDisk();
         $generation = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=2',
             '-f', 'lavfi', '-i', 'sine=sample_rate=48000:duration=2', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $local->path('source.mkv')]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         $bitmap = imagecreatetruecolor(32, 16);
         imagealphablending($bitmap, false);
         imagesavealpha($bitmap, true);
@@ -667,11 +667,11 @@ class CompositionTest extends TestCase
                 $local->put('watermarked.mkv', Storage::disk('memory')->get('watermarked.mkv'));
                 $original = Process::run([$binary, '-v', 'error', '-i', $local->path('source.mkv'), '-map', '0:a', '-f', 'md5', '-']);
                 $audio = Process::run([$binary, '-v', 'error', '-i', $local->path('watermarked.mkv'), '-map', '0:a', '-f', 'md5', '-']);
-                $this->assertTrue($original->successful(), $original->errorOutput());
-                $this->assertTrue($audio->successful(), $audio->errorOutput());
+                $this->assertProcessSucceeded($original);
+                $this->assertProcessSucceeded($audio);
                 $this->assertSame($original->output(), $audio->output());
                 $this->assertSame($bytes, Storage::disk($disk)->get($key));
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
     }
@@ -682,7 +682,7 @@ class CompositionTest extends TestCase
         $local = $this->fakeLocalDisk();
         $generation = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=1',
             '-c:v', 'ffv1', $local->path('source.mkv')]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         $bitmap = imagecreatetruecolor(8, 8);
         imagefill($bitmap, 0, 0, imagecolorallocate($bitmap, 0, 0, 255));
         imagepng($bitmap, $local->path('logo.png'));
@@ -738,7 +738,7 @@ class CompositionTest extends TestCase
             $this->assertSame('watermark', $exception->category);
         }
         $this->assertFalse($local->exists('invalid.mkv'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_real_graphs_stage_luts_compose_mixed_disks_and_keep_output_timelines_independent(): void
@@ -748,10 +748,10 @@ class CompositionTest extends TestCase
         $source = $this->root.'/red.mkv';
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=80x60:rate=10:duration=2',
             '-c:v', 'ffv1', $source]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:size=16x12:rate=10:duration=2',
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $local->path('blue.mkv')]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         Storage::disk('memory')->put('nested/red 日本語.mkv', file_get_contents($source));
         // Invert RGB, with the red coordinate varying fastest as required by .cube.
         $lut = "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
@@ -768,7 +768,7 @@ class CompositionTest extends TestCase
             $metadata = FFMpeg::disk('local')->open($path)->probe();
             $this->assertSame([$width, $height], [$metadata->video()->width(), $metadata->video()->height()]);
             $pixels = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path($path), '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']);
-            $this->assertTrue($pixels->successful(), $pixels->errorOutput());
+            $this->assertProcessSucceeded($pixels);
             $rgb = array_values(unpack('C*', substr($pixels->output(), 0, 3)));
             $this->assertLessThan(25, $rgb[0]);
             $this->assertGreaterThan(225, $rgb[1]);
@@ -802,7 +802,7 @@ class CompositionTest extends TestCase
         $this->assertSame($lut, Storage::disk('memory')->get($lutKey));
         $local->put('composed.mkv', Storage::disk('memory')->get('composed.mkv'));
         $pixels = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('composed.mkv'), '-map', '0:v', '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']);
-        $this->assertTrue($pixels->successful(), $pixels->errorOutput());
+        $this->assertProcessSucceeded($pixels);
         $rgb = array_values(unpack('C*', substr($pixels->output(), (30 * 80 + 40) * 3, 3)));
         $this->assertLessThan(25, $rgb[0]);
         $this->assertGreaterThan(225, $rgb[1]);
@@ -813,8 +813,8 @@ class CompositionTest extends TestCase
         $this->assertGreaterThan(225, $blue[2]);
         $audio = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('sound.wav'), '-map', '0:a', '-f', 'md5', '-']);
         $original = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('blue.mkv'), '-map', '0:a', '-f', 'md5', '-']);
-        $this->assertTrue($audio->successful(), $audio->errorOutput());
-        $this->assertTrue($original->successful(), $original->errorOutput());
+        $this->assertProcessSucceeded($audio);
+        $this->assertProcessSucceeded($original);
         $this->assertSame($original->output(), $audio->output());
 
         $withCopiedAudio = FFMpeg::disk('memory')->open('nested/red 日本語.mkv')->export();
@@ -826,9 +826,9 @@ class CompositionTest extends TestCase
         $this->assertSame('pcm_s16le', $copied->audio()->get('codec_name'));
         $this->assertSame([80, 60], [$copied->video()->width(), $copied->video()->height()]);
         $copiedAudio = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('copied-audio.mkv'), '-map', '0:a', '-f', 'md5', '-']);
-        $this->assertTrue($copiedAudio->successful(), $copiedAudio->errorOutput());
+        $this->assertProcessSucceeded($copiedAudio);
         $this->assertSame($original->output(), $copiedAudio->output());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
 
         $title = "English 'mix'; 日本語 = literal";
         FFMpeg::disk('local')->open('blue.mkv')->export()->filterComplex('[0:a]asplit[english][german]')
@@ -880,7 +880,7 @@ class CompositionTest extends TestCase
         Storage::disk('memory')->put("fonts/a 'quoted', café.ttf", file_get_contents($font));
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=black:size=480x120:rate=10:duration=0.2',
             '-c:v', 'ffv1', $local->path('black.mkv')]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         FFMpeg::disk('local')->open('black.mkv')->export()
             ->resource('font', FFMpeg::disk('memory')->open("fonts/a 'quoted', café.ttf"))->textResource('title', $text)
             ->videoFilter('drawtext=fontfile={{font}}:textfile={{title}}:expansion=none:fontcolor=white:fontsize=20:x=8:y=8')
@@ -892,8 +892,8 @@ class CompositionTest extends TestCase
             'drawtext=fontfile='.$font.':textfile='.$this->root.'/literal.txt:expansion=none:fontcolor=white:fontsize=20:x=8:y=8',
             '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
         $actual = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('title.mkv'), '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
-        $this->assertTrue($reference->successful(), $reference->errorOutput());
-        $this->assertTrue($actual->successful(), $actual->errorOutput());
+        $this->assertProcessSucceeded($reference);
+        $this->assertProcessSucceeded($actual);
         $this->assertSame($reference->output(), $actual->output());
         $this->assertGreaterThan(200, count(array_filter(unpack('C*', $actual->output()), fn ($pixel) => $pixel > 200)));
 
@@ -901,9 +901,9 @@ class CompositionTest extends TestCase
             ->drawText($text, font: FFMpeg::disk('memory')->open("fonts/a 'quoted', café.ttf"), size: 20, x: 8, y: 8)
             ->video('ffv1')->toDisk('local')->save('title-helper.mkv');
         $helper = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('title-helper.mkv'), '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
-        $this->assertTrue($helper->successful(), $helper->errorOutput());
+        $this->assertProcessSucceeded($helper);
         $this->assertSame($reference->output(), $helper->output());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_real_subtitles_validate_content_and_keep_cue_timing_through_accurate_clips(): void
@@ -912,7 +912,7 @@ class CompositionTest extends TestCase
         $local = $this->fakeLocalDisk();
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=black:size=160x90:rate=10:duration=6',
             '-c:v', 'ffv1', $local->path('black.mkv')]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         $formats = [
             'srt' => "1\n00:00:05,000 --> 00:00:05,500\nCaption café\n",
             'vtt' => "WEBVTT\n\n00:05.000 --> 00:05.500\nCaption café\n",
@@ -927,7 +927,7 @@ class CompositionTest extends TestCase
                 ->videoFilter('subtitles=filename={{captions}}')->video('ffv1')->clip(4, duration: 2)
                 ->toDisk('local')->save('caption-'.$extension.'.mkv');
             $frames = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('caption-'.$extension.'.mkv'), '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
-            $this->assertTrue($frames->successful(), $frames->errorOutput());
+            $this->assertProcessSucceeded($frames);
             $this->assertSame(20 * 160 * 90, strlen($frames->output()));
             foreach ([2 => false, 12 => true, 18 => false] as $index => $visible) {
                 $pixels = unpack('C*', substr($frames->output(), $index * 160 * 90, 160 * 90));
@@ -939,7 +939,7 @@ class CompositionTest extends TestCase
                 ->burnSubtitles(FFMpeg::disk('memory')->open($key))->video('ffv1')->clip(4, duration: 2)
                 ->toDisk('local')->save('caption-helper-'.$extension.'.mkv');
             $helper = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('caption-helper-'.$extension.'.mkv'), '-pix_fmt', 'gray', '-f', 'rawvideo', '-']);
-            $this->assertTrue($helper->successful(), $helper->errorOutput());
+            $this->assertProcessSucceeded($helper);
             $this->assertSame($frames->output(), $helper->output());
         }
 
@@ -954,7 +954,7 @@ class CompositionTest extends TestCase
                 $this->assertSame('probing', $exception->phase);
                 $this->assertSame('resource', $exception->category);
                 $this->assertFalse(Storage::disk('memory')->exists('rejected.mkv'));
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
     }
@@ -983,7 +983,7 @@ class CompositionTest extends TestCase
                     ? 'Streamcopy requested for output stream fed from a complex filtergraph'
                     : 'Simple and complex filtering cannot be used together', $exception->diagnostics);
                 $this->assertFalse(Storage::disk('memory')->exists('conflict.mkv'));
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
     }
@@ -1001,7 +1001,7 @@ class CompositionTest extends TestCase
             $this->assertSame('validation', $exception->phase);
             $this->assertSame('mapping', $exception->category);
             $this->assertFalse(Storage::disk('memory')->exists('unexpected.mkv'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 }

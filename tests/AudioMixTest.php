@@ -21,7 +21,7 @@ class AudioMixTest extends TestCase
     protected function ffmpeg(array $arguments): string
     {
         $process = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-y', ...$arguments]);
-        $this->assertTrue($process->successful(), $process->errorOutput());
+        $this->assertProcessSucceeded($process);
 
         return $process->output();
     }
@@ -94,7 +94,7 @@ class AudioMixTest extends TestCase
             }
         }
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_offsets_delay_only_added_samples_and_loop_without_repeating_the_delay(): void
@@ -124,7 +124,7 @@ class AudioMixTest extends TestCase
                 $this->ffmpeg(['-i', $this->path($name), '-map', '0:v', '-f', 'framemd5', '-']),
             );
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_offsets_beyond_the_presentation_add_no_audio_and_silent_sources_keep_the_delay(): void
@@ -141,7 +141,7 @@ class AudioMixTest extends TestCase
             $this->assertSample($samples, 0.625, $offset < 3 ? 0.05 : 0, $offset < 3 ? 0.1 : 0);
             $this->assertSample($samples, 2.7, $offset < 3 ? 0.05 : 0, $offset < 3 ? 0.1 : 0);
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_looped_music_preserves_original_audio_delay_gain_video_and_primary_duration(): void
@@ -172,7 +172,7 @@ class AudioMixTest extends TestCase
         $this->assertSame($original, $encoded);
         $this->assertSame($sourceHash, hash_file('sha256', $this->path('source.mkv')));
         $this->assertSame($musicHash, hash_file('sha256', $this->path('music.wav')));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_one_shot_music_pads_short_tracks_and_trims_long_tracks_without_gain_pumping(): void
@@ -218,7 +218,7 @@ class AudioMixTest extends TestCase
         $this->assertSample($samples, 0.1, 0.15, -0.1);
         $this->assertSample($samples, 1.3, 0, -0.15);
         $this->assertFalse($this->media('audio-only.wav')->probe()->hasVideo());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_encoded_mono_music_loops_throughout_the_presentation_and_supports_aac_output(): void
@@ -241,7 +241,7 @@ class AudioMixTest extends TestCase
             $this->assertGreaterThan(0.005, $rms, 'Music must continue through repeated encoded input boundaries.');
             $this->assertLessThan(0.03, $rms);
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_invalid_audio_failed_filters_and_cancellation_preserve_inputs_and_existing_destinations(): void
@@ -267,7 +267,7 @@ class AudioMixTest extends TestCase
                 }
                 $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
             }
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
         foreach (['analysis', 'encoding'] as $phase) {
             try {
@@ -281,9 +281,9 @@ class AudioMixTest extends TestCase
             } catch (ExportCancelled) {
                 $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
             }
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
         $this->assertSame($hash, hash_file('sha256', $this->path('source.mkv')));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

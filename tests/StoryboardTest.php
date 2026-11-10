@@ -24,7 +24,7 @@ class StoryboardTest extends TestCase
         array_push($command, '-filter_complex', '[0:v][1:v][2:v][3:v][4:v][5:v][6:v]concat=n=7:v=1:a=0[video]',
             '-map', '[video]', '-c:v', 'ffv1', '-threads', '1', $local->path('colors.mkv'));
         $result = Process::run($command);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
 
         return FFMpeg::disk('local')->open('colors.mkv');
     }
@@ -55,7 +55,7 @@ class StoryboardTest extends TestCase
                 $media->storyboard(...$arguments);
                 $this->fail('An invalid storyboard was accepted.');
             } catch (InvalidArgumentException) {
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
         Process::assertNothingRan();
@@ -96,7 +96,7 @@ class StoryboardTest extends TestCase
             $this->assertSame([0, 0, 0], [$pixel['red'], $pixel['green'], $pixel['blue']]);
         }
         $this->assertSame($original, Storage::disk('local')->get('colors.mkv'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_clips_bound_thumbnails_before_tiling_and_custom_urls_keep_their_query(): void
@@ -120,7 +120,7 @@ class StoryboardTest extends TestCase
             ->toDisk('memory')->save('short-%d.png');
         $this->assertStringContainsString('00:00:00.000 --> 00:00:00.050', Storage::disk('memory')->get('short.vtt'));
         $this->assertFalse(Storage::disk('memory')->exists('short-2.png'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_jpeg_quality_is_preserved_and_invalid_cue_urls_prevent_all_publication(): void
@@ -128,7 +128,7 @@ class StoryboardTest extends TestCase
         $binary = $this->useRealFFMpeg();
         $local = $this->fakeLocalDisk();
         $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=10:duration=0.4', '-c:v', 'ffv1', $local->path('detail.mkv')]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
         $media = FFMpeg::disk('local')->open('detail.mkv');
         foreach ([2, 31] as $quality) {
             $result = $media->storyboard(every: 0.2, columns: 2, rows: 1)->outputOptions(['-q:v', (string) $quality])
@@ -144,7 +144,7 @@ class StoryboardTest extends TestCase
             $this->assertSame('validation', $exception->phase);
             $this->assertFalse(Storage::disk('memory')->exists('invalid-1.png'));
             $this->assertFalse(Storage::disk('memory')->exists('invalid.vtt'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -168,6 +168,6 @@ class StoryboardTest extends TestCase
         $this->assertNotEmpty($storage->get('sheet-2.png'));
         $this->assertFalse($storage->exists('preview.vtt'));
         $this->assertTrue(Storage::disk('local')->exists('colors.mkv'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

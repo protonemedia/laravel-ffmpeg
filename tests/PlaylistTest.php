@@ -118,7 +118,7 @@ class PlaylistTest extends TestCase
         $disk = $this->fakeLocalDisk();
         $source = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=80x48:rate=10:duration=1.2',
             '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '1', $disk->path('source.mp4')]);
-        $this->assertTrue($source->successful(), $source->errorOutput());
+        $this->assertProcessSucceeded($source);
         FFMpeg::disk('local')->open('source.mp4')->hls(segmentDuration: 0.5)
             ->video(bitrate: '100k', preset: 'ultrafast')->variant('low', fn () => null)->variant('high', fn () => null)
             ->save('old/master.m3u8');

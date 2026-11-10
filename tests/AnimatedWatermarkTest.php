@@ -18,11 +18,11 @@ class AnimatedWatermarkTest extends TestCase
         config(['filesystems.disks.animated' => ['driver' => 'local', 'root' => $this->root.'/output']]);
         $source = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=black:s=80x48:r=10:d=1.6',
             '-c:v', 'libx264', $this->root.'/source.mp4']);
-        $this->assertTrue($source->successful(), $source->errorOutput());
+        $this->assertProcessSucceeded($source);
         $gif = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=20x12:r=5:d=0.2',
             '-f', 'lavfi', '-i', 'color=c=blue:s=20x12:r=5:d=0.2',
             '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[logo]', '-map', '[logo]', '-loop', '-1', $this->root.'/logo.gif']);
-        $this->assertTrue($gif->successful(), $gif->errorOutput());
+        $this->assertProcessSucceeded($gif);
         // The GIF plays once on its own; loop() must still repeat it for the whole video.
         $media = FFMpeg::open(new File($this->root.'/source.mp4'));
         $logo = FFMpeg::open(new File($this->root.'/logo.gif'));
@@ -40,7 +40,7 @@ class AnimatedWatermarkTest extends TestCase
             foreach (['small' => 40, 'large' => 80] as $name => $width) {
                 $playlist = $this->root.'/output/'.$result->variant($name)->playlist()->path;
                 $decoded = Process::run([$binary, '-v', 'error', '-i', $playlist, '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
-                $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+                $this->assertProcessSucceeded($decoded);
                 $height = $width === 40 ? 24 : 48;
                 $frameBytes = $width * $height * 3;
                 $this->assertSame(16, intdiv(strlen($decoded->output()), $frameBytes));
@@ -56,7 +56,7 @@ class AnimatedWatermarkTest extends TestCase
         $media->export()->watermark($logo, fn (Watermark $watermark) => $corner($watermark)->grayscale())
             ->video('libx264', crf: 12)->toDisk('animated')->save('gray.mp4');
         $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/output/gray.mp4', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
-        $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+        $this->assertProcessSucceeded($decoded);
         $brightness = [];
         foreach ([8, 10, 12, 14] as $frame) {
             $pixel = array_values(unpack('C3', substr($decoded->output(), $frame * 80 * 48 * 3 + (80 * 2 + 2) * 3, 3)));
@@ -69,10 +69,10 @@ class AnimatedWatermarkTest extends TestCase
         // The looping overlay ends with the main video without cutting longer streams or clips.
         $tone = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=black:s=80x48:r=10:d=1',
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1', '-c:v', 'libx264', '-c:a', 'aac', '-shortest', $this->root.'/tone.mp4']);
-        $this->assertTrue($tone->successful(), $tone->errorOutput());
+        $this->assertProcessSucceeded($tone);
         $durations = function (string $path) use ($probe): array {
             $result = Process::run([$probe, '-v', 'error', '-show_entries', 'stream=codec_type,duration', '-of', 'json', $path]);
-            $this->assertTrue($result->successful(), $result->errorOutput());
+            $this->assertProcessSucceeded($result);
 
             return array_column(array_map(fn ($stream) => [$stream['codec_type'], round((float) $stream['duration'], 1)],
                 json_decode($result->output(), true)['streams']), 1, 0);
@@ -85,9 +85,9 @@ class AnimatedWatermarkTest extends TestCase
         $this->assertEqualsWithDelta(0.6, $durations($this->root.'/output/clipped.mp4')['video'], 0.1);
         // A raw stream has no container duration; the overlay still ends with it.
         $raw = Process::run([$binary, '-v', 'error', '-i', $this->root.'/source.mp4', '-c:v', 'copy', '-bsf:v', 'h264_mp4toannexb', '-f', 'h264', $this->root.'/source.h264']);
-        $this->assertTrue($raw->successful(), $raw->errorOutput());
+        $this->assertProcessSucceeded($raw);
         FFMpeg::open(new File($this->root.'/source.h264'))->export()->watermark($logo, $looping)->video('libx264')->toDisk('animated')->save('raw.mp4');
         $this->assertEqualsWithDelta(1.6, $durations($this->root.'/output/raw.mp4')['video'], 0.1);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

@@ -160,7 +160,7 @@ class EncodingOptionsTest extends TestCase
     protected function runTool(array $arguments): string
     {
         $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-y', ...$arguments]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
 
         return $result->output();
     }
@@ -195,7 +195,7 @@ class EncodingOptionsTest extends TestCase
         $other = $this->runTool(['-i', $this->path('source.mkv'), '-map', '0:a:1', '-ar', '22050', '-ac', '1', '-f', 's16le', '-']);
         $this->assertSame(hash('sha256', $original), hash('sha256', $audible));
         $this->assertNotSame(hash('sha256', $other), hash('sha256', $audible));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_real_x265_private_settings_and_safe_bitstream_remux(): void
@@ -230,6 +230,6 @@ class EncodingOptionsTest extends TestCase
             $this->assertNotEmpty($exception->getMessage());
             $this->assertFalse(Storage::disk('encoding-options')->exists('hardware.mp4'));
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

@@ -30,7 +30,7 @@ class PreservationTest extends TestCase
     protected function tearDown(): void
     {
         if (isset($this->root)) {
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
         parent::tearDown();
     }
@@ -38,7 +38,7 @@ class PreservationTest extends TestCase
     protected function ffmpeg(array $arguments): string
     {
         $result = Process::run([$this->ffmpeg, '-v', 'error', '-y', ...$arguments]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
 
         return $result->output();
     }
@@ -149,14 +149,14 @@ class PreservationTest extends TestCase
         file_put_contents($this->root.'/clip.mkv', Storage::disk('memory')->get('clip.mkv'));
         $frames = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'v:0',
             '-show_entries', 'frame=best_effort_timestamp_time', '-of', 'json', $this->root.'/clip.mkv']);
-        $this->assertTrue($frames->successful(), $frames->errorOutput());
+        $this->assertProcessSucceeded($frames);
         $times = array_map(fn ($frame) => (float) $frame['best_effort_timestamp_time'], json_decode($frames->output(), true)['frames']);
         $gaps = array_map(fn ($a, $b) => round($b - $a, 3), array_slice($times, 0, -1), array_slice($times, 1));
         $this->assertContains(0.1, $gaps);
         $this->assertContains(0.05, $gaps);
         $audio = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'a:0',
             '-show_packets', '-show_entries', 'packet=pts_time', '-of', 'json', $this->root.'/clip.mkv']);
-        $this->assertTrue($audio->successful(), $audio->errorOutput());
+        $this->assertProcessSucceeded($audio);
         $this->assertEqualsWithDelta(0.25, (float) json_decode($audio->output(), true)['packets'][0]['pts_time'], 0.025);
         $this->assertLessThanOrEqual(1.6, end($times));
     }

@@ -45,7 +45,7 @@ class WaveformPeaksTest extends TestCase
 
     protected function clean(): void
     {
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_asymmetric_signed_little_endian_extrema_keep_unequal_channels_and_partial_bucket(): void
@@ -77,7 +77,7 @@ class WaveformPeaksTest extends TestCase
             $name = 'layout-'.$index.'.wav';
             $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-f', 'lavfi', '-i',
                 'aevalsrc=0.1|0.2|0.3|0.4:c='.$layout.':s=8000:d=0.1', '-c:a', 'pcm_s16le', Storage::disk('peaks-fixtures')->path($name)]);
-            $this->assertTrue($result->successful(), $result->errorOutput());
+            $this->assertProcessSucceeded($result);
             $peaks = $this->pending(new Media('peaks-fixtures', $name))->buckets(1)->get();
             $this->assertSame([[[3277, 3277]], [[6554, 6554]], [[9830, 9830]], [[13107, 13107]]], $peaks->channels, $layout);
         }
@@ -136,7 +136,7 @@ class WaveformPeaksTest extends TestCase
         $this->wav('second.wav', [[-500, -400, -300, -200, -100]], 16000);
         $process = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-i', $this->root.'/disk/first.wav',
             '-i', $this->root.'/disk/second.wav', '-map', '0:a', '-map', '1:a', '-c:a', 'pcm_s16le', $this->root.'/disk/tracks.nut']);
-        $this->assertTrue($process->successful(), $process->errorOutput());
+        $this->assertProcessSucceeded($process);
         $peaks = $this->pending(new Media('peaks-fixtures', 'tracks.nut'))->audioTrack(1)->get();
         $this->assertSame(1, $peaks->audioTrack);
         $this->assertSame(16000, $peaks->sampleRate);

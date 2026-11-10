@@ -35,7 +35,7 @@ class SpeedTest extends TestCase
         }
         array_push($command, '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $path);
         $result = Process::run($command);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
 
         return $path;
     }
@@ -73,7 +73,7 @@ class SpeedTest extends TestCase
             }
         }
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_asymmetric_factors_retime_decoded_video_and_audio_without_changing_pitch(): void
@@ -92,7 +92,7 @@ class SpeedTest extends TestCase
             $this->assertPitch($path);
         }
         $this->assertSame($hash, hash_file('sha256', $source));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_speeding_up_h264_with_a_frame_rate_time_base_keeps_every_frame(): void
@@ -101,7 +101,7 @@ class SpeedTest extends TestCase
         $result = Process::run([$binary, '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=25:d=2',
             '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
             '-c:a', 'aac', '-video_track_timescale', '25', Storage::disk('speed')->path('h264.mp4')]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
 
         foreach ([2.0, 3.0] as $factor) {
             $result = $this->media('h264.mp4')->speed($factor)->save("h264-{$factor}.mp4");
@@ -154,7 +154,7 @@ class SpeedTest extends TestCase
                 }
             }
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_progress_uses_retimed_duration_and_stays_indeterminate_for_trusted_filters(): void
@@ -207,7 +207,7 @@ class SpeedTest extends TestCase
             $this->assertSame('encoding', $exception->phase);
         }
         $shift = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $source, '-c', 'copy', '-output_ts_offset', '2', Storage::disk('speed')->path('shifted.mkv')]);
-        $this->assertTrue($shift->successful(), $shift->errorOutput());
+        $this->assertProcessSucceeded($shift);
         try {
             $this->media('shifted.mkv')->speed(1.5)->save('failed.mkv');
             $this->fail('Nonzero timeline accepted.');
@@ -216,13 +216,13 @@ class SpeedTest extends TestCase
         }
         $this->assertSame($hash, hash_file('sha256', $source));
         $this->assertFalse(Storage::disk('speed')->exists('failed.mkv'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     protected function frames(string $path): array
     {
         $result = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-of', 'json', '-show_frames', $path]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
 
         return json_decode($result->output(), true)['frames'];
     }
@@ -230,7 +230,7 @@ class SpeedTest extends TestCase
     protected function assertPitch(string $path): void
     {
         $result = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $path, '-map', '0:a:0', '-t', '1', '-f', 's16le', '-ac', '1', '-ar', '48000', '-']);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
         $samples = array_values(unpack('v*', $result->output()));
         $crossings = 0;
         $previous = 0;

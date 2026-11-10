@@ -88,14 +88,14 @@ class ProbeTest extends TestCase
         $this->assertSame('memory', $explicit->defaultOutputDisk());
         $this->assertContains('2048', $local->export()->inspect());
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
 
         foreach ([$memory, $local, $explicit] as $media) {
             $this->assertSame(12.375, $media->probe()->duration());
         }
 
         $this->assertSame(['memory source', 'local source', 'memory source'], $sources);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_it_probes_a_local_input_without_mutating_or_staging_it(): void
@@ -110,7 +110,7 @@ class ProbeTest extends TestCase
 
         $media = FFMpeg::disk('local')->open($key);
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
 
         $metadata = $media->probe();
         $this->assertSame([[
@@ -156,7 +156,7 @@ class ProbeTest extends TestCase
         $this->assertSame($key, $metadata->toArray()['format']['filename']);
         $this->assertSame('fallback', $metadata->get('missing', 'fallback'));
         $this->assertSame('source bytes', $disk->get($key));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_it_stages_non_local_disks_and_supplied_filesystems_privately(): void
@@ -172,7 +172,7 @@ class ProbeTest extends TestCase
         $this->assertSame(12.375, FFMpeg::disk('memory')->open('private/video.mp4')->probe()->duration());
         $this->assertSame(12.375, FFMpeg::disk($disk)->open('private/video.mp4')->probe()->duration());
         $this->assertSame(array_fill(0, 2, ['private media', 0700, 0600]), $staged);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         $this->assertSame('private media', $disk->get('private/video.mp4'));
     }
 
@@ -182,7 +182,7 @@ class ProbeTest extends TestCase
         $media = FFMpeg::open(new File(__DIR__.'/src/guitar.m4a'));
         $media->export()->inspect();
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         $metadata = $media->probe();
 
         $this->assertNull($metadata->duration());
@@ -238,7 +238,7 @@ class ProbeTest extends TestCase
             $this->fail('Invalid metadata must not become an empty successful probe.');
         } catch (MediaException $exception) {
             $this->assertSame('metadata', $exception->category);
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -261,7 +261,7 @@ class ProbeTest extends TestCase
             $this->assertSame('staging', $exception->phase);
             $this->assertSame('transfer', $exception->category);
             Process::assertNothingRan();
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -282,7 +282,7 @@ class ProbeTest extends TestCase
             $this->assertSame('transfer', $exception->category);
             $this->assertFalse(is_resource($stream));
             Process::assertNothingRan();
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -296,7 +296,7 @@ class ProbeTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('manifest', $exception->category);
             Process::assertNothingRan();
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -311,7 +311,7 @@ class ProbeTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('manifest', $exception->category);
             Process::assertNothingRan();
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -326,11 +326,11 @@ class ProbeTest extends TestCase
         $this->assertContains('2048', $command);
         $this->assertStringNotContainsString('outside.mp4', json_encode($command));
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         $metadata = $media->probe();
 
         $this->assertSame($upload->getPathname(), $metadata->get('format.filename'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     #[DataProvider('invalidKeys')]
@@ -367,7 +367,7 @@ class ProbeTest extends TestCase
             $this->assertSame('process', $exception->category);
             $this->assertStringNotContainsString('Upstream private', $exception->getMessage());
             $this->assertNull($exception->getPrevious());
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -381,7 +381,7 @@ class ProbeTest extends TestCase
 
             $this->assertFalse($metadata->get('format.tags.secret'));
             $this->assertTrue($metadata->get('format.tags.temporary'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         } finally {
             putenv('NATIVE_PROBE_SECRET');
         }
@@ -399,7 +399,7 @@ class ProbeTest extends TestCase
             $this->assertLessThanOrEqual(65536, strlen($exception->diagnostics));
             $this->assertStringEndsWith('[input] THE-END', $exception->diagnostics);
             $this->assertNull($exception->getPrevious());
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -417,7 +417,7 @@ class ProbeTest extends TestCase
             $this->assertSame('timeout', $exception->category);
             $this->assertFileExists($pidFile);
             $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -437,7 +437,7 @@ class ProbeTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('output_limit', $exception->category);
             $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -467,7 +467,7 @@ class ProbeTest extends TestCase
             $this->assertSame('h264', $metadata->video()->codec());
             $this->assertSame('video', $metadata->video()->type());
             $this->assertTrue($metadata->hasVideo());
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 }

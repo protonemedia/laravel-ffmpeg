@@ -69,7 +69,7 @@ class QueueTest extends TestCase
         $result = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=96x64:rate=10:duration=1.6',
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1.6',
             '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-threads', '1', $disk->path('source.mp4')]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
     }
 
     protected function work(): void
@@ -116,7 +116,7 @@ class QueueTest extends TestCase
         $this->work();
         $this->assertSame('published', Storage::disk('queued')->get('follow-up'));
         $this->assertSame(0, DB::table('jobs')->count());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_a_saved_hls_builder_can_still_be_queued(): void
@@ -160,7 +160,7 @@ class QueueTest extends TestCase
                 continue;
             }
             $decoded = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', '-i', Storage::disk('queued')->path($file['path']), '-f', 'framemd5', '-']);
-            $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+            $this->assertProcessSucceeded($decoded);
             $this->assertStringContainsString('#media_type 0: video', $decoded->output());
         }
         $this->assertFalse(Storage::disk('queued')->exists('follow-up'));
@@ -265,7 +265,7 @@ class QueueTest extends TestCase
         $this->assertCount(0, $this->completed);
         $this->assertCount(2, $this->errors);
         $this->assertInstanceOf(ExportCancelled::class, $this->errors[1]);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_parallel_hls_keeps_shared_renditions_together_and_serializes_encryption_callbacks(): void
@@ -345,7 +345,7 @@ class QueueTest extends TestCase
         $this->assertCount(2, $this->completed);
         $this->assertSame([], $this->errors);
         $this->assertSame(0, DB::table('jobs')->count());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }
 

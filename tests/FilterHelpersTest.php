@@ -29,7 +29,7 @@ class FilterHelpersTest extends TestCase
     protected function ffmpeg(array $arguments): string
     {
         $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-v', 'error', ...$arguments]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
 
         return $result->output();
     }
@@ -136,7 +136,7 @@ class FilterHelpersTest extends TestCase
         foreach ([0, 20, 50] as $frame) {
             $this->assertGreaterThan(250, $this->pixel($frames, 24, 8, $frame)[0]);
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_audio_delay_inserts_silence_in_every_channel_and_keeps_all_original_samples(): void
@@ -167,7 +167,7 @@ class FilterHelpersTest extends TestCase
             $this->assertEqualsWithDelta(1 + $seconds, $probe->duration(), 0.0001);
             $this->assertSame(2, $probe->audio()->get('channels'));
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_deinterlace_outputs_progressive_frames_with_explicit_frame_or_field_cadence(): void
@@ -178,7 +178,7 @@ class FilterHelpersTest extends TestCase
         $frames = function (string $name): array {
             $result = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'v:0',
                 '-show_frames', '-show_entries', 'frame=interlaced_frame,width,height', '-of', 'json', Storage::disk('filter-helpers')->path($name)]);
-            $this->assertTrue($result->successful(), $result->errorOutput());
+            $this->assertProcessSucceeded($result);
 
             return json_decode($result->output(), true, flags: JSON_THROW_ON_ERROR)['frames'];
         };
@@ -200,7 +200,7 @@ class FilterHelpersTest extends TestCase
         $this->export()->deinterlace('field', onlyInterlaced: false)->save('force-progressive.mkv');
         $this->assertCount(60, $frames('progressive.mkv'));
         $this->assertCount(120, $frames('force-progressive.mkv'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_invalid_inputs_copy_conflicts_and_mutation_after_outputs_are_rejected_before_io(): void

@@ -29,7 +29,7 @@ class GifTest extends TestCase
         $this->assertContains('[gif_out]', $command);
         $this->assertSame('0', $command[array_search('-loop', $command) + 1]);
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_invalid_and_contradictory_settings_fail_without_io(): void
@@ -51,7 +51,7 @@ class GifTest extends TestCase
         }
 
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_native_gif_has_changing_palette_frames_requested_timing_and_loop_bytes(): void
@@ -60,7 +60,7 @@ class GifTest extends TestCase
         $source = $this->root.'/source.mp4';
         $fixture = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=128x96:rate=20:duration=2',
             '-f', 'lavfi', '-i', 'sine=duration=2', '-c:v', 'libx264', '-threads', '1', '-c:a', 'aac', $source]);
-        $this->assertTrue($fixture->successful(), $fixture->errorOutput());
+        $this->assertProcessSucceeded($fixture);
         $hash = hash_file('sha256', $source);
         $media = FFMpeg::disk()->open(new File($source));
 
@@ -90,7 +90,7 @@ class GifTest extends TestCase
             $path = $this->root.'/animation.gif';
             file_put_contents($path, $bytes);
             $probe = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-count_frames', '-show_streams', '-show_format', '-of', 'json', $path]);
-            $this->assertTrue($probe->successful(), $probe->errorOutput());
+            $this->assertProcessSucceeded($probe);
             $data = json_decode($probe->output(), true);
             $this->assertCount(1, $data['streams']);
             $stream = $data['streams'][0];
@@ -102,7 +102,7 @@ class GifTest extends TestCase
             $this->assertEqualsWithDelta(1.0, $data['format']['duration'], 0.01);
 
             $decoded = Process::run([$binary, '-v', 'error', '-i', $path, '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1']);
-            $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+            $this->assertProcessSucceeded($decoded);
             $frames = str_split($decoded->output(), 64 * 48 * 3);
             $this->assertCount(10, $frames);
             $this->assertGreaterThan(5, count(array_unique(array_map('md5', $frames))));
@@ -110,7 +110,7 @@ class GifTest extends TestCase
         }
 
         $this->assertSame($hash, hash_file('sha256', $source));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_clip_selects_source_frames_before_palette_generation(): void
@@ -120,7 +120,7 @@ class GifTest extends TestCase
         $fixture = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=64x48:rate=10:duration=1',
             '-f', 'lavfi', '-i', 'color=blue:size=64x48:rate=10:duration=1',
             '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]', '-map', '[v]', '-c:v', 'libx264', '-threads', '1', $source]);
-        $this->assertTrue($fixture->successful(), $fixture->errorOutput());
+        $this->assertProcessSucceeded($fixture);
         FFMpeg::disk()->open(new File($source))->gif(64, 10)->clip(1.0, duration: 0.5)->toDisk('memory')->save('blue.gif');
         $image = imagecreatefromstring(Storage::disk('memory')->get('blue.gif'));
         $pixel = imagecolorsforindex($image, imagecolorat($image, 20, 20));
@@ -158,6 +158,6 @@ class GifTest extends TestCase
 
         $this->assertSame('existing destination', Storage::disk('memory')->get('retained.gif'));
         $this->assertSame($hash, hash_file('sha256', $source));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

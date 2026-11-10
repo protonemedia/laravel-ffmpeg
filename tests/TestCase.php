@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
 
+use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Application;
@@ -9,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use League\Flysystem\Filesystem as Flysystem;
 use League\Flysystem\InMemory\InMemoryFilesystemAdapter;
 use Orchestra\Testbench\TestCase as BaseTestCase;
+use ProtoneMedia\LaravelFFMpeg\ProcessResult as MediaProcessResult;
 use ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider;
 
 abstract class TestCase extends BaseTestCase
@@ -125,5 +127,23 @@ abstract class TestCase extends BaseTestCase
     protected function addTestFile(string $file, string $disk = 'local'): void
     {
         Storage::disk($disk)->put($file, file_get_contents(__DIR__."/src/{$file}"));
+    }
+
+    /**
+     * Assert that every media workspace has been removed from the temporary directory.
+     */
+    protected function assertWorkspacesAreCleanedUp(): void
+    {
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    /**
+     * Assert that the given process finished successfully.
+     */
+    protected function assertProcessSucceeded(ProcessResult|MediaProcessResult $process): void
+    {
+        // The error output of FFmpeg explains why it failed, so we use it as the
+        // failure message instead of PHPUnit's bare "false is not true".
+        $this->assertTrue($process->successful(), $process->errorOutput());
     }
 }

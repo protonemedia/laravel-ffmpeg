@@ -39,14 +39,14 @@ class InputHelpersTest extends TestCase
             $this->assertSame('yuv420p', $result->video()->get('pix_fmt'));
             $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/output/'.$index.'.mp4',
                 '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
-            $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+            $this->assertProcessSucceeded($decoded);
             $pixel = array_values(unpack('C3', substr($decoded->output(), 0, 3)));
             $this->assertGreaterThan(220, $pixel[0]);
             $this->assertLessThan(40, $pixel[1]);
         }
         $this->assertSame($bytes, file_get_contents($this->root.'/source.png'));
         $this->assertSame($bytes, Storage::disk('memory')->get('source.png'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_invalid_still_inputs_fail_without_publication(): void
@@ -65,7 +65,7 @@ class InputHelpersTest extends TestCase
                 FFMpeg::open('photo.png')->still($duration, $rate);
                 $this->fail('Invalid still configuration accepted.');
             } catch (InvalidArgumentException) {
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
     }
@@ -143,21 +143,21 @@ class InputHelpersTest extends TestCase
             }
         }
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_an_unavailable_hardware_encoder_fails_explicitly_without_software_fallback_or_publication(): void
     {
         $binary = $this->useRealFFMpeg();
         $encoders = Process::run([$binary, '-hide_banner', '-encoders']);
-        $this->assertTrue($encoders->successful(), $encoders->errorOutput());
+        $this->assertProcessSucceeded($encoders);
         if (preg_match('/\bh264_nvenc\b/', $encoders->output())) {
             $this->markTestSkipped('This acceptance case requires a build without h264_nvenc, not an assumption about GPU availability.');
         }
         $path = $this->root.'/source.mp4';
         $source = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=80x48:r=10',
             '-t', '0.4', '-c:v', 'libx264', '-threads', '1', $path]);
-        $this->assertTrue($source->successful(), $source->errorOutput());
+        $this->assertProcessSucceeded($source);
         $hash = hash_file('sha256', $path);
         $media = FFMpeg::open(new File($path));
         foreach (['hardware.mp4' => $media->export()->video('h264_nvenc'),
@@ -171,7 +171,7 @@ class InputHelpersTest extends TestCase
                 $this->assertStringContainsString("Unknown encoder 'h264_nvenc'", $exception->diagnostics);
                 $this->assertStringNotContainsString($this->root, $exception->diagnostics);
                 $this->assertSame([], Storage::disk('input-helpers')->allFiles());
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
                 $this->assertSame($hash, hash_file('sha256', $path));
             }
         }
@@ -181,7 +181,7 @@ class InputHelpersTest extends TestCase
     {
         $binary = $this->useRealFFMpeg();
         $backends = Process::run([$binary, '-hide_banner', '-hwaccels']);
-        $this->assertTrue($backends->successful(), $backends->errorOutput());
+        $this->assertProcessSucceeded($backends);
         if (preg_match('/^cuda$/m', $backends->output())) {
             $this->markTestSkipped('This acceptance case requires a build without CUDA decoding support.');
         }
@@ -197,7 +197,7 @@ class InputHelpersTest extends TestCase
             $this->assertStringContainsString('No device available for decoder: device type cuda', $exception->diagnostics);
             $this->assertStringNotContainsString($this->root, $exception->diagnostics);
             $this->assertSame([], Storage::disk('input-helpers')->allFiles());
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
             $this->assertSame($hash, hash_file('sha256', $path));
         }
     }
@@ -209,7 +209,7 @@ class InputHelpersTest extends TestCase
         $encoded = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=c=green:s=80x48:r=10',
             '-t', '1', '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
             '-x264-params', 'aud=1:repeat-headers=1:keyint=1', '-f', 'h264', $this->root.'/frames.h264']);
-        $this->assertTrue($encoded->successful(), $encoded->errorOutput());
+        $this->assertProcessSucceeded($encoded);
         foreach ([['tcp', 'ok'], ['udp', 'ok'], ['tcp', 'denied'], ['tcp', 'stall']] as $index => [$transport, $mode]) {
             $ready = $this->root.'/server-'.$index;
             $server = Process::start([PHP_BINARY, __DIR__.'/fixtures/rtsp.php', $this->root.'/frames.h264', $ready, $mode]);
@@ -244,7 +244,7 @@ class InputHelpersTest extends TestCase
                     }
                     $this->assertFalse(Storage::disk('input-helpers')->exists('snapshot-'.$index.'.png'));
                 }
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             } finally {
                 if ($server->running()) {
                     $server->stop();

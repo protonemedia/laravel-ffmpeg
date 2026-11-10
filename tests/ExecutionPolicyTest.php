@@ -49,7 +49,7 @@ class ExecutionPolicyTest extends TestCase
         $result = $media->export()->save('normal.mp4');
         $this->assertSame('normal.mp4', $result->file()->path);
         $this->assertSame('encoded', Storage::disk('memory')->get('normal.mp4'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public static function deadlines(): array
@@ -73,7 +73,7 @@ class ExecutionPolicyTest extends TestCase
             $this->assertFileExists($pid);
             $this->assertFalse(posix_kill((int) file_get_contents($pid), 0));
             $this->assertFalse(Storage::disk('memory')->exists('late.mp4'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -90,7 +90,7 @@ class ExecutionPolicyTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('timeout', $exception->category);
             $this->assertFalse(Storage::disk('memory')->exists('queued.mp4'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -110,7 +110,7 @@ class ExecutionPolicyTest extends TestCase
                     FFMpeg::disk('missing')->open('source.mp4')->export()->{$method}($seconds);
                     $this->fail('Invalid deadlines must be rejected.');
                 } catch (InvalidArgumentException) {
-                    $this->assertSame([], glob($this->root.'/workspaces/*'));
+                    $this->assertWorkspacesAreCleanedUp();
                 }
             }
         }

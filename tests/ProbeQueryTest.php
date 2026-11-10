@@ -48,7 +48,7 @@ class ProbeQueryTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame(['probing', 'version'], [$exception->phase, $exception->category]);
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_public_query_is_lazy_bounded_and_returns_separate_raw_sections(): void
@@ -66,7 +66,7 @@ class ProbeQueryTest extends TestCase
             ->entries(['stream' => ['index', 'nb_read_frames'], 'frame' => ['pts_time', 'key_frame'], 'format' => ['filename']]);
         $this->assertInstanceOf(PendingProbe::class, $query);
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         $result = $query->get();
         $this->assertInstanceOf(ProbeResult::class, $result);
         $this->assertSame('12', $result->streams()->first()['nb_read_frames']);
@@ -75,7 +75,7 @@ class ProbeQueryTest extends TestCase
         $this->assertSame('[input]', $result->get('format.filename'));
         $this->assertSame($result->toArray(), json_decode(json_encode($result), true));
         $this->assertSame(10.0, $result->bounds()['duration']);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         Process::assertRan(fn (PendingProcess $process) => in_array('-skip_frame', $process->command, true)
             && in_array('-count_frames', $process->command, true) && in_array('v:0', $process->command, true));
     }
@@ -113,7 +113,7 @@ class ProbeQueryTest extends TestCase
             }
         }
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_malformed_and_failed_queries_are_sanitized_and_cleaned(): void
@@ -126,7 +126,7 @@ class ProbeQueryTest extends TestCase
             } catch (MediaException $exception) {
                 $this->assertSame('metadata', $exception->category);
             }
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
         $this->fakeProbe(fn (PendingProcess $process) => Process::result(exitCode: 1, errorOutput: end($process->command)));
         try {
@@ -136,7 +136,7 @@ class ProbeQueryTest extends TestCase
             $this->assertSame('exit', $exception->category);
             $this->assertSame('[input]', trim($exception->diagnostics));
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_url_queries_use_the_source_protocol_policy_and_redact_decoded_json(): void
@@ -161,7 +161,7 @@ class ProbeQueryTest extends TestCase
         // probe() applies the same rules to its decoded data.
         $metadata = FFMpeg::openUrl($url)->probe();
         $this->assertSame(['comment' => '[redacted]', 'purl' => '[input]'], $metadata->get('format.tags'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_real_process_output_and_total_timeout_caps_are_enforced(): void
@@ -179,7 +179,7 @@ class ProbeQueryTest extends TestCase
                 $this->assertSame($category, $exception->category);
                 $this->assertStringNotContainsString($this->root, $exception->getMessage());
             }
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -191,7 +191,7 @@ class ProbeQueryTest extends TestCase
         $generated = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=64x48:r=24:d=3',
             '-vf', 'select=if(lt(n\,12)\,1\,not(mod(n\,3)))', '-fps_mode', 'vfr', '-c:v', 'mpeg4', '-bf', '2', '-g', '12',
             '-q:v', '3', $disk->path('vfr.mp4')]);
-        $this->assertTrue($generated->successful(), $generated->errorOutput());
+        $this->assertProcessSucceeded($generated);
         $media = FFMpeg::disk('query')->open('vfr.mp4');
         $frames = $media->probeQuery()->selectStreams('v:0')->frames()->readInterval(0, 4)
             ->entries(['frame' => ['pts_time', 'key_frame', 'pict_type'], 'stream' => ['index']])->get();
@@ -221,6 +221,6 @@ class ProbeQueryTest extends TestCase
         $this->assertLessThan($frames->frames()->count(), $partial->packets()->count());
         Storage::disk('memory')->put('vfr.mp4', $disk->get('vfr.mp4'));
         $this->assertCount(3, FFMpeg::disk('memory')->open('vfr.mp4')->probeQuery()->packets()->readPackets(3)->get()->packets());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

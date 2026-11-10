@@ -42,7 +42,7 @@ class DashTest extends TestCase
         $process = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=2.3',
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2.3', '-map', '0:v', '-map', '1:a',
             '-c:v', 'libx264', '-threads', '1', '-c:a', 'aac', $disk->path('source.mkv')]);
-        $this->assertTrue($process->successful(), $process->errorOutput());
+        $this->assertProcessSucceeded($process);
 
         return FFMpeg::disk('local')->open('source.mkv');
     }
@@ -70,7 +70,7 @@ class DashTest extends TestCase
         $this->assertFalse(is_callable([new DashRepresentation, 'toDisk']));
         $this->assertFalse(is_callable([new DashRepresentation, 'audioGroup']));
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_native_mpd_and_opt_in_hls_decode_the_exact_same_owned_segments(): void
@@ -125,7 +125,7 @@ class DashTest extends TestCase
                 $probe = $this->root.'/workspaces/fragment.mp4';
                 file_put_contents($probe, $local->get('nested/é #?/'.$name.'/init.mp4').$local->get($file->path));
                 $check = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-show_streams', '-show_packets', '-of', 'json', $probe]);
-                $this->assertTrue($check->successful(), $check->errorOutput());
+                $this->assertProcessSucceeded($check);
                 $data = json_decode($check->output(), true);
                 $this->assertSame([str_starts_with($name, 'audio') ? 'audio' : 'video'], array_column($data['streams'], 'codec_type'));
                 if (! str_starts_with($name, 'audio')) {
@@ -142,7 +142,7 @@ class DashTest extends TestCase
         $this->decode($local->path('playback/manifest.mpd'), ['-map', '0:v:0', '-map', '0:v:1', '-map', '0:a:0', '-map', '0:a:1']);
         $this->decode($local->path('playback/master.m3u8'), ['-map', '0:v:0', '-map', '0:a:0']);
         unlink($this->root.'/workspaces/fragment.mp4');
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         Event::assertDispatched(Events\ExportCompleted::class);
     }
 
@@ -150,7 +150,7 @@ class DashTest extends TestCase
     {
         $binary = config('laravel-ffmpeg.ffmpeg.binaries');
         $decode = Process::run([$binary, '-v', 'error', '-xerror', '-i', $path, ...$maps, '-f', 'null', '-']);
-        $this->assertTrue($decode->successful(), $decode->errorOutput());
+        $this->assertProcessSucceeded($decode);
     }
 
     public function test_shared_hls_plays_through_protected_hls_routes(): void
@@ -190,7 +190,7 @@ class DashTest extends TestCase
         unserialize(serialize($this->export($this->source())->sharedHls()->queued()->job('shared/manifest.mpd')))->handle();
         Event::assertDispatched(Events\QueuedExportCompleted::class, fn ($event) => $event->playback !== null
             && HlsPresentation::fromArray($event->playback)->file()['path'] === 'shared/master.m3u8');
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_cancellation_before_publication_publishes_nothing_and_preserves_events(): void
@@ -206,7 +206,7 @@ class DashTest extends TestCase
         } catch (ExportCancelled) {
             $this->assertSame([], Storage::disk('local')->allFiles('cancel'));
             Event::assertDispatched(Events\ExportCancelled::class);
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -235,7 +235,7 @@ class DashTest extends TestCase
             $this->assertSame(array_keys($writes), array_column($e->published, 'path'));
             $this->assertSame('partial/low/segment-00000002.m4s', $e->destination['path']);
             Event::assertDispatched(Events\ExportFailed::class);
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -287,7 +287,7 @@ class DashTest extends TestCase
             $this->assertSame('artifact', $exception->category);
             $this->assertSame([], Storage::disk('local')->allFiles('corrupt'));
             Event::assertDispatched(Events\ExportFailed::class);
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 

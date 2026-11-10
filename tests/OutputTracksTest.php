@@ -30,7 +30,7 @@ class OutputTracksTest extends TestCase
     protected function ffmpeg(array $arguments): string
     {
         $result = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-y', ...$arguments]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
 
         return $result->output();
     }
@@ -64,7 +64,7 @@ class OutputTracksTest extends TestCase
             $this->assertSame($this->decoded('source.mp4', '0:V:0'), $this->decoded($name, '0:V:0'));
             $this->assertSame($this->decoded('source.mp4', '0:a:0'), $this->decoded($name, '0:a:0'));
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_cover_art_supports_audio_only_and_rejects_existing_art(): void
@@ -174,7 +174,7 @@ class OutputTracksTest extends TestCase
         }
         $this->assertNotSame($videos[0]->get('bit_rate'), $videos[1]->get('bit_rate'));
         $this->assertSame($this->decoded('source.mp4', '0:a:0'), $this->decoded('scaled-tracks.mp4', '0:a:0'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_graph_pad_types_defer_missing_video_track_validation_until_before_publication(): void
@@ -190,7 +190,7 @@ class OutputTracksTest extends TestCase
             $this->assertStringContainsString('existing encoded output video tracks', $exception->getMessage());
         }
         $this->assertFalse(Storage::disk('output-tracks')->exists('no-video.m4a'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_rejects_missing_video_track_and_conflicting_rate_control(): void

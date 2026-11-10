@@ -27,7 +27,7 @@ class LoudnessTest extends TestCase
             $silent ? 'anullsrc=r=48000:cl=stereo:d=5' : 'aevalsrc=0.02*sin(2*PI*440*t):s=48000:d=8',
             '-f', 'lavfi', '-i', 'aevalsrc=if(lt(t\,3)\,0.02\,0.5)*sin(2*PI*1000*t)|0.01*sin(2*PI*250*t):s=48000:d=8',
             '-map', '0:a', '-map', '1:a', '-metadata', 'title=Loudness fixture', '-c:a', 'pcm_f64le', $path]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
 
         return $path;
     }
@@ -45,7 +45,7 @@ class LoudnessTest extends TestCase
         $command = $operation->inspect();
         $this->assertSame($command, $operation->inspect());
         $this->assertStringContainsString('atrim=start=3:duration=4,asetpts=PTS-STARTPTS,pan=mono|c0=c0,volume=0.5,aresample=48000,loudnorm=', implode(' ', $command));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
 
         foreach ([
@@ -79,20 +79,20 @@ class LoudnessTest extends TestCase
         $this->assertEqualsWithDelta(-18, $independent->inputIntegrated, 0.2);
         $this->assertLessThanOrEqual(-1.9, $independent->inputTruePeak);
         $probe = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-of', 'json', '-show_streams', '-show_format', $output]);
-        $this->assertTrue($probe->successful(), $probe->errorOutput());
+        $this->assertProcessSucceeded($probe);
         $data = json_decode($probe->output(), true);
         $this->assertSame(1, $data['streams'][0]['channels']);
         $this->assertSame('48000', $data['streams'][0]['sample_rate']);
         $this->assertEqualsWithDelta(4, (float) $data['format']['duration'], 0.01);
         $this->assertSame($sourceHash, hash_file('sha256', $source));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     protected function measure(string $path): LoudnessStats
     {
         $result = Process::run([config('laravel-ffmpeg.ffmpeg.binaries'), '-hide_banner', '-i', $path,
             '-af', 'loudnorm=print_format=json', '-f', 'null', '-']);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
         $this->assertSame(1, preg_match('/\{\s*"input_i".*?\}/s', $result->errorOutput(), $matches));
 
         return LoudnessStats::fromJson($matches[0]);
@@ -105,7 +105,7 @@ class LoudnessTest extends TestCase
         foreach ([true, false] as $linear) {
             $fixture = Process::run([$binary, '-v', 'error', '-y', '-f', 'lavfi', '-i',
                 'aevalsrc=(0.2+0.1*sin(2*PI*t/10))*sin(2*PI*1000*t):s=48000:d=30', '-c:a', 'pcm_f64le', $path]);
-            $this->assertTrue($fixture->successful(), $fixture->errorOutput());
+            $this->assertProcessSucceeded($fixture);
             $starts = 0;
             $result = FFMpeg::disk('loudness')->open('varying.wav')
                 ->normalizeLoudness(integrated: -18, linear: $linear)->audio('pcm_s24le')
@@ -122,7 +122,7 @@ class LoudnessTest extends TestCase
             $independent = $this->measure(Storage::disk('loudness')->path($result->file()->path));
             $this->assertEqualsWithDelta(-18, $independent->inputIntegrated, 0.4);
             $this->assertLessThanOrEqual(-1.9, $independent->inputTruePeak);
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -136,7 +136,7 @@ class LoudnessTest extends TestCase
         $this->assertNull($result->normalization->outputIntegrated);
         $this->assertSame('dynamic', $result->actualMode());
         $this->assertTrue($this->measure(Storage::disk('loudness')->path($result->file()->path))->silent());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_invalid_measurement_statistics_fail_in_the_analysis_phase(): void
@@ -186,7 +186,7 @@ class LoudnessTest extends TestCase
                 $this->assertTrue($exception instanceof MediaException || $exception->getMessage() === 'cancel loudness');
             }
             $this->assertFalse(Storage::disk('loudness')->exists('failed.wav'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 }

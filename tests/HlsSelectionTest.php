@@ -43,7 +43,7 @@ class HlsSelectionTest extends TestCase
                 '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2.4', '-i', $disk->path('captions.srt'),
                 '-map', '0:v', '-map', '1:a', '-map', '2:s', '-c:v', 'libx264', '-preset', 'ultrafast',
                 '-c:a', 'aac', '-c:s', 'srt', '-threads', '1', $disk->path('source.mkv')]);
-            $this->assertTrue($result->successful(), $result->errorOutput());
+            $this->assertProcessSucceeded($result);
         }
 
         return FFMpeg::disk('selection')->open('source.mkv');
@@ -94,7 +94,7 @@ class HlsSelectionTest extends TestCase
         $result = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-xerror', '-allowed_extensions', 'ALL',
             '-protocol_whitelist', 'file,crypto,data', '-i', $disk->path($prefix.$presentation->toArray()['playlist'].'.m3u8'),
             '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-']);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
     }
 
     protected function register(HlsPresentation $presentation): void
@@ -158,7 +158,7 @@ class HlsSelectionTest extends TestCase
         $this->allowed = false;
         $this->get($masterUrl)->assertForbidden();
         $this->get($this->url($selected->toArray()['playlist']))->assertForbidden();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     #[DataProvider('packaging')]

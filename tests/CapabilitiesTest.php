@@ -61,7 +61,7 @@ class CapabilitiesTest extends TestCase
         $this->assertSame(['encoders' => ['missing']], $capabilities->missing(['encoders' => ['aac', 'missing']]));
         $this->assertSame($capabilities, $capabilities->require(['filters' => ['scale']]));
         $this->assertSame($capabilities->toArray(), json_decode(json_encode($capabilities), true));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         $this->assertInstanceOf(Capabilities::class, FFMpeg::capabilities());
         $this->expectException(MediaException::class);
         $capabilities->require(['encoders' => ['absent']]);
@@ -76,7 +76,7 @@ class CapabilitiesTest extends TestCase
         $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame(['encoders' => ['not_present']], $report['missing']);
         $this->assertFalse($report['hardware']['device_usability_tested']);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_mismatched_and_wrong_major_versions_fail_sanitized(): void
@@ -90,7 +90,7 @@ class CapabilitiesTest extends TestCase
                 $this->assertSame('version', $exception->category);
                 $this->assertSame('', $exception->diagnostics);
             }
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -102,7 +102,7 @@ class CapabilitiesTest extends TestCase
         $this->assertSame('capability', $report['category']);
         $this->assertStringNotContainsString('secret-token', Artisan::output());
         $this->assertStringNotContainsString('/private/binary', Artisan::output());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/absent/root']);
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertSame('filesystem', json_decode(Artisan::output(), true)['category']);
@@ -143,6 +143,6 @@ class CapabilitiesTest extends TestCase
         $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame([], $report['missing']);
         $this->assertTrue($report['temporary_root']['writable']);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

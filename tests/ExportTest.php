@@ -85,7 +85,7 @@ class ExportTest extends TestCase
         $this->assertNotContains('-ss', $media->export()->inspect());
         $this->assertNotContains('language=eng', $media->export()->inspect());
         Process::assertNothingRan();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_geometry_helpers_share_filter_order_output_scopes_and_copy_restrictions(): void
@@ -133,7 +133,7 @@ class ExportTest extends TestCase
         $generation = Process::run([$ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
             'color=red:size=160x80:rate=10:duration=0.3,drawbox=x=0:y=0:w=40:h=80:color=blue:t=fill,drawbox=x=120:y=0:w=40:h=80:color=green:t=fill,setsar=2',
             '-c:v', 'ffv1', $local->path('anamorphic.mkv')]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         $media = FFMpeg::disk('local')->open('anamorphic.mkv');
         $media->export()
             ->output('width.mkv', fn ($out) => $out->map('0:v')->resize(width: 80)->video('ffv1')->toDisk('local'))
@@ -151,7 +151,7 @@ class ExportTest extends TestCase
 
         foreach (['stretch', 'contain', 'cover'] as $name) {
             $frame = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path($name.'.mkv'), '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']);
-            $this->assertTrue($frame->successful(), $frame->errorOutput());
+            $this->assertProcessSucceeded($frame);
             $pixel = fn ($x, $y) => array_values(unpack('C*', substr($frame->output(), ($y * 80 + $x) * 3, 3)));
             $middle = $pixel(40, 40);
             $this->assertGreaterThan(220, $middle[0], $name.' must retain the red center');
@@ -175,7 +175,7 @@ class ExportTest extends TestCase
             }
         }
 
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     #[DataProvider('unsafeOptions')]
@@ -291,7 +291,7 @@ class ExportTest extends TestCase
             '-f', 'lavfi', '-i', 'sine=frequency=700:sample_rate=48000:duration=1',
             '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $fixture,
         ]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         Storage::disk('memory')->put('bitrates.mkv', file_get_contents($fixture));
         $media = FFMpeg::disk('memory')->open('bitrates.mkv');
         $media->export()->video('libx264', bitrate: 800_000)->audio('aac', bitrate: 64_000)->save('integer.mp4');
@@ -301,7 +301,7 @@ class ExportTest extends TestCase
         $metadata = FFMpeg::disk('memory')->open('integer.mp4')->probe();
         $this->assertSame('h264', $metadata->video()->codec());
         $this->assertSame('aac', $metadata->audio()->codec());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_clip_timecodes_normalize_all_positions_and_mix_with_numeric_seconds(): void
@@ -369,7 +369,7 @@ class ExportTest extends TestCase
         $result = $media->frame(at: '00:00:01.125')->save('nested/frame.png');
         $this->assertSame($image, Storage::disk('memory')->get('nested/frame.png'));
         $this->assertSame('image', $result->file()->role);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
 
         $this->fakePipeline();
         try {
@@ -379,7 +379,7 @@ class ExportTest extends TestCase
             $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
         }
         $this->assertFalse(Storage::disk('memory')->exists('invalid.png'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
 
         foreach ([-1, INF, '12.5'] as $invalid) {
             try {
@@ -407,7 +407,7 @@ class ExportTest extends TestCase
             '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0,setpts=3*N/TB[v]',
             '-map', '[v]', '-fps_mode', 'vfr', '-c:v', 'ffv1', $fixture,
         ]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         Storage::disk('memory')->put('sparse.mkv', file_get_contents($fixture));
         $media = FFMpeg::disk('memory')->open('sparse.mkv');
 
@@ -446,7 +446,7 @@ class ExportTest extends TestCase
             $this->assertSame([], $exception->published);
         }
         $this->assertFalse(Storage::disk('memory')->exists('beyond-end.jpg'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_image_sequences_require_valid_sampling_and_numbered_destinations(): void
@@ -489,7 +489,7 @@ class ExportTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame(['probing', 'metadata'], [$exception->phase, $exception->category]);
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_image_sequences_validate_every_image_and_inventory_before_any_publication(): void
@@ -514,7 +514,7 @@ class ExportTest extends TestCase
                 $this->assertSame(['validation', 'artifact', []], [$exception->phase, $exception->category, $exception->published]);
             }
             $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -544,7 +544,7 @@ class ExportTest extends TestCase
         }
         $this->assertSame($image, $storage->get('partial/01.png'));
         $this->assertFalse($storage->exists('partial/02.png'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
@@ -558,7 +558,7 @@ class ExportTest extends TestCase
             '-f', 'lavfi', '-i', 'color=c=blue:s=80x48:r=10:d=0.2',
             '-filter_complex', '[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]', '-map', '[v]', '-c:v', 'ffv1', $fixture,
         ]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         Storage::disk('memory')->put('colors.mkv', file_get_contents($fixture));
         $media = FFMpeg::disk('memory')->open('colors.mkv');
         $result = $media->frames(every: 0.2)->resize(width: 40)->save('interval/%03d.png');
@@ -586,7 +586,7 @@ class ExportTest extends TestCase
             $image = imagecreatefromstring($bytes);
             $this->assertGreaterThan(200, imagecolorsforindex($image, imagecolorat($image, 40, 24))['green']);
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_two_pass_encoding_requires_explicit_video_bitrate_without_crf(): void
@@ -618,7 +618,7 @@ class ExportTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame(['probing', 'mapping'], [$exception->phase, $exception->category]);
         }
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_two_pass_failures_and_cancellation_never_publish_or_retain_statistics(): void
@@ -652,7 +652,7 @@ class ExportTest extends TestCase
                 $this->assertSame([], $exception->published);
             }
             $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
@@ -666,7 +666,7 @@ class ExportTest extends TestCase
             '-f', 'lavfi', '-i', 'sine=frequency=700:sample_rate=48000:duration=1.2',
             '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $fixture,
         ]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         Storage::disk('memory')->put('passes.mkv', file_get_contents($fixture));
         $media = FFMpeg::disk('memory')->open('passes.mkv');
         $snapshots = [];
@@ -690,7 +690,7 @@ class ExportTest extends TestCase
             });
         $inspection = $export->inspect();
         $this->assertSame($inspection, $export->inspect());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         $result = $export->save();
 
         $this->assertCount(2, $result->processes());
@@ -710,7 +710,7 @@ class ExportTest extends TestCase
         $this->assertEqualsWithDelta(0.5, $full->duration(), 0.05);
         $this->assertEqualsWithDelta(0.3, $small->duration(), 0.05);
         $this->assertSame($inspection, $export->inspect());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_waveform_arguments_and_invalid_images_fail_without_publication(): void
@@ -752,7 +752,7 @@ class ExportTest extends TestCase
             $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
         }
         $this->assertFalse(Storage::disk('memory')->exists('invalid-wave.png'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_real_waveforms_render_audio_levels_filters_clips_colors_and_geometry(): void
@@ -763,13 +763,13 @@ class ExportTest extends TestCase
             $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'aevalsrc=if(lt(t\,0.3)\,0\,0.8):s=8000:d=1.2',
             '-c:a', 'pcm_s16le', $fixture,
         ]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         Storage::disk('memory')->put('levels.wav', file_get_contents($fixture));
         $media = FFMpeg::disk('memory')->open('levels.wav');
         $operation = $media->waveform(width: 80, height: 41);
         $inspection = $operation->inspect();
         $this->assertSame($inspection, $operation->inspect());
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
         $result = $operation->onProgress(fn (Progress $progress) => $this->assertNull($progress->percentage))->save('wave.png');
         $this->assertSame('image', $result->file()->role);
         $bytes = Storage::disk('memory')->get('wave.png');
@@ -798,7 +798,7 @@ class ExportTest extends TestCase
         $this->assertSame([40, 20, IMAGETYPE_JPEG], array_slice(getimagesizefromstring($bytes), 0, 3));
         $clipped = imagecreatefromstring($bytes);
         $this->assertGreaterThan(200, imagecolorsforindex($clipped, imagecolorat($clipped, 2, 5))['red']);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_generated_files_read_streams_and_delegate_temporary_urls_to_the_retained_filesystem(): void
@@ -843,7 +843,7 @@ class ExportTest extends TestCase
         $completed = null;
         Event::fake([Events\ExportStarting::class, Events\ExportFailed::class, Events\ExportCancelled::class]);
         Event::listen(Events\ExportCompleted::class, function ($event) use (&$completed) {
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
             $this->assertSame('encoded media', Storage::disk('memory')->get('nested/encoded.mp4'));
             $completed = $event;
         });
@@ -881,7 +881,7 @@ class ExportTest extends TestCase
         $this->assertInstanceOf(Events\ExportCompleted::class, $completed);
         $this->assertSame('nested/encoded.mp4', $completed->files[0]['path']);
         Event::assertNotDispatched(Events\ExportFailed::class);
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_global_progress_events_work_without_a_per_export_callback(): void
@@ -929,7 +929,7 @@ class ExportTest extends TestCase
         }
         $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
         Event::assertNothingDispatched();
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_global_progress_listeners_can_cancel_before_publication(): void
@@ -951,7 +951,7 @@ class ExportTest extends TestCase
         Event::assertDispatched(Events\ExportCancelled::class);
         Event::assertNotDispatched(Events\ExportCompleted::class);
         $this->assertFalse(Storage::disk('memory')->exists('cancelled.mp4'));
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_progress_chunks_are_parsed_without_inventing_unknown_percentages(): void
@@ -999,7 +999,7 @@ class ExportTest extends TestCase
                 $this->assertSame('validation', $exception->phase);
                 $this->assertSame('artifact', $exception->category);
                 $this->assertFalse(Storage::disk('memory')->exists('missing.mp4'));
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
                 Event::assertNotDispatched(Events\ExportCompleted::class);
             }
         }
@@ -1016,7 +1016,7 @@ class ExportTest extends TestCase
             $this->assertSame('encoding', $exception->phase);
             $this->assertStringContainsString('encoder rejected', $exception->diagnostics);
             $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
             Event::assertDispatched(Events\ExportFailed::class, fn ($event) => $event->phase === 'encoding');
             Event::assertNotDispatched(Events\ExportCompleted::class);
         }
@@ -1060,7 +1060,7 @@ class ExportTest extends TestCase
             $this->assertSame(['disk' => null, 'path' => 'failed.mp4'], $exception->destination);
             $this->assertSame([], $exception->published);
             $this->assertNull($exception->getPrevious());
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
             Event::assertNotDispatched(Events\ExportCompleted::class);
         }
     }
@@ -1078,7 +1078,7 @@ class ExportTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('publication', $exception->phase);
             $this->assertSame([['disk' => null, 'path' => 'partial.mp4']], $exception->published);
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
             Event::assertDispatched(Events\ExportFailed::class, fn ($event) => $event->published === $exception->published);
             Event::assertNotDispatched(Events\ExportCompleted::class);
         }
@@ -1112,7 +1112,7 @@ class ExportTest extends TestCase
             $this->assertSame($original, $exception);
             $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
             $this->assertFalse(Storage::disk('memory')->exists('cancelled.mp4'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
             Event::assertDispatched($class === ExportCancelled::class ? Events\ExportCancelled::class : Events\ExportFailed::class);
             Event::assertNotDispatched(Events\ExportCompleted::class);
         }
@@ -1137,7 +1137,7 @@ class ExportTest extends TestCase
             '-g', '10', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-metadata:s:a:0', 'language=fra',
             '-metadata:s:a:1', 'language=eng', $fixture,
         ]);
-        $this->assertTrue($generation->successful(), $generation->errorOutput());
+        $this->assertProcessSucceeded($generation);
         $original = file_get_contents($fixture);
         Storage::disk('memory')->put('fixture.mkv', $original);
         $local = $this->fakeLocalDisk();
@@ -1190,8 +1190,8 @@ class ExportTest extends TestCase
         $media->export()->video('copy')->audio('copy')->clip('00:00:01.300', duration: '00:00:00.600', seek: 'keyframe')->toDisk('local')->save('keyframe.mkv');
         $keyframe = Process::run([$ffmpeg, '-v', 'error', '-i', $local->path('keyframe.mkv'), '-map', '0:v:0', '-frames:v', '1', '-f', 'md5', '-']);
         $sourceFrame = Process::run([$ffmpeg, '-v', 'error', '-i', $fixture, '-map', '0:v:0', '-vf', 'select=eq(n\\,10)', '-frames:v', '1', '-f', 'md5', '-']);
-        $this->assertTrue($keyframe->successful(), $keyframe->errorOutput());
-        $this->assertTrue($sourceFrame->successful(), $sourceFrame->errorOutput());
+        $this->assertProcessSucceeded($keyframe);
+        $this->assertProcessSucceeded($sourceFrame);
         $this->assertSame($sourceFrame->output(), $keyframe->output());
 
         $clip = $media->export()->video('libx264', crf: 25, preset: 'ultrafast')->audio('aac', bitrate: '64k')
@@ -1216,6 +1216,6 @@ class ExportTest extends TestCase
             $this->assertFalse(Storage::disk('memory')->exists('unexpected.mp4'));
         }
 
-        $this->assertSame([], glob($this->root.'/workspaces/*'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

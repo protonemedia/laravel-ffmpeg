@@ -37,7 +37,7 @@ class LiveHlsTest extends TestCase
             'testsrc2=size=128x72:rate=20:duration='.$duration, '-f', 'lavfi', '-i',
             'sine=sample_rate=48000:duration='.$duration, '-c:v', 'libx264', '-preset', 'ultrafast',
             '-threads', '1', '-c:a', 'aac', Storage::disk('local')->path('source.mkv')]);
-        $this->assertTrue($result->successful(), $result->errorOutput());
+        $this->assertProcessSucceeded($result);
         $probe = Process::run([dirname($this->binary).'/ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', Storage::disk('local')->path('source.mkv')]);
         $this->assertGreaterThanOrEqual($duration, (float) trim($probe->output()));
 
@@ -80,7 +80,7 @@ class LiveHlsTest extends TestCase
             }
             if ($seen === []) {
                 $decode = Process::run([$this->binary, '-v', 'error', '-i', $disk->path($snapshot->segments[0]), '-f', 'null', '-']);
-                $this->assertTrue($decode->successful(), $decode->errorOutput());
+                $this->assertProcessSucceeded($decode);
             }
             $local = glob($this->root.'/workspaces/laravel-ffmpeg-*/live-*.ts*') ?: [];
             $this->assertLessThanOrEqual(7, count($local));
@@ -279,7 +279,7 @@ class LiveHlsTest extends TestCase
             $this->assertGreaterThan(1, $result->publishedSegments);
             $this->assertStringContainsString('#EXT-X-ENDLIST', $disk->get($result->playlist));
             $decoded = Process::run([$this->binary, '-v', 'error', '-xerror', '-i', $disk->path($result->playlist), '-f', 'null', '-']);
-            $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+            $this->assertProcessSucceeded($decoded);
             $requests = array_map(fn ($line) => json_decode($line, true, flags: JSON_THROW_ON_ERROR), file($this->root.'/requests', FILE_IGNORE_NEW_LINES));
             $this->assertContains('/public', array_column($requests, 'path'));
             $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));

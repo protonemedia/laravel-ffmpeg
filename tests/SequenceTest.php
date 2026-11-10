@@ -34,7 +34,7 @@ class SequenceTest extends TestCase
             $selector->open('one.png')->concat($sequence);
             $this->fail('A multi-file input was accepted as a standalone concat input.');
         } catch (InvalidArgumentException) {
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
         foreach ([['plain.png', 3, 2.5, 1], ['%d/%d.png', 3, 2.5, 1], ['%03d/photo.png', 3, 2.5, 1],
             ['photo-%s.png', 3, 2.5, 1], ['photo-%d.gif', 3, 2.5, 1], ['/photo-%d.png', 3, 2.5, 1],
@@ -44,7 +44,7 @@ class SequenceTest extends TestCase
                 $selector->openSequence(...$arguments);
                 $this->fail('An invalid sequence was accepted.');
             } catch (InvalidArgumentException) {
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
         Process::assertNothingRan();
@@ -76,7 +76,7 @@ class SequenceTest extends TestCase
 
             file_put_contents($this->root.'/timelapse.mp4', Storage::disk($disk)->get('timelapse.mp4'));
             $decoded = Process::run([$binary, '-v', 'error', '-i', $this->root.'/timelapse.mp4', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
-            $this->assertTrue($decoded->successful(), $decoded->errorOutput());
+            $this->assertProcessSucceeded($decoded);
             $this->assertSame(3 * 64 * 48 * 3, strlen($decoded->output()));
             foreach ([0, 1, 2] as $frame) {
                 $pixel = array_values(unpack('C3', substr($decoded->output(), $frame * 64 * 48 * 3, 3)));
@@ -86,7 +86,7 @@ class SequenceTest extends TestCase
             foreach ($hashes as $key => $hash) {
                 $this->assertSame($hash, hash('sha256', Storage::disk($disk)->get($key)));
             }
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -106,7 +106,7 @@ class SequenceTest extends TestCase
             } catch (MediaException $exception) {
                 $this->assertSame('staging', $exception->phase);
                 $this->assertFalse(Storage::disk('memory')->exists('invalid.mp4'));
-                $this->assertSame([], glob($this->root.'/workspaces/*'));
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
     }
@@ -124,7 +124,7 @@ class SequenceTest extends TestCase
         } catch (MediaException $exception) {
             $this->assertSame('encoding', $exception->phase);
             $this->assertFalse(Storage::disk('memory')->exists('corrupt.mp4'));
-            $this->assertSame([], glob($this->root.'/workspaces/*'));
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 }
