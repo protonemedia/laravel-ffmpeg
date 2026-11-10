@@ -231,43 +231,9 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         $dimensions = null;
         $urls = [];
         foreach ($artifacts as $index => $artifact) {
-            ImageOutput::validate($artifact['path'], 'image');
-            [$width, $height] = getimagesize($artifact['path']);
-
-            // We will remove the margins and padding to recover the size of one thumbnail,
-            // which must divide the grid evenly and match the size on every other sheet.
-            $width -= 2 * $this->margin + ($this->columns - 1) * $this->padding;
-            $height -= 2 * $this->margin + ($this->rows - 1) * $this->padding;
-            if ($width <= 0 || $height <= 0 || $width % $this->columns !== 0 || $height % $this->rows !== 0
-                || ($dimensions !== null
-                    && $dimensions !== [intdiv($width, $this->columns), intdiv($height, $this->rows)])) {
-                throw MediaException::validation(
-                    'The storyboard sheets have inconsistent grid dimensions.',
-                    'artifact',
-                );
-            }
-
-            $dimensions = [intdiv($width, $this->columns), intdiv($height, $this->rows)];
+            $dimensions = $this->thumbnailSize($artifact['path'], $dimensions);
             if ($this->vttPath !== null) {
-                $key = $artifact['destination']['path'];
-                try {
-                    $url = $this->imageUrl instanceof Closure
-                        ? ($this->imageUrl)($key, $index + 1)
-                        : $this->relativeUrl($key);
-                } catch (Throwable) {
-                    throw MediaException::validation('Cannot resolve storyboard image URLs.', 'artifact');
-                }
-
-                // Each URL is written into the cue text ahead of an #xywh fragment, so it must
-                // not contain whitespace or a fragment of its own.
-                if (! is_string($url) || $url === '' || preg_match('/[\x00-\x20\x7f#]/', $url)) {
-                    throw MediaException::validation(
-                        'Storyboard image URLs require a nonempty URI without whitespace or a fragment.',
-                        'artifact',
-                    );
-                }
-
-                $urls[] = $url;
+                $urls[] = $this->sheetUrl($artifact['destination']['path'], $index + 1);
             }
         }
 
@@ -276,6 +242,75 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         }
 
         $path = dirname($paths[0]).'/thumbnails.vtt';
+
+        $this->writeCues($path, $dimensions, $urls);
+
+        $artifacts[] = ['path' => $path, 'output' => 0, 'role' => 'vtt', 'destination' => [
+            'disk' => $outputs[0]->destination()['disk'], 'path' => $this->vttPath,
+        ]];
+
+        return $artifacts;
+    }
+
+    /**
+     * Validate the given sheet and get the size of one of its thumbnails.
+     *
+     * @param  array{0: int, 1: int}|null  $expected
+     * @return array{0: int, 1: int}
+     */
+    protected function thumbnailSize(string $path, ?array $expected): array
+    {
+        ImageOutput::validate($path, 'image');
+        [$width, $height] = getimagesize($path);
+
+        // We will remove the margins and padding to recover the size of one thumbnail,
+        // which must divide the grid evenly and match the size on every other sheet.
+        $width -= 2 * $this->margin + ($this->columns - 1) * $this->padding;
+        $height -= 2 * $this->margin + ($this->rows - 1) * $this->padding;
+        if ($width <= 0 || $height <= 0 || $width % $this->columns !== 0 || $height % $this->rows !== 0
+            || ($expected !== null
+                && $expected !== [intdiv($width, $this->columns), intdiv($height, $this->rows)])) {
+            throw MediaException::validation(
+                'The storyboard sheets have inconsistent grid dimensions.',
+                'artifact',
+            );
+        }
+
+        return [intdiv($width, $this->columns), intdiv($height, $this->rows)];
+    }
+
+    /**
+     * Resolve the URL the cues use for the given sheet.
+     */
+    protected function sheetUrl(string $key, int $sheet): string
+    {
+        try {
+            $url = $this->imageUrl instanceof Closure
+                ? ($this->imageUrl)($key, $sheet)
+                : $this->relativeUrl($key);
+        } catch (Throwable) {
+            throw MediaException::validation('Cannot resolve storyboard image URLs.', 'artifact');
+        }
+
+        // Each URL is written into the cue text ahead of an #xywh fragment, so it must
+        // not contain whitespace or a fragment of its own.
+        if (! is_string($url) || $url === '' || preg_match('/[\x00-\x20\x7f#]/', $url)) {
+            throw MediaException::validation(
+                'Storyboard image URLs require a nonempty URI without whitespace or a fragment.',
+                'artifact',
+            );
+        }
+
+        return $url;
+    }
+
+    /**
+     * Write a WebVTT cue for every thumbnail to the given private path.
+     *
+     * @param  array{0: int, 1: int}  $dimensions
+     */
+    protected function writeCues(string $path, array $dimensions, array $urls): void
+    {
         $file = @fopen($path, 'xb');
         if ($file === false) {
             throw MediaException::validation('Cannot create storyboard cues.', 'filesystem');
@@ -286,16 +321,8 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
                 throw MediaException::validation('Cannot write storyboard cues.', 'filesystem');
             }
 
-            [$width, $height] = $dimensions;
-            $end = intdiv($this->duration - 1, 1000) + 1;
-            $cells = $this->columns * $this->rows;
             for ($index = 0; $index < $this->frames; $index++) {
-                $cell = $index % $cells;
-                $x = $this->margin + ($cell % $this->columns) * ($width + $this->padding);
-                $y = $this->margin + intdiv($cell, $this->columns) * ($height + $this->padding);
-                $start = $index * $this->interval;
-                $cue = $this->timestamp($start).' --> '.$this->timestamp(min($start + $this->interval, $end))."\n"
-                    .$urls[intdiv($index, $cells)]."#xywh={$x},{$y},{$width},{$height}\n\n";
+                $cue = $this->cue($index, $dimensions, $urls);
                 if (fwrite($file, $cue) !== strlen($cue)) {
                     throw MediaException::validation('Cannot write storyboard cues.', 'filesystem');
                 }
@@ -307,12 +334,25 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         } finally {
             fclose($file);
         }
+    }
 
-        $artifacts[] = ['path' => $path, 'output' => 0, 'role' => 'vtt', 'destination' => [
-            'disk' => $outputs[0]->destination()['disk'], 'path' => $this->vttPath,
-        ]];
+    /**
+     * Get the WebVTT cue that frames the given thumbnail within its sheet.
+     *
+     * @param  array{0: int, 1: int}  $dimensions
+     */
+    protected function cue(int $index, array $dimensions, array $urls): string
+    {
+        [$width, $height] = $dimensions;
+        $end = intdiv($this->duration - 1, 1000) + 1;
+        $cells = $this->columns * $this->rows;
+        $cell = $index % $cells;
+        $x = $this->margin + ($cell % $this->columns) * ($width + $this->padding);
+        $y = $this->margin + intdiv($cell, $this->columns) * ($height + $this->padding);
+        $start = $index * $this->interval;
 
-        return $artifacts;
+        return $this->timestamp($start).' --> '.$this->timestamp(min($start + $this->interval, $end))."\n"
+            .$urls[intdiv($index, $cells)]."#xywh={$x},{$y},{$width},{$height}\n\n";
     }
 
     /**

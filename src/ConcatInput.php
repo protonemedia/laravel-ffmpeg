@@ -101,43 +101,12 @@ class ConcatInput implements InputSource
 
         $manifest = "ffconcat version 1.0\n";
         $layout = null;
-        $fields = ['codec_type', 'codec_name', 'codec_tag_string', 'profile', 'level', 'time_base',
-            'width', 'height', 'pix_fmt', 'sample_aspect_ratio', 'r_frame_rate',
-            'sample_rate', 'channels', 'channel_layout', 'extradata_size'];
 
         foreach ($this->inputs as $index => $input) {
             $metadata = $workspace->probe($input);
-            $duration = $metadata->duration();
-            $streams = $metadata->streams()
-                ->map(fn ($stream): array => array_map(fn (string $field) => $stream->get($field), $fields))
-                ->all();
+            $streams = $this->streamLayout($metadata);
 
-            if ($duration === null || $duration <= 0) {
-                throw MediaException::probing(
-                    "Concat input [{$index}] must have a finite positive duration.",
-                    'metadata',
-                );
-            }
-
-            if ($streams === []) {
-                throw MediaException::probing("Concat input [{$index}] must contain streams.", 'metadata');
-            }
-
-            if (in_array($metadata->get('format.format_name'), ['concat', 'hls', 'dash'], true)) {
-                throw MediaException::probing(
-                    "Concat input [{$index}] must be standalone media, not a playlist or manifest.",
-                    'metadata',
-                );
-            }
-
-            $start = $metadata->get('format.start_time', '0');
-
-            if (! is_numeric($start) || (float) $start !== 0.0) {
-                throw MediaException::probing(
-                    "Concat input [{$index}] must start at zero; use an explicit normalization graph.",
-                    'metadata',
-                );
-            }
+            $this->ensureConcatenable($index, $metadata, $streams);
 
             if ($layout !== null && $layout !== $streams) {
                 throw MediaException::probing(
@@ -147,17 +116,8 @@ class ConcatInput implements InputSource
             }
 
             $layout = $streams;
-            $source = $workspace->stage($input);
-            $alias = "{$name}-part-{$index}".($input->extension() === '' ? '' : ".{$input->extension()}");
-            $target = "{$workspace->path}/{$alias}";
-
-            // We link each input under a safe relative name, which avoids FFconcat's quoting
-            // rules for caller filenames. Cleanup deletes the links, never their source files.
-            if (! @symlink($source, $target) && (! @copy($source, $target) || ! chmod($target, 0600))) {
-                throw MediaException::staging("Cannot prepare concat input {$index}.", 'filesystem');
-            }
-
-            $manifest .= "file '{$alias}'\nduration ".sprintf('%.6F', $duration)."\n";
+            $alias = $this->linkInput($workspace, $input, $index, $name);
+            $manifest .= "file '{$alias}'\nduration ".sprintf('%.6F', $metadata->duration())."\n";
         }
 
         $path = "{$workspace->path}/{$name}";
@@ -167,5 +127,72 @@ class ConcatInput implements InputSource
         }
 
         return $path;
+    }
+
+    /**
+     * Get the stream parameters that must match across every concatenated input.
+     */
+    protected function streamLayout(Metadata $metadata): array
+    {
+        $fields = ['codec_type', 'codec_name', 'codec_tag_string', 'profile', 'level', 'time_base',
+            'width', 'height', 'pix_fmt', 'sample_aspect_ratio', 'r_frame_rate',
+            'sample_rate', 'channels', 'channel_layout', 'extradata_size'];
+
+        return $metadata->streams()
+            ->map(fn ($stream): array => array_map(fn (string $field) => $stream->get($field), $fields))
+            ->all();
+    }
+
+    /**
+     * Ensure the given input is standalone media with streams, a positive duration and a zero start.
+     */
+    protected function ensureConcatenable(int|string $index, Metadata $metadata, array $streams): void
+    {
+        $duration = $metadata->duration();
+
+        if ($duration === null || $duration <= 0) {
+            throw MediaException::probing(
+                "Concat input [{$index}] must have a finite positive duration.",
+                'metadata',
+            );
+        }
+
+        if ($streams === []) {
+            throw MediaException::probing("Concat input [{$index}] must contain streams.", 'metadata');
+        }
+
+        if (in_array($metadata->get('format.format_name'), ['concat', 'hls', 'dash'], true)) {
+            throw MediaException::probing(
+                "Concat input [{$index}] must be standalone media, not a playlist or manifest.",
+                'metadata',
+            );
+        }
+
+        $start = $metadata->get('format.start_time', '0');
+
+        if (! is_numeric($start) || (float) $start !== 0.0) {
+            throw MediaException::probing(
+                "Concat input [{$index}] must start at zero; use an explicit normalization graph.",
+                'metadata',
+            );
+        }
+    }
+
+    /**
+     * Stage the given input and link it into the workspace under a safe alias.
+     */
+    protected function linkInput(Workspace $workspace, Media $input, int|string $index, string $name): string
+    {
+        $source = $workspace->stage($input);
+        $alias = "{$name}-part-{$index}".($input->extension() === '' ? '' : ".{$input->extension()}");
+        $target = "{$workspace->path}/{$alias}";
+
+        // We link each input under a safe relative name, which avoids FFconcat's quoting
+        // rules for caller filenames. Cleanup deletes the links, never their source files.
+        if (! @symlink($source, $target) && (! @copy($source, $target) || ! chmod($target, 0600))) {
+            throw MediaException::staging("Cannot prepare concat input {$index}.", 'filesystem');
+        }
+
+        return $alias;
     }
 }

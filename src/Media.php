@@ -591,9 +591,6 @@ class Media
             throw new InvalidArgumentException('The staging name must be a safe generated filename.');
         }
 
-        $input = null;
-        $output = null;
-
         try {
             if ($this->source instanceof InputSource) {
                 return $this->source->stage($workspace, $name, $resource);
@@ -617,6 +614,32 @@ class Media
             }
 
             $path = $workspace->path.DIRECTORY_SEPARATOR.$name;
+
+            $this->copyToWorkspace($disk, $path);
+
+            if (! $resource) {
+                self::rejectManifestContent($path);
+            }
+
+            return $path;
+        } catch (Throwable $throwable) {
+            if ($throwable instanceof MediaException) {
+                throw $throwable;
+            }
+
+            throw MediaException::staging('Cannot stage the media input.', 'transfer');
+        }
+    }
+
+    /**
+     * Copy the media from the given disk to the given private workspace path.
+     */
+    protected function copyToWorkspace(Filesystem $disk, string $path): void
+    {
+        $input = null;
+        $output = null;
+
+        try {
             $output = @fopen($path, 'xb');
 
             if ($output === false || ! chmod($path, 0600)) {
@@ -639,18 +662,6 @@ class Media
                 || fstat($output)['size'] !== $bytes) {
                 throw MediaException::staging('The media input transfer did not complete.', 'transfer');
             }
-
-            if (! $resource) {
-                self::rejectManifestContent($path);
-            }
-
-            return $path;
-        } catch (Throwable $throwable) {
-            if ($throwable instanceof MediaException) {
-                throw $throwable;
-            }
-
-            throw MediaException::staging('Cannot stage the media input.', 'transfer');
         } finally {
             if (is_resource($input)) {
                 fclose($input);

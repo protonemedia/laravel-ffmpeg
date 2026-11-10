@@ -199,6 +199,20 @@ trait StagesInputs
      */
     protected function validateResources(Workspace $workspace, ProcessRunner $runner, array $resources): void
     {
+        $this->ensureResourceFiltersExist($workspace, $runner, $resources);
+
+        foreach ($resources as $resource) {
+            if ($resource['type'] === 'subtitle') {
+                $this->validateSubtitleResource($workspace, $runner, $resource);
+            }
+        }
+    }
+
+    /**
+     * Ensure the FFmpeg build has the filters that render the given text and subtitle resources.
+     */
+    protected function ensureResourceFiltersExist(Workspace $workspace, ProcessRunner $runner, array $resources): void
+    {
         $required = collect($resources)
             ->reject(fn (array $resource): bool => $resource['type'] === 'file')
             ->map(fn (array $resource): string => $resource['type'] === 'text' ? 'drawtext' : 'subtitles')
@@ -218,48 +232,48 @@ trait StagesInputs
                 }
             }
         }
+    }
 
-        foreach ($resources as $resource) {
-            if ($resource['type'] !== 'subtitle') {
-                continue;
-            }
+    /**
+     * Ensure the given subtitle resource is a standalone UTF-8 subtitle file FFmpeg can decode.
+     */
+    protected function validateSubtitleResource(Workspace $workspace, ProcessRunner $runner, array $resource): void
+    {
+        if (! mb_check_encoding(file_get_contents("{$workspace->path}/{$resource['path']}"), 'UTF-8')) {
+            throw MediaException::probing(
+                "Subtitle resources require UTF-8 for {$resource['context']}.",
+                'resource',
+            );
+        }
 
-            if (! mb_check_encoding(file_get_contents("{$workspace->path}/{$resource['path']}"), 'UTF-8')) {
-                throw MediaException::probing(
-                    "Subtitle resources require UTF-8 for {$resource['context']}.",
-                    'resource',
-                );
-            }
+        // We will probe the exact filename and bytes the subtitles filter reopens, without
+        // the caller's input options, so they cannot force a different demuxer or seek.
+        $probe = $runner->run([
+            config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-of', 'json',
+            '-show_entries', 'format=format_name:stream=codec_type', '-protocol_whitelist', 'file',
+            '-format_whitelist', 'srt,ass,webvtt', $resource['path'],
+        ], $workspace->path);
+        $data = json_decode($probe->output, true);
 
-            // We will probe the exact filename and bytes the subtitles filter reopens, without
-            // the caller's input options, so they cannot force a different demuxer or seek.
-            $probe = $runner->run([
-                config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'), '-v', 'error', '-of', 'json',
-                '-show_entries', 'format=format_name:stream=codec_type', '-protocol_whitelist', 'file',
-                '-format_whitelist', 'srt,ass,webvtt', $resource['path'],
-            ], $workspace->path);
-            $data = json_decode($probe->output, true);
+        if ($probe->exitCode !== 0
+            || ! in_array($data['format']['format_name'] ?? null, ['srt', 'ass', 'webvtt'], true)
+            || ($data['streams'] ?? null) !== [['codec_type' => 'subtitle']]) {
+            throw MediaException::probing(
+                "A subtitle resource must be a standalone SRT, ASS, or WebVTT file for {$resource['context']}.",
+                'resource',
+            );
+        }
 
-            if ($probe->exitCode !== 0
-                || ! in_array($data['format']['format_name'] ?? null, ['srt', 'ass', 'webvtt'], true)
-                || ($data['streams'] ?? null) !== [['codec_type' => 'subtitle']]) {
-                throw MediaException::probing(
-                    "A subtitle resource must be a standalone SRT, ASS, or WebVTT file for {$resource['context']}.",
-                    'resource',
-                );
-            }
+        // The encoding binary must also accept and decode these unchanged
+        // bytes under the whitelist before its filter reopens the file.
+        $decode = $runner->run([
+            config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), '-v', 'error', '-nostdin',
+            '-protocol_whitelist', 'file', '-format_whitelist', 'srt,ass,webvtt', '-i', $resource['path'],
+            '-map', '0:s:0', '-c:s', 'ass', '-f', 'null', '-',
+        ], $workspace->path);
 
-            // The encoding binary must also accept and decode these unchanged
-            // bytes under the whitelist before its filter reopens the file.
-            $decode = $runner->run([
-                config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'), '-v', 'error', '-nostdin',
-                '-protocol_whitelist', 'file', '-format_whitelist', 'srt,ass,webvtt', '-i', $resource['path'],
-                '-map', '0:s:0', '-c:s', 'ass', '-f', 'null', '-',
-            ], $workspace->path);
-
-            if ($decode->exitCode !== 0) {
-                throw MediaException::probing("Cannot decode {$resource['context']}.", 'resource');
-            }
+        if ($decode->exitCode !== 0) {
+            throw MediaException::probing("Cannot decode {$resource['context']}.", 'resource');
         }
     }
 

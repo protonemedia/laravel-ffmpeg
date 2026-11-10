@@ -294,19 +294,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
      */
     public function outputs(array $default, ?string $path): array
     {
-        if ($this->representations === []) {
-            throw new InvalidArgumentException('A DASH export requires at least one representation.');
-        }
-
-        foreach ($this->sets as $name => $set) {
-            if ($set['representations'] === []) {
-                throw new InvalidArgumentException("The DASH adaptation set [{$name}] has no representations.");
-            }
-        }
-
-        if (! class_exists(DOMDocument::class)) {
-            throw new InvalidArgumentException('DASH requires the PHP DOM XML extension.');
-        }
+        $this->ensureExportable();
 
         $manifest = new ExportOutput($path ?? 'manifest.mpd', $this->export->filesystem());
         $destination = $manifest->destination()['path'];
@@ -320,62 +308,109 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         foreach ($this->representations as $name => $representation) {
             $settings = $representation->inherit($this->export->outputConfiguration());
             $type = $this->type($name);
-            if ($settings['maps'] === []) {
-                throw new InvalidArgumentException("The DASH representation [{$name}] requires an explicit map.");
-            }
 
-            if ($settings['omitAudio'] || $settings['omitVideo']) {
-                throw new InvalidArgumentException("The DASH representation [{$name}] cannot omit streams.");
-            }
-
-            if ($settings['videoStreams'] !== [] || ($settings['audioStreams'] ?? []) !== []) {
-                throw new InvalidArgumentException(
-                    "The DASH representation [{$name}] cannot override per-track settings."
-                );
-            }
-
-            $codec = $type === 'video' ? 'libx264' : 'aac';
-            if (($settings[$type]['codec'] ?? null) !== $codec) {
-                throw new InvalidArgumentException(
-                    "The DASH representation [{$name}] must encode {$type} with [{$codec}]."
-                );
-            }
-
-            if (($settings['clip']['seek'] ?? 'accurate') !== 'accurate') {
-                throw new InvalidArgumentException("The DASH representation [{$name}] requires an accurate clip.");
-            }
+            $this->ensureRepresentationIsEncodable($name, $type, $settings);
 
             if ($outputs !== [] && $settings['clip'] !== $clip) {
                 throw new InvalidArgumentException('DASH representations require identical clips.');
             }
 
             $clip = $settings['clip'];
-            if ($type === 'video' && Arr::hasAny(
-                $settings['video'],
-                ['g', 'keyint_min', 'sc_threshold', 'x264-params', 'x265-params'],
-            )) {
-                throw new InvalidArgumentException('DASH owns video encoder GOP and segment alignment settings.');
-            }
 
-            foreach ($settings['outputOptions'] as $token) {
-                if ($token === '-f'
-                    || preg_match('/\A-(?:c|r|g|keyint_min|sc_threshold|x264-params|x265-params)(?::|\z)/', $token)) {
-                    throw new InvalidArgumentException(
-                        'DASH owns its muxer, stream codecs, frame rate, and segment alignment.'
-                    );
-                }
-            }
+            $this->ensureDashOwnsAlignment($type, $settings);
 
-            $settings[$type === 'video' ? 'audio' : 'video'] = [];
-            $settings[$type === 'video' ? 'audioStreams' : 'videoStreams'] = [];
-            $settings[$type === 'video' ? 'audioFilters' : 'videoFilters'] = [];
             $outputs[] = new ExportOutput("{$prefix}{$name}/index.mpd", $this->export->filesystem())
-                ->configure($settings);
+                ->configure($this->onlyRepresentationType($type, $settings));
         }
 
         $outputs[] = $manifest->configure($this->export->outputConfiguration());
 
         return $outputs;
+    }
+
+    /**
+     * Ensure every adaptation set has representations and the DOM extension is available.
+     */
+    protected function ensureExportable(): void
+    {
+        if ($this->representations === []) {
+            throw new InvalidArgumentException('A DASH export requires at least one representation.');
+        }
+
+        foreach ($this->sets as $name => $set) {
+            if ($set['representations'] === []) {
+                throw new InvalidArgumentException("The DASH adaptation set [{$name}] has no representations.");
+            }
+        }
+
+        if (! class_exists(DOMDocument::class)) {
+            throw new InvalidArgumentException('DASH requires the PHP DOM XML extension.');
+        }
+    }
+
+    /**
+     * Ensure the given representation encodes one mapped stream of its type with an accurate clip.
+     */
+    protected function ensureRepresentationIsEncodable(int|string $name, string $type, array $settings): void
+    {
+        if ($settings['maps'] === []) {
+            throw new InvalidArgumentException("The DASH representation [{$name}] requires an explicit map.");
+        }
+
+        if ($settings['omitAudio'] || $settings['omitVideo']) {
+            throw new InvalidArgumentException("The DASH representation [{$name}] cannot omit streams.");
+        }
+
+        if ($settings['videoStreams'] !== [] || ($settings['audioStreams'] ?? []) !== []) {
+            throw new InvalidArgumentException(
+                "The DASH representation [{$name}] cannot override per-track settings."
+            );
+        }
+
+        $codec = $type === 'video' ? 'libx264' : 'aac';
+        if (($settings[$type]['codec'] ?? null) !== $codec) {
+            throw new InvalidArgumentException(
+                "The DASH representation [{$name}] must encode {$type} with [{$codec}]."
+            );
+        }
+
+        if (($settings['clip']['seek'] ?? 'accurate') !== 'accurate') {
+            throw new InvalidArgumentException("The DASH representation [{$name}] requires an accurate clip.");
+        }
+    }
+
+    /**
+     * Ensure the representation settings leave the muxer, codecs and segment alignment to DASH.
+     */
+    protected function ensureDashOwnsAlignment(string $type, array $settings): void
+    {
+        if ($type === 'video' && Arr::hasAny(
+            $settings['video'],
+            ['g', 'keyint_min', 'sc_threshold', 'x264-params', 'x265-params'],
+        )) {
+            throw new InvalidArgumentException('DASH owns video encoder GOP and segment alignment settings.');
+        }
+
+        foreach ($settings['outputOptions'] as $token) {
+            if ($token === '-f'
+                || preg_match('/\A-(?:c|r|g|keyint_min|sc_threshold|x264-params|x265-params)(?::|\z)/', $token)) {
+                throw new InvalidArgumentException(
+                    'DASH owns its muxer, stream codecs, frame rate, and segment alignment.'
+                );
+            }
+        }
+    }
+
+    /**
+     * Remove the settings of the stream type the representation does not carry.
+     */
+    protected function onlyRepresentationType(string $type, array $settings): array
+    {
+        $settings[$type === 'video' ? 'audio' : 'video'] = [];
+        $settings[$type === 'video' ? 'audioStreams' : 'videoStreams'] = [];
+        $settings[$type === 'video' ? 'audioFilters' : 'videoFilters'] = [];
+
+        return $settings;
     }
 
     /**
@@ -522,14 +557,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $total = 0;
         $longest = 0;
         foreach (array_keys($this->representations) as $index => $name) {
-            $type = $this->type($name);
-            $parsed = [
-                'index' => $index,
-                'name' => $name,
-                'output' => $outputs[$index],
-                'path' => $paths[$index],
-                ...DashManifest::read($paths[$index], $type),
-            ];
+            $parsed = $this->readRepresentation($index, $name, $outputs[$index], $paths[$index]);
             $total += count($parsed['durations']);
             if ($total > DashManifest::LIMIT) {
                 DashManifest::fail();
@@ -537,10 +565,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
 
             // Each adaptation set declares segment alignment, so all of its representations
             // must share one segment clock or players could not switch between them.
-            $setName = array_find_key(
-                $this->sets,
-                fn ($set): bool => in_array($name, $set['representations'], true),
-            );
+            $setName = $this->adaptationSetOf($name);
             $this->ensureClocksAlign($clocks[$setName] ?? null, $parsed['durations']);
             $clocks[$setName] = $parsed['durations'];
             $longest = max($longest, array_sum($parsed['durations']));
@@ -549,24 +574,13 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
 
             [$files, $peak, $bytes] = $this->representationArtifacts($parsed);
             array_push($segments, ...$files);
-            $info[$name] = [
-                'type' => $type,
-                'bandwidth' => $peak,
-                'average' => (int) ceil(8 * $bytes / array_sum($parsed['durations'])),
-                'codecs' => $representation->getAttribute('codecs'),
-                'width' => $representation->getAttribute('width'),
-                'height' => $representation->getAttribute('height'),
-            ];
+            $info[$name] = $this->representationInfo($parsed, $representation, $peak, $bytes);
             if ($this->sharedHls) {
                 $playlists[] = $this->writeRepresentationPlaylist($parsed);
             }
         }
 
-        $root->setAttribute('mediaPresentationDuration', 'PT'.CommandCompiler::timestamp($longest).'S');
-        $root->setAttribute(
-            'maxSegmentDuration',
-            'PT'.CommandCompiler::timestamp(max(array_map(max(...), $clocks))).'S',
-        );
+        $this->setManifestDurations($root, $longest, $clocks);
 
         $master = array_key_last($outputs);
         if ($this->sharedHls) {
@@ -576,6 +590,69 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $this->write($paths[$master], $document->saveXML());
         $artifacts = [...$segments, ...$playlists, ['path' => $paths[$master], 'output' => $master,
             'role' => 'dash-manifest', 'destination' => $outputs[$master]->destination()]];
+
+        $this->ensureArtifactDestinationsAreValid($artifacts);
+
+        return $artifacts;
+    }
+
+    /**
+     * Set the presentation length and the longest segment on the manifest root.
+     */
+    protected function setManifestDurations(DOMElement $root, float $longest, array $clocks): void
+    {
+        $root->setAttribute('mediaPresentationDuration', 'PT'.CommandCompiler::timestamp($longest).'S');
+        $root->setAttribute(
+            'maxSegmentDuration',
+            'PT'.CommandCompiler::timestamp(max(array_map(max(...), $clocks))).'S',
+        );
+    }
+
+    /**
+     * Read the manifest FFmpeg wrote for the given representation.
+     */
+    protected function readRepresentation(int $index, int|string $name, ExportOutput $output, string $path): array
+    {
+        return [
+            'index' => $index,
+            'name' => $name,
+            'output' => $output,
+            'path' => $path,
+            ...DashManifest::read($path, $this->type($name)),
+        ];
+    }
+
+    /**
+     * Get the name of the adaptation set that holds the given representation.
+     */
+    protected function adaptationSetOf(int|string $name): int|string
+    {
+        return array_find_key(
+            $this->sets,
+            fn ($set): bool => in_array($name, $set['representations'], true),
+        );
+    }
+
+    /**
+     * Get the attributes a shared HLS master playlist needs for the given representation.
+     */
+    protected function representationInfo(array $parsed, DOMElement $representation, int $peak, int $bytes): array
+    {
+        return [
+            'type' => $this->type($parsed['name']),
+            'bandwidth' => $peak,
+            'average' => (int) ceil(8 * $bytes / array_sum($parsed['durations'])),
+            'codecs' => $representation->getAttribute('codecs'),
+            'width' => $representation->getAttribute('width'),
+            'height' => $representation->getAttribute('height'),
+        ];
+    }
+
+    /**
+     * Ensure the destinations of the given artifacts are valid on the export filesystem.
+     */
+    protected function ensureArtifactDestinationsAreValid(array $artifacts): void
+    {
         $this->export->validateDestinations(array_map(
             fn (array $artifact): ExportOutput => new ExportOutput(
                 $artifact['destination']['path'],
@@ -583,8 +660,6 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             ),
             $artifacts,
         ));
-
-        return $artifacts;
     }
 
     /**

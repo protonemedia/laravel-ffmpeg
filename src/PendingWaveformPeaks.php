@@ -247,73 +247,11 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     public function artifacts(array $default, array $outputs, array $paths): array
     {
         $path = $paths[0];
-        clearstatcache(true, $path);
-        $size = is_file($path) ? filesize($path) : false;
         $channels = $this->mixMono ? 1 : $this->inputChannels;
-        $frameBytes = $channels * 2;
-        if ($size === false || $size % $frameBytes !== 0) {
-            throw MediaException::validation('The decoded PCM has an incomplete frame.', 'artifact');
-        }
+        $frames = $this->decodedFrames($path, $channels);
+        $count = $this->bucketCount($frames, $channels);
 
-        $frames = intdiv($size, $frameBytes);
-        $count = match (true) {
-            $frames === 0 => 0,
-            $this->targetBuckets === null => intdiv($frames - 1, $this->samplesPerBucket) + 1,
-            default => min($frames, $this->targetBuckets),
-        };
-        if ($count > intdiv(self::MAX_CELLS, $channels)) {
-            throw MediaException::validation(
-                'Peaks exceed 100000 channel buckets; request fewer buckets.',
-                'output_limit',
-            );
-        }
-
-        $data = array_fill(0, $channels, []);
-        $lengths = [];
-        $file = @fopen($path, 'rb');
-        if ($file === false) {
-            throw MediaException::validation('Cannot read decoded PCM.', 'filesystem');
-        }
-
-        try {
-            for ($bucket = 0; $bucket < $count; $bucket++) {
-                // A quotient and remainder split avoids overflowing frames * bucket.
-                if ($this->targetBuckets === null) {
-                    $length = min($this->samplesPerBucket, $frames - $bucket * $this->samplesPerBucket);
-                } else {
-                    $length = intdiv($frames, $count) + ($bucket < $frames % $count ? 1 : 0);
-                }
-
-                $lengths[] = $length;
-                $min = array_fill(0, $channels, 32767);
-                $max = array_fill(0, $channels, -32768);
-                $remaining = $length;
-                while ($remaining > 0) {
-                    $take = min($remaining, 2048);
-                    $bytes = fread($file, $take * $frameBytes);
-                    if ($bytes === false || strlen($bytes) !== $take * $frameBytes) {
-                        throw MediaException::validation('Cannot read complete PCM frames.', 'filesystem');
-                    }
-
-                    // The v format is unsigned little-endian 16-bit, independent of the host
-                    // byte order, so we will convert from two's complement explicitly.
-                    foreach (unpack('v*', $bytes) as $index => $unsigned) {
-                        $channel = ($index - 1) % $channels;
-                        $sample = $unsigned >= 32768 ? $unsigned - 65536 : $unsigned;
-                        $min[$channel] = min($min[$channel], $sample);
-                        $max[$channel] = max($max[$channel], $sample);
-                    }
-
-                    $remaining -= $take;
-                }
-
-                for ($channel = 0; $channel < $channels; $channel++) {
-                    $data[$channel][] = [$min[$channel], $max[$channel]];
-                }
-            }
-        } finally {
-            fclose($file);
-        }
+        [$lengths, $data] = $this->readPeaks($path, $frames, $count, $channels);
 
         $this->peaks = new WaveformPeaks(
             $this->rate,
@@ -332,5 +270,109 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
         }
 
         return [['path' => $target, 'output' => 0, 'destination' => $outputs[0]->destination()]];
+    }
+
+    /**
+     * Get the number of complete frames in the decoded PCM file.
+     */
+    protected function decodedFrames(string $path, int $channels): int
+    {
+        clearstatcache(true, $path);
+        $size = is_file($path) ? filesize($path) : false;
+        if ($size === false || $size % ($channels * 2) !== 0) {
+            throw MediaException::validation('The decoded PCM has an incomplete frame.', 'artifact');
+        }
+
+        return intdiv($size, $channels * 2);
+    }
+
+    /**
+     * Get the number of buckets the given frames are divided into.
+     */
+    protected function bucketCount(int $frames, int $channels): int
+    {
+        $count = match (true) {
+            $frames === 0 => 0,
+            $this->targetBuckets === null => intdiv($frames - 1, $this->samplesPerBucket) + 1,
+            default => min($frames, $this->targetBuckets),
+        };
+        if ($count > intdiv(self::MAX_CELLS, $channels)) {
+            throw MediaException::validation(
+                'Peaks exceed 100000 channel buckets; request fewer buckets.',
+                'output_limit',
+            );
+        }
+
+        return $count;
+    }
+
+    /**
+     * Read the bucket lengths and the per-channel minimum and maximum of each bucket.
+     *
+     * @return array{0: list<int>, 1: list<list<array{0: int, 1: int}>>}
+     */
+    protected function readPeaks(string $path, int $frames, int $count, int $channels): array
+    {
+        $data = array_fill(0, $channels, []);
+        $lengths = [];
+        $file = @fopen($path, 'rb');
+        if ($file === false) {
+            throw MediaException::validation('Cannot read decoded PCM.', 'filesystem');
+        }
+
+        try {
+            for ($bucket = 0; $bucket < $count; $bucket++) {
+                // A quotient and remainder split avoids overflowing frames * bucket.
+                if ($this->targetBuckets === null) {
+                    $length = min($this->samplesPerBucket, $frames - $bucket * $this->samplesPerBucket);
+                } else {
+                    $length = intdiv($frames, $count) + ($bucket < $frames % $count ? 1 : 0);
+                }
+
+                $lengths[] = $length;
+                [$min, $max] = $this->readBucket($file, $length, $channels);
+                for ($channel = 0; $channel < $channels; $channel++) {
+                    $data[$channel][] = [$min[$channel], $max[$channel]];
+                }
+            }
+        } finally {
+            fclose($file);
+        }
+
+        return [$lengths, $data];
+    }
+
+    /**
+     * Read the given number of frames and get the minimum and maximum sample of each channel.
+     *
+     * @param  resource  $file
+     * @return array{0: list<int>, 1: list<int>}
+     */
+    protected function readBucket($file, int $length, int $channels): array
+    {
+        $frameBytes = $channels * 2;
+        $min = array_fill(0, $channels, 32767);
+        $max = array_fill(0, $channels, -32768);
+        $remaining = $length;
+        while ($remaining > 0) {
+            $take = min($remaining, 2048);
+            $bytes = fread($file, $take * $frameBytes);
+            if ($bytes === false || strlen($bytes) !== $take * $frameBytes) {
+                throw MediaException::validation('Cannot read complete PCM frames.', 'filesystem');
+            }
+
+            // The v format is unsigned little-endian 16-bit, independent of the host
+            // byte order, so we will convert from two's complement explicitly.
+            foreach (unpack('v*', $bytes) as $index => $unsigned) {
+                $channel = ($index - 1) % $channels;
+                $sample = $unsigned >= 32768 ? $unsigned - 65536 : $unsigned;
+                $min[$channel] = min($min[$channel], $sample);
+                $max[$channel] = max($max[$channel], $sample);
+            }
+
+            $remaining -= $take;
+        }
+
+        return [$min, $max];
     }
 }

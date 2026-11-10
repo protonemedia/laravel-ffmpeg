@@ -77,51 +77,86 @@ class HlsEncryption
     public function segment(string $path, int $sequence, string $playlist, string $variant): array
     {
         $index = $this->rotateEvery === null ? 0 : intdiv($sequence, $this->rotateEvery);
-        if (! isset($this->keys[$index])) {
-            $bytes = $this->key ?? random_bytes(16);
-            $filename = bin2hex(random_bytes(16)).'.key';
-            $local = dirname($path)."/{$filename}";
-            if (@file_put_contents($local, $bytes) !== 16 || ! chmod($local, 0600)) {
-                throw MediaException::validation('Cannot prepare the private HLS key.', 'filesystem');
-            }
-
-            $target = new ExportOutput($this->directory.$filename, $this->keysDisk)->visibility('private');
-            $this->keys[$index] = ['bytes' => $bytes, 'artifact' => [
-                'path' => $local,
-                'output' => 0,
-                'target' => $target,
-                'destination' => $target->destination(),
-                'role' => 'hls-key',
-            ]];
-        }
+        $this->keys[$index] ??= $this->generateKey(dirname($path));
 
         $key = $this->keys[$index];
-        if (! isset($this->urls[$playlist][$index])) {
-            $url = ($this->keyUrl)($key['artifact']['destination']['path'], $playlist, $variant, $index);
-            if (! is_string($url) || $url === '' || ! preg_match('//u', $url)
-                || preg_match('/[\s\x00-\x1F\x7F-\x9F"\\\\#]/u', $url)
-                || str_starts_with($url, '//') || parse_url($url) === false
-                || (($scheme = parse_url($url, PHP_URL_SCHEME)) !== null
-                    && (! in_array(strtolower($scheme), ['http', 'https'], true)
-                        || ! filter_var($url, FILTER_VALIDATE_URL)))) {
-                throw MediaException::validation(
-                    'HLS key URLs require an HTTP(S) URL or a relative URI without quotes, backslashes, whitespace, or fragments.',
-                    'artifact',
-                );
-            }
-
-            if (in_array($url, $this->urls[$playlist] ?? [], true)) {
-                throw MediaException::validation(
-                    'Rotated HLS keys must have distinct URLs within each playlist.',
-                    'artifact',
-                );
-            }
-
-            $this->urls[$playlist][$index] = $url;
-        }
+        $this->urls[$playlist][$index] ??= $this->resolveKeyUrl($key, $index, $playlist, $variant);
 
         $iv = random_bytes(16);
         $encrypted = "{$path}.aes";
+
+        $this->encrypt($path, $encrypted, $key['bytes'], $iv);
+
+        return [
+            'path' => $encrypted,
+            'tag' => "#EXT-X-KEY:METHOD=AES-128,URI=\"{$this->urls[$playlist][$index]}\",IV=0x".bin2hex($iv),
+        ];
+    }
+
+    /**
+     * Write a new private key to the given directory and get its bytes and artifact.
+     */
+    protected function generateKey(string $directory): array
+    {
+        $bytes = $this->key ?? random_bytes(16);
+        $filename = bin2hex(random_bytes(16)).'.key';
+        $local = "{$directory}/{$filename}";
+        if (@file_put_contents($local, $bytes) !== 16 || ! chmod($local, 0600)) {
+            throw MediaException::validation('Cannot prepare the private HLS key.', 'filesystem');
+        }
+
+        $target = new ExportOutput($this->directory.$filename, $this->keysDisk)->visibility('private');
+
+        return ['bytes' => $bytes, 'artifact' => [
+            'path' => $local,
+            'output' => 0,
+            'target' => $target,
+            'destination' => $target->destination(),
+            'role' => 'hls-key',
+        ]];
+    }
+
+    /**
+     * Resolve the URL of the given key within the given playlist.
+     */
+    protected function resolveKeyUrl(array $key, int $index, string $playlist, string $variant): string
+    {
+        $url = ($this->keyUrl)($key['artifact']['destination']['path'], $playlist, $variant, $index);
+        if (! $this->isValidKeyUrl($url)) {
+            throw MediaException::validation(
+                'HLS key URLs require an HTTP(S) URL or a relative URI without quotes, backslashes, whitespace, or fragments.',
+                'artifact',
+            );
+        }
+
+        if (in_array($url, $this->urls[$playlist] ?? [], true)) {
+            throw MediaException::validation(
+                'Rotated HLS keys must have distinct URLs within each playlist.',
+                'artifact',
+            );
+        }
+
+        return $url;
+    }
+
+    /**
+     * Determine if the given key URL can be quoted in a playlist tag.
+     */
+    protected function isValidKeyUrl(mixed $url): bool
+    {
+        return is_string($url) && $url !== '' && preg_match('//u', $url)
+            && ! preg_match('/[\s\x00-\x1F\x7F-\x9F"\\\\#]/u', $url)
+            && ! str_starts_with($url, '//') && parse_url($url) !== false
+            && (($scheme = parse_url($url, PHP_URL_SCHEME)) === null
+                || (in_array(strtolower($scheme), ['http', 'https'], true)
+                    && filter_var($url, FILTER_VALIDATE_URL)));
+    }
+
+    /**
+     * Encrypt the given segment into a new private file with the given key and IV.
+     */
+    protected function encrypt(string $path, string $encrypted, string $bytes, string $iv): void
+    {
         $source = null;
         $destination = null;
         try {
@@ -131,38 +166,7 @@ class HlsEncryption
                 throw MediaException::validation('Cannot prepare the encrypted HLS segment.', 'filesystem');
             }
 
-            $chain = $iv;
-            $buffer = '';
-            do {
-                $chunk = fread($source, 1048576);
-                if ($chunk === false || ($chunk === '' && ! feof($source))) {
-                    throw MediaException::validation('Cannot read the HLS segment.', 'filesystem');
-                }
-
-                $buffer .= $chunk;
-                $final = feof($source);
-                if ($final) {
-                    $padding = 16 - strlen($buffer) % 16;
-                    $buffer .= str_repeat(chr($padding), $padding);
-                }
-
-                $length = intdiv(strlen($buffer), 16) * 16;
-                if ($length > 0) {
-                    $ciphertext = openssl_encrypt(
-                        substr($buffer, 0, $length),
-                        'aes-128-cbc',
-                        $key['bytes'],
-                        OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
-                        $chain,
-                    );
-                    if ($ciphertext === false || fwrite($destination, $ciphertext) !== strlen($ciphertext)) {
-                        throw MediaException::validation('Cannot encrypt the HLS segment.', 'filesystem');
-                    }
-
-                    $chain = substr($ciphertext, -16);
-                    $buffer = substr($buffer, $length);
-                }
-            } while (! $final);
+            $this->encryptStream($source, $destination, $bytes, $iv);
         } finally {
             if (is_resource($source)) {
                 fclose($source);
@@ -172,11 +176,48 @@ class HlsEncryption
                 fclose($destination);
             }
         }
+    }
 
-        return [
-            'path' => $encrypted,
-            'tag' => "#EXT-X-KEY:METHOD=AES-128,URI=\"{$this->urls[$playlist][$index]}\",IV=0x".bin2hex($iv),
-        ];
+    /**
+     * Encrypt the source stream into the destination stream in bounded chunks.
+     *
+     * @param  resource  $source
+     * @param  resource  $destination
+     */
+    protected function encryptStream($source, $destination, string $bytes, string $iv): void
+    {
+        $chain = $iv;
+        $buffer = '';
+        do {
+            $chunk = fread($source, 1048576);
+            if ($chunk === false || ($chunk === '' && ! feof($source))) {
+                throw MediaException::validation('Cannot read the HLS segment.', 'filesystem');
+            }
+
+            $buffer .= $chunk;
+            $final = feof($source);
+            if ($final) {
+                $padding = 16 - strlen($buffer) % 16;
+                $buffer .= str_repeat(chr($padding), $padding);
+            }
+
+            $length = intdiv(strlen($buffer), 16) * 16;
+            if ($length > 0) {
+                $ciphertext = openssl_encrypt(
+                    substr($buffer, 0, $length),
+                    'aes-128-cbc',
+                    $bytes,
+                    OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
+                    $chain,
+                );
+                if ($ciphertext === false || fwrite($destination, $ciphertext) !== strlen($ciphertext)) {
+                    throw MediaException::validation('Cannot encrypt the HLS segment.', 'filesystem');
+                }
+
+                $chain = substr($ciphertext, -16);
+                $buffer = substr($buffer, $length);
+            }
+        } while (! $final);
     }
 
     /**

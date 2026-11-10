@@ -16,6 +16,7 @@ use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\HlsExportResult;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
+use ProtoneMedia\LaravelFFMpeg\Result;
 use RuntimeException;
 
 /**
@@ -87,58 +88,82 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
             $export->cancelWhen(fn () => $this->batch()?->cancelled() ?? false);
             $result = $export->save($this->path);
         } else {
-            // Without a plan, this job is the finalizer of a parallel HLS export. We will read
-            // the inventory of every part, make sure the whole batch succeeded, and then merge
-            // the parts into a single master playlist.
-            $presentations = [];
-            $batchId = null;
-            foreach ($this->parts as $part) {
-                $manifest = json_decode(
-                    Storage::disk($this->manifestDisk)->get($part),
-                    true,
-                    flags: JSON_THROW_ON_ERROR,
-                );
-                $batchId ??= $manifest['batchId'];
-                if ($manifest['batchId'] !== $batchId) {
-                    throw new RuntimeException('Queued HLS inventories must belong to the same batch.');
-                }
-
-                $presentations[] = $manifest['playback'];
-            }
-
-            $batch = Bus::findBatch($batchId);
-            if ($batch === null || $batch->cancelled() || $batch->pendingJobs !== 0 || $batch->failedJobs !== 0) {
-                throw new ExportCancelled('The HLS conversion batch did not complete successfully.');
-            }
-
-            $result = new PendingHlsMerge($presentations)->toDisk($this->manifestDisk)->save($this->path);
+            $result = $this->mergeParts();
         }
 
         // A part stores its playback inventory privately for the finalizer to merge. Only
         // the finalizer reports the completed export, so a part returns without an event.
         if ($this->manifestPath !== null) {
-            if (! $result instanceof HlsExportResult
-                || ! Storage::disk($this->manifestDisk)->put($this->manifestPath, json_encode([
-                    'batchId' => $this->batchId, 'playback' => $result->playback()->toArray(),
-                ], JSON_THROW_ON_ERROR), ['visibility' => 'private'])) {
-                throw new RuntimeException('Cannot retain the completed queued HLS inventory.');
-            }
+            $this->retainInventory($result);
 
             return;
         }
 
         if (config('laravel-ffmpeg.enable_events', true)) {
-            $playback = null;
-            if ($result instanceof HlsExportResult
-                || ($result instanceof DashExportResult && $result->files()->contains('role', 'hls-master'))) {
-                $playback = $result->playback()->toArray();
+            $this->dispatchCompletedEvent($result);
+        }
+    }
+
+    /**
+     * Merge the parts of a parallel HLS export into a single master playlist.
+     */
+    protected function mergeParts(): HlsExportResult
+    {
+        // Without a plan, this job is the finalizer of a parallel HLS export. We will read
+        // the inventory of every part, make sure the whole batch succeeded, and then merge
+        // the parts into a single master playlist.
+        $presentations = [];
+        $batchId = null;
+        foreach ($this->parts as $part) {
+            $manifest = json_decode(
+                Storage::disk($this->manifestDisk)->get($part),
+                true,
+                flags: JSON_THROW_ON_ERROR,
+            );
+            $batchId ??= $manifest['batchId'];
+            if ($manifest['batchId'] !== $batchId) {
+                throw new RuntimeException('Queued HLS inventories must belong to the same batch.');
             }
 
-            Event::dispatch(new QueuedExportCompleted(
-                $this->exportId,
-                $result->files()->map->toArray()->all(),
-                $playback,
-            ));
+            $presentations[] = $manifest['playback'];
         }
+
+        $batch = Bus::findBatch($batchId);
+        if ($batch === null || $batch->cancelled() || $batch->pendingJobs !== 0 || $batch->failedJobs !== 0) {
+            throw new ExportCancelled('The HLS conversion batch did not complete successfully.');
+        }
+
+        return new PendingHlsMerge($presentations)->toDisk($this->manifestDisk)->save($this->path);
+    }
+
+    /**
+     * Store the playback inventory of a completed part for the finalizer.
+     */
+    protected function retainInventory(Result $result): void
+    {
+        if (! $result instanceof HlsExportResult
+            || ! Storage::disk($this->manifestDisk)->put($this->manifestPath, json_encode([
+                'batchId' => $this->batchId, 'playback' => $result->playback()->toArray(),
+            ], JSON_THROW_ON_ERROR), ['visibility' => 'private'])) {
+            throw new RuntimeException('Cannot retain the completed queued HLS inventory.');
+        }
+    }
+
+    /**
+     * Dispatch the event that reports the completed export.
+     */
+    protected function dispatchCompletedEvent(Result $result): void
+    {
+        $playback = null;
+        if ($result instanceof HlsExportResult
+            || ($result instanceof DashExportResult && $result->files()->contains('role', 'hls-master'))) {
+            $playback = $result->playback()->toArray();
+        }
+
+        Event::dispatch(new QueuedExportCompleted(
+            $this->exportId,
+            $result->files()->map->toArray()->all(),
+            $playback,
+        ));
     }
 }

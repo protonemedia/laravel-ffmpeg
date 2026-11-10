@@ -150,13 +150,47 @@ trait ManagesHlsRenditions
     ): static {
         $this->export->assertOutputMutable();
         $this->ensureSimpleName($group, 'HLS rendition group');
+        $this->ensureRenditionNameIsValid($name);
+        $this->ensureRenditionAttributesAreValid($language, $channels, $default, $autoselect);
+        $this->ensureRenditionIsUnique($type, $group, $name, $default);
 
+        $id = 'rendition-'.strtolower($type)."-{$group}-".count($this->renditions);
+        $this->variant($id, $configure, $playlist, $segments, $init);
+        $this->renditions[$id] = [
+            'type' => $type,
+            'group' => $group,
+            'name' => $name,
+            'language' => $language,
+            'default' => $default,
+            'autoselect' => $autoselect,
+            'forced' => $forced,
+            'channels' => $channels,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Ensure the given rendition name can be quoted in a playlist tag.
+     */
+    protected function ensureRenditionNameIsValid(string $name): void
+    {
         if ($name === '' || ! preg_match('//u', $name) || preg_match('/["\\\\\x00-\x1F\x7F-\x9F]/u', $name)) {
             throw new InvalidArgumentException(
                 'The HLS rendition name must be non-empty UTF-8 text without quotes, backslashes, or control characters.'
             );
         }
+    }
 
+    /**
+     * Ensure the language, channels and selection flags of a rendition are valid.
+     */
+    protected function ensureRenditionAttributesAreValid(
+        ?string $language,
+        ?string $channels,
+        bool $default,
+        bool $autoselect,
+    ): void {
         if ($language !== null && ! preg_match('/\A[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*\z/', $language)) {
             throw new InvalidArgumentException('The HLS rendition language must be a language tag.');
         }
@@ -170,7 +204,13 @@ trait ManagesHlsRenditions
         if ($default && ! $autoselect) {
             throw new InvalidArgumentException('A default HLS rendition must also be autoselected.');
         }
+    }
 
+    /**
+     * Ensure the group has no rendition with the given name and at most one default rendition.
+     */
+    protected function ensureRenditionIsUnique(string $type, string $group, string $name, bool $default): void
+    {
         foreach ($this->renditions as $rendition) {
             if ($rendition['type'] !== $type || $rendition['group'] !== $group) {
                 continue;
@@ -188,21 +228,6 @@ trait ManagesHlsRenditions
                 );
             }
         }
-
-        $id = 'rendition-'.strtolower($type)."-{$group}-".count($this->renditions);
-        $this->variant($id, $configure, $playlist, $segments, $init);
-        $this->renditions[$id] = [
-            'type' => $type,
-            'group' => $group,
-            'name' => $name,
-            'language' => $language,
-            'default' => $default,
-            'autoselect' => $autoselect,
-            'forced' => $forced,
-            'channels' => $channels,
-        ];
-
-        return $this;
     }
 
     /**

@@ -238,13 +238,8 @@ trait PackagesHlsSegments
         $name = array_keys($this->variants)[$index];
         $extension = $this->segmentExtension($this->isSubtitle($index));
         $filename = "segment-{$index}-".sprintf('%08d', $media['count']).".{$extension}";
-        if ($media['duration'] === null || $media['lines'][$lineIndex] !== $filename
-            || ($this->segmentType === 'fmp4' && ! $this->isSubtitle($index) && $media['init'] === null)) {
-            throw MediaException::validation(
-                'An HLS playlist references an unowned or unordered segment.',
-                'artifact',
-            );
-        }
+
+        $this->ensureSegmentIsOwned($lineIndex, $media, $filename);
 
         $local = dirname($path)."/{$filename}";
         $size = $this->export->validateArtifact($local, 'hls-segment');
@@ -257,17 +252,8 @@ trait PackagesHlsSegments
             $size = $this->export->validateArtifact($encrypted['path'], 'hls-segment');
         }
 
-        $duration = $media['duration'];
-        $media['bytes'] += $size;
-        $media['total'] += $duration;
-        $media['peak'] = max($media['peak'], (int) ceil(8 * $size / $duration));
-        $media['longest'] = max($media['longest'], $duration);
-        $pattern = $this->variantPaths[$name]['segments']
-            ?? dirname($output->destination()['path'])."/segment-%08d.{$extension}";
-        $directory = dirname($pattern);
-        $destination = $output->destination();
-        $destination['path'] = ($directory === '.' ? '' : "{$directory}/")
-            .sprintf(basename($pattern), $media['count']++);
+        $media = $this->withSegmentStatistics($media, $size);
+        $destination = $this->segmentDestination($output, $name, $extension, $media['count']++);
         $media['lines'][$lineIndex] = HlsPresentation::relativeUrl(
             $destination['path'],
             $output->destination()['path'],
@@ -293,6 +279,54 @@ trait PackagesHlsSegments
         $media['duration'] = null;
 
         return $media;
+    }
+
+    /**
+     * Ensure the playlist line names the next segment FFmpeg wrote, after its duration and initialization.
+     *
+     * @param  array<string, mixed>  $media
+     */
+    protected function ensureSegmentIsOwned(int $lineIndex, array $media, string $filename): void
+    {
+        if ($media['duration'] === null || $media['lines'][$lineIndex] !== $filename
+            || ($this->segmentType === 'fmp4' && ! $this->isSubtitle($media['index']) && $media['init'] === null)) {
+            throw MediaException::validation(
+                'An HLS playlist references an unowned or unordered segment.',
+                'artifact',
+            );
+        }
+    }
+
+    /**
+     * Add the size and duration of the current segment to the variant's totals.
+     *
+     * @param  array<string, mixed>  $media
+     * @return array<string, mixed>
+     */
+    protected function withSegmentStatistics(array $media, int $size): array
+    {
+        $duration = $media['duration'];
+        $media['bytes'] += $size;
+        $media['total'] += $duration;
+        $media['peak'] = max($media['peak'], (int) ceil(8 * $size / $duration));
+        $media['longest'] = max($media['longest'], $duration);
+
+        return $media;
+    }
+
+    /**
+     * Get the destination of the given segment number from the variant's segment pattern.
+     */
+    protected function segmentDestination(ExportOutput $output, int|string $name, string $extension, int $number): array
+    {
+        $pattern = $this->variantPaths[$name]['segments']
+            ?? dirname($output->destination()['path'])."/segment-%08d.{$extension}";
+        $directory = dirname($pattern);
+        $destination = $output->destination();
+        $destination['path'] = ($directory === '.' ? '' : "{$directory}/")
+            .sprintf(basename($pattern), $number);
+
+        return $destination;
     }
 
     /**

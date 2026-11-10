@@ -146,18 +146,8 @@ class ProcessRunner
         $started = hrtime(true);
         $process = null;
         $failure = null;
-        $this->capture = [
-            'output' => '',
-            'diagnostics' => '',
-            'overflow' => false,
-            'lastOutput' => $started,
-            'failure' => null,
-        ];
-        $this->applicationFailure = null;
-        $this->processStartedAt = $started;
-        $this->processTimeout = $timeout;
-        $this->progress = $progress;
-        $this->tick = $tick === null ? null : $tick(...);
+
+        $this->beginTracking($started, $timeout, $progress, $tick);
 
         try {
             $this->check($phase);
@@ -187,14 +177,41 @@ class ProcessRunner
                     $this->stopProcess($process, $failure);
                 }
             } finally {
-                $this->capture = null;
-                $this->applicationFailure = null;
-                $this->processStartedAt = null;
-                $this->processTimeout = null;
-                $this->progress = null;
-                $this->tick = null;
+                $this->stopTracking();
             }
         }
+    }
+
+    /**
+     * Reset the capture and supervision state for a process started at the given time.
+     */
+    protected function beginTracking(int|float $started, ?float $timeout, ?ProgressParser $progress, ?callable $tick): void
+    {
+        $this->capture = [
+            'output' => '',
+            'diagnostics' => '',
+            'overflow' => false,
+            'lastOutput' => $started,
+            'failure' => null,
+        ];
+        $this->applicationFailure = null;
+        $this->processStartedAt = $started;
+        $this->processTimeout = $timeout;
+        $this->progress = $progress;
+        $this->tick = $tick === null ? null : $tick(...);
+    }
+
+    /**
+     * Forget the capture and supervision state of the finished process.
+     */
+    protected function stopTracking(): void
+    {
+        $this->capture = null;
+        $this->applicationFailure = null;
+        $this->processStartedAt = null;
+        $this->processTimeout = null;
+        $this->progress = null;
+        $this->tick = null;
     }
 
     /**

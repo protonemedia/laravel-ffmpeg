@@ -73,26 +73,7 @@ class ExportPlan
         }
 
         if ($value instanceof Closure) {
-            $reflection = new ReflectionFunction($value);
-            if ($reflection->getClosureThis() !== null) {
-                throw new InvalidArgumentException(
-                    'Queued callbacks must be static closures capturing only scalar values or arrays.'
-                );
-            }
-
-            $captures = $reflection->getStaticVariables();
-            array_walk_recursive($captures, static function ($capture): void {
-                if (is_object($capture) || is_resource($capture)) {
-                    throw new InvalidArgumentException('Queued callbacks must capture only scalar values or arrays.');
-                }
-            });
-            try {
-                return ['type' => 'closure', 'value' => serialize(new SerializableClosure($value))];
-            } catch (Throwable) {
-                throw new InvalidArgumentException(
-                    'Queue callbacks must be serializable. Use static closures capturing scalar identifiers instead of request or service objects.'
-                );
-            }
+            return $this->encodeClosure($value);
         }
 
         if (! is_object($value)) {
@@ -113,6 +94,41 @@ class ExportPlan
             return ['type' => 'reference', 'id' => $objects[$value]];
         }
 
+        return $this->encodeObject($value, $objects);
+    }
+
+    /**
+     * Encode the given static closure after ensuring it captures only scalar values or arrays.
+     */
+    protected function encodeClosure(Closure $value): array
+    {
+        $reflection = new ReflectionFunction($value);
+        if ($reflection->getClosureThis() !== null) {
+            throw new InvalidArgumentException(
+                'Queued callbacks must be static closures capturing only scalar values or arrays.'
+            );
+        }
+
+        $captures = $reflection->getStaticVariables();
+        array_walk_recursive($captures, static function ($capture): void {
+            if (is_object($capture) || is_resource($capture)) {
+                throw new InvalidArgumentException('Queued callbacks must capture only scalar values or arrays.');
+            }
+        });
+        try {
+            return ['type' => 'closure', 'value' => serialize(new SerializableClosure($value))];
+        } catch (Throwable) {
+            throw new InvalidArgumentException(
+                'Queue callbacks must be serializable. Use static closures capturing scalar identifiers instead of request or service objects.'
+            );
+        }
+    }
+
+    /**
+     * Encode the given package object and every property it has initialized.
+     */
+    protected function encodeObject(object $value, SplObjectStorage $objects): array
+    {
         $id = count($objects);
         $objects[$value] = $id;
         $properties = [];

@@ -297,6 +297,49 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     public function queueParts(string $path, string $prefix): array
     {
         $this->outputs([], $path);
+
+        $this->ensureParallelizable();
+
+        $remaining = collect($this->variants)->diffKeys($this->renditions)->keys()->all();
+
+        $this->ensureRenditionGroupsAreReferenced($remaining);
+
+        $parts = [];
+        while ($remaining !== []) {
+            $members = [array_shift($remaining)];
+
+            // We will keep pulling in every remaining variant that shares a rendition group
+            // with a member until the part stops growing, since a variant may join a part
+            // through a group it shares with a variant that only joined in the last pass.
+            do {
+                $previous = count($members);
+                $groups = $this->groupKeys($members);
+                foreach ($remaining as $index => $name) {
+                    if ($this->sharesGroup($name, $groups)) {
+                        $members[] = $name;
+                        unset($remaining[$index]);
+                    }
+                }
+            } while (count($members) !== $previous);
+
+            foreach ($this->renditions as $id => $rendition) {
+                if (isset($groups["{$rendition['type']}:{$rendition['group']}"])) {
+                    $members[] = $id;
+                }
+            }
+
+            $directory = "{$prefix}/parts/".count($parts);
+            $parts[] = [$this->queuePart($members, $directory), "{$directory}/master.m3u8"];
+        }
+
+        return $parts;
+    }
+
+    /**
+     * Ensure the export can be split into parts that are encoded in parallel.
+     */
+    protected function ensureParallelizable(): void
+    {
         if ($this->playlistType !== 'vod') {
             throw new InvalidArgumentException(
                 'Parallel HLS composition requires VOD playlists; use a single queued export for event or live playlists.'
@@ -314,11 +357,16 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                 'Parallel HLS does not accept complex graphs; use a single queued export.'
             );
         }
+    }
 
-        $remaining = collect($this->variants)->diffKeys($this->renditions)->keys()->all();
+    /**
+     * Ensure every alternate rendition group is referenced by one of the given variants.
+     */
+    protected function ensureRenditionGroupsAreReferenced(array $variants): void
+    {
         foreach ($this->renditions as $rendition) {
             if (! array_any(
-                $remaining,
+                $variants,
                 fn (int|string $name): bool => $this->variants[$name]->groups()[$rendition['type']]
                     === $rendition['group'],
             )) {
@@ -327,53 +375,53 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                 );
             }
         }
+    }
 
-        $parts = [];
-        while ($remaining !== []) {
-            $members = [array_shift($remaining)];
-            do {
-                $previous = count($members);
-                $groups = [];
-                foreach ($members as $member) {
-                    foreach ($this->variants[$member]->groups() as $type => $group) {
-                        if ($group !== null) {
-                            $groups["{$type}:{$group}"] = true;
-                        }
-                    }
-                }
-
-                foreach ($remaining as $index => $name) {
-                    foreach ($this->variants[$name]->groups() as $type => $group) {
-                        if ($group !== null && isset($groups["{$type}:{$group}"])) {
-                            $members[] = $name;
-                            unset($remaining[$index]);
-                            break;
-                        }
-                    }
-                }
-            } while (count($members) !== $previous);
-
-            foreach ($this->renditions as $id => $rendition) {
-                if (isset($groups["{$rendition['type']}:{$rendition['group']}"])) {
-                    $members[] = $id;
+    /**
+     * Get the rendition groups the given variants reference, keyed by type and group.
+     */
+    protected function groupKeys(array $members): array
+    {
+        $groups = [];
+        foreach ($members as $member) {
+            foreach ($this->variants[$member]->groups() as $type => $group) {
+                if ($group !== null) {
+                    $groups["{$type}:{$group}"] = true;
                 }
             }
-
-            $part = new ExportPlan($this)->restore();
-            $part->variants = collect($part->variants)->only($members)->all();
-            $part->renditions = collect($part->renditions)->only($members)->all();
-            $directory = "{$prefix}/parts/".count($parts);
-            $part->variantPaths = collect($part->variantPaths)
-                ->only($members)
-                ->map(fn ($paths): array => array_map(
-                    fn ($value): ?string => $value === null ? null : "{$directory}/custom/{$value}",
-                    $paths,
-                ))
-                ->all();
-            $parts[] = [$part, "{$directory}/master.m3u8"];
         }
 
-        return $parts;
+        return $groups;
+    }
+
+    /**
+     * Determine if the given variant references one of the given rendition groups.
+     */
+    protected function sharesGroup(int|string $name, array $groups): bool
+    {
+        return array_any(
+            $this->variants[$name]->groups(),
+            fn (?string $group, string $type): bool => $group !== null && isset($groups["{$type}:{$group}"]),
+        );
+    }
+
+    /**
+     * Restore a copy of the export that encodes only the given members below the given directory.
+     */
+    protected function queuePart(array $members, string $directory): static
+    {
+        $part = new ExportPlan($this)->restore();
+        $part->variants = collect($part->variants)->only($members)->all();
+        $part->renditions = collect($part->renditions)->only($members)->all();
+        $part->variantPaths = collect($part->variantPaths)
+            ->only($members)
+            ->map(fn ($paths): array => array_map(
+                fn ($value): ?string => $value === null ? null : "{$directory}/custom/{$value}",
+                $paths,
+            ))
+            ->all();
+
+        return $part;
     }
 
     /**
@@ -445,54 +493,57 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
                 true,
             );
             if ($index !== false) {
-                if ($this->isSubtitle($index)) {
-                    $result[] = '-c:s';
-                    $result[] = 'webvtt';
-                    $result[] = '-f';
-                    $result[] = 'webvtt';
-                    $result[] = $token;
-
-                    continue;
-                }
-
-                $settings = $outputs[$index]->outputConfiguration();
-                if (! isset($this->renditions[array_keys($this->variants)[$index]])
-                    && ! $settings['omitVideo'] && ($settings['video']['codec'] ?? null) !== 'copy') {
-                    $result[] = '-force_key_frames:v';
-                    $result[] = 'expr:gte(t,n_forced*'.CommandCompiler::timestamp($this->segmentDuration).')';
-                    $result[] = '-flags:v';
-                    $result[] = '+cgop';
-                }
-
-                $result[] = '-f';
-                $result[] = 'hls';
-                $result[] = '-hls_time';
-                $result[] = CommandCompiler::timestamp($this->segmentDuration);
-                $result[] = '-hls_list_size';
-                $result[] = '0';
-                $result[] = '-hls_segment_type';
-                $result[] = $this->segmentType;
-                $result[] = '-start_number';
-                $result[] = '0';
-                $result[] = '-hls_segment_filename';
-                $result[] = "segment-{$index}-%08d.".($this->segmentType === 'fmp4' ? 'm4s' : 'ts');
-                $result[] = '-master_pl_name';
-                $result[] = "master-{$index}.m3u8";
-                if ($this->playlistType !== 'live') {
-                    $result[] = '-hls_playlist_type';
-                    $result[] = $this->playlistType;
-                }
-
-                if ($this->segmentType === 'fmp4') {
-                    $result[] = '-hls_fmp4_init_filename';
-                    $result[] = "init-{$index}.mp4";
-                }
+                array_push($result, ...($this->isSubtitle($index)
+                    ? ['-c:s', 'webvtt', '-f', 'webvtt']
+                    : $this->muxerOptions($index, $outputs[$index])));
             }
 
             $result[] = $token;
         }
 
         return $result;
+    }
+
+    /**
+     * Get the HLS muxer options that go in front of the given playlist output.
+     */
+    protected function muxerOptions(int $index, ExportOutput $output): array
+    {
+        $options = [];
+        $settings = $output->outputConfiguration();
+        if (! isset($this->renditions[array_keys($this->variants)[$index]])
+            && ! $settings['omitVideo'] && ($settings['video']['codec'] ?? null) !== 'copy') {
+            $options[] = '-force_key_frames:v';
+            $options[] = 'expr:gte(t,n_forced*'.CommandCompiler::timestamp($this->segmentDuration).')';
+            $options[] = '-flags:v';
+            $options[] = '+cgop';
+        }
+
+        $options[] = '-f';
+        $options[] = 'hls';
+        $options[] = '-hls_time';
+        $options[] = CommandCompiler::timestamp($this->segmentDuration);
+        $options[] = '-hls_list_size';
+        $options[] = '0';
+        $options[] = '-hls_segment_type';
+        $options[] = $this->segmentType;
+        $options[] = '-start_number';
+        $options[] = '0';
+        $options[] = '-hls_segment_filename';
+        $options[] = "segment-{$index}-%08d.".($this->segmentType === 'fmp4' ? 'm4s' : 'ts');
+        $options[] = '-master_pl_name';
+        $options[] = "master-{$index}.m3u8";
+        if ($this->playlistType !== 'live') {
+            $options[] = '-hls_playlist_type';
+            $options[] = $this->playlistType;
+        }
+
+        if ($this->segmentType === 'fmp4') {
+            $options[] = '-hls_fmp4_init_filename';
+            $options[] = "init-{$index}.mp4";
+        }
+
+        return $options;
     }
 
     /**

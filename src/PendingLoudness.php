@@ -127,7 +127,35 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
      */
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
-        $settings = $outputs[0]->outputConfiguration();
+        $this->ensureNormalizable($outputs[0]);
+
+        [$result, $filter] = $this->extractAudioFilter($default);
+
+        // We trim before preprocessing and measurement, instead of seeking the output after loudnorm.
+        $clip = $outputs[0]->clipSettings();
+        $filters = $clip === null ? [] : [
+            "atrim=start={$this->number($clip['start'])}:duration={$this->number($clip['duration'])}",
+            'asetpts=PTS-STARTPTS',
+        ];
+        if ($filter !== '') {
+            $filters[] = $filter;
+        }
+
+        $filters[] = "aresample={$this->sampleRate}";
+        $filters[] = $this->loudnorm('loudness-final.json');
+        $destination = array_pop($result);
+
+        return [
+            ...$result, '-vn', '-filter:a', implode(',', $filters), '-ar', (string) $this->sampleRate, $destination,
+        ];
+    }
+
+    /**
+     * Ensure the given output encodes audio without video filters or keyframe seek.
+     */
+    protected function ensureNormalizable(ExportOutput $output): void
+    {
+        $settings = $output->outputConfiguration();
 
         if (($settings['audio']['codec'] ?? null) === 'copy') {
             throw new InvalidArgumentException('Loudness normalization must encode audio, not copy it.');
@@ -138,11 +166,18 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             throw new InvalidArgumentException('Loudness normalization does not support video filters.');
         }
 
-        if ($outputs[0]->inputSeekOptions() !== []) {
+        if ($output->inputSeekOptions() !== []) {
             throw new InvalidArgumentException('Loudness normalization requires accurate clips, not keyframe seek.');
         }
+    }
 
-        $command = $default;
+    /**
+     * Remove the audio filter and output clip from the given command and get both.
+     *
+     * @return array{0: list<string>, 1: string}
+     */
+    protected function extractAudioFilter(array $command): array
+    {
         $filter = '';
         $result = [];
 
@@ -170,23 +205,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             $result[] = $token;
         }
 
-        // We trim before preprocessing and measurement, instead of seeking the output after loudnorm.
-        $clip = $outputs[0]->clipSettings();
-        $filters = $clip === null ? [] : [
-            "atrim=start={$this->number($clip['start'])}:duration={$this->number($clip['duration'])}",
-            'asetpts=PTS-STARTPTS',
-        ];
-        if ($filter !== '') {
-            $filters[] = $filter;
-        }
-
-        $filters[] = "aresample={$this->sampleRate}";
-        $filters[] = $this->loudnorm('loudness-final.json');
-        $destination = array_pop($result);
-
-        return [
-            ...$result, '-vn', '-filter:a', implode(',', $filters), '-ar', (string) $this->sampleRate, $destination,
-        ];
+        return [$result, $filter];
     }
 
     /**
