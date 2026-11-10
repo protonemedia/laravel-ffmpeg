@@ -50,15 +50,25 @@ class PreservationTest extends TestCase
 
     public function test_geometry_helpers_apply_in_call_order(): void
     {
-        $this->ffmpeg(['-f', 'lavfi', '-i', 'color=red:size=64x32:duration=0.2,drawbox=x=0:y=0:w=16:h=32:color=blue:t=fill',
+        $this->ffmpeg(['-f', 'lavfi',
+            '-i', 'color=red:size=64x32:duration=0.2,drawbox=x=0:y=0:w=16:h=32:color=blue:t=fill',
             '-c:v', 'ffv1', $this->root.'/colors.mkv']);
         $media = FFMpeg::disk()->open(new File($this->root.'/colors.mkv'));
-        $result = $media->frame()->crop(32, 24, x: 0, y: 0)->rotate(90)->pad(40, 48, x: 8, y: 4)->save('geometry.png');
+        $result = $media->frame()
+            ->crop(32, 24, x: 0, y: 0)
+            ->rotate(90)
+            ->pad(40, 48, x: 8, y: 4)
+            ->save('geometry.png');
+
         file_put_contents($this->root.'/geometry.png', Storage::disk('memory')->get($result->file()->path));
+
         $rgb = $this->ffmpeg(['-i', $this->root.'/geometry.png', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-']);
-        $this->assertSame(40 * 48 * 3, strlen($rgb));
+
+        [$width, $height] = [40, 48];
+
+        $this->assertSame($width * $height * 3, strlen($rgb));
         foreach ([[0, 0, 0], [10, 8, 2], [10, 28, 0]] as [$x, $y, $channel]) {
-            $pixel = array_values(unpack('C3', substr($rgb, ($y * 40 + $x) * 3, 3)));
+            $pixel = array_values(unpack('C3', substr($rgb, ($y * $width + $x) * 3, 3)));
             if ($x === 0) {
                 $this->assertSame([0, 0, 0], $pixel);
             } else {
@@ -72,8 +82,12 @@ class PreservationTest extends TestCase
     #[DataProvider('invalidGeometryProvider')]
     public function test_invalid_geometry_is_rejected(Closure $configure): void
     {
-        $export = FFMpeg::disk()->open(new File(__DIR__.'/src/video.mp4'))->export();
+        $export = FFMpeg::disk()
+            ->open(new File(__DIR__.'/src/video.mp4'))
+            ->export();
+
         $this->expectException(InvalidArgumentException::class);
+
         $configure($export);
     }
 
@@ -82,7 +96,9 @@ class PreservationTest extends TestCase
         return [
             'unsupported rotation' => [fn (PendingExport $export) => $export->rotate(45)],
             'odd crop width' => [fn (PendingExport $export) => $export->crop(31, 24)],
-            'filter in pad color' => [fn (PendingExport $export) => $export->pad(40, 48, background: 'red;movie=/secret')],
+            'filter in pad color' => [
+                fn (PendingExport $export) => $export->pad(40, 48, background: 'red;movie=/secret'),
+            ],
             'crop of copied video' => [fn (PendingExport $export) => $export->crop(32, 24)->video('copy')->inspect()],
         ];
     }
@@ -90,7 +106,13 @@ class PreservationTest extends TestCase
     public function test_scoped_disks_keep_their_prefix(): void
     {
         [$source, $writable] = $this->scopedDisks();
-        $result = FFMpeg::disk($source)->open('input.wav')->export()->audio('flac')->toDisk($writable)->save('exports/audio.flac');
+        $result = FFMpeg::disk($source)
+            ->open('input.wav')
+            ->export()
+            ->audio('flac')
+            ->toDisk($writable)
+            ->save('exports/audio.flac');
+
         $this->assertSame('exports/audio.flac', $result->file()->path);
         $this->assertFileExists($this->root.'/storage/tenant-42/exports/audio.flac');
         $this->assertFileDoesNotExist($this->root.'/storage/exports/audio.flac');
@@ -101,8 +123,15 @@ class PreservationTest extends TestCase
     public function test_read_only_disks_reject_publication(): void
     {
         [$source, $writable] = $this->scopedDisks();
+
+        $export = FFMpeg::disk($source)
+            ->open('input.wav')
+            ->export()
+            ->audio('flac')
+            ->toDisk($source);
+
         $this->assertThrows(
-            fn () => FFMpeg::disk($source)->open('input.wav')->export()->audio('flac')->toDisk($source)->save('blocked.flac'),
+            fn () => $export->save('blocked.flac'),
             fn (MediaException $exception) => [$exception->phase, $exception->category] === ['publication', 'transfer'],
         );
         $this->assertFalse($writable->exists('blocked.flac'));
@@ -112,6 +141,7 @@ class PreservationTest extends TestCase
     public function test_destinations_cannot_escape_the_disk_root(): void
     {
         [$source, $writable] = $this->scopedDisks();
+
         $this->assertThrows(
             fn () => FFMpeg::disk($source)->open('input.wav')->export()->toDisk($writable)->save('../outside.flac'),
             PathTraversalDetected::class,
@@ -127,7 +157,8 @@ class PreservationTest extends TestCase
      */
     protected function scopedDisks(): array
     {
-        $this->ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=611:duration=0.3', '-c:a', 'pcm_s16le', $this->root.'/source.wav']);
+        $this->ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=611:duration=0.3',
+            '-c:a', 'pcm_s16le', $this->root.'/source.wav']);
         $base = new LocalFilesystemAdapter($this->root.'/storage');
         $scoped = new PathPrefixedAdapter($base, 'tenant-42');
         $writable = new FilesystemAdapter(new Filesystem($scoped), $scoped);
@@ -140,12 +171,27 @@ class PreservationTest extends TestCase
     public function test_stream_copy_keeps_subtitles_cover_art_and_metadata(): void
     {
         $media = $this->richMedia();
-        $media->export()->map('0:V:0')->map('0:a')->map('0:s')->map('0:v:1')->video('copy')->audio('copy')
-            ->outputOptions(['-c:s', 'copy'])->save('preserved.mp4');
-        $probe = FFMpeg::disk()->open('preserved.mp4')->probe();
+
+        $media->export()
+            ->map('0:V:0')
+            ->map('0:a')
+            ->map('0:s')
+            ->map('0:v:1')
+            ->video('copy')
+            ->audio('copy')
+            ->outputOptions(['-c:s', 'copy'])
+            ->save('preserved.mp4');
+        $probe = FFMpeg::disk()
+            ->open('preserved.mp4')
+            ->probe();
+
         $this->assertSame('Preserved', $probe->tag('title'));
         $this->assertCount(1, $probe->chapters());
-        $subtitles = $probe->streams()->filter(fn ($stream) => $stream->type() === 'subtitle')->values();
+
+        $subtitles = $probe->streams()
+            ->filter(fn ($stream) => $stream->type() === 'subtitle')
+            ->values();
+
         $this->assertCount(1, $subtitles);
         $this->assertSame('mov_text', $subtitles[0]->codec());
         $this->assertSame('fra', $subtitles[0]->language());
@@ -156,9 +202,20 @@ class PreservationTest extends TestCase
 
     public function test_metadata_can_be_removed_and_replaced(): void
     {
-        $this->richMedia()->export()->mapVideo()->mapAudio()->video('copy')->audio('copy')->withoutMetadata(chapters: true)
-            ->metadata('title', 'Replacement')->save('removed.mp4');
-        $removed = FFMpeg::disk()->open('removed.mp4')->probe();
+        $this->richMedia()
+            ->export()
+            ->mapVideo()
+            ->mapAudio()
+            ->video('copy')
+            ->audio('copy')
+            ->withoutMetadata(chapters: true)
+            ->metadata('title', 'Replacement')
+            ->save('removed.mp4');
+
+        $removed = FFMpeg::disk()
+            ->open('removed.mp4')
+            ->probe();
+
         $this->assertSame('Replacement', $removed->tag('title'));
         $this->assertNull($removed->tag('comment'));
         $this->assertCount(0, $removed->chapters());
@@ -175,7 +232,7 @@ class PreservationTest extends TestCase
             Bonjour
 
             SRT);
-        file_put_contents($this->root.'/metadata.txt', <<<'FFMETADATA'
+        file_put_contents($this->root.'/metadata.txt', <<<'TXT'
             ;FFMETADATA1
             title=Preserved
             comment=Remove me
@@ -185,7 +242,7 @@ class PreservationTest extends TestCase
             END=900
             title=Introduction
 
-            FFMETADATA);
+            TXT);
         $this->ffmpeg(['-f', 'lavfi', '-i', 'color=blue:size=16x16', '-frames:v', '1', $this->root.'/cover.png']);
         $this->ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=64x48:rate=10:duration=1',
             '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-i', $this->root.'/captions.srt',
@@ -205,19 +262,37 @@ class PreservationTest extends TestCase
             '-vf', 'select=if(lt(t\,1)\,not(mod(n\,2))\,1)', '-fps_mode', 'vfr',
             '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $this->root.'/vfr.mkv']);
         $media = FFMpeg::disk()->open(new File($this->root.'/vfr.mkv'));
-        $media->export()->video('ffv1')->audio('pcm_s16le')->clip(0.1, duration: 1.6)->save('clip.mkv');
+        $media->export()
+            ->video('ffv1')
+            ->audio('pcm_s16le')
+            ->clip(0.1, duration: 1.6)
+            ->save('clip.mkv');
+
         file_put_contents($this->root.'/clip.mkv', Storage::disk('memory')->get('clip.mkv'));
+
         $frames = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'v:0',
             '-show_entries', 'frame=best_effort_timestamp_time', '-of', 'json', $this->root.'/clip.mkv']);
+
         $this->assertProcessSucceeded($frames);
-        $times = array_map(fn ($frame) => (float) $frame['best_effort_timestamp_time'], json_decode($frames->output(), true)['frames']);
+
+        $times = array_map(
+            fn ($frame) => (float) $frame['best_effort_timestamp_time'],
+            json_decode($frames->output(), true)['frames'],
+        );
         $gaps = array_map(fn ($a, $b) => round($b - $a, 3), array_slice($times, 0, -1), array_slice($times, 1));
+
         $this->assertContains(0.1, $gaps);
         $this->assertContains(0.05, $gaps);
+
         $audio = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'a:0',
             '-show_packets', '-show_entries', 'packet=pts_time', '-of', 'json', $this->root.'/clip.mkv']);
+
         $this->assertProcessSucceeded($audio);
-        $this->assertEqualsWithDelta(0.25, (float) json_decode($audio->output(), true)['packets'][0]['pts_time'], 0.025);
+        $this->assertEqualsWithDelta(
+            0.25,
+            (float) json_decode($audio->output(), true)['packets'][0]['pts_time'],
+            0.025,
+        );
         $this->assertLessThanOrEqual(1.6, end($times));
     }
 }

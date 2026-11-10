@@ -44,19 +44,29 @@ class PlaylistTest extends TestCase
 
             return 'https://cdn.example.test/'.str_replace(' ', '%20', $target).'?signed='.count($calls);
         };
-        $playlist = FFMpeg::disk($disk)->playlist('shows/master/index.m3u8')
-            ->playlistUrlsUsing($signed)->keyUrlsUsing($signed)->mediaUrlsUsing($signed);
+        $playlist = FFMpeg::disk($disk)
+            ->playlist('shows/master/index.m3u8')
+            ->playlistUrlsUsing($signed)
+            ->keyUrlsUsing($signed)
+            ->mediaUrlsUsing($signed);
         $all = $playlist->all();
+
         $this->assertSame(['shows/master/index.m3u8', 'shows/variants/low'], $all->keys()->all());
         $this->assertSame([
             ['shows/variants/low', 'shows/master/index.m3u8', '../variants/low?token=old'],
             ['shows/keys/a b.key', 'shows/variants/low', '../keys/a%20b.key?old=1'],
             ['shows/segments/part 0.ts', 'shows/variants/low', '../segments/part%200.ts?old=2'],
         ], $calls);
-        $this->assertSame(str_replace('../variants/low?token=old', 'https://cdn.example.test/shows/variants/low?signed=1', $master), $all->first());
+        $this->assertSame(
+            str_replace('../variants/low?token=old', 'https://cdn.example.test/shows/variants/low?signed=1', $master),
+            $all->first(),
+        );
         $this->assertSame(str_replace(
             ['../keys/a%20b.key?old=1', '../segments/part%200.ts?old=2'],
-            ['https://cdn.example.test/shows/keys/a%20b.key?signed=2', 'https://cdn.example.test/shows/segments/part%200.ts?signed=3'],
+            [
+                'https://cdn.example.test/shows/keys/a%20b.key?signed=2',
+                'https://cdn.example.test/shows/segments/part%200.ts?signed=3',
+            ],
             $variant
         ), $all->last());
         $this->assertStringContainsString('?signed=4', $playlist->get());
@@ -78,11 +88,14 @@ class PlaylistTest extends TestCase
         $disk->put('master.m3u8', $master);
         $seen = [];
 
-        $all = FFMpeg::disk('memory')->playlist('master.m3u8')->playlistUrlsUsing(function ($target, $source, $uri) use (&$seen) {
-            $seen[] = [$target, $source, $uri];
+        $all = FFMpeg::disk('memory')
+            ->playlist('master.m3u8')
+            ->playlistUrlsUsing(function ($target, $source, $uri) use (&$seen) {
+                $seen[] = [$target, $source, $uri];
 
-            return $uri;
-        })->all();
+                return $uri;
+            })
+            ->all();
 
         $this->assertSame(['master.m3u8' => $master], $all->all());
         $this->assertSame([
@@ -101,13 +114,16 @@ class PlaylistTest extends TestCase
 
             M3U8);
 
-        $output = FFMpeg::disk('memory')->playlist('encrypted.m3u8')->keyUrlsUsing(function ($target, $source, $uri) {
-            $this->assertNull($target);
-            $this->assertSame('encrypted.m3u8', $source);
-            $this->assertSame('/private/key?id=1', $uri);
+        $output = FFMpeg::disk('memory')
+            ->playlist('encrypted.m3u8')
+            ->keyUrlsUsing(function ($target, $source, $uri) {
+                $this->assertNull($target);
+                $this->assertSame('encrypted.m3u8', $source);
+                $this->assertSame('/private/key?id=1', $uri);
 
-            return '/signed/key?id=2';
-        })->get();
+                return '/signed/key?id=2';
+            })
+            ->get();
 
         $this->assertStringContainsString('URI="/signed/key?id=2",IV=0x01', $output);
     }
@@ -140,7 +156,10 @@ class PlaylistTest extends TestCase
 
             M3U8);
 
-        $this->assertSame(['master.m3u8', 'child.m3u8'], FFMpeg::disk('memory')->playlist('master.m3u8')->all()->keys()->all());
+        $this->assertSame(
+            ['master.m3u8', 'child.m3u8'],
+            FFMpeg::disk('memory')->playlist('master.m3u8')->all()->keys()->all(),
+        );
     }
 
     public function test_reopened_encrypted_playlists_delete_only_approved_original_files(): void
@@ -178,16 +197,21 @@ class PlaylistTest extends TestCase
         $disk->put('other/master.m3u8', 'keep');
         $playlist = FFMpeg::disk('memory')->playlist('show/master.m3u8');
         $resolver = fn () => throw new \RuntimeException('Deletion must not invoke URL resolvers.');
-        $playlist->playlistUrlsUsing($resolver)->keyUrlsUsing($resolver)->mediaUrlsUsing($resolver);
+        $playlist->playlistUrlsUsing($resolver)
+            ->keyUrlsUsing($resolver)
+            ->mediaUrlsUsing($resolver);
         $approved = [];
-        $this->assertSame($playlist, $playlist->deleteAllFiles(function (string $path) use ($disk, $files, &$approved): bool {
+
+        $returned = $playlist->deleteAllFiles(function (string $path) use ($disk, $files, &$approved): bool {
             foreach (array_keys($files) as $existing) {
                 $this->assertTrue($disk->exists($existing), 'Deletion started before all approvals.');
             }
             $approved[] = $path;
 
             return array_key_exists($path, $files);
-        }));
+        });
+
+        $this->assertSame($playlist, $returned);
         $this->assertSame(array_keys($files), $approved);
         $this->assertEqualsCanonicalizing(['show/unrelated.ts', 'other/master.m3u8'], $disk->allFiles());
     }
@@ -198,14 +222,25 @@ class PlaylistTest extends TestCase
         $disk = $this->fakeLocalDisk();
         $source = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=80x48:rate=10:duration=1.2',
             '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '1', $disk->path('source.mp4')]);
+
         $this->assertProcessSucceeded($source);
-        FFMpeg::disk('local')->open('source.mp4')->hls(segmentDuration: 0.5)
-            ->video(bitrate: '100k', preset: 'ultrafast')->variant('low', fn () => null)->variant('high', fn () => null)
+
+        FFMpeg::disk('local')
+            ->open('source.mp4')
+            ->hls(segmentDuration: 0.5)
+            ->video(bitrate: '100k', preset: 'ultrafast')
+            ->variant('low', fn () => null)
+            ->variant('high', fn () => null)
             ->save('old/master.m3u8');
         $generated = $disk->allFiles('old');
+
         $this->assertGreaterThanOrEqual(5, count($generated));
+
         $disk->put('old/unrelated.ts', 'keep');
-        FFMpeg::disk('local')->playlist('old/master.m3u8')->deleteAllFiles(fn (string $path): bool => in_array($path, $generated, true));
+        FFMpeg::disk('local')
+            ->playlist('old/master.m3u8')
+            ->deleteAllFiles(fn (string $path): bool => in_array($path, $generated, true));
+
         $this->assertSame(['old/unrelated.ts'], $disk->allFiles('old'));
         $this->assertTrue($disk->exists('source.mp4'));
     }
@@ -219,11 +254,13 @@ class PlaylistTest extends TestCase
 
         $this->assertThrows(
             function () use ($disk, &$seen, $refusal) {
-                FFMpeg::disk($disk)->playlist('show/master.m3u8')->deleteAllFiles(function (string $path) use (&$seen, $refusal) {
-                    $seen[] = $path;
+                FFMpeg::disk($disk)
+                    ->playlist('show/master.m3u8')
+                    ->deleteAllFiles(function (string $path) use (&$seen, $refusal) {
+                        $seen[] = $path;
 
-                    return $path === 'shared.ts' ? $refusal : true;
-                });
+                        return $path === 'shared.ts' ? $refusal : true;
+                    });
             },
             fn (MediaException $exception) => $exception->category === 'authorization',
         );
@@ -240,11 +277,13 @@ class PlaylistTest extends TestCase
 
         $this->assertThrows(
             function () use ($disk, &$seen, $failure) {
-                FFMpeg::disk($disk)->playlist('show/master.m3u8')->deleteAllFiles(function (string $path) use (&$seen, $failure) {
-                    $seen[] = $path;
+                FFMpeg::disk($disk)
+                    ->playlist('show/master.m3u8')
+                    ->deleteAllFiles(function (string $path) use (&$seen, $failure) {
+                        $seen[] = $path;
 
-                    return $path === 'shared.ts' ? throw $failure : true;
-                });
+                        return $path === 'shared.ts' ? throw $failure : true;
+                    });
             },
             fn (\RuntimeException $exception) => $exception === $failure,
         );
@@ -308,6 +347,7 @@ class PlaylistTest extends TestCase
             M3U8, $uri));
         $disk->put('show/safe.ts', 'keep');
         $disk->put('outside.ts', 'keep');
+
         $this->assertThrows(
             fn () => FFMpeg::disk($disk)->playlist('show/master.m3u8')->deleteAllFiles(function () {
                 $this->fail('Approval ran before discovery finished.');
@@ -332,6 +372,7 @@ class PlaylistTest extends TestCase
             M3U8);
         $disk->put('safe.ts', 'keep');
         $disk->put('bad.m3u8', $contents);
+
         $this->assertThrows(
             fn () => FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function () {
                 $this->fail('Approval ran before validation finished.');
@@ -360,25 +401,36 @@ class PlaylistTest extends TestCase
 
                 M3U8, $child));
             rewind($stream);
-            $disk->shouldReceive('readStream')->once()->with($path)->andReturn($stream);
+            $disk->shouldReceive('readStream')
+                ->once()
+                ->with($path)
+                ->andReturn($stream);
         }
-        $disk->shouldReceive('delete')->once()->with('master.m3u8')->andReturn(true);
-        $expectation = $disk->shouldReceive('delete')->once()->with('child.m3u8');
+        $disk->shouldReceive('delete')
+            ->once()
+            ->with('master.m3u8')
+            ->andReturn(true);
+        $expectation = $disk->shouldReceive('delete')
+            ->once()
+            ->with('child.m3u8');
         if ($throws) {
             $expectation->andThrow(new \RuntimeException('secret adapter details'));
         } else {
             $expectation->andReturn(false);
         }
-        $disk->shouldNotReceive('delete')->with('part.ts');
+        $disk->shouldNotReceive('delete')
+            ->with('part.ts');
         $approved = [];
 
         $this->assertThrows(
             function () use ($disk, &$approved) {
-                FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function (string $path) use (&$approved): bool {
-                    $approved[] = $path;
+                FFMpeg::disk($disk)
+                    ->playlist('master.m3u8')
+                    ->deleteAllFiles(function (string $path) use (&$approved): bool {
+                        $approved[] = $path;
 
-                    return true;
-                });
+                        return true;
+                    });
             },
             fn (MediaException $exception) => $exception->phase === 'response'
                 && $exception->category === 'filesystem'
@@ -402,9 +454,16 @@ class PlaylistTest extends TestCase
 
             M3U8);
         rewind($stream);
-        $disk->shouldReceive('readStream')->once()->with('master.m3u8')->andReturn($stream);
-        $disk->shouldReceive('readStream')->once()->with('missing.m3u8')->andReturn(false);
+        $disk->shouldReceive('readStream')
+            ->once()
+            ->with('master.m3u8')
+            ->andReturn($stream);
+        $disk->shouldReceive('readStream')
+            ->once()
+            ->with('missing.m3u8')
+            ->andReturn(false);
         $disk->shouldNotReceive('delete');
+
         $this->assertThrows(
             fn () => FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function () {
                 $this->fail('Approval ran before every playlist was read.');
@@ -432,8 +491,11 @@ class PlaylistTest extends TestCase
 
                 M3U8);
         }
-        $all = FFMpeg::disk('memory')->playlist('master.m3u8')
-            ->mediaUrlsUsing(fn ($target, $source) => '/signed/'.$target.'?source='.rawurlencode($source))->all();
+        $all = FFMpeg::disk('memory')
+            ->playlist('master.m3u8')
+            ->mediaUrlsUsing(fn ($target, $source) => '/signed/'.$target.'?source='.rawurlencode($source))
+            ->all();
+
         $this->assertSame(<<<'M3U8'
             #EXTM3U
             #EXTINF:1,
@@ -454,12 +516,16 @@ class PlaylistTest extends TestCase
         Route::get('/native-playlist', function () {
             abort_unless(request()->query('token') === 'allowed', 403);
 
-            return FFMpeg::disk('memory')->playlist('index.m3u8')
+            return FFMpeg::disk('memory')
+                ->playlist('index.m3u8')
                 ->mediaUrlsUsing(fn ($target) => 'https://cdn.example.test/'.$target.'?signature=ok');
         });
-        $this->get('/native-playlist')->assertForbidden();
-        $response = $this->get('/native-playlist?token=allowed')->assertOk()
+        $this->get('/native-playlist')
+            ->assertForbidden();
+        $response = $this->get('/native-playlist?token=allowed')
+            ->assertOk()
             ->assertHeader('Content-Type', 'application/vnd.apple.mpegurl');
+
         $this->assertSame(<<<'M3U8'
             #EXTM3U
             #EXTINF:1,
@@ -496,8 +562,12 @@ class PlaylistTest extends TestCase
     public function test_malformed_or_unsupported_playlists_fail_without_a_partial_response(string $contents): void
     {
         Storage::disk('memory')->put('bad.m3u8', $contents);
+
         $this->expectException(MediaException::class);
-        FFMpeg::disk('memory')->playlist('bad.m3u8')->get();
+
+        FFMpeg::disk('memory')
+            ->playlist('bad.m3u8')
+            ->get();
     }
 
     #[DataProvider('invalidResolverResultProvider')]
@@ -580,7 +650,10 @@ class PlaylistTest extends TestCase
 
         $this->expectException(MediaException::class);
 
-        FFMpeg::disk('memory')->playlist('index.m3u8')->mediaUrlsUsing(fn () => '/'.str_repeat('x', 16777216))->get();
+        FFMpeg::disk('memory')
+            ->playlist('index.m3u8')
+            ->mediaUrlsUsing(fn () => '/'.str_repeat('x', 16777216))
+            ->get();
     }
 
     public function test_traversal_follows_at_most_1024_playlists(): void
@@ -623,7 +696,9 @@ class PlaylistTest extends TestCase
 
         $this->expectException(MediaException::class);
 
-        FFMpeg::disk('memory')->playlist('master.m3u8')->all();
+        FFMpeg::disk('memory')
+            ->playlist('master.m3u8')
+            ->all();
     }
 
     public function test_resolver_configuration_is_snapshotted_for_each_render(): void
@@ -642,6 +717,7 @@ class PlaylistTest extends TestCase
 
             return '/current/'.$target;
         });
+
         $this->assertSame(<<<'M3U8'
             #EXTM3U
             #EXTINF:1,

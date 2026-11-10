@@ -19,7 +19,8 @@ class CapabilitiesTest extends TestCase
     {
         parent::setUp();
         config(['laravel-ffmpeg.ffmpeg.binaries' => 'ffmpeg', 'laravel-ffmpeg.ffprobe.binaries' => 'ffprobe']);
-        $this->app->make(Kernel::class)->registerCommand(new DoctorCommand);
+        $this->app->make(Kernel::class)
+            ->registerCommand(new DoctorCommand);
     }
 
     protected function fakeCapabilities(string $probeVersion = '9.0.2', ?string $brokenOption = null): void
@@ -28,11 +29,15 @@ class CapabilitiesTest extends TestCase
         Process::fake(function (PendingProcess $process) use ($probeVersion, $brokenOption) {
             $command = $process->command;
             $option = end($command);
+
             if ($option === $brokenOption) {
                 return Process::result(exitCode: 1, errorOutput: 'secret-token /private/binary');
             }
+
             if ($option === '-version') {
-                return Process::result(output: $command[0].' version '.($command[0] === 'ffprobe' ? $probeVersion : '9.0.2'));
+                return Process::result(
+                    output: $command[0].' version '.($command[0] === 'ffprobe' ? $probeVersion : '9.0.2'),
+                );
             }
 
             return Process::result(output: match ($option) {
@@ -84,6 +89,7 @@ class CapabilitiesTest extends TestCase
     {
         $this->fakeCapabilities();
         $capabilities = new Capabilities;
+
         $this->assertInstanceOf(Capabilities::class, $capabilities);
         $this->assertSame(['ffmpeg' => '9.0.2', 'ffprobe' => '9.0.2'], $capabilities->versions());
         $this->assertSame(['aac', 'mpeg4'], $capabilities->available('encoders'));
@@ -95,6 +101,7 @@ class CapabilitiesTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
         $this->assertInstanceOf(Capabilities::class, FFMpeg::capabilities());
         $this->expectException(MediaException::class);
+
         $capabilities->require(['encoders' => ['absent']]);
     }
 
@@ -123,10 +130,13 @@ class CapabilitiesTest extends TestCase
     public function test_doctor_has_human_and_json_reports_and_missing_requirements_fail(): void
     {
         $this->fakeCapabilities();
+
         $this->assertSame(0, Artisan::call('ffmpeg:doctor', ['--encoder' => ['mpeg4']]));
         $this->assertStringContainsString('GPU/device usability is NOT tested', Artisan::output());
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true, '--encoder' => ['not_present']]));
+
         $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
         $this->assertSame(['encoders' => ['not_present']], $report['missing']);
         $this->assertFalse($report['hardware']['device_usability_tested']);
         $this->assertWorkspacesAreCleanedUp();
@@ -137,6 +147,7 @@ class CapabilitiesTest extends TestCase
     public function test_mismatched_and_wrong_major_versions_fail_sanitized(string $version): void
     {
         $this->fakeCapabilities(probeVersion: $version);
+
         $this->assertThrows(fn () => new Capabilities, function (MediaException $exception) {
             $this->assertSame('version', $exception->category);
             $this->assertSame('', $exception->diagnostics);
@@ -149,8 +160,11 @@ class CapabilitiesTest extends TestCase
     public function test_failed_capture_is_reported_without_binary_details(): void
     {
         $this->fakeCapabilities(brokenOption: '-encoders');
+
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
+
         $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
         $this->assertSame('capability', $report['category']);
         $this->assertStringNotContainsString('secret-token', Artisan::output());
         $this->assertStringNotContainsString('/private/binary', Artisan::output());
@@ -161,6 +175,7 @@ class CapabilitiesTest extends TestCase
     {
         $this->fakeCapabilities();
         config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/absent/root']);
+
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertSame('filesystem', json_decode(Artisan::output(), true)['category']);
         $this->assertStringNotContainsString($this->root, Artisan::output());
@@ -196,6 +211,7 @@ class CapabilitiesTest extends TestCase
         // separate version response is supplied by the second script.
         $probe = $this->versionOnlyProbe();
         config(['laravel-ffmpeg.ffmpeg.binaries' => $binary, 'laravel-ffmpeg.ffprobe.binaries' => $probe]);
+
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertSame('output_limit', json_decode(Artisan::output(), true)['category']);
         $this->assertStringNotContainsString($this->root, Artisan::output());
@@ -209,6 +225,7 @@ class CapabilitiesTest extends TestCase
             'laravel-ffmpeg.ffmpeg.binaries' => $this->root.'/missing-private-binary',
             'laravel-ffmpeg.ffprobe.binaries' => $probe,
         ]);
+
         $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
         $this->assertStringNotContainsString($this->root, Artisan::output());
         $this->assertStringNotContainsString('missing-private-binary', Artisan::output());
@@ -219,12 +236,25 @@ class CapabilitiesTest extends TestCase
     {
         $this->useRealFFMpeg();
         $capabilities = new Capabilities;
+
         $this->assertMatchesRegularExpression('/\A9\.0\.\d+\z/', $capabilities->versions()['ffmpeg']);
-        $this->assertSame([], $capabilities->missing(['encoders' => ['mpeg4', 'aac'], 'muxers' => ['mp4', 'hls'],
-            'filters' => ['scale', 'loudnorm'], 'bitstream_filters' => ['aac_adtstoasc'], 'input_protocols' => ['file']]));
+        $this->assertSame(
+            [],
+            $capabilities->missing(
+                [
+                    'encoders' => ['mpeg4', 'aac'],
+                    'muxers' => ['mp4', 'hls'],
+                    'filters' => ['scale', 'loudnorm'],
+                    'bitstream_filters' => ['aac_adtstoasc'],
+                    'input_protocols' => ['file'],
+                ],
+            ),
+        );
         $this->assertFalse($capabilities->toArray()['hardware']['device_usability_tested']);
         $this->assertSame(0, Artisan::call('ffmpeg:doctor', ['--json' => true, '--protocol' => ['file']]));
+
         $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
         $this->assertSame([], $report['missing']);
         $this->assertTrue($report['temporary_root']['writable']);
         $this->assertWorkspacesAreCleanedUp();

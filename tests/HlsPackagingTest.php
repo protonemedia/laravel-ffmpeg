@@ -45,19 +45,28 @@ class HlsPackagingTest extends TestCase
         parent::tearDownAfterClass();
     }
 
+    /**
+     * Set up the test environment.
+     */
     protected function setUp(): void
     {
         parent::setUp();
-        config(['filesystems.disks.hls-packaging' => ['driver' => 'local', 'root' => $this->root.'/storage'],
-            'filesystems.disks.hls-packaging-keys' => ['driver' => 'local', 'root' => $this->root.'/keys']]);
+
+        config([
+            'filesystems.disks.hls-packaging' => ['driver' => 'local', 'root' => $this->root.'/storage'],
+            'filesystems.disks.hls-packaging-keys' => ['driver' => 'local', 'root' => $this->root.'/keys'],
+        ]);
     }
 
-    protected function source(string $disk = 'hls-packaging')
+    /**
+     * Generate a source with a video, two audio tracks and a subtitle track on the given disk and open it.
+     */
+    protected function source(string $disk = 'hls-packaging'): Media
     {
         $binary = $this->useRealFFMpeg();
-        $name = $disk;
-        $disk = Storage::disk($name);
-        $disk->put('captions.srt', <<<'SRT'
+        $storage = Storage::disk($disk);
+
+        $storage->put('captions.srt', <<<'SRT'
             1
             00:00:00,200 --> 00:00:01,000
             Hello HLS
@@ -67,27 +76,59 @@ class HlsPackagingTest extends TestCase
             Second cue
 
             SRT);
-        $result = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=2.4',
+
+        $result = Process::run([
+            $binary, '-v', 'error',
+            '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=2.4',
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2.4',
-            '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000:duration=2.4', '-i', $disk->path('captions.srt'),
-            '-map', '0:v', '-map', '1:a', '-map', '2:a', '-map', '3:s', '-c:v', 'libx264', '-preset', 'ultrafast',
-            '-g', '14', '-c:a', 'aac', '-c:s', 'srt', '-threads', '1', $disk->path('source.mkv')]);
+            '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000:duration=2.4',
+            '-i', $storage->path('captions.srt'),
+            '-map', '0:v', '-map', '1:a', '-map', '2:a', '-map', '3:s',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-g', '14', '-c:a', 'aac', '-c:s', 'srt', '-threads', '1',
+            $storage->path('source.mkv'),
+        ]);
+
         $this->assertProcessSucceeded($result);
 
-        return FFMpeg::disk($name)->open('source.mkv');
+        return FFMpeg::disk($disk)->open('source.mkv');
     }
 
+    /**
+     * Decode the given streams of the given file with FFmpeg, failing on the first error.
+     */
     protected function decode(string $path, array $maps = ['0:v:0', '0:a:0'], string $disk = 'hls-packaging'): string
     {
         $command = [$this->useRealFFMpeg(), '-v', 'error', '-xerror', '-i', Storage::disk($disk)->path($path)];
+
         foreach ($maps as $map) {
             array_push($command, '-map', $map);
         }
-        array_push($command, '-f', 'null', '-');
-        $result = Process::run($command);
+
+        $result = Process::run([...$command, '-f', 'null', '-']);
+
         $this->assertProcessSucceeded($result);
 
         return $result->output();
+    }
+
+    /**
+     * Count the rising zero crossings in the given signed 16-bit little-endian samples.
+     */
+    protected function countRisingZeroCrossings(string $pcm): int
+    {
+        $previous = $crossings = 0;
+
+        foreach (unpack('v*', $pcm) as $sample) {
+            $sample = $sample >= 32768 ? $sample - 65536 : $sample;
+
+            if ($sample > 0 && $previous <= 0) {
+                $crossings++;
+            }
+
+            $previous = $sample;
+        }
+
+        return $crossings;
     }
 
     /**
@@ -102,22 +143,34 @@ class HlsPackagingTest extends TestCase
     }
 
     #[DataProvider('packagingProvider')]
-    public function test_x265_variants_publish_hevc_playlists_and_decode_without_falling_back_to_h264(bool $fragmented): void
+    public function test_x265_variants_publish_hevc_playlists_that_decode(bool $fragmented): void
     {
-        $export = $this->source()->hls(segmentDuration: 0.7)->video('libx265', crf: 28, preset: 'ultrafast')
+        $export = $this->source()
+            ->hls(segmentDuration: 0.7)
+            ->video('libx265', crf: 28, preset: 'ultrafast')
             ->outputOptions(['-tag:v', 'hvc1'])
             ->variant('hevc', fn (HlsVariant $variant) => $variant->resize(width: 80));
+
         if ($fragmented) {
             $export->fmp4();
         }
+
         $result = $export->save('hevc/master.m3u8');
+
         $disk = Storage::disk('hls-packaging');
         $variant = $result->variant('hevc');
-        $probe = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error',
-            '-show_entries', 'stream=codec_type,codec_name,width,height', '-of', 'json', $disk->path($variant->playlist()->path)]);
+
+        $probe = Process::run([
+            config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error',
+            '-show_entries', 'stream=codec_type,codec_name,width,height', '-of', 'json',
+            $disk->path($variant->playlist()->path),
+        ]);
+
         $this->assertProcessSucceeded($probe);
+
         $streams = collect(json_decode($probe->output(), true, flags: JSON_THROW_ON_ERROR)['streams']);
         $video = $streams->firstWhere('codec_type', 'video');
+
         $this->assertSame('hevc', $video['codec_name']);
         $this->assertSame(80, $video['width']);
         $this->assertSame(48, $video['height']);
@@ -131,63 +184,95 @@ class HlsPackagingTest extends TestCase
     }
 
     #[DataProvider('packagingProvider')]
-    public function test_two_pass_variants_decode_with_private_isolated_statistics_and_no_first_pass_packaging(bool $fragmented): void
+    public function test_two_pass_variants_package_only_the_second_pass(bool $fragmented): void
     {
-        $media = $this->source();
-        $export = $media->hls(segmentDuration: 0.7)->video(bitrate: '180k')->audio(bitrate: '48k')
+        $export = $this->source()
+            ->hls(segmentDuration: 0.7)
+            ->video(bitrate: '180k')
+            ->audio(bitrate: '48k')
             ->variant('small', fn ($v) => $v->resize(width: 80))
             ->variant('large', fn ($v) => $v->video(bitrate: '300k'));
+
         if ($fragmented) {
             $export->fmp4();
         }
+
         $inspectedSecondPass = false;
-        $export->twoPass()->onProgress(function (Progress $progress) use (&$inspectedSecondPass) {
-            if ($progress->phase !== Progress::ENCODING || $progress->pass !== 2 || $inspectedSecondPass) {
-                return;
-            }
-            $inspectedSecondPass = true;
-            $this->assertTrue(Storage::disk('hls-packaging')->missing('out/master.m3u8'));
-            $workspace = glob($this->root.'/workspaces/*')[0];
-            $this->assertSame([], glob($workspace.'/*.m3u8'));
-            $this->assertSame([], glob($workspace.'/*.ts'));
-            $this->assertSame([], glob($workspace.'/*.m4s'));
-            $this->assertSame([], glob($workspace.'/init-*.mp4'));
-            $this->assertNotEmpty(glob($workspace.'/pass-0-*.log'));
-            $this->assertNotEmpty(glob($workspace.'/pass-1-*.log'));
-        });
+
+        // When the second pass starts, the first pass must have left only its private
+        // statistics in the workspace. Playlists, segments and initialization files
+        // would mean the first pass was packaged and could leak into the output.
+        $export->twoPass()
+            ->onProgress(function (Progress $progress) use (&$inspectedSecondPass) {
+                if ($progress->phase !== Progress::ENCODING || $progress->pass !== 2 || $inspectedSecondPass) {
+                    return;
+                }
+
+                $inspectedSecondPass = true;
+                $workspace = glob($this->root.'/workspaces/*')[0];
+
+                $this->assertTrue(Storage::disk('hls-packaging')->missing('out/master.m3u8'));
+                $this->assertSame([], glob($workspace.'/*.m3u8'));
+                $this->assertSame([], glob($workspace.'/*.ts'));
+                $this->assertSame([], glob($workspace.'/*.m4s'));
+                $this->assertSame([], glob($workspace.'/init-*.mp4'));
+                $this->assertNotEmpty(glob($workspace.'/pass-0-*.log'));
+                $this->assertNotEmpty(glob($workspace.'/pass-1-*.log'));
+            });
+
         $result = $export->save('out/master.m3u8');
+
         $this->assertTrue($inspectedSecondPass);
         $this->assertCount(2, $result->processes());
+
         foreach (['small', 'large'] as $name) {
             $this->decode($result->variant($name)->playlist()->path);
             $this->assertCount($fragmented ? 1 : 0, $result->variant($name)->files()->where('role', 'hls-init'));
         }
+
         $this->decode($result->playlist()->path);
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_custom_fragment_paths_and_dynamic_map_references_decode_without_publishing_probe_files(): void
+    public function test_custom_fragment_paths_decode_without_publishing_probe_files(): void
     {
-        $result = $this->source()->hls(segmentDuration: 0.7)->fmp4()
-            ->variant('small', fn ($v) => $v->resize(width: 80), playlist: 'lists/small/index.m3u8',
-                segments: 'assets/é #?/part-%03d.m4s', init: 'assets/é #?/start.mp4')
+        $result = $this->source()
+            ->hls(segmentDuration: 0.7)
+            ->fmp4()
+            ->variant(
+                'small',
+                fn ($v) => $v->resize(width: 80),
+                playlist: 'lists/small/index.m3u8',
+                segments: 'assets/é #?/part-%03d.m4s',
+                init: 'assets/é #?/start.mp4',
+            )
             ->save('catalog/master.m3u8');
+
         $disk = Storage::disk('hls-packaging');
         $playlist = $disk->get($result->variant('small')->playlist()->path);
+
         $this->assertStringContainsString('#EXT-X-MAP:URI="../../assets/%C3%A9%20%23%3F/start.mp4"', $playlist);
         $this->assertStringContainsString('../../assets/%C3%A9%20%23%3F/part-000.m4s', $playlist);
-        // FFmpeg's local file demuxer does not URL-decode percent-encoded file paths; responses resolve disk keys.
-        $rewritten = FFMpeg::disk('hls-packaging')->playlist($result->playlist()->path)
+
+        // FFmpeg's local file demuxer does not URL-decode percent-encoded file paths, so
+        // the rewritten playlists point at plain copies of the media instead. The URLs
+        // still resolve from disk keys, which is what the rewriter hands to callbacks.
+        $rewritten = FFMpeg::disk('hls-packaging')
+            ->playlist($result->playlist()->path)
             ->playlistUrlsUsing(fn ($target) => $disk->path('responses/'.$target))
             ->mediaUrlsUsing(function ($target) use ($disk) {
                 $safe = 'playback/'.basename($target);
+
                 $disk->put($safe, $disk->get($target));
 
                 return $disk->path($safe);
-            })->all();
+            })
+            ->all();
+
         foreach ($rewritten as $path => $contents) {
             $disk->put('responses/'.$path, $contents);
         }
+
         $this->decode('responses/'.$result->playlist()->path);
         $this->assertCount(1, $result->files()->where('role', 'hls-init'));
         $this->assertFalse(collect($disk->allFiles())->contains(fn ($path) => str_contains($path, '.probe.')));
@@ -221,23 +306,65 @@ class HlsPackagingTest extends TestCase
      */
     protected function saveGroups(string $disk, bool $fragmented): array
     {
-        $media = $this->source($disk);
-        $export = $media->hls(segmentDuration: 0.7)->video(bitrate: '180k')->audio(bitrate: '48k')
-            ->variant('small', fn (HlsVariant $v) => $v->resize(width: 80)->audioGroup('sound')->subtitleGroup('captions'), playlist: 'video/small/index.m3u8')
-            ->variant('large', fn (HlsVariant $v) => $v->audioGroup('sound')->subtitleGroup('captions'), playlist: 'video/large/index.m3u8')
-            ->audioRendition('sound', 'English', fn ($v) => $v->map('0:a:0'), language: 'en', default: true, channels: '1', playlist: 'audio/en/index.m3u8')
-            ->audioRendition('sound', 'Español, stereo name', fn ($v) => $v->map('0:a:1'), language: 'es', playlist: 'audio/es/index.m3u8')
-            ->subtitleRendition('captions', 'English', fn ($v) => $v->map('0:s:0'), language: 'en', default: true, forced: false, playlist: 'text/en/index.m3u8');
+        $export = $this->source($disk)
+            ->hls(segmentDuration: 0.7)
+            ->video(bitrate: '180k')
+            ->audio(bitrate: '48k')
+            ->variant(
+                'small',
+                fn (HlsVariant $v) => $v->resize(width: 80)
+                    ->audioGroup('sound')
+                    ->subtitleGroup('captions'),
+                playlist: 'video/small/index.m3u8',
+            )
+            ->variant(
+                'large',
+                fn (HlsVariant $v) => $v->audioGroup('sound')
+                    ->subtitleGroup('captions'),
+                playlist: 'video/large/index.m3u8',
+            )
+            ->audioRendition(
+                'sound',
+                'English',
+                fn ($v) => $v->map('0:a:0'),
+                language: 'en',
+                default: true,
+                channels: '1',
+                playlist: 'audio/en/index.m3u8',
+            )
+            ->audioRendition(
+                'sound',
+                'Español, stereo name',
+                fn ($v) => $v->map('0:a:1'),
+                language: 'es',
+                playlist: 'audio/es/index.m3u8',
+            )
+            ->subtitleRendition(
+                'captions',
+                'English',
+                fn ($v) => $v->map('0:s:0'),
+                language: 'en',
+                default: true,
+                forced: false,
+                playlist: 'text/en/index.m3u8',
+            );
+
         if ($fragmented) {
             $export->fmp4();
         }
-        $seen = [];
-        $result = $export->twoPass()->playlistUsing(function ($text, $path) use (&$seen, $disk) {
-            $seen[] = $path;
-            $this->assertFalse(Storage::disk($disk)->exists('catalog/master.m3u8'));
 
-            return str_replace("#EXTM3U\n", "#EXTM3U\n# Application comment\n", $text);
-        })->save('catalog/master.m3u8');
+        $seen = [];
+
+        $result = $export->twoPass()
+            ->playlistUsing(function ($text, $path) use (&$seen, $disk) {
+                $seen[] = $path;
+
+                $this->assertFalse(Storage::disk($disk)->exists('catalog/master.m3u8'));
+
+                return str_replace("#EXTM3U\n", "#EXTM3U\n# Application comment\n", $text);
+            })
+            ->save('catalog/master.m3u8');
+
         $this->assertWorkspacesAreCleanedUp();
 
         return [$result, $seen];
@@ -247,12 +374,22 @@ class HlsPackagingTest extends TestCase
     public function test_rendition_groups_are_listed_in_the_master_playlist(bool $fragmented): void
     {
         [$disk, $result, $seen] = $this->exportGroups($fragmented);
+
         $master = Storage::disk($disk)->get($result->playlist()->path);
+
         $this->assertSame(3, substr_count($master, '#EXT-X-MEDIA:'));
         $this->assertSame(2, substr_count($master, '#EXT-X-STREAM-INF:'));
         $this->assertSame(2, substr_count($master, 'AUDIO="sound",SUBTITLES="captions"'));
-        $this->assertStringContainsString('TYPE=AUDIO,GROUP-ID="sound",NAME="English",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="en",CHANNELS="1",URI="../audio/en/index.m3u8"', $master);
-        $this->assertStringContainsString('TYPE=SUBTITLES,GROUP-ID="captions",NAME="English",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="en",FORCED=NO,URI="../text/en/index.m3u8"', $master);
+        $this->assertStringContainsString(
+            'TYPE=AUDIO,GROUP-ID="sound",NAME="English",DEFAULT=YES,AUTOSELECT=YES,'
+                .'LANGUAGE="en",CHANNELS="1",URI="../audio/en/index.m3u8"',
+            $master,
+        );
+        $this->assertStringContainsString(
+            'TYPE=SUBTITLES,GROUP-ID="captions",NAME="English",DEFAULT=YES,AUTOSELECT=YES,'
+                .'LANGUAGE="en",FORCED=NO,URI="../text/en/index.m3u8"',
+            $master,
+        );
         $this->assertStringContainsString('mp4a.40.2', $master);
         $this->assertCount(6, $seen);
         $this->assertCount($fragmented ? 4 : 0, $result->files()->where('role', 'hls-init'));
@@ -262,41 +399,60 @@ class HlsPackagingTest extends TestCase
     public function test_audio_renditions_decode_their_own_track(bool $fragmented): void
     {
         [$disk, $result] = $this->exportGroups($fragmented);
+
+        // One second of a sine wave crosses zero upwards once per period, so the
+        // count tells the 440 Hz English track apart from the 880 Hz Spanish one.
         foreach (['English' => 440, 'Español, stereo name' => 880] as $name => $frequency) {
             $path = $result->audioRendition('sound', $name)->playlist()->path;
+
             $this->decode($path, ['0:a:0'], $disk);
-            $pcm = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', Storage::disk($disk)->path($path), '-map', '0:a:0',
-                '-t', '1', '-ar', '8000', '-ac', '1', '-f', 's16le', '-']);
+
+            $pcm = Process::run([
+                $this->useRealFFMpeg(), '-v', 'error', '-i', Storage::disk($disk)->path($path), '-map', '0:a:0',
+                '-t', '1', '-ar', '8000', '-ac', '1', '-f', 's16le', '-',
+            ]);
+
             $this->assertProcessSucceeded($pcm);
-            $previous = $crossings = 0;
-            foreach (unpack('v*', $pcm->output()) as $sample) {
-                $sample = $sample >= 32768 ? $sample - 65536 : $sample;
-                if ($sample > 0 && $previous <= 0) {
-                    $crossings++;
-                }
-                $previous = $sample;
-            }
-            $this->assertEqualsWithDelta($frequency, $crossings, 6);
+            $this->assertEqualsWithDelta($frequency, $this->countRisingZeroCrossings($pcm->output()), 6);
         }
     }
 
     #[DataProvider('packagingProvider')]
     public function test_subtitle_renditions_keep_their_cues_on_the_video_clock(bool $fragmented): void
     {
-        [$disk, $result] = $this->exportGroups($fragmented);
-        $disk = Storage::disk($disk);
+        [$name, $result] = $this->exportGroups($fragmented);
+
+        $disk = Storage::disk($name);
         $subtitle = $result->subtitleRendition('captions', 'English');
-        $this->assertCount(2, $subtitle->files());
         $vtt = $subtitle->files()->firstWhere('role', 'hls-segment');
+
+        $this->assertCount(2, $subtitle->files());
         $this->assertStringContainsString('Hello HLS', $disk->get($vtt->path));
         $this->assertStringContainsString('Second cue', $disk->get($vtt->path));
+
         preg_match('/X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:([0-9]+)/', $disk->get($vtt->path), $clock);
+
         $this->assertNotEmpty($clock);
-        $probe = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'v:0',
-            '-show_entries', 'stream=start_time', '-of', 'json', $disk->path($result->variant('small')->playlist()->path)]);
+
+        $probe = Process::run([
+            config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'v:0',
+            '-show_entries', 'stream=start_time', '-of', 'json',
+            $disk->path($result->variant('small')->playlist()->path),
+        ]);
+
         $this->assertProcessSucceeded($probe);
-        $this->assertEqualsWithDelta((float) json_decode($probe->output(), true)['streams'][0]['start_time'] * 90000, (int) $clock[1], 1);
-        $decodeText = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $disk->path($vtt->path), '-f', 'srt', '-']);
+
+        // WebVTT segments map their local clock onto the MPEG-TS clock of the video,
+        // which counts 90,000 ticks per second from the first video timestamp.
+        $ticksPerSecond = 90000;
+        $startTime = (float) json_decode($probe->output(), true)['streams'][0]['start_time'];
+
+        $this->assertEqualsWithDelta($startTime * $ticksPerSecond, (int) $clock[1], 1);
+
+        $decodeText = Process::run([
+            $this->useRealFFMpeg(), '-v', 'error', '-i', $disk->path($vtt->path), '-f', 'srt', '-',
+        ]);
+
         $this->assertProcessSucceeded($decodeText);
         $this->assertStringContainsString('00:00:00,200 --> 00:00:01,000', $decodeText->output());
     }
@@ -305,7 +461,9 @@ class HlsPackagingTest extends TestCase
     public function test_grouped_master_and_variant_playlists_decode(bool $fragmented): void
     {
         [$disk, $result] = $this->exportGroups($fragmented);
+
         $this->decode($result->playlist()->path, disk: $disk);
+
         foreach (['small', 'large'] as $name) {
             $this->decode($result->variant($name)->playlist()->path, ['0:v:0'], $disk);
         }
@@ -315,14 +473,21 @@ class HlsPackagingTest extends TestCase
     public function test_rewriting_grouped_playlists_covers_every_owned_playlist(bool $fragmented): void
     {
         [$name, $result] = $this->exportGroups($fragmented);
+
         $disk = Storage::disk($name);
-        $rewritten = FFMpeg::disk($name)->playlist($result->playlist()->path)
+
+        $rewritten = FFMpeg::disk($name)
+            ->playlist($result->playlist()->path)
             ->playlistUrlsUsing(fn ($target) => $disk->path('responses/'.$target))
-            ->mediaUrlsUsing(fn ($target) => $disk->path($target))->all();
+            ->mediaUrlsUsing(fn ($target) => $disk->path($target))
+            ->all();
+
         $this->assertCount(6, $rewritten);
+
         foreach ($rewritten as $path => $contents) {
             $disk->put('responses/'.$path, $contents);
         }
+
         $this->decode('responses/'.$result->playlist()->path, disk: $name);
     }
 
@@ -330,10 +495,10 @@ class HlsPackagingTest extends TestCase
     public function test_invalid_packaging_and_group_settings_fail_before_io(Closure $invalid): void
     {
         Process::fake();
+
         $media = FFMpeg::disk('absent')->open('unread.mp4');
 
         $this->assertThrows(fn () => $invalid($media), InvalidArgumentException::class);
-
         $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
     }
@@ -344,22 +509,52 @@ class HlsPackagingTest extends TestCase
     public static function invalidPackagingProvider(): array
     {
         return [
-            'encryption before fmp4' => [fn (Media $media) => $media->hls()->fmp4()->encrypt('absent', fn () => '/key')],
-            'fmp4 after encryption' => [fn (Media $media) => $media->hls()->encrypt('absent', fn () => '/key')->fmp4()],
-            'init path without fmp4' => [fn (Media $media) => $media->hls()->variant('v', fn () => null, init: 'init.mp4')->inspect()],
-            'ts segments with fmp4' => [fn (Media $media) => $media->hls()->fmp4()->variant('v', fn () => null, segments: 'part-%d.ts')->inspect()],
-            'undeclared audio group' => [fn (Media $media) => $media->hls()->variant('v', fn ($v) => $v->audioGroup('missing'))->inspect()],
-            'default without autoselect' => [fn (Media $media) => $media->hls()->audioRendition('a', 'one', fn () => null, default: true, autoselect: false)],
-            'duplicate rendition name' => [fn (Media $media) => $media->hls()->audioRendition('a', 'one', fn () => null)->audioRendition('a', 'one', fn () => null)],
-            'two defaults in a group' => [fn (Media $media) => $media->hls()->audioRendition('a', 'one', fn () => null, default: true)->audioRendition('a', 'two', fn () => null, default: true)],
-            'group id with a path' => [fn (Media $media) => $media->hls()->audioRendition('../a', 'one', fn () => null)],
-            'quote in a name' => [fn (Media $media) => $media->hls()->subtitleRendition('s', 'bad"name', fn () => null)],
-            'unreferenced group' => [fn (Media $media) => $media->hls()->variant('v', fn () => null)->audioRendition('a', 'one', fn () => null)->inspect()],
-            'two-pass inspection' => [fn (Media $media) => $media->hls()->variant('v', fn () => null)->twoPass()->inspect()],
-            'encrypted subtitles' => [fn (Media $media) => $media->hls()->variant('v', fn ($v) => $v->subtitleGroup('s'))
-                ->subtitleRendition('s', 'one', fn ($v) => $v->map('0:s:0'))->encrypt('absent', fn () => '/key')->inspect()],
-            'rendition longer than its variant' => [fn (Media $media) => $media->hls()->variant('v', fn ($v) => $v->audioGroup('a'))->clip(0, duration: 1)
-                ->audioRendition('a', 'one', fn ($v) => $v->map('0:a:0')->clip(0, duration: 2))->inspect()],
+            'encryption before fmp4' => [fn (Media $media) => $media->hls()
+                ->fmp4()
+                ->encrypt('absent', fn () => '/key')],
+            'fmp4 after encryption' => [fn (Media $media) => $media->hls()
+                ->encrypt('absent', fn () => '/key')
+                ->fmp4()],
+            'init path without fmp4' => [fn (Media $media) => $media->hls()
+                ->variant('v', fn () => null, init: 'init.mp4')
+                ->inspect()],
+            'ts segments with fmp4' => [fn (Media $media) => $media->hls()
+                ->fmp4()
+                ->variant('v', fn () => null, segments: 'part-%d.ts')
+                ->inspect()],
+            'undeclared audio group' => [fn (Media $media) => $media->hls()
+                ->variant('v', fn ($v) => $v->audioGroup('missing'))
+                ->inspect()],
+            'default without autoselect' => [fn (Media $media) => $media->hls()
+                ->audioRendition('a', 'one', fn () => null, default: true, autoselect: false)],
+            'duplicate rendition name' => [fn (Media $media) => $media->hls()
+                ->audioRendition('a', 'one', fn () => null)
+                ->audioRendition('a', 'one', fn () => null)],
+            'two defaults in a group' => [fn (Media $media) => $media->hls()
+                ->audioRendition('a', 'one', fn () => null, default: true)
+                ->audioRendition('a', 'two', fn () => null, default: true)],
+            'group id with a path' => [fn (Media $media) => $media->hls()
+                ->audioRendition('../a', 'one', fn () => null)],
+            'quote in a name' => [fn (Media $media) => $media->hls()
+                ->subtitleRendition('s', 'bad"name', fn () => null)],
+            'unreferenced group' => [fn (Media $media) => $media->hls()
+                ->variant('v', fn () => null)
+                ->audioRendition('a', 'one', fn () => null)
+                ->inspect()],
+            'two-pass inspection' => [fn (Media $media) => $media->hls()
+                ->variant('v', fn () => null)
+                ->twoPass()
+                ->inspect()],
+            'encrypted subtitles' => [fn (Media $media) => $media->hls()
+                ->variant('v', fn ($v) => $v->subtitleGroup('s'))
+                ->subtitleRendition('s', 'one', fn ($v) => $v->map('0:s:0'))
+                ->encrypt('absent', fn () => '/key')
+                ->inspect()],
+            'rendition longer than its variant' => [fn (Media $media) => $media->hls()
+                ->variant('v', fn ($v) => $v->audioGroup('a'))
+                ->clip(0, duration: 1)
+                ->audioRendition('a', 'one', fn ($v) => $v->map('0:a:0')->clip(0, duration: 2))
+                ->inspect()],
         ];
     }
 
@@ -383,20 +578,30 @@ class HlsPackagingTest extends TestCase
     }
 
     #[DataProvider('corruptFragmentProvider')]
-    public function test_invalid_fragment_inventories_and_map_hook_tampering_prevent_every_write(string $case): void
+    public function test_invalid_fragment_inventories_prevent_every_write(string $case): void
     {
         $disk = Storage::disk('hls-packaging');
         $disk->put('source.mp4', 'source');
+
         Process::preventStrayProcesses();
+
+        // The fake encoder writes one valid fMP4 variant into the workspace and then
+        // breaks it the way the case describes, so the export must reject what it
+        // finds before it publishes a single file.
         Process::fake(function ($process) use ($case) {
             if (in_array('-version', $process->command, true)) {
                 return Process::result(output: basename($process->command[0]).' version 9.0.2');
             }
+
             if (basename($process->command[0]) === 'ffprobe') {
-                return Process::result(output: '{"format":{"duration":"2"},"streams":[{"index":0,"codec_type":"video"}]}');
+                $video = '{"format":{"duration":"2"},"streams":[{"index":0,"codec_type":"video"}]}';
+
+                return Process::result(output: $video);
             }
+
             $path = $process->path;
             $map = '#EXT-X-MAP:URI="init-0.mp4"';
+
             $playlist = sprintf(<<<'M3U8'
                 #EXTM3U
                 #EXT-X-VERSION:7
@@ -408,6 +613,7 @@ class HlsPackagingTest extends TestCase
                 #EXT-X-ENDLIST
 
                 M3U8, $map);
+
             file_put_contents($path.'/init-0.mp4', 'owned initialization');
             file_put_contents($path.'/segment-0-00000000.m4s', 'owned fragment');
             file_put_contents($path.'/master-0.m3u8', <<<'M3U8'
@@ -416,6 +622,7 @@ class HlsPackagingTest extends TestCase
                 playlist-0.m3u8
 
                 M3U8);
+
             match ($case) {
                 'missing-init' => unlink($path.'/init-0.mp4'),
                 'empty-init' => file_put_contents($path.'/init-0.mp4', ''),
@@ -428,14 +635,22 @@ class HlsPackagingTest extends TestCase
                 'extra-segment' => file_put_contents($path.'/segment-0-00000001.m4s', 'unreferenced fragment'),
                 default => null,
             };
+
             file_put_contents($path.'/playlist-0.m3u8', $playlist);
 
             return Process::result(output: "out_time_us=2000000\nprogress=end\n");
         });
-        $export = FFMpeg::disk('hls-packaging')->open('source.mp4')->hls()->fmp4()->variant('v', fn () => null);
+
+        $export = FFMpeg::disk('hls-packaging')
+            ->open('source.mp4')
+            ->hls()
+            ->fmp4()
+            ->variant('v', fn () => null);
+
         if ($case === 'hook-map') {
             $export->playlistUsing(fn ($text) => preg_replace('/#EXT-X-MAP:[^\n]*\n/', '', $text));
         }
+
         $this->assertThrows(
             fn () => $export->save('out/master.m3u8'),
             fn (MediaException $exception) => [$exception->phase, $exception->category] === ['validation', 'artifact'],
@@ -444,9 +659,12 @@ class HlsPackagingTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_dynamic_group_traversal_reads_only_owned_local_playlists_never_external_playlists_init_keys_or_media(): void
+    public function test_group_traversal_reads_only_owned_local_playlists(): void
     {
         $disk = Mockery::mock(FilesystemContract::class);
+
+        // Only these three playlists may be read. The external subtitle playlist, the
+        // initialization files, the key and the media segments must never be opened.
         $playlists = [
             'master.m3u8' => <<<'M3U8'
                 #EXTM3U
@@ -472,22 +690,36 @@ class HlsPackagingTest extends TestCase
 
                 M3U8,
         ];
-        foreach ($playlists as $path => $contents) {
-            $disk->shouldReceive('readStream')->with($path)->once()->andReturnUsing(function () use ($contents) {
-                $stream = fopen('php://temp', 'w+b');
-                fwrite($stream, $contents);
-                rewind($stream);
 
-                return $stream;
-            });
+        foreach ($playlists as $path => $contents) {
+            $disk->shouldReceive('readStream')
+                ->with($path)
+                ->once()
+                ->andReturnUsing(function () use ($contents) {
+                    $stream = fopen('php://temp', 'w+b');
+
+                    fwrite($stream, $contents);
+                    rewind($stream);
+
+                    return $stream;
+                });
         }
+
         $calls = [];
+
         $resolver = function ($target, $source, $uri) use (&$calls) {
             $calls[] = [$target, $source, $uri];
 
             return 'https://signed.example.test/'.($target ?? 'external').'?signed=1';
         };
-        $result = FFMpeg::disk($disk)->playlist('master.m3u8')->playlistUrlsUsing($resolver)->mediaUrlsUsing($resolver)->keyUrlsUsing($resolver)->all();
+
+        $result = FFMpeg::disk($disk)
+            ->playlist('master.m3u8')
+            ->playlistUrlsUsing($resolver)
+            ->mediaUrlsUsing($resolver)
+            ->keyUrlsUsing($resolver)
+            ->all();
+
         $this->assertSame(array_keys($playlists), $result->keys()->all());
         $this->assertContains([null, 'master.m3u8', 'https://external.example.test/subs.m3u8'], $calls);
         $this->assertContains(['init/a.mp4', 'audio/en.m3u8', '../init/a.mp4'], $calls);
@@ -497,28 +729,35 @@ class HlsPackagingTest extends TestCase
 
     #[TestWith(['0:v:0'])]
     #[TestWith(['0:a'])]
-    public function test_alternate_renditions_require_exactly_one_stream_of_the_declared_type_before_encoding(string $map): void
+    public function test_alternate_renditions_require_one_stream_of_their_type(string $map): void
     {
         $media = $this->source();
 
         $this->assertThrows(
-            fn () => $media->hls()->variant('v', fn ($v) => $v->audioGroup('a'))
-                ->audioRendition('a', 'one', fn ($v) => $v->map($map))->save('out/master.m3u8'),
+            fn () => $media->hls()
+                ->variant('v', fn ($v) => $v->audioGroup('a'))
+                ->audioRendition('a', 'one', fn ($v) => $v->map($map))
+                ->save('out/master.m3u8'),
             fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
         );
         $this->assertFalse(Storage::disk('hls-packaging')->exists('out/master.m3u8'));
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    public function test_cancelling_between_hls_passes_cleans_logs_without_publishing_media_or_private_keys(): void
+    public function test_cancelling_between_passes_publishes_no_media_or_keys(): void
     {
-        $export = $this->source()->hls(segmentDuration: 0.7)->video(bitrate: '180k')->variant('v', fn () => null)
-            ->encrypt('hls-packaging-keys', fn ($path) => '/keys/'.$path)->twoPass()
+        $export = $this->source()
+            ->hls(segmentDuration: 0.7)
+            ->video(bitrate: '180k')
+            ->variant('v', fn () => null)
+            ->encrypt('hls-packaging-keys', fn ($path) => '/keys/'.$path)
+            ->twoPass()
             ->onProgress(function (Progress $progress) {
                 if ($progress->phase === Progress::ENCODING && $progress->pass === 2) {
                     throw new ExportCancelled;
                 }
             });
+
         $this->assertThrows(fn () => $export->save('out/master.m3u8'), ExportCancelled::class);
         $this->assertFalse(Storage::disk('hls-packaging')->exists('out/master.m3u8'));
         $this->assertSame([], Storage::disk('hls-packaging-keys')->allFiles());

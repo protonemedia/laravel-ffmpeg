@@ -28,44 +28,69 @@ class BuilderShapeTest extends TestCase
     /** Builders hold the export pipeline instead of extending it, and expose only what they support. */
     public static function builders(): array
     {
-        $images = ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
-            'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'map', 'mapVideo', 'mapAudio',
-            'withoutAudio', 'withoutVideo', 'metadata', 'metadataFrom', 'withoutMetadata', 'streamMetadata', 'disposition', 'chaptersFrom'];
+        $images = [
+            'output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'audio', 'audioOptions',
+            'audioStream', 'audioFilter', 'volume', 'delayAudio', 'map', 'mapVideo', 'mapAudio', 'withoutAudio',
+            'withoutVideo', 'metadata', 'metadataFrom', 'withoutMetadata', 'streamMetadata', 'disposition',
+            'chaptersFrom',
+        ];
 
         return [
-            'mixAudio' => [PendingAudioMix::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
-                'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'audioStream']],
-            'concatTranscoded' => [PendingConcat::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt',
-                'videoStream', 'audioStream', 'color', 'map', 'mapVideo', 'mapAudio', 'withoutVideo', 'videoFilter', 'resize', 'cover', 'contain',
-                'audioFilter', 'volume', 'delayAudio', 'fadeIn', 'fadeOut', 'drawText', 'resource', 'metadataFrom', 'chaptersFrom', 'withoutMetadata']],
+            'mixAudio' => [PendingAudioMix::class, [
+                'output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip', 'map', 'mapVideo',
+                'mapAudio', 'withoutAudio', 'audioStream',
+            ]],
+            'concatTranscoded' => [PendingConcat::class, [
+                'output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'videoStream', 'audioStream', 'color',
+                'map', 'mapVideo', 'mapAudio', 'withoutVideo', 'videoFilter', 'resize', 'cover', 'contain',
+                'audioFilter', 'volume', 'delayAudio', 'fadeIn', 'fadeOut', 'drawText', 'resource', 'metadataFrom',
+                'chaptersFrom', 'withoutMetadata',
+            ]],
             'frame' => [PendingFrame::class, [...$images, 'clip']],
             'frames' => [PendingFrames::class, $images],
             'storyboard' => [PendingStoryboard::class, $images],
-            'waveformPeaks' => [PendingWaveformPeaks::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
-                'audio', 'audioOptions', 'audioStream', 'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo',
-                'video', 'videoOptions', 'videoStream', 'videoFilter', 'resize', 'drawText', 'resource', 'metadata', 'withoutMetadata', 'disposition']],
+            'waveformPeaks' => [PendingWaveformPeaks::class, [
+                'output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'audio', 'audioOptions',
+                'audioStream', 'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo', 'video', 'videoOptions',
+                'videoStream', 'videoFilter', 'resize', 'drawText', 'resource', 'metadata', 'withoutMetadata',
+                'disposition',
+            ]],
             'waveform' => [PendingWaveform::class, [...array_diff($images, ['audioFilter', 'volume', 'delayAudio'])]],
-            'gif' => [PendingGif::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
-                'video', 'videoOptions', 'videoStream', 'color', 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio',
-                'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo', 'outputOptions', 'drawText', 'burnSubtitles', 'lut3d', 'fadeIn', 'fadeOut']],
+            'gif' => [PendingGif::class, [
+                'output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'video', 'videoOptions',
+                'videoStream', 'color', 'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio',
+                'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo', 'outputOptions', 'drawText',
+                'burnSubtitles', 'lut3d', 'fadeIn', 'fadeOut',
+            ]],
             'speed' => [PendingSpeed::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'clip']],
-            'normalizeLoudness' => [PendingLoudness::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass',
-                'globalOptions', 'map', 'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo', 'audioStream', 'video', 'videoOptions',
-                'videoStream', 'videoFilter', 'resize', 'drawText', 'resource', 'textResource', 'subtitleResource']],
-            'dash' => [PendingDashExport::class, ['output', 'twoPass', 'coverArt', 'watermark', 'filterComplex', 'delayAudio',
-                'withoutAudio', 'withoutVideo', 'videoStream', 'audioStream']],
+            'normalizeLoudness' => [PendingLoudness::class, [
+                'output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'globalOptions', 'map',
+                'mapVideo', 'mapAudio', 'withoutAudio', 'withoutVideo', 'audioStream', 'video', 'videoOptions',
+                'videoStream', 'videoFilter', 'resize', 'drawText', 'resource', 'textResource', 'subtitleResource',
+            ]],
+            'dash' => [PendingDashExport::class, [
+                'output', 'twoPass', 'coverArt', 'watermark', 'filterComplex', 'delayAudio', 'withoutAudio',
+                'withoutVideo', 'videoStream', 'audioStream',
+            ]],
             'hls' => [PendingHlsExport::class, ['output', 'coverArt']],
-            'still' => [PendingStill::class, ['output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip',
-                'audio', 'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'mapAudio', 'withoutAudio', 'withoutVideo']],
+            'still' => [PendingStill::class, [
+                'output', 'addInput', 'filterComplex', 'watermark', 'coverArt', 'twoPass', 'clip', 'audio',
+                'audioOptions', 'audioStream', 'audioFilter', 'volume', 'delayAudio', 'mapAudio', 'withoutAudio',
+                'withoutVideo',
+            ]],
         ];
     }
 
     #[DataProvider('builders')]
-    public function test_builders_are_macroable_compositions_without_unsupported_methods(string $class, array $unsupported): void
-    {
+    public function test_builders_are_macroable_compositions_without_unsupported_methods(
+        string $class,
+        array $unsupported,
+    ): void {
         $reflection = new ReflectionClass($class);
+
         $this->assertFalse($reflection->getParentClass());
         $this->assertContains(Macroable::class, $reflection->getTraitNames());
+
         foreach ($unsupported as $method) {
             $this->assertFalse($reflection->hasMethod($method), $class.' exposes '.$method.'().');
         }
@@ -80,8 +105,11 @@ class BuilderShapeTest extends TestCase
                 || ! (new ReflectionMethod(PendingExport::class, $method->getName()))->isPublic()) {
                 continue;
             }
-            $this->assertSame($describe(new ReflectionMethod(PendingExport::class, $method->getName())), $describe($method),
-                $class.'::'.$method->getName().'() differs from PendingExport.');
+            $this->assertSame(
+                $describe(new ReflectionMethod(PendingExport::class, $method->getName())),
+                $describe($method),
+                $class.'::'.$method->getName().'() differs from PendingExport.',
+            );
         }
     }
 
@@ -92,14 +120,22 @@ class BuilderShapeTest extends TestCase
             if ($file->getExtension() !== 'php') {
                 continue;
             }
-            $class = 'ProtoneMedia\\LaravelFFMpeg\\'.str_replace(['/', '.php'], ['\\', ''], substr($file->getPathname(), strlen(dirname(__DIR__).'/src/')));
+            $class = 'ProtoneMedia\\LaravelFFMpeg\\'.str_replace(
+                ['/', '.php'],
+                ['\\', ''],
+                substr($file->getPathname(), strlen(dirname(__DIR__).'/src/')),
+            );
             if (! class_exists($class)) {
                 continue;
             }
             $classes++;
             $parent = (new ReflectionClass($class))->getParentClass();
-            $this->assertFalse($parent !== false && str_starts_with($parent->name, 'ProtoneMedia\\LaravelFFMpeg\\'), $class.' extends '.($parent ? $parent->name : '').'.');
+            $this->assertFalse(
+                $parent !== false && str_starts_with($parent->name, 'ProtoneMedia\\LaravelFFMpeg\\'),
+                $class.' extends '.($parent ? $parent->name : '').'.',
+            );
         }
+
         $this->assertGreaterThan(30, $classes);
     }
 }

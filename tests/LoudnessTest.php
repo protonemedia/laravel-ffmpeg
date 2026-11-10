@@ -38,17 +38,25 @@ class LoudnessTest extends TestCase
 
     protected function operation(int $audio = 1, bool $linear = true): PendingLoudness
     {
-        return FFMpeg::disk('loudness')->open('tracks.mka')->normalizeLoudness(
-            integrated: -18, truePeak: -2, linear: $linear, audio: $audio);
+        return FFMpeg::disk('loudness')
+            ->open('tracks.mka')
+            ->normalizeLoudness(integrated: -18, truePeak: -2, linear: $linear, audio: $audio);
     }
 
     public function test_inspection_trims_and_filters_before_loudnorm(): void
     {
         Process::fake();
-        $operation = $this->operation()->clip(3, duration: 4)->audioFilter('pan=mono|c0=c0,volume=0.5');
+
+        $operation = $this->operation()
+            ->clip(3, duration: 4)
+            ->audioFilter('pan=mono|c0=c0,volume=0.5');
         $command = $operation->inspect();
+
         $this->assertSame($command, $operation->inspect());
-        $this->assertStringContainsString('atrim=start=3:duration=4,asetpts=PTS-STARTPTS,pan=mono|c0=c0,volume=0.5,aresample=48000,loudnorm=', implode(' ', $command));
+        $this->assertStringContainsString(
+            'atrim=start=3:duration=4,asetpts=PTS-STARTPTS,pan=mono|c0=c0,volume=0.5,aresample=48000,loudnorm=',
+            implode(' ', $command),
+        );
         $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
     }
@@ -57,6 +65,7 @@ class LoudnessTest extends TestCase
     public function test_unsupported_configuration_is_rejected(Closure $configure): void
     {
         Process::fake();
+
         $this->assertThrows(fn () => $configure($this->operation())->inspect(), InvalidArgumentException::class);
         Process::assertNothingRan();
     }
@@ -73,22 +82,35 @@ class LoudnessTest extends TestCase
     public function test_normalization_measures_the_trimmed_filtered_samples(): void
     {
         $source = $this->fixture();
+
         $sourceHash = hash_file('sha256', $source);
-        $result = $this->operation()->audio('pcm_s24le')->clip(3, duration: 4)
-            ->audioFilter('pan=mono|c0=c0,volume=0.5')->save('filtered.wav');
+        $result = $this->operation()
+            ->audio('pcm_s24le')
+            ->clip(3, duration: 4)
+            ->audioFilter('pan=mono|c0=c0,volume=0.5')
+            ->save('filtered.wav');
+
         $this->assertEqualsWithDelta(-15.1, $result->measurement->inputIntegrated, 0.4);
         $this->assertEqualsWithDelta(-12.04, $result->measurement->inputTruePeak, 0.15);
+
         // FFmpeg falls back for a constant tone with measured LRA=0, even
         // when linear=true. The report must describe reality, not the request.
         $this->assertSame('linear', $result->requestedMode);
         $this->assertSame('dynamic', $result->actualMode());
+
         $output = Storage::disk('loudness')->path($result->file()->path);
         $independent = $this->measure($output);
+
         $this->assertEqualsWithDelta(-18, $independent->inputIntegrated, 0.2);
         $this->assertLessThanOrEqual(-1.9, $independent->inputTruePeak);
-        $probe = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-of', 'json', '-show_streams', '-show_format', $output]);
+
+        $probe = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-of', 'json', '-show_streams',
+            '-show_format', $output]);
+
         $this->assertProcessSucceeded($probe);
+
         $data = json_decode($probe->output(), true);
+
         $this->assertSame(1, $data['streams'][0]['channels']);
         $this->assertSame('48000', $data['streams'][0]['sample_rate']);
         $this->assertEqualsWithDelta(4, (float) $data['format']['duration'], 0.01);
@@ -111,24 +133,33 @@ class LoudnessTest extends TestCase
     public function test_normalization_measures_a_private_snapshot_of_the_source(bool $linear): void
     {
         $binary = $this->useRealFFMpeg();
+
         $path = Storage::disk('loudness')->path('varying.wav');
         $fixture = Process::run([$binary, '-v', 'error', '-y', '-f', 'lavfi', '-i',
             'aevalsrc=(0.2+0.1*sin(2*PI*t/10))*sin(2*PI*1000*t):s=48000:d=30', '-c:a', 'pcm_f64le', $path]);
+
         $this->assertProcessSucceeded($fixture);
+
         $starts = 0;
-        $result = FFMpeg::disk('loudness')->open('varying.wav')
-            ->normalizeLoudness(integrated: -18, linear: $linear)->audio('pcm_s24le')
+        $result = FFMpeg::disk('loudness')
+            ->open('varying.wav')
+            ->normalizeLoudness(integrated: -18, linear: $linear)
+            ->audio('pcm_s24le')
             ->onProgress(function ($progress) use ($path, &$starts) {
                 if ($progress->phase === 'analysis' && $progress->elapsedSeconds === null && ++$starts === 2) {
                     // The source changes after preprocessing, before measurement.
                     file_put_contents($path, 'source replaced between passes');
                 }
-            })->save($linear ? 'linear.wav' : 'dynamic.wav');
+            })
+            ->save($linear ? 'linear.wav' : 'dynamic.wav');
+
         $this->assertSame('source replaced between passes', file_get_contents($path));
         $this->assertGreaterThan(1, $result->measurement->inputRange);
         $this->assertSame($linear ? 'linear' : 'dynamic', $result->requestedMode);
         $this->assertSame($linear ? 'linear' : 'dynamic', $result->actualMode());
+
         $independent = $this->measure(Storage::disk('loudness')->path($result->file()->path));
+
         $this->assertEqualsWithDelta(-18, $independent->inputIntegrated, 0.4);
         $this->assertLessThanOrEqual(-1.9, $independent->inputTruePeak);
         $this->assertWorkspacesAreCleanedUp();
@@ -137,8 +168,13 @@ class LoudnessTest extends TestCase
     public function test_silence_stays_silent(): void
     {
         $this->fixture(silent: true);
-        $result = FFMpeg::disk('loudness')->open('silence.mka')->normalizeLoudness(audio: 0)
-            ->audio('pcm_s24le')->save('silent-output.wav');
+
+        $result = FFMpeg::disk('loudness')
+            ->open('silence.mka')
+            ->normalizeLoudness(audio: 0)
+            ->audio('pcm_s24le')
+            ->save('silent-output.wav');
+
         $this->assertTrue($result->measurement->silent());
         $this->assertFalse($result->measurement->finite());
         $this->assertNull($result->normalization->outputIntegrated);
@@ -150,17 +186,23 @@ class LoudnessTest extends TestCase
     public function test_invalid_measurement_statistics_fail_in_the_analysis_phase(): void
     {
         $this->fixture();
+
         $binary = $this->root.'/ffmpeg';
+
         // Wrap the real binary so only the measurement pass leaves invalid statistics.
         file_put_contents($binary, sprintf(<<<'PHP'
             #!%s
             <?php
             passthru(implode(" ", array_map("escapeshellarg", [%s, ...array_slice($argv, 1)])), $code);
-            if (in_array("-af", $argv, true) && str_contains(implode(" ", $argv), "stats_file=loudness-measure.json")) { file_put_contents("loudness-measure.json", "{}"); }
+            if (in_array("-af", $argv, true)
+                && str_contains(implode(" ", $argv), "stats_file=loudness-measure.json")) {
+                file_put_contents("loudness-measure.json", "{}");
+            }
             exit($code);
             PHP, PHP_BINARY, var_export($this->useRealFFMpeg(), true)));
         chmod($binary, 0700);
         config(['laravel-ffmpeg.ffmpeg.binaries' => $binary]);
+
         $this->assertThrows(
             fn () => $this->operation()->save('normalized.wav'),
             fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->getMessage()]
@@ -172,24 +214,36 @@ class LoudnessTest extends TestCase
     public function test_normalized_exports_report_their_processes(): void
     {
         $this->fixture();
+
         $events = [];
-        $result = $this->operation()->audio('pcm_s24le')->clip(3, duration: 4)
+        $result = $this->operation()
+            ->audio('pcm_s24le')
+            ->clip(3, duration: 4)
             ->onProgress(function ($progress) use (&$events) {
                 $events[] = $progress->phase;
             })
             ->save('normalized.wav');
+
         $this->assertSame('linear', $result->requestedMode);
         $this->assertSame('dynamic', $result->actualMode());
         $this->assertSame(48000, $result->sampleRate);
         $this->assertCount(3, $result->processes());
         $this->assertContains('analysis', $events);
-        $this->assertEqualsWithDelta(-18, $this->measure(Storage::disk('loudness')->path('normalized.wav'))->inputIntegrated, 0.2);
+        $this->assertEqualsWithDelta(
+            -18,
+            $this->measure(Storage::disk('loudness')->path('normalized.wav'))->inputIntegrated,
+            0.2,
+        );
     }
 
     public function test_failed_normalization_publishes_nothing(): void
     {
         $this->fixture();
-        $this->assertThrows(fn () => $this->operation()->audioFilter('not_a_filter')->save('failed.wav'), MediaException::class);
+
+        $this->assertThrows(
+            fn () => $this->operation()->audioFilter('not_a_filter')->save('failed.wav'),
+            MediaException::class,
+        );
         $this->assertFalse(Storage::disk('loudness')->exists('failed.wav'));
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -197,6 +251,7 @@ class LoudnessTest extends TestCase
     public function test_cancelled_normalization_publishes_nothing(): void
     {
         $this->fixture();
+
         $this->assertThrows(
             fn () => $this->operation()->audioFilter('volume=1')->onProgress(function ($progress) {
                 if ($progress->phase === 'analysis') {

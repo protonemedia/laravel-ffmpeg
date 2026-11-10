@@ -28,15 +28,38 @@ class ProbeTest extends TestCase
     protected function metadataJson(): string
     {
         return json_encode([
-            'format' => ['duration' => '12.375', 'tags' => ['title' => 'Lecture', 'com.example.title' => 'Literal key']],
+            'format' => [
+                'duration' => '12.375',
+                'tags' => ['title' => 'Lecture', 'com.example.title' => 'Literal key'],
+            ],
             'chapters' => [['start_time' => '1.250', 'end_time' => '7.500']],
             'streams' => [
-                ['index' => 0, 'codec_type' => 'video', 'disposition' => ['attached_pic' => 1], 'width' => 80, 'height' => 80],
-                ['index' => 1, 'codec_type' => 'audio', 'codec_name' => 'aac', 'channels' => 6, 'sample_rate' => '48000', 'bit_rate' => '192000', 'tags' => ['language' => 'fra', 'com.example.title' => 'Commentary'], 'disposition' => ['default' => 0]],
-                ['index' => 2, 'codec_type' => 'video', 'width' => 854, 'height' => 480, 'avg_frame_rate' => '30000/1001', 'sample_aspect_ratio' => '4:3', 'color_transfer' => 'smpte2084'],
-                ['index' => 3, 'codec_type' => 'audio', 'tags' => ['language' => 'eng'], 'disposition' => ['default' => 1]],
-                ['index' => 4, 'codec_type' => 'subtitle', 'codec_name' => 'subrip', 'tags' => ['language' => 'eng'], 'disposition' => ['default' => 0, 'forced' => 1]],
-                ['index' => 5, 'codec_type' => 'subtitle', 'codec_name' => 'ass', 'tags' => ['language' => 'fra'], 'disposition' => ['default' => 1, 'forced' => 0]],
+                [
+                    'index' => 0, 'codec_type' => 'video', 'disposition' => ['attached_pic' => 1],
+                    'width' => 80, 'height' => 80,
+                ],
+                [
+                    'index' => 1, 'codec_type' => 'audio', 'codec_name' => 'aac', 'channels' => 6,
+                    'sample_rate' => '48000', 'bit_rate' => '192000',
+                    'tags' => ['language' => 'fra', 'com.example.title' => 'Commentary'],
+                    'disposition' => ['default' => 0],
+                ],
+                [
+                    'index' => 2, 'codec_type' => 'video', 'width' => 854, 'height' => 480,
+                    'avg_frame_rate' => '30000/1001', 'sample_aspect_ratio' => '4:3', 'color_transfer' => 'smpte2084',
+                ],
+                [
+                    'index' => 3, 'codec_type' => 'audio', 'tags' => ['language' => 'eng'],
+                    'disposition' => ['default' => 1],
+                ],
+                [
+                    'index' => 4, 'codec_type' => 'subtitle', 'codec_name' => 'subrip', 'tags' => ['language' => 'eng'],
+                    'disposition' => ['default' => 0, 'forced' => 1],
+                ],
+                [
+                    'index' => 5, 'codec_type' => 'subtitle', 'codec_name' => 'ass', 'tags' => ['language' => 'fra'],
+                    'disposition' => ['default' => 1, 'forced' => 0],
+                ],
             ],
         ]);
     }
@@ -83,6 +106,7 @@ class ProbeTest extends TestCase
         FFMpeg::disk('other');
         $local = FFMpeg::open('source.mp4', inputOptions: ['-probesize', '2048']);
         $explicit = FFMpeg::disk('memory')->open('source.mp4');
+
         $this->assertSame($factory, FFMpeg::getFacadeRoot());
         $this->assertSame('memory', $memory->defaultOutputDisk());
         $this->assertSame('local', $local->defaultOutputDisk());
@@ -110,10 +134,12 @@ class ProbeTest extends TestCase
         });
 
         $media = FFMpeg::disk('local')->open($key);
+
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
 
         $metadata = $media->probe();
+
         $this->assertSame([[
             'ffprobe', '-v', 'error', '-print_format', 'json',
             '-show_format', '-show_streams', '-show_chapters', '-protocol_whitelist', 'file', $disk->path($key),
@@ -130,7 +156,9 @@ class ProbeTest extends TestCase
         Storage::disk('local')->put('lecture.mp4', 'source bytes');
         $this->fakeProbe();
 
-        $metadata = FFMpeg::disk('local')->open('lecture.mp4')->probe();
+        $metadata = FFMpeg::disk('local')
+            ->open('lecture.mp4')
+            ->probe();
 
         $this->assertCount(6, $metadata->streams());
         $this->assertCount(1, $metadata->videoStreams());
@@ -188,11 +216,15 @@ class ProbeTest extends TestCase
 
     public function test_it_preserves_unknown_values_and_handles_audio_only_media(): void
     {
-        $this->fakeProbe(Process::result(output: '{"format":{},"streams":[{"codec_type":"audio","avg_frame_rate":"0/0"}]}'));
+        $json = '{"format":{},"streams":[{"codec_type":"audio","avg_frame_rate":"0/0"}]}';
+        $this->fakeProbe(Process::result(output: $json));
         $media = FFMpeg::open(new File(__DIR__.'/src/guitar.m4a'));
-        $media->export()->inspect();
+        $media->export()
+            ->inspect();
+
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
+
         $metadata = $media->probe();
 
         $this->assertNull($metadata->duration());
@@ -220,7 +252,10 @@ class ProbeTest extends TestCase
     {
         $stream = ['codec_type' => 'video', 'disposition' => ['attached_pic' => 1]];
         $this->fakeProbe(Process::result(output: json_encode(['format' => [], 'streams' => [$stream]])));
-        $metadata = FFMpeg::disk('local')->open(new File(__DIR__.'/src/guitar.m4a'))->probe();
+        $metadata = FFMpeg::disk('local')
+            ->open(new File(__DIR__.'/src/guitar.m4a'))
+            ->probe();
+
         $this->assertFalse($metadata->hasVideo());
         $this->assertFalse($metadata->hasAudio());
         $this->assertCount(1, $metadata->coverArt());
@@ -278,8 +313,12 @@ class ProbeTest extends TestCase
     {
         $this->fakeProbe();
         $disk = Mockery::mock(Filesystem::class);
-        $disk->shouldReceive('size')->with('missing.mp4')->andReturn(100);
-        $disk->shouldReceive('readStream')->with('missing.mp4')->andReturn(false);
+        $disk->shouldReceive('size')
+            ->with('missing.mp4')
+            ->andReturn(100);
+        $disk->shouldReceive('readStream')
+            ->with('missing.mp4')
+            ->andReturn(false);
 
         $this->assertThrows(
             fn () => FFMpeg::disk($disk)->open('missing.mp4')->probe(),
@@ -297,8 +336,10 @@ class ProbeTest extends TestCase
         fwrite($stream, 'short');
         rewind($stream);
         $disk = Mockery::mock(Filesystem::class);
-        $disk->shouldReceive('size')->andReturn(100);
-        $disk->shouldReceive('readStream')->andReturn($stream);
+        $disk->shouldReceive('size')
+            ->andReturn(100);
+        $disk->shouldReceive('readStream')
+            ->andReturn($stream);
 
         $this->assertThrows(
             fn () => FFMpeg::disk($disk)->open('truncated.mp4')->probe(),
@@ -348,11 +389,14 @@ class ProbeTest extends TestCase
 
         FFMpeg::disk('other');
         $media = FFMpeg::open($upload, inputOptions: ['-probesize', '2048']);
-        $command = $media->export()->inspect();
+        $command = $media->export()
+            ->inspect();
+
         $this->assertContains('2048', $command);
         $this->assertStringNotContainsString('outside.mp4', json_encode($command));
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
+
         $metadata = $media->probe();
 
         $this->assertSame($upload->getPathname(), $metadata->get('format.filename'));
@@ -401,8 +445,12 @@ class ProbeTest extends TestCase
         putenv('NATIVE_PROBE_SECRET=do-not-inherit');
 
         try {
-            $this->binary('echo json_encode(["format" => ["tags" => ["secret" => getenv("NATIVE_PROBE_SECRET"), "temporary" => getenv("TMPDIR") === getcwd()]], "streams" => []]);');
-            $metadata = FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe();
+            $this->binary('echo json_encode(["format" => ["tags" => ['
+                .'"secret" => getenv("NATIVE_PROBE_SECRET"), "temporary" => getenv("TMPDIR") === getcwd()'
+                .']], "streams" => []]);');
+            $metadata = FFMpeg::disk('local')
+                ->open(new File(__DIR__.'/src/video.mp4'))
+                ->probe();
 
             $this->assertFalse($metadata->get('format.tags.secret'));
             $this->assertTrue($metadata->get('format.tags.temporary'));
@@ -414,7 +462,8 @@ class ProbeTest extends TestCase
 
     public function test_it_drains_noisy_children_and_keeps_only_a_diagnostic_tail(): void
     {
-        $this->binary('for ($i = 0; $i < 512; $i++) { fwrite(STDERR, str_repeat("N", 65536)); } fwrite(STDERR, end($argv)." THE-END"); exit(7);');
+        $this->binary('for ($i = 0; $i < 512; $i++) { fwrite(STDERR, str_repeat("N", 65536)); } '
+            .'fwrite(STDERR, end($argv)." THE-END"); exit(7);');
 
         $this->assertThrows(
             fn () => FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe(),
@@ -452,7 +501,8 @@ class ProbeTest extends TestCase
     public function test_it_caps_probe_output_and_reaps_the_child(): void
     {
         $pidFile = $this->root.'/pid';
-        $this->binary('file_put_contents('.var_export($pidFile, true).', getmypid()); for ($i = 0; $i < 300; $i++) { echo str_repeat("X", 65536); } sleep(30);');
+        $this->binary('file_put_contents('.var_export($pidFile, true).', getmypid()); '
+            .'for ($i = 0; $i < 300; $i++) { echo str_repeat("X", 65536); } sleep(30);');
 
         $this->assertThrows(
             fn () => FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe(),
@@ -471,7 +521,9 @@ class ProbeTest extends TestCase
         $this->expectException(MediaException::class);
         $this->expectExceptionMessage('FFprobe 9.0.x is required.');
 
-        FFMpeg::disk('memory')->open('video.mp4')->probe();
+        FFMpeg::disk('memory')
+            ->open('video.mp4')
+            ->probe();
     }
 
     #[TestWith(['local'])]

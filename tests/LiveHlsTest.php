@@ -38,8 +38,16 @@ class LiveHlsTest extends TestCase
             'testsrc2=size=128x72:rate=20:duration='.$duration, '-f', 'lavfi', '-i',
             'sine=sample_rate=48000:duration='.$duration, '-c:v', 'libx264', '-preset', 'ultrafast',
             '-threads', '1', '-c:a', 'aac', Storage::disk('local')->path('source.mkv')]);
+
         $this->assertProcessSucceeded($result);
-        $probe = Process::run([dirname($this->binary).'/ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', Storage::disk('local')->path('source.mkv')]);
+
+        $probe = Process::run(
+            [
+                dirname($this->binary).'/ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0',
+                Storage::disk('local')->path('source.mkv'),
+            ],
+        );
+
         $this->assertGreaterThanOrEqual($duration, (float) trim($probe->output()));
 
         return new Media('local', 'source.mkv');
@@ -48,6 +56,7 @@ class LiveHlsTest extends TestCase
     protected function children(): array
     {
         $children = [];
+
         foreach (glob('/proc/[0-9]*/status') ?: [] as $path) {
             $status = @file_get_contents($path);
             $pid = basename(dirname($path));
@@ -69,37 +78,54 @@ class LiveHlsTest extends TestCase
         $live = new PendingLiveHls($source, $disk, 0.4, 2);
         $live->onPublish(function (LiveHlsResult $snapshot) use ($disk, &$seen, &$pids, $live): void {
             $this->assertSame('running', $snapshot->status);
+
             $text = $disk->get($snapshot->playlist);
+
             $this->assertStringNotContainsString('#EXT-X-ENDLIST', $text);
             $this->assertLessThanOrEqual(2, count($snapshot->segments));
             $this->assertLessThanOrEqual(5, count($disk->allFiles('live')));
+
             $pids = array_unique([...$pids, ...$this->children()]);
+
             $this->assertNotEmpty($pids, 'Encoder must still be alive during publication.');
+
             foreach ($snapshot->segments as $segment) {
                 $this->assertTrue($disk->exists($segment));
                 $this->assertStringContainsString(basename($segment), $text);
             }
+
             if ($seen === []) {
-                $decode = Process::run([$this->binary, '-v', 'error', '-i', $disk->path($snapshot->segments[0]), '-f', 'null', '-']);
+                $decode = Process::run(
+                    [$this->binary, '-v', 'error', '-i', $disk->path($snapshot->segments[0]), '-f', 'null', '-'],
+                );
                 $this->assertProcessSucceeded($decode);
             }
+
             $local = glob($this->root.'/workspaces/laravel-ffmpeg-*/live-*.ts*') ?: [];
+
             $this->assertLessThanOrEqual(7, count($local));
+
             $seen[] = $snapshot->lastSequence;
+
             if ($snapshot->publishedSegments >= 7) {
                 $live->stop();
             }
         });
         $result = $live->run('live');
+
         $this->assertSame('cancelled', $result->status);
         $this->assertGreaterThanOrEqual(7, $result->publishedSegments);
         $this->assertGreaterThan(0, $result->firstSequence);
+
         $sorted = $seen;
         sort($sorted);
+
         $this->assertSame($sorted, $seen);
+
         foreach ($pids as $pid) {
             $this->assertDirectoryDoesNotExist('/proc/'.$pid, 'Child must have been reaped.');
         }
+
         $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
         $this->assertStringNotContainsString('#EXT-X-ENDLIST', $disk->get('live/index.m3u8'));
     }
@@ -108,6 +134,7 @@ class LiveHlsTest extends TestCase
     {
         $disk = Storage::disk('local');
         $complete = (new PendingLiveHls($this->source(1.2), $disk, 0.4, 3))->run('finite');
+
         $this->assertSame('completed', $complete->status);
         $this->assertStringContainsString('#EXT-X-ENDLIST', $disk->get($complete->playlist));
         $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
@@ -128,11 +155,14 @@ class LiveHlsTest extends TestCase
             }
         });
         $result = $live->run('reconnect');
+
         $this->assertTrue($observed);
         $this->assertSame(2, $result->attempts);
         $this->assertSame('cancelled', $result->status);
+
         // stop() ends one session; running the same builder again starts fresh.
         $again = $live->run('reconnect-again');
+
         $this->assertSame(2, $again->attempts);
         $this->assertSame('cancelled', $again->status);
         $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
@@ -146,10 +176,13 @@ class LiveHlsTest extends TestCase
                 foreach (glob($this->root.'/workspaces/laravel-ffmpeg-*') as $workspace) {
                     rename($workspace, $this->root.'/workspaces/moved-'.basename($workspace));
                 }
+
                 throw new \RuntimeException('Application publication hook failed.');
             });
+
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Application publication hook failed.');
+
         $live->run('cleanup');
     }
 
@@ -157,8 +190,11 @@ class LiveHlsTest extends TestCase
     {
         $disk = Storage::disk('local');
         $disk->put('broken.ts', 'not a media source');
+
         $this->assertThrows(function () use ($disk) {
-            (new PendingLiveHls(new Media('local', 'broken.ts'), $disk, 0.4, 2))->retry(2, 0)->run('failed');
+            (new PendingLiveHls(new Media('local', 'broken.ts'), $disk, 0.4, 2))
+                ->retry(2, 0)
+                ->run('failed');
         }, function (MediaException $exception) {
             $this->assertSame('source', $exception->category);
             $this->assertSame('', $exception->diagnostics);
@@ -185,6 +221,7 @@ class LiveHlsTest extends TestCase
             if (++$calls === 2) {
                 $started = hrtime(true);
             }
+
             if (! $restored && $started !== null && (hrtime(true) - $started) / 1e9 > 0.15) {
                 $disk->put('recover.mkv', $disk->get('source.mkv'));
                 $restored = true;
@@ -193,6 +230,7 @@ class LiveHlsTest extends TestCase
             return false;
         });
         $result = $live->run('recovered');
+
         $this->assertSame('completed', $result->status);
         $this->assertGreaterThanOrEqual(2, $result->attempts);
         $this->assertGreaterThan(0, $result->publishedSegments);
@@ -207,13 +245,16 @@ class LiveHlsTest extends TestCase
         $calls = 0;
         $started = null;
         $result = (new PendingLiveHls(new Media('local', 'broken.ts'), $disk, 0.4, 2))
-            ->retry(2, 10)->cancelWhen(function () use (&$calls, &$started): bool {
+            ->retry(2, 10)
+            ->cancelWhen(function () use (&$calls, &$started): bool {
                 if (++$calls === 2) {
                     $started = hrtime(true);
                 }
 
                 return $started !== null && (hrtime(true) - $started) / 1e9 > 0.2;
-            })->run('backoff');
+            })
+            ->run('backoff');
+
         $this->assertSame('cancelled', $result->status);
         $this->assertSame(1, $result->attempts);
         $this->assertLessThan(2, (hrtime(true) - $began) / 1e9);
@@ -225,16 +266,20 @@ class LiveHlsTest extends TestCase
         $source = $this->source();
         $disk = Storage::disk('local');
         $destination = Mockery::mock(Filesystem::class);
-        $destination->shouldReceive('allFiles')->with('failed-disk')->andReturn([]);
+        $destination->shouldReceive('allFiles')
+            ->with('failed-disk')
+            ->andReturn([]);
         $writes = 0;
-        $destination->shouldReceive('put')->andReturnUsing(function ($key, $value) use ($disk, &$writes) {
-            if (str_ends_with($key, '.m3u8') && ++$writes === 2) {
-                return false;
-            }
+        $destination->shouldReceive('put')
+            ->andReturnUsing(function ($key, $value) use ($disk, &$writes) {
+                if (str_ends_with($key, '.m3u8') && ++$writes === 2) {
+                    return false;
+                }
 
-            return $disk->put($key, $value);
-        });
+                return $disk->put($key, $value);
+            });
         $pids = [];
+
         $this->assertThrows(function () use ($source, $destination, &$pids) {
             (new PendingLiveHls($source, $destination, 0.4, 2))
                 ->onPublish(function () use (&$pids): void {
@@ -247,23 +292,31 @@ class LiveHlsTest extends TestCase
 
             return true;
         });
+
         $playlist = $disk->get('failed-disk/index.m3u8');
+
         foreach (explode("\n", trim($playlist)) as $line) {
             if ($line !== '' && $line[0] !== '#') {
                 $this->assertTrue($disk->exists('failed-disk/'.$line));
             }
         }
+
         $this->assertNotEmpty($pids, 'Encoder must still be alive during publication.');
+
         foreach ($pids as $pid) {
             $this->assertDirectoryDoesNotExist('/proc/'.$pid);
         }
+
         $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
     public function test_total_timeout_returns_a_partial_result(): void
     {
         $disk = Storage::disk('local');
-        $result = (new PendingLiveHls($this->source(), $disk, 0.4, 2))->timeout(3)->run('timeout');
+        $result = (new PendingLiveHls($this->source(), $disk, 0.4, 2))
+            ->timeout(3)
+            ->run('timeout');
+
         $this->assertSame('timed_out', $result->status);
         $this->assertGreaterThan(0, $result->publishedSegments);
         $this->assertStringNotContainsString('#EXT-X-ENDLIST', $disk->get($result->playlist));
@@ -273,7 +326,10 @@ class LiveHlsTest extends TestCase
     public function test_cancellation_before_the_first_attempt_publishes_nothing(): void
     {
         $disk = Storage::disk('local');
-        $cancelled = (new PendingLiveHls(new Media('local', 'source.mkv'), $disk))->cancelWhen(fn () => true)->run('cancelled');
+        $cancelled = (new PendingLiveHls(new Media('local', 'source.mkv'), $disk))
+            ->cancelWhen(fn () => true)
+            ->run('cancelled');
+
         $this->assertSame('cancelled', $cancelled->status);
         $this->assertSame(0, $cancelled->attempts);
         $this->assertSame([], $disk->allFiles('cancelled'));
@@ -284,18 +340,29 @@ class LiveHlsTest extends TestCase
     {
         $this->source(2);
         $disk = Storage::disk('local');
-        $server = new Server([PHP_BINARY, __DIR__.'/src/http-input-server.php', $disk->path('source.mkv'), $this->root.'/requests']);
+        $server = new Server(
+            [PHP_BINARY, __DIR__.'/src/http-input-server.php', $disk->path('source.mkv'), $this->root.'/requests'],
+        );
         $server->start();
+
         try {
-            $this->assertTrue($server->waitUntil(fn ($type, $buffer) => $type === Server::OUT && str_contains($buffer, "\n")));
+            $this->assertTrue(
+                $server->waitUntil(fn ($type, $buffer) => $type === Server::OUT && str_contains($buffer, "\n")),
+            );
             $result = FFMpeg::liveHls('http://'.trim($server->getOutput()).'/public', segmentDuration: 0.4, window: 10)
-                ->toDisk('local')->run('network');
+                ->toDisk('local')
+                ->run('network');
             $this->assertSame('completed', $result->status);
             $this->assertGreaterThan(1, $result->publishedSegments);
             $this->assertStringContainsString('#EXT-X-ENDLIST', $disk->get($result->playlist));
-            $decoded = Process::run([$this->binary, '-v', 'error', '-xerror', '-i', $disk->path($result->playlist), '-f', 'null', '-']);
+            $decoded = Process::run(
+                [$this->binary, '-v', 'error', '-xerror', '-i', $disk->path($result->playlist), '-f', 'null', '-'],
+            );
             $this->assertProcessSucceeded($decoded);
-            $requests = array_map(fn ($line) => json_decode($line, true, flags: JSON_THROW_ON_ERROR), file($this->root.'/requests', FILE_IGNORE_NEW_LINES));
+            $requests = array_map(
+                fn ($line) => json_decode($line, true, flags: JSON_THROW_ON_ERROR),
+                file($this->root.'/requests', FILE_IGNORE_NEW_LINES),
+            );
             $this->assertContains('/public', array_column($requests, 'path'));
             $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
         } finally {
@@ -306,7 +373,9 @@ class LiveHlsTest extends TestCase
     public function test_refuses_preexisting_namespaces(): void
     {
         Storage::disk('local')->put('owned/keep.ts', 'keep');
-        $this->assertThrows(fn () => (new PendingLiveHls(new Media('local', 'missing'), 'local'))->run('owned'), function (MediaException $exception) {
+        $live = new PendingLiveHls(new Media('local', 'missing'), 'local');
+
+        $this->assertThrows(fn () => $live->run('owned'), function (MediaException $exception) {
             $this->assertSame('ownership', $exception->category);
 
             return true;

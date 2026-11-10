@@ -31,7 +31,12 @@ class UrlTest extends TestCase
 
     protected function server(bool $tls = false, ?string $fixture = null): string
     {
-        $command = [PHP_BINARY, __DIR__.'/src/http-input-server.php', $fixture ?? __DIR__.'/src/guitar.m4a', $this->root.'/requests'];
+        $command = [
+            PHP_BINARY,
+            __DIR__.'/src/http-input-server.php',
+            $fixture ?? __DIR__.'/src/guitar.m4a',
+            $this->root.'/requests',
+        ];
 
         if ($tls) {
             $key = openssl_pkey_new(['private_key_bits' => 2048]);
@@ -46,7 +51,9 @@ class UrlTest extends TestCase
         $server = new Server($command);
         $this->servers[] = $server;
         $server->start();
-        $this->assertTrue($server->waitUntil(fn ($type, $buffer) => $type === Server::OUT && str_contains($buffer, "\n")));
+        $this->assertTrue(
+            $server->waitUntil(fn ($type, $buffer) => $type === Server::OUT && str_contains($buffer, "\n")),
+        );
 
         return ($tls ? 'https://' : 'http://').trim($server->getOutput());
     }
@@ -55,16 +62,22 @@ class UrlTest extends TestCase
     {
         Http::preventStrayRequests();
         Process::fake();
+
         $url = 'https://media.example/audio.m4a?signature=private-signed-value';
         $media = FFMpeg::openUrl($url, inputOptions: ['-probesize', '2048']);
-        $command = $media->export()->audio('copy')->inspect();
+        $command = $media->export()
+            ->audio('copy')
+            ->inspect();
+
         $this->assertContains('2048', $command);
         $this->assertContains('https,tls,tcp', $command);
         $this->assertContains('-tls_verify', $command);
         $this->assertContains('15000000', $command);
         $this->assertStringNotContainsString('private-signed-value', json_encode($command));
+
         ob_start();
         var_dump($media);
+
         $this->assertStringNotContainsString('private-signed-value', ob_get_clean());
         Process::assertNothingRan();
         Http::assertNothingSent();
@@ -76,7 +89,11 @@ class UrlTest extends TestCase
         Process::fake();
 
         $this->expectException(InvalidArgumentException::class);
-        FFMpeg::openUrl('https://media.example/audio.m4a?signature=private-signed-value', headers: ['Authorization' => 'Bearer secret']);
+
+        FFMpeg::openUrl(
+            'https://media.example/audio.m4a?signature=private-signed-value',
+            headers: ['Authorization' => 'Bearer secret'],
+        );
     }
 
     #[DataProvider('invalidUrlProvider')]
@@ -84,6 +101,7 @@ class UrlTest extends TestCase
     {
         Http::preventStrayRequests();
         Process::fake();
+
         $this->assertThrows(
             fn () => FFMpeg::openUrl($invalid),
             fn (InvalidArgumentException $exception) => ! str_contains($exception->getMessage(), $invalid),
@@ -105,13 +123,20 @@ class UrlTest extends TestCase
         $this->useRealFFMpeg();
         config(['laravel-ffmpeg.redact_credentials' => true]);
         Http::preventStrayRequests();
+
         $url = $this->server().'/public?signature=private-signed-value';
         $media = FFMpeg::openUrl($url);
         $metadata = $media->probe();
+
         $this->assertSame('[url]', $metadata->get('format.filename'));
         $this->assertTrue($metadata->hasAudio());
         $this->assertGreaterThan(1, $metadata->duration());
-        $result = $media->export()->audio('copy')->toDisk('memory')->save('direct.m4a');
+
+        $result = $media->export()
+            ->audio('copy')
+            ->toDisk('memory')
+            ->save('direct.m4a');
+
         $this->assertTrue(Storage::disk('memory')->exists('direct.m4a'));
         $this->assertStringNotContainsString('private-signed-value', json_encode($result->processes()));
         $this->assertWorkspacesAreCleanedUp();
@@ -121,6 +146,7 @@ class UrlTest extends TestCase
     public function test_probe_failures_redact_partial_urls_in_diagnostics(): void
     {
         config(['laravel-ffmpeg.redact_credentials' => true]);
+
         $media = FFMpeg::openUrl('http://127.0.0.1:8000/public?signature=private-signed-value');
 
         // A partial URL in FFmpeg's diagnostics must not expose its query value.
@@ -134,6 +160,7 @@ class UrlTest extends TestCase
 
             return Process::result(errorOutput: 'Failed /public?signature=private-signed-value', exitCode: 1);
         });
+
         $this->assertThrows(
             fn () => $media->probe(),
             fn (MediaException $exception) => ! str_contains($exception->diagnostics, 'private-signed-value')
@@ -144,15 +171,24 @@ class UrlTest extends TestCase
     public function test_authenticated_download_inspection_is_lazy_and_redacted(): void
     {
         $this->useRealFFMpeg();
+
         $base = $this->server();
-        $first = FFMpeg::openUrl($base.'/private?signature=private-download-signature', headers: ['Authorization' => 'Bearer first-secret'], download: true, inputOptions: ['-probesize', '2048']);
+        $first = FFMpeg::openUrl(
+            $base.'/private?signature=private-download-signature',
+            headers: ['Authorization' => 'Bearer first-secret'],
+            download: true,
+            inputOptions: ['-probesize', '2048'],
+        );
         $command = $first->export()->inspect();
+
         $this->assertContains('2048', $command);
         $this->assertStringNotContainsString('first-secret', json_encode($command));
         $this->assertStringNotContainsString('private-download-signature', json_encode($command));
+
         ob_start();
         var_dump($first);
         $debug = ob_get_clean();
+
         $this->assertStringNotContainsString('first-secret', $debug);
         $this->assertStringNotContainsString('private-download-signature', $debug);
         $this->assertFileDoesNotExist($this->root.'/requests');
@@ -162,39 +198,69 @@ class UrlTest extends TestCase
     public function test_authenticated_downloads_keep_their_headers_separate(): void
     {
         $this->useRealFFMpeg();
+
         $base = $this->server();
-        $first = FFMpeg::openUrl($base.'/private?signature=private-download-signature', headers: ['Authorization' => 'Bearer first-secret'], download: true, inputOptions: ['-probesize', '2048']);
+        $first = FFMpeg::openUrl(
+            $base.'/private?signature=private-download-signature',
+            headers: ['Authorization' => 'Bearer first-secret'],
+            download: true,
+            inputOptions: ['-probesize', '2048'],
+        );
         $second = FFMpeg::openUrl($base.'/private', ['Authorization' => 'Bearer second-secret'], download: true);
         $export = $first->export();
         $export->addInput($second);
-        $result = $export->map('0:a:0')->map('1:a:0')->audio('copy')
-            ->withoutMetadata(chapters: true)->toDisk('memory')->save('both.mkv');
-        $metadata = FFMpeg::disk('memory')->open('both.mkv')->probe();
+        $result = $export->map('0:a:0')
+            ->map('1:a:0')
+            ->audio('copy')
+            ->withoutMetadata(chapters: true)
+            ->toDisk('memory')
+            ->save('both.mkv');
+        $metadata = FFMpeg::disk('memory')
+            ->open('both.mkv')
+            ->probe();
+
         $this->assertCount(2, $metadata->audioStreams());
         $this->assertStringNotContainsString('first-secret', json_encode($result->processes()));
         $this->assertStringNotContainsString('second-secret', json_encode($result->processes()));
         $this->assertStringNotContainsString($base, json_encode($result->processes()));
+
         $requests = array_map(fn ($line) => json_decode($line, true), file($this->root.'/requests'));
+
         $this->assertSame(['first', 'second'], array_column($requests, 'source'));
         $this->assertWorkspacesAreCleanedUp();
     }
 
     #[TestWith([false, null])]
     #[TestWith([true, 'first'])]
-    public function test_url_watermarks_are_fetched_once_without_exposing_the_url(bool $authenticated, ?string $source): void
-    {
+    public function test_url_watermarks_are_fetched_once_without_exposing_the_url(
+        bool $authenticated,
+        ?string $source,
+    ): void {
         $this->useRealFFMpeg();
+
         $base = $this->server(fixture: __DIR__.'/src/logo.png');
         $url = $base.($authenticated ? '/private' : '/public').'?signature=private-image-signature';
-        $logo = FFMpeg::openUrl($url, $authenticated ? ['Authorization' => 'Bearer first-secret'] : [], download: $authenticated);
-        $result = FFMpeg::open(new File(__DIR__.'/src/video.mp4'))->export()->clip(0, 0.2)
+        $logo = FFMpeg::openUrl(
+            $url,
+            $authenticated ? ['Authorization' => 'Bearer first-secret'] : [],
+            download: $authenticated,
+        );
+        $result = FFMpeg::open(new File(__DIR__.'/src/video.mp4'))
+            ->export()
+            ->clip(0, 0.2)
             ->watermark($logo, fn (Watermark $watermark) => $watermark->flipHorizontally())
-            ->video('ffv1')->withoutAudio()->toDisk('memory')->save('logo.mkv');
+            ->video('ffv1')
+            ->withoutAudio()
+            ->toDisk('memory')
+            ->save('logo.mkv');
+
         $this->assertStringNotContainsString($base, json_encode($result->processes()));
         $this->assertStringNotContainsString('private-image-signature', json_encode($result->processes()));
         $this->assertStringNotContainsString('first-secret', json_encode($result->processes()));
         $this->assertWorkspacesAreCleanedUp();
+
         $requests = array_map(fn ($line) => json_decode($line, true), file($this->root.'/requests'));
+
         $this->assertSame([$source], array_column($requests, 'source'));
     }
 
@@ -205,9 +271,14 @@ class UrlTest extends TestCase
     {
         $base = $this->server();
 
+        $media = FFMpeg::openUrl(
+            $base.$path.'?signature=hidden-signature',
+            ['Authorization' => 'Bearer wrong-secret'],
+            download: true,
+        );
+
         $this->assertThrows(
-            fn () => FFMpeg::openUrl($base.$path.'?signature=hidden-signature', ['Authorization' => 'Bearer wrong-secret'], download: true)
-                ->export()->toDisk('memory')->save('never.m4a'),
+            fn () => $media->export()->toDisk('memory')->save('never.m4a'),
             fn (MediaException $exception) => $exception->phase === 'staging'
                 && $exception->category === 'transfer'
                 && $exception->getPrevious() === null
@@ -265,7 +336,9 @@ class UrlTest extends TestCase
             return Process::result(output: in_array('-version', $process->command)
                 ? 'ffprobe version 9.0.2' : "Input:\nfile\nhttp\ntcp\nOutput:\nfile\n");
         });
+
         $media = FFMpeg::openUrl('https://media.example/input?signature=hidden');
+
         $this->assertContains('https,tls,tcp', $media->export()->inspect());
 
         $this->assertThrows(
@@ -280,6 +353,7 @@ class UrlTest extends TestCase
     public function test_https_rejects_an_untrusted_certificate_in_both_transport_modes(bool $download): void
     {
         $this->useRealFFMpeg();
+
         $url = $this->server(tls: true).'/public';
 
         $this->assertThrows(
