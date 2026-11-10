@@ -79,7 +79,7 @@ class NativeSpeedTest extends TestCase
         $this->assertSame($command, $operation->inspect());
         $text = implode(' ', $command);
         $this->assertStringContainsString('-map 0:v:1 -map 0:a:1', $text);
-        $this->assertStringContainsString('hflip,setpts=PTS/3', $text);
+        $this->assertStringContainsString('hflip,settb=AVTB,setpts=PTS/3', $text);
         $this->assertStringContainsString('volume=0.5,asetpts=PTS-STARTPTS+STARTPTS/3,atempo=2,atempo=1.5', $text);
         $this->assertStringContainsString('atempo=0.5,atempo=0.5', implode(' ', $this->media()->speed(0.25)->inspect()));
         foreach ([0, -1, INF, NAN] as $factor) {
@@ -124,6 +124,28 @@ class NativeSpeedTest extends TestCase
         }
         $this->assertSame($hash, hash_file('sha256', $source));
         $this->assertSame([], glob($this->root.'/workspaces/*'));
+    }
+
+    #[Test]
+    public function speeding_up_h264_with_a_frame_rate_time_base_keeps_every_frame(): void
+    {
+        $binary = $this->native();
+        $result = Process::run([$binary, '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=25:d=2',
+            '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac', '-video_track_timescale', '25', Storage::disk('speed-native')->path('h264.mp4')]);
+        $this->assertTrue($result->successful(), $result->errorOutput());
+
+        foreach ([2.0, 3.0] as $factor) {
+            $result = $this->media('h264.mp4')->speed($factor)->save("h264-{$factor}.mp4");
+            $frames = $this->frames(Storage::disk('speed-native')->path($result->file()->path));
+            $times = array_map(
+                fn ($frame) => (float) $frame['best_effort_timestamp_time'],
+                array_values(array_filter($frames, fn ($frame) => $frame['media_type'] === 'video')),
+            );
+            $this->assertCount(50, $times);
+            $this->assertSame($times, array_values(array_unique($times, SORT_NUMERIC)));
+            $this->assertEqualsWithDelta(49 / 25 / $factor, end($times), 0.01);
+        }
     }
 
     #[Test]

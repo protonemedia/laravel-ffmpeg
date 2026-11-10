@@ -88,7 +88,12 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
 
         $factor = $this->number($this->factor);
         if (! $settings['omitVideo']) {
-            $settings['videoFilters'][] = "setpts=PTS/{$factor}";
+            // Dividing timestamps in a coarse source time base, such as 1/25, would give two
+            // frames the same timestamp. We will retime in microseconds and let the encoder
+            // inherit that time base instead of the source frame rate.
+            $settings['videoFilters'][] = "settb=AVTB,setpts=PTS/{$factor}";
+            $settings['outputOptions'][] = '-enc_time_base:v';
+            $settings['outputOptions'][] = 'filter';
         }
 
         if (! $settings['omitAudio']) {
