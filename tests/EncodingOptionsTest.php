@@ -99,12 +99,7 @@ class EncodingOptionsTest extends TestCase
             ['output', ['-preset', '-ss']],
             ['output', ['-disposition:a:0', '-filter_complex']],
         ] as [$scope, $invalid]) {
-            try {
-                CommandCompiler::options($invalid, $scope);
-                $this->fail('Accepted unsafe options: '.json_encode($invalid));
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
+            $this->assertThrows(fn () => CommandCompiler::options($invalid, $scope), InvalidArgumentException::class);
         }
     }
 
@@ -118,12 +113,7 @@ class EncodingOptionsTest extends TestCase
             fn () => $this->destination()->audioStream(-1, fn ($audio) => $audio->codec('aac')),
             fn () => $this->destination()->audioStream(0, fn ($audio) => null)->audioStream(0, fn ($audio) => null),
         ] as $configure) {
-            try {
-                $this->arguments($configure());
-                $this->fail('Accepted incompatible copy or invalid track settings.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
+            $this->assertThrows(fn () => $this->arguments($configure()), InvalidArgumentException::class);
         }
         $this->assertContains('h264_mp4toannexb', $this->arguments($this->destination()->video('copy')->audio('copy')
             ->outputOptions(['-bsf:v', 'h264_mp4toannexb'])));
@@ -222,14 +212,12 @@ class EncodingOptionsTest extends TestCase
         if (preg_match('/^cuda$/m', $backends->output()) && preg_match('/\bh264_nvenc\b/', $encoders->output())) {
             $this->markTestSkipped('This acceptance case requires a build without CUDA/NVENC support, not an assumption about GPU availability.');
         }
-        try {
-            $this->media('source.mkv')->export()->globalOptions(['-init_hw_device', 'cuda=gpu:0', '-filter_hw_device', 'gpu'])
-                ->video('h264_nvenc')->save('hardware.mp4');
-            $this->fail('This acceptance environment has no CUDA/NVENC hardware.');
-        } catch (MediaException $exception) {
-            $this->assertNotEmpty($exception->getMessage());
-            $this->assertFalse(Storage::disk('encoding-options')->exists('hardware.mp4'));
-        }
+        $this->assertThrows(
+            fn () => $this->media('source.mkv')->export()->globalOptions(['-init_hw_device', 'cuda=gpu:0', '-filter_hw_device', 'gpu'])
+                ->video('h264_nvenc')->save('hardware.mp4'),
+            fn (MediaException $exception) => $exception->getMessage() !== '',
+        );
+        $this->assertFalse(Storage::disk('encoding-options')->exists('hardware.mp4'));
         $this->assertWorkspacesAreCleanedUp();
     }
 }

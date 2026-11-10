@@ -86,12 +86,7 @@ class AudioMixTest extends TestCase
             fn () => $source->mixAudio($music)->audio('copy')->inspect(),
             fn () => $source->backgroundMusic(FFMpeg::disk()->openUrl('https://media.example/music.mp3'))->inspect(),
         ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Expected an unsupported audio-mix configuration to fail.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
+            $this->assertThrows($invalid, InvalidArgumentException::class);
         }
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
@@ -258,29 +253,26 @@ class AudioMixTest extends TestCase
             [$this->media('shifted.mkv')->backgroundMusic($music), 'metadata'],
             [$source->backgroundMusic($music)->audioFilter('not_a_real_filter'), null],
         ] as [$invalid, $category]) {
-            try {
-                $invalid->video('copy')->audio('pcm_f64le')->save('retained.mkv');
-                $this->fail('Expected invalid audio or filter to fail.');
-            } catch (MediaException $exception) {
+            $this->assertThrows(fn () => $invalid->video('copy')->audio('pcm_f64le')->save('retained.mkv'), function (MediaException $exception) use ($category) {
                 if ($category !== null) {
                     $this->assertSame($category, $exception->category);
                 }
-                $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
-            }
+
+                return true;
+            });
+            $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
             $this->assertWorkspacesAreCleanedUp();
         }
         foreach (['analysis', 'encoding'] as $phase) {
-            try {
+            $this->assertThrows(function () use ($source, $music, $phase) {
                 $source->backgroundMusic($music)->video('copy')->audio('pcm_f64le')
                     ->onProgress(function ($progress) use ($phase) {
                         if ($progress->phase === $phase) {
                             throw new ExportCancelled('Stop mixing.');
                         }
                     })->save('retained.mkv');
-                $this->fail('Expected cancellation.');
-            } catch (ExportCancelled) {
-                $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
-            }
+            }, ExportCancelled::class);
+            $this->assertSame('existing destination', Storage::disk('audio-mix')->get('retained.mkv'));
             $this->assertWorkspacesAreCleanedUp();
         }
         $this->assertSame($hash, hash_file('sha256', $this->path('source.mkv')));

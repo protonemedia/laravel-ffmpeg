@@ -53,24 +53,14 @@ class SpeedTest extends TestCase
         $this->assertStringContainsString('volume=0.5,asetpts=PTS-STARTPTS+STARTPTS/3,atempo=2,atempo=1.5', $text);
         $this->assertStringContainsString('atempo=0.5,atempo=0.5', implode(' ', $this->media()->speed(0.25)->inspect()));
         foreach ([0, -1, INF, NAN] as $factor) {
-            try {
-                $this->media()->speed($factor);
-                $this->fail('Invalid speed accepted.');
-            } catch (InvalidArgumentException) {
-                $this->assertTrue(true);
-            }
+            $this->assertThrows(fn () => $this->media()->speed($factor), InvalidArgumentException::class);
         }
         foreach ([
             fn () => $this->media()->speed(1.5)->video('copy')->inspect(),
             fn () => $this->media()->speed(1.5)->audio('copy')->inspect(),
             fn () => $this->media()->speed(1.5)->withoutAudio()->withoutVideo()->inspect(),
         ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Unsupported speed configuration accepted.');
-            } catch (InvalidArgumentException) {
-                $this->assertTrue(true);
-            }
+            $this->assertThrows($invalid, InvalidArgumentException::class);
         }
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
@@ -144,14 +134,12 @@ class SpeedTest extends TestCase
                 $this->assertSame([$select], array_values($types));
             }
             if ($kind !== 'both') {
-                try {
-                    $operation = $this->media()->speed(1.5);
-                    $kind === 'audio' ? $operation->withoutAudio() : $operation->withoutVideo();
-                    $operation->save('missing.mkv');
-                    $this->fail('An empty stream selection was accepted.');
-                } catch (MediaException $exception) {
-                    $this->assertSame(['probing', 'mapping'], [$exception->phase, $exception->category]);
-                }
+                $operation = $this->media()->speed(1.5);
+                $kind === 'audio' ? $operation->withoutAudio() : $operation->withoutVideo();
+                $this->assertThrows(
+                    fn () => $operation->save('missing.mkv'),
+                    fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+                );
             }
         }
         $this->assertWorkspacesAreCleanedUp();
@@ -200,20 +188,16 @@ class SpeedTest extends TestCase
     {
         $source = $this->fixture();
         $hash = hash_file('sha256', $source);
-        try {
-            $this->media()->speed(1.5)->videoFilter('not_a_filter')->save('failed.mkv');
-            $this->fail('Invalid filter accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('encoding', $exception->phase);
-        }
+        $this->assertThrows(
+            fn () => $this->media()->speed(1.5)->videoFilter('not_a_filter')->save('failed.mkv'),
+            fn (MediaException $exception) => $exception->phase === 'encoding',
+        );
         $shift = Process::run([$this->useRealFFMpeg(), '-v', 'error', '-i', $source, '-c', 'copy', '-output_ts_offset', '2', Storage::disk('speed')->path('shifted.mkv')]);
         $this->assertProcessSucceeded($shift);
-        try {
-            $this->media('shifted.mkv')->speed(1.5)->save('failed.mkv');
-            $this->fail('Nonzero timeline accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['probing', 'metadata'], [$exception->phase, $exception->category]);
-        }
+        $this->assertThrows(
+            fn () => $this->media('shifted.mkv')->speed(1.5)->save('failed.mkv'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'metadata'],
+        );
         $this->assertSame($hash, hash_file('sha256', $source));
         $this->assertFalse(Storage::disk('speed')->exists('failed.mkv'));
         $this->assertWorkspacesAreCleanedUp();

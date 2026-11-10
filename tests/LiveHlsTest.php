@@ -142,28 +142,26 @@ class LiveHlsTest extends TestCase
                 }
                 throw new \RuntimeException('Application publication hook failed.');
             });
-        try {
-            $live->run('cleanup');
-            $this->fail('The application exception was swallowed.');
-        } catch (\RuntimeException $exception) {
-            $this->assertSame('Application publication hook failed.', $exception->getMessage());
-        }
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Application publication hook failed.');
+        $live->run('cleanup');
     }
 
     public function test_failed_native_source_consumes_explicit_retry_budget_and_redacts_errors(): void
     {
         $disk = Storage::disk('local');
         $disk->put('broken.ts', 'not a media source');
-        try {
+        $this->assertThrows(function () use ($disk) {
             (new PendingLiveHls(new Media('local', 'broken.ts'), $disk, 0.4, 2))->retry(2, 0)->run('failed');
-            $this->fail('Expected source failure.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame('source', $exception->category);
             $this->assertSame('', $exception->diagnostics);
             $this->assertSame([], $exception->published);
             $this->assertStringContainsString('after 3 attempts', $exception->getMessage());
             $this->assertStringNotContainsString('broken.ts', $exception->getMessage());
-        }
+
+            return true;
+        });
         $this->assertSame([], glob($this->root.'/workspaces/laravel-ffmpeg-*'));
     }
 
@@ -226,17 +224,18 @@ class LiveHlsTest extends TestCase
             return $disk->put($key, $value);
         });
         $pids = [];
-        try {
+        $this->assertThrows(function () use ($source, $destination, &$pids) {
             (new PendingLiveHls($source, $destination, 0.4, 2))
                 ->onPublish(function () use (&$pids): void {
                     $pids = array_unique([...$pids, ...$this->children()]);
                 })
                 ->run('failed-disk');
-            $this->fail('Expected destination failure.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame('transfer', $exception->category);
             $this->assertContains(['disk' => null, 'path' => 'failed-disk/index.m3u8'], $exception->published);
-        }
+
+            return true;
+        });
         $playlist = $disk->get('failed-disk/index.m3u8');
         foreach (explode("\n", trim($playlist)) as $line) {
             if ($line !== '' && $line[0] !== '#') {
@@ -291,20 +290,14 @@ class LiveHlsTest extends TestCase
     public function test_refuses_preexisting_namespaces_and_untrusted_protocols(): void
     {
         Storage::disk('local')->put('owned/keep.ts', 'keep');
-        try {
-            (new PendingLiveHls(new Media('local', 'missing'), 'local'))->run('owned');
-            $this->fail('Expected namespace rejection.');
-        } catch (MediaException $exception) {
+        $this->assertThrows(fn () => (new PendingLiveHls(new Media('local', 'missing'), 'local'))->run('owned'), function (MediaException $exception) {
             $this->assertSame('ownership', $exception->category);
-            $this->assertSame('keep', Storage::disk('local')->get('owned/keep.ts'));
-        }
+
+            return true;
+        });
+        $this->assertSame('keep', Storage::disk('local')->get('owned/keep.ts'));
         foreach (['file:///tmp/private', 'concat:http://example.com', 'rtsp://user:pass@example.com/live', "https://example.com/\n"] as $url) {
-            try {
-                new LiveHlsSource($url);
-                $this->fail('Expected trusted source validation.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
+            $this->assertThrows(fn () => new LiveHlsSource($url), InvalidArgumentException::class);
         }
     }
 }

@@ -63,14 +63,12 @@ class VolumeDetectTest extends TestCase
             $this->assertNotSame(0, $failure->exitCode);
             $this->assertNotEmpty($failure->errorOutput());
             $this->assertSame('analysis', $failure->phase);
-            try {
-                $failure->throw();
-                $this->fail('throw() accepted an unsuccessful analysis.');
-            } catch (MediaException $exception) {
-                $this->assertSame(['analysis', 'exit'], [$exception->phase, $exception->category]);
-                $this->assertSame($failure->errorOutput(), $exception->diagnostics);
-                $this->assertNull($exception->getPrevious());
-            }
+            $this->assertThrows(
+                fn () => $failure->throw(),
+                fn (MediaException $exception) => [$exception->phase, $exception->category] === ['analysis', 'exit']
+                    && $exception->diagnostics === $failure->errorOutput()
+                    && $exception->getPrevious() === null,
+            );
         }
         $this->assertSame(['broken.wav', 'silence.wav'], $local->allFiles());
         $this->assertWorkspacesAreCleanedUp();
@@ -96,13 +94,11 @@ class VolumeDetectTest extends TestCase
         $this->assertSame('[input] [redacted]', trim($result->output()));
         $this->assertSame('[input] [redacted]', trim($result->errorOutput()));
         $this->assertStringNotContainsString('private-token', json_encode($result->summary()));
-        try {
-            $result->throw();
-            $this->fail('A failed signed-URL analysis was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertStringNotContainsString('private-token', $exception->diagnostics);
-            $this->assertNull($exception->getPrevious());
-        }
+        $this->assertThrows(
+            fn () => $result->throw(),
+            fn (MediaException $exception) => ! str_contains($exception->diagnostics, 'private-token')
+                && $exception->getPrevious() === null,
+        );
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -123,12 +119,10 @@ class VolumeDetectTest extends TestCase
 
         config(['laravel-ffmpeg.redact_credentials' => true]);
         $this->assertSame("mean_volume: -21.5 dB\nmax_volume: -2.0 dB\n[redacted] [redacted] [query]", trim(FFMpeg::openUrl($url)->analyze()->errorOutput()));
-        try {
-            FFMpeg::openRtsp('rtsp://admin:1234@camera.invalid/live')->frame()->toDisk('memory')->save('snapshot.png');
-            $this->fail('A failed RTSP capture was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('user admin rejected with password [redacted]', trim($exception->diagnostics));
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::openRtsp('rtsp://admin:1234@camera.invalid/live')->frame()->toDisk('memory')->save('snapshot.png'),
+            fn (MediaException $exception) => trim($exception->diagnostics) === 'user admin rejected with password [redacted]',
+        );
     }
 
     public function test_missing_url_protocols_fail_in_the_analysis_phase(): void
@@ -136,24 +130,21 @@ class VolumeDetectTest extends TestCase
         Process::preventStrayProcesses();
         Process::fake(fn (PendingProcess $process) => Process::result(output: in_array('-version', $process->command, true)
             ? 'ffmpeg version 9.0.2' : "Input:\nfile\nOutput:\nfile\n"));
-        try {
-            FFMpeg::disk('memory')->openUrl('https://example.invalid/audio.wav')->analyze();
-            $this->fail('Analysis ran without the required URL protocols.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['analysis', 'capability'], [$exception->phase, $exception->category]);
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->openUrl('https://example.invalid/audio.wav')->analyze(),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['analysis', 'capability'],
+        );
     }
 
     public function test_invalid_analysis_requests_fail_before_staging_or_process_execution(): void
     {
         Process::fake();
         foreach ([['', 0], ["volumedetect\0", 0], ['amovie=https://example.invalid/audio.wav', 0], ['volumedetect', -1]] as [$filter, $audio]) {
-            try {
-                FFMpeg::disk('missing')->open('missing.wav')->analyze($filter, $audio);
-                $this->fail('Invalid analysis settings were accepted.');
-            } catch (InvalidArgumentException) {
-                $this->assertWorkspacesAreCleanedUp();
-            }
+            $this->assertThrows(
+                fn () => FFMpeg::disk('missing')->open('missing.wav')->analyze($filter, $audio),
+                InvalidArgumentException::class,
+            );
+            $this->assertWorkspacesAreCleanedUp();
         }
         Process::assertNothingRan();
     }
@@ -168,23 +159,19 @@ class VolumeDetectTest extends TestCase
             'file_put_contents('.var_export($pidFile, true).', getmypid()); sleep(30);');
         chmod($binary, 0700);
         config(['laravel-ffmpeg.ffmpeg.binaries' => $binary, 'laravel-ffmpeg.timeout' => 0.3]);
-        try {
-            FFMpeg::disk('memory')->open('audio.wav')->analyze();
-            $this->fail('A timed-out analysis returned a result.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['analysis', 'timeout'], [$exception->phase, $exception->category]);
-            $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('audio.wav')->analyze(),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['analysis', 'timeout'],
+        );
+        $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
+        $this->assertWorkspacesAreCleanedUp();
         config(['laravel-ffmpeg.ffmpeg.binaries' => $this->root.'/missing-binary']);
-        try {
-            FFMpeg::disk('memory')->open('audio.wav')->analyze();
-            $this->fail('A missing executable returned a result.');
-        } catch (MediaException $exception) {
-            $this->assertContains($exception->category, ['process', 'version']);
-            $this->assertSame('analysis', $exception->phase);
-            $this->assertWorkspacesAreCleanedUp();
-            $this->assertSame('source bytes', Storage::disk('memory')->get('audio.wav'));
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('audio.wav')->analyze(),
+            fn (MediaException $exception) => in_array($exception->category, ['process', 'version'], true)
+                && $exception->phase === 'analysis',
+        );
+        $this->assertWorkspacesAreCleanedUp();
+        $this->assertSame('source bytes', Storage::disk('memory')->get('audio.wav'));
     }
 }

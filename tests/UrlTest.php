@@ -68,12 +68,10 @@ class UrlTest extends TestCase
         Http::assertNothingSent();
 
         foreach (['file:///tmp/video', 'ftp://media.example/video', 'https://user:password@media.example/video', "https://media.example/\nvideo"] as $invalid) {
-            try {
-                FFMpeg::openUrl($invalid);
-                $this->fail('Invalid URL was accepted.');
-            } catch (InvalidArgumentException $exception) {
-                $this->assertStringNotContainsString($invalid, $exception->getMessage());
-            }
+            $this->assertThrows(
+                fn () => FFMpeg::openUrl($invalid),
+                fn (InvalidArgumentException $exception) => ! str_contains($exception->getMessage(), $invalid),
+            );
         }
 
         $this->expectException(InvalidArgumentException::class);
@@ -108,13 +106,11 @@ class UrlTest extends TestCase
 
             return Process::result(errorOutput: 'Failed /public?signature=private-signed-value', exitCode: 1);
         });
-        try {
-            $media->probe();
-            $this->fail('Probe failure was not reported.');
-        } catch (MediaException $exception) {
-            $this->assertStringNotContainsString('private-signed-value', $exception->diagnostics);
-            $this->assertNull($exception->getPrevious());
-        }
+        $this->assertThrows(
+            fn () => $media->probe(),
+            fn (MediaException $exception) => ! str_contains($exception->diagnostics, 'private-signed-value')
+                && $exception->getPrevious() === null,
+        );
     }
 
     public function test_authenticated_downloads_keep_headers_separate_and_publish_two_audio_tracks(): void
@@ -172,19 +168,17 @@ class UrlTest extends TestCase
         $base = $this->server();
 
         foreach (['/redirect', '/truncated', '/first'] as $path) {
-            try {
-                FFMpeg::openUrl($base.$path.'?signature=hidden-signature', ['Authorization' => 'Bearer wrong-secret'], download: true)
-                    ->export()->toDisk('memory')->save('never.m4a');
-                $this->fail('Invalid download was accepted.');
-            } catch (MediaException $exception) {
-                $this->assertSame('staging', $exception->phase);
-                $this->assertSame('transfer', $exception->category);
-                $this->assertNull($exception->getPrevious());
-                $this->assertStringNotContainsString('hidden-signature', (string) $exception);
-                $this->assertStringNotContainsString('wrong-secret', (string) $exception);
-                $this->assertFalse(Storage::disk('memory')->exists('never.m4a'));
-                $this->assertWorkspacesAreCleanedUp();
-            }
+            $this->assertThrows(
+                fn () => FFMpeg::openUrl($base.$path.'?signature=hidden-signature', ['Authorization' => 'Bearer wrong-secret'], download: true)
+                    ->export()->toDisk('memory')->save('never.m4a'),
+                fn (MediaException $exception) => $exception->phase === 'staging'
+                    && $exception->category === 'transfer'
+                    && $exception->getPrevious() === null
+                    && ! str_contains((string) $exception, 'hidden-signature')
+                    && ! str_contains((string) $exception, 'wrong-secret'),
+            );
+            $this->assertFalse(Storage::disk('memory')->exists('never.m4a'));
+            $this->assertWorkspacesAreCleanedUp();
         }
 
         $this->assertStringNotContainsString('/stolen', file_get_contents($this->root.'/requests'));
@@ -196,21 +190,17 @@ class UrlTest extends TestCase
         Http::fake(['*' => Http::response("#EXTM3U\nhttps://elsewhere.example/segment.ts", 200)]);
 
         foreach ([["X-Test\r\nAuthorization" => 'secret'], ['Authorization' => "secret\r\nX-Test: value"], ['X-Test' => ['array']]] as $headers) {
-            try {
-                FFMpeg::openUrl('https://media.example/input', $headers, download: true);
-                $this->fail('Invalid headers were accepted.');
-            } catch (InvalidArgumentException $exception) {
-                $this->assertStringNotContainsString('secret', $exception->getMessage());
-            }
+            $this->assertThrows(
+                fn () => FFMpeg::openUrl('https://media.example/input', $headers, download: true),
+                fn (InvalidArgumentException $exception) => ! str_contains($exception->getMessage(), 'secret'),
+            );
         }
 
-        try {
-            FFMpeg::openUrl('https://media.example/disguised.mp4', download: true)->probe();
-            $this->fail('A downloaded manifest was accepted as a standalone file.');
-        } catch (MediaException $exception) {
-            $this->assertSame('manifest', $exception->category);
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::openUrl('https://media.example/disguised.mp4', download: true)->probe(),
+            fn (MediaException $exception) => $exception->category === 'manifest',
+        );
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_missing_https_support_is_reported_lazily_without_contacting_the_url(): void
@@ -222,13 +212,11 @@ class UrlTest extends TestCase
         $media = FFMpeg::openUrl('https://media.example/input?signature=hidden');
         $this->assertContains('https,tls,tcp', $media->export()->inspect());
 
-        try {
-            $media->probe();
-            $this->fail('Missing HTTPS support was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('capability', $exception->category);
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => $media->probe(),
+            fn (MediaException $exception) => $exception->category === 'capability',
+        );
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_https_rejects_an_untrusted_certificate_in_both_transport_modes(): void
@@ -237,16 +225,12 @@ class UrlTest extends TestCase
         $url = $this->server(tls: true).'/public';
 
         foreach ([false, true] as $download) {
-            try {
-                FFMpeg::openUrl($url, download: $download)->probe();
-                $this->fail('An untrusted certificate was accepted.');
-            } catch (MediaException $exception) {
-                $this->assertSame($download ? 'staging' : 'probing', $exception->phase);
-                if (! $download) {
-                    $this->assertStringContainsString('certificate', strtolower($exception->diagnostics));
-                }
-                $this->assertWorkspacesAreCleanedUp();
-            }
+            $this->assertThrows(
+                fn () => FFMpeg::openUrl($url, download: $download)->probe(),
+                fn (MediaException $exception) => $exception->phase === ($download ? 'staging' : 'probing')
+                    && ($download || str_contains(strtolower($exception->diagnostics), 'certificate')),
+            );
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 }

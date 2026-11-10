@@ -53,20 +53,17 @@ class InputHelpersTest extends TestCase
     {
         $this->useRealFFMpeg();
         Storage::disk('memory')->put('bad.png', 'not image data');
-        try {
+        $this->assertThrows(function () {
             FFMpeg::disk('memory')->open('bad.png')->still(1)->toDisk('input-helpers')->save('bad.mp4');
-            $this->fail('Corrupt image accepted.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame('image', $exception->category);
-            $this->assertFalse(Storage::disk('input-helpers')->exists('bad.mp4'));
-        }
+
+            return true;
+        });
+        $this->assertFalse(Storage::disk('input-helpers')->exists('bad.mp4'));
         foreach ([[0, 25], [-1, 25], [INF, 25], [NAN, 25], [1, 0], [1, 241]] as [$duration, $rate]) {
-            try {
-                FFMpeg::open('photo.png')->still($duration, $rate);
-                $this->fail('Invalid still configuration accepted.');
-            } catch (InvalidArgumentException) {
-                $this->assertWorkspacesAreCleanedUp();
-            }
+            $this->assertThrows(fn () => FFMpeg::open('photo.png')->still($duration, $rate), InvalidArgumentException::class);
+            $this->assertWorkspacesAreCleanedUp();
         }
     }
 
@@ -111,12 +108,7 @@ class InputHelpersTest extends TestCase
             $this->assertStringNotContainsString($option, $arguments);
         }
         foreach ([['-hwaccel', 'auto'], ['-hwaccel', 'bogus'], ['-ignore_loop', '-1'], ['-hwaccel_device', "0\nsecret"]] as $options) {
-            try {
-                FFMpeg::open('input', inputOptions: $options);
-                $this->fail('Invalid input options accepted.');
-            } catch (InvalidArgumentException) {
-                $this->assertTrue(true);
-            }
+            $this->assertThrows(fn () => FFMpeg::open('input', inputOptions: $options), InvalidArgumentException::class);
         }
     }
 
@@ -162,18 +154,17 @@ class InputHelpersTest extends TestCase
         $media = FFMpeg::open(new File($path));
         foreach (['hardware.mp4' => $media->export()->video('h264_nvenc'),
             'hardware/master.m3u8' => $media->hls()->variant('gpu', fn ($variant) => $variant->video('h264_nvenc'))] as $output => $export) {
-            try {
-                $export->toDisk('input-helpers')->save($output);
-                $this->fail('An unavailable hardware encoder silently succeeded.');
-            } catch (MediaException $exception) {
+            $this->assertThrows(fn () => $export->toDisk('input-helpers')->save($output), function (MediaException $exception) {
                 $this->assertSame('encoding', $exception->phase);
                 $this->assertSame('exit', $exception->category);
                 $this->assertStringContainsString("Unknown encoder 'h264_nvenc'", $exception->diagnostics);
                 $this->assertStringNotContainsString($this->root, $exception->diagnostics);
-                $this->assertSame([], Storage::disk('input-helpers')->allFiles());
-                $this->assertWorkspacesAreCleanedUp();
-                $this->assertSame($hash, hash_file('sha256', $path));
-            }
+
+                return true;
+            });
+            $this->assertSame([], Storage::disk('input-helpers')->allFiles());
+            $this->assertWorkspacesAreCleanedUp();
+            $this->assertSame($hash, hash_file('sha256', $path));
         }
     }
 
@@ -187,19 +178,20 @@ class InputHelpersTest extends TestCase
         }
         $path = __DIR__.'/src/video.mp4';
         $hash = hash_file('sha256', $path);
-        try {
+        $this->assertThrows(function () use ($path) {
             FFMpeg::open(new File($path), inputOptions: ['-hwaccel', 'cuda'])->export()
                 ->video('libx264')->toDisk('input-helpers')->save('hardware-decoding.mp4');
-            $this->fail('An unavailable explicit decoder silently fell back to software.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame('encoding', $exception->phase);
             $this->assertSame('exit', $exception->category);
             $this->assertStringContainsString('No device available for decoder: device type cuda', $exception->diagnostics);
             $this->assertStringNotContainsString($this->root, $exception->diagnostics);
-            $this->assertSame([], Storage::disk('input-helpers')->allFiles());
-            $this->assertWorkspacesAreCleanedUp();
-            $this->assertSame($hash, hash_file('sha256', $path));
-        }
+
+            return true;
+        });
+        $this->assertSame([], Storage::disk('input-helpers')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
+        $this->assertSame($hash, hash_file('sha256', $path));
     }
 
     public function test_rtsp_snapshots_capture_real_tcp_and_udp_frames_and_bound_failed_cameras(): void

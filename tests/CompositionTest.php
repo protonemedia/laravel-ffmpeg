@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ItemNotFoundException;
 use Illuminate\Support\MultipleItemsFoundException;
 use InvalidArgumentException;
+use LogicException;
 use Mockery;
 use ProtoneMedia\LaravelFFMpeg\Events;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
@@ -113,12 +114,7 @@ class CompositionTest extends TestCase
         $export = $media->export();
         $export->addInput($media);
 
-        try {
-            $export->map('1:v')->inspect();
-            $this->fail('Multi-input metadata sources must be explicit.');
-        } catch (InvalidArgumentException) {
-            $this->addToAssertionCount(1);
-        }
+        $this->assertThrows(fn () => $export->map('1:v')->inspect(), InvalidArgumentException::class);
 
         Process::assertNothingRan();
     }
@@ -254,15 +250,13 @@ class CompositionTest extends TestCase
             return Process::result(output: in_array('-version', $process->command, true) ? basename($process->command[0]).' version 9.0.2' : '');
         });
 
-        try {
-            FFMpeg::disk('memory')->open('source.mkv')->export()->textResource('title', $text)
-                ->videoFilter('drawtext=textfile={{title}}:expansion=none')->toDisk('memory')->save('unsupported.mkv');
-            $this->fail('A build without drawtext was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('capability', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('unsupported.mkv'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mkv')->export()->textResource('title', $text)
+                ->videoFilter('drawtext=textfile={{title}}:expansion=none')->toDisk('memory')->save('unsupported.mkv'),
+            fn (MediaException $exception) => $exception->category === 'capability',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('unsupported.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_probed_streams_resolve_to_their_source_and_absolute_index_without_more_io(): void
@@ -384,12 +378,7 @@ class CompositionTest extends TestCase
         $this->assertSame('encoded', Storage::disk('memory')->get('one.mkv'));
         $this->assertSame('encoded', Storage::disk('memory')->get('two.mkv'));
 
-        try {
-            $retained->drawText('late change', $font);
-            $this->fail('A saved output was mutable.');
-        } catch (\LogicException) {
-            $this->addToAssertionCount(1);
-        }
+        $this->assertThrows(fn () => $retained->drawText('late change', $font), LogicException::class);
         $this->assertWorkspacesAreCleanedUp();
 
         Storage::disk('memory')->put('invalid.srt', "\xff");
@@ -477,19 +466,17 @@ class CompositionTest extends TestCase
         $disk = Mockery::mock(Filesystem::class);
         $disk->shouldReceive('put')->andReturn(false);
 
-        try {
-            FFMpeg::disk('memory')->open('source.mkv')->export()
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mkv')->export()
                 ->output('first.mkv', fn ($out) => $out->toDisk('memory')->map('0:v'))
-                ->output('second.mkv', fn ($out) => $out->toDisk($disk)->map('0:v'))->save();
-            $this->fail('Publication failure was ignored.');
-        } catch (MediaException $exception) {
-            $this->assertSame('publication', $exception->phase);
-            $this->assertSame([['disk' => 'memory', 'path' => 'first.mkv']], $exception->published);
-            $this->assertSame(['disk' => null, 'path' => 'second.mkv'], $exception->destination);
-            $this->assertSame('encoded', Storage::disk('memory')->get('first.mkv'));
-            $this->assertWorkspacesAreCleanedUp();
-            Event::assertNotDispatched(Events\ExportCompleted::class);
-        }
+                ->output('second.mkv', fn ($out) => $out->toDisk($disk)->map('0:v'))->save(),
+            fn (MediaException $exception) => $exception->phase === 'publication'
+                && $exception->published === [['disk' => 'memory', 'path' => 'first.mkv']]
+                && $exception->destination === ['disk' => null, 'path' => 'second.mkv'],
+        );
+        $this->assertSame('encoded', Storage::disk('memory')->get('first.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
+        Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
     public function test_cancellation_cleans_resources_and_outputs_without_publication(): void
@@ -498,8 +485,8 @@ class CompositionTest extends TestCase
         Storage::disk('memory')->put('look.cube', 'a LUT');
         $cancelled = new ExportCancelled('cancel composition');
 
-        try {
-            FFMpeg::disk('memory')->open('source.mkv')->export()
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mkv')->export()
                 ->resource('look', FFMpeg::disk('memory')->open('look.cube'))
                 ->output('first.mkv', fn ($out) => $out->videoFilter('lut3d=file={{look}}')->toDisk('memory'))
                 ->output('second.mkv', fn ($out) => $out->toDisk('memory'))
@@ -507,16 +494,14 @@ class CompositionTest extends TestCase
                     if ($progress->phase === 'encoding') {
                         throw $cancelled;
                     }
-                })->save();
-            $this->fail('Cancellation did not propagate.');
-        } catch (ExportCancelled $exception) {
-            $this->assertSame($cancelled, $exception);
-            $this->assertWorkspacesAreCleanedUp();
-            $this->assertFalse(Storage::disk('memory')->exists('first.mkv'));
-            $this->assertFalse(Storage::disk('memory')->exists('second.mkv'));
-            $this->assertSame('a LUT', Storage::disk('memory')->get('look.cube'));
-            Event::assertDispatched(Events\ExportCancelled::class);
-        }
+                })->save(),
+            fn (ExportCancelled $exception) => $exception === $cancelled,
+        );
+        $this->assertWorkspacesAreCleanedUp();
+        $this->assertFalse(Storage::disk('memory')->exists('first.mkv'));
+        $this->assertFalse(Storage::disk('memory')->exists('second.mkv'));
+        $this->assertSame('a LUT', Storage::disk('memory')->get('look.cube'));
+        Event::assertDispatched(Events\ExportCancelled::class);
     }
 
     public function test_generated_files_can_be_selected_by_path_and_disk_without_ambiguous_matches(): void
@@ -567,16 +552,14 @@ class CompositionTest extends TestCase
             ->watermark(FFMpeg::disk('local')->open('logo.png'), fn (Watermark $watermark) => $watermark->rotate(10, background: 'application-secret'));
         $this->assertContains('[input:1]', $export->inspect());
         Process::assertNothingRan();
-        try {
-            $export->toDisk('memory')->save('failed.mkv');
-            $this->fail('An image edit that cannot be processed was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('staging', $exception->phase);
-            $this->assertSame('resource', $exception->category);
-            $this->assertNull($exception->getPrevious());
-            $this->assertStringNotContainsString('application-secret', $exception->getMessage());
-            $this->assertFalse(Storage::disk('memory')->exists('failed.mkv'));
-        }
+        $this->assertThrows(
+            fn () => $export->toDisk('memory')->save('failed.mkv'),
+            fn (MediaException $exception) => $exception->phase === 'staging'
+                && $exception->category === 'resource'
+                && $exception->getPrevious() === null
+                && ! str_contains($exception->getMessage(), 'application-secret'),
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('failed.mkv'));
         $this->assertSame($hash, hash_file('sha256', $local->path('logo.png')));
         $this->assertWorkspacesAreCleanedUp();
         Process::assertNothingRan();
@@ -731,12 +714,10 @@ class CompositionTest extends TestCase
                 $this->addToAssertionCount(1);
             }
         }
-        try {
-            $media->export()->watermark($media)->video('ffv1')->save('invalid.mkv');
-            $this->fail('A video must not silently become a static watermark.');
-        } catch (MediaException $exception) {
-            $this->assertSame('watermark', $exception->category);
-        }
+        $this->assertThrows(
+            fn () => $media->export()->watermark($media)->video('ffv1')->save('invalid.mkv'),
+            fn (MediaException $exception) => $exception->category === 'watermark',
+        );
         $this->assertFalse($local->exists('invalid.mkv'));
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -856,18 +837,9 @@ class CompositionTest extends TestCase
         $this->assertFalse($second->audio()->isDefault());
         $this->assertFalse($second->audio()->isForced());
 
-        foreach ([
-            fn () => $retained->video('copy'),
-            fn () => $retained->streamMetadata('a', 'language', 'eng'),
-            fn () => $retained->disposition('a', 'default'),
-        ] as $attempt) {
-            try {
-                $attempt();
-                $this->fail('A retained output must be frozen when execution starts.');
-            } catch (\LogicException) {
-                $this->addToAssertionCount(1);
-            }
-        }
+        $this->assertThrows(fn () => $retained->video('copy'), LogicException::class);
+        $this->assertThrows(fn () => $retained->streamMetadata('a', 'language', 'eng'), LogicException::class);
+        $this->assertThrows(fn () => $retained->disposition('a', 'default'), LogicException::class);
     }
 
     public function test_real_fonts_and_literal_text_render_without_filter_or_percent_expansion(): void
@@ -993,15 +965,12 @@ class CompositionTest extends TestCase
         $this->useRealFFMpeg();
         $media = FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'));
 
-        try {
-            // split has an unlabeled second pad. FFmpeg silently adds it to output zero.
-            $media->export()->filterComplex('[0:v]split=2[named]')->map('[named]')->video('ffv1')->toDisk('memory')->save('unexpected.mkv');
-            $this->fail('The unmapped graph pad was published.');
-        } catch (MediaException $exception) {
-            $this->assertSame('validation', $exception->phase);
-            $this->assertSame('mapping', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('unexpected.mkv'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        // split has an unlabeled second pad. FFmpeg silently adds it to output zero.
+        $this->assertThrows(
+            fn () => $media->export()->filterComplex('[0:v]split=2[named]')->map('[named]')->video('ffv1')->toDisk('memory')->save('unexpected.mkv'),
+            fn (MediaException $exception) => $exception->phase === 'validation' && $exception->category === 'mapping',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('unexpected.mkv'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

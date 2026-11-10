@@ -230,12 +230,7 @@ class FilterHelpersTest extends TestCase
             $attempts[] = fn () => $media->export()->output('one.mkv', fn () => null)->{$method}(...$arguments);
         }
         foreach ($attempts as $attempt) {
-            try {
-                $attempt();
-                $this->fail('Invalid helper configuration was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
+            $this->assertThrows($attempt, InvalidArgumentException::class);
         }
         Process::assertNothingRan();
     }

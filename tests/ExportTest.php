@@ -372,12 +372,10 @@ class ExportTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
 
         $this->fakePipeline();
-        try {
-            $media->frame(at: 1)->save('invalid.png');
-            $this->fail('Non-image output must not be published.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
-        }
+        $this->assertThrows(
+            fn () => $media->frame(at: 1)->save('invalid.png'),
+            fn (MediaException $exception) => $exception->phase === 'validation' && $exception->category === 'artifact',
+        );
         $this->assertFalse(Storage::disk('memory')->exists('invalid.png'));
         $this->assertWorkspacesAreCleanedUp();
 
@@ -389,12 +387,10 @@ class ExportTest extends TestCase
                 $this->addToAssertionCount(1);
             }
         }
-        try {
-            $media->frame(at: 0)->save('frame.mp4');
-            $this->fail('A non-image destination was accepted.');
-        } catch (InvalidArgumentException) {
-            $this->addToAssertionCount(1);
-        }
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $media->frame(at: 0)->save('frame.mp4');
     }
 
     public function test_real_frames_sample_after_the_timestamp_and_return_or_publish_images(): void
@@ -439,12 +435,10 @@ class ExportTest extends TestCase
         $image = imagecreatefromstring($first);
         $this->assertGreaterThan(200, imagecolorsforindex($image, imagecolorat($image, 48, 32))['red']);
 
-        try {
-            $media->frame(at: 99)->save('beyond-end.jpg');
-            $this->fail('A timestamp beyond the final frame must not publish an empty image.');
-        } catch (MediaException $exception) {
-            $this->assertSame([], $exception->published);
-        }
+        $this->assertThrows(
+            fn () => $media->frame(at: 99)->save('beyond-end.jpg'),
+            fn (MediaException $exception) => $exception->published === [],
+        );
         $this->assertFalse(Storage::disk('memory')->exists('beyond-end.jpg'));
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -483,12 +477,10 @@ class ExportTest extends TestCase
         Process::assertNothingRan();
 
         $this->fakePipeline(metadata: '{"format":{},"streams":[{"index":0,"codec_type":"video"}]}');
-        try {
-            $media->frames(count: 2)->save('unknown-%d.png');
-            $this->fail('Count sampling requires a known duration.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['probing', 'metadata'], [$exception->phase, $exception->category]);
-        }
+        $this->assertThrows(
+            fn () => $media->frames(count: 2)->save('unknown-%d.png'),
+            fn (MediaException $exception) => $exception->phase === 'probing' && $exception->category === 'metadata',
+        );
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -533,15 +525,14 @@ class ExportTest extends TestCase
         $destination->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $path === 'partial/02.png' ? false : $storage->put($path, $stream, $options));
         $destination->shouldReceive('size')->andReturnUsing(fn ($path) => $storage->size($path));
 
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->frames(count: 2)
-                ->toDisk($destination)->save('partial/%02d.png');
-            $this->fail('A failed sequence upload must not complete.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
-            $this->assertSame([['disk' => null, 'path' => 'partial/01.png']], $exception->published);
-            $this->assertSame(['disk' => null, 'path' => 'partial/02.png'], $exception->destination);
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->frames(count: 2)
+                ->toDisk($destination)->save('partial/%02d.png'),
+            fn (MediaException $exception) => $exception->phase === 'publication'
+                && $exception->category === 'transfer'
+                && $exception->published === [['disk' => null, 'path' => 'partial/01.png']]
+                && $exception->destination === ['disk' => null, 'path' => 'partial/02.png'],
+        );
         $this->assertSame($image, $storage->get('partial/01.png'));
         $this->assertFalse($storage->exists('partial/02.png'));
         $this->assertWorkspacesAreCleanedUp();
@@ -612,12 +603,10 @@ class ExportTest extends TestCase
         Process::assertNothingRan();
 
         $this->fakePipeline(metadata: '{"format":{"duration":"1"},"streams":[{"index":0,"codec_type":"audio"}]}');
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->export()->video('libx264', bitrate: '150k')->twoPass()->save('audio.mp4');
-            $this->fail('An audio-only selection cannot produce video pass statistics.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['probing', 'mapping'], [$exception->phase, $exception->category]);
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->video('libx264', bitrate: '150k')->twoPass()->save('audio.mp4'),
+            fn (MediaException $exception) => $exception->phase === 'probing' && $exception->category === 'mapping',
+        );
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -745,12 +734,10 @@ class ExportTest extends TestCase
         Process::assertNothingRan();
 
         $this->fakePipeline();
-        try {
-            $media->waveform()->save('invalid-wave.png');
-            $this->fail('Invalid waveform image bytes must not publish.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
-        }
+        $this->assertThrows(
+            fn () => $media->waveform()->save('invalid-wave.png'),
+            fn (MediaException $exception) => $exception->phase === 'validation' && $exception->category === 'artifact',
+        );
         $this->assertFalse(Storage::disk('memory')->exists('invalid-wave.png'));
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -816,12 +803,10 @@ class ExportTest extends TestCase
         }
 
         $expiration = now()->addMinutes(5);
-        try {
-            $file->temporaryUrl($expiration);
-            $this->fail('Unsupported temporary URLs must not fall back to public URLs.');
-        } catch (RuntimeException $exception) {
-            $this->assertSame('This driver does not support creating temporary URLs.', $exception->getMessage());
-        }
+        $this->assertThrows(
+            fn () => $file->temporaryUrl($expiration),
+            fn (RuntimeException $exception) => $exception->getMessage() === 'This driver does not support creating temporary URLs.',
+        );
 
         $arguments = null;
         $filesystem->buildTemporaryUrlsUsing(function ($path, $expires, $options) use (&$arguments) {
@@ -919,14 +904,12 @@ class ExportTest extends TestCase
         $this->assertContains('encoding', $phases);
         $this->assertSame('encoded media', Storage::disk('memory')->get('disabled.mp4'));
         $failure = new RuntimeException('Application callback failure');
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->export()->onProgress(function () use ($failure) {
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->onProgress(function () use ($failure) {
                 throw $failure;
-            })->save('failed.mp4');
-            $this->fail('Callback failure must still propagate with events disabled.');
-        } catch (RuntimeException $exception) {
-            $this->assertSame($failure, $exception);
-        }
+            })->save('failed.mp4'),
+            fn (RuntimeException $exception) => $exception === $failure,
+        );
         $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
         Event::assertNothingDispatched();
         $this->assertWorkspacesAreCleanedUp();
@@ -942,12 +925,11 @@ class ExportTest extends TestCase
             }
         });
 
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->export()->save('cancelled.mp4');
-            $this->fail('A global listener must be able to cancel an export.');
-        } catch (ExportCancelled $exception) {
-            $this->assertSame($cancelled, $exception);
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->save('cancelled.mp4'),
+            fn (ExportCancelled $exception) => $exception === $cancelled,
+        );
+
         Event::assertDispatched(Events\ExportCancelled::class);
         Event::assertNotDispatched(Events\ExportCompleted::class);
         $this->assertFalse(Storage::disk('memory')->exists('cancelled.mp4'));
@@ -1009,17 +991,16 @@ class ExportTest extends TestCase
     {
         $this->fakePipeline(fn () => Process::result(errorOutput: 'encoder rejected the input', exitCode: 7));
 
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->export()->save('failed.mp4');
-            $this->fail('A nonzero encode must not complete.');
-        } catch (MediaException $exception) {
-            $this->assertSame('encoding', $exception->phase);
-            $this->assertStringContainsString('encoder rejected', $exception->diagnostics);
-            $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
-            $this->assertWorkspacesAreCleanedUp();
-            Event::assertDispatched(Events\ExportFailed::class, fn ($event) => $event->phase === 'encoding');
-            Event::assertNotDispatched(Events\ExportCompleted::class);
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->save('failed.mp4'),
+            fn (MediaException $exception) => $exception->phase === 'encoding'
+                && str_contains($exception->diagnostics, 'encoder rejected'),
+        );
+
+        $this->assertFalse(Storage::disk('memory')->exists('failed.mp4'));
+        $this->assertWorkspacesAreCleanedUp();
+        Event::assertDispatched(Events\ExportFailed::class, fn ($event) => $event->phase === 'encoding');
+        Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
     public function test_destination_options_merge_and_the_last_explicit_visibility_wins(): void
@@ -1051,18 +1032,17 @@ class ExportTest extends TestCase
         $disk = Mockery::mock(Filesystem::class);
         $disk->shouldReceive('put')->with('failed.mp4', Mockery::type('resource'), ['visibility' => 'private', 'ContentType' => 'video/mp4'])->andReturn(false);
 
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->export()
-                ->toDisk($disk, ['visibility' => 'private', 'ContentType' => 'video/mp4'])->save('failed.mp4');
-            $this->fail('A false Storage write must not complete.');
-        } catch (MediaException $exception) {
-            $this->assertSame('publication', $exception->phase);
-            $this->assertSame(['disk' => null, 'path' => 'failed.mp4'], $exception->destination);
-            $this->assertSame([], $exception->published);
-            $this->assertNull($exception->getPrevious());
-            $this->assertWorkspacesAreCleanedUp();
-            Event::assertNotDispatched(Events\ExportCompleted::class);
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()
+                ->toDisk($disk, ['visibility' => 'private', 'ContentType' => 'video/mp4'])->save('failed.mp4'),
+            fn (MediaException $exception) => $exception->phase === 'publication'
+                && $exception->destination === ['disk' => null, 'path' => 'failed.mp4']
+                && $exception->published === []
+                && $exception->getPrevious() === null,
+        );
+
+        $this->assertWorkspacesAreCleanedUp();
+        Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
     public function test_incomplete_publication_identifies_the_object_already_written(): void
@@ -1072,16 +1052,16 @@ class ExportTest extends TestCase
         $disk->shouldReceive('put')->andReturn(true);
         $disk->shouldReceive('size')->with('partial.mp4')->andReturn(4);
 
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->export()->toDisk($disk)->save('partial.mp4');
-            $this->fail('An incomplete upload must not complete.');
-        } catch (MediaException $exception) {
-            $this->assertSame('publication', $exception->phase);
-            $this->assertSame([['disk' => null, 'path' => 'partial.mp4']], $exception->published);
-            $this->assertWorkspacesAreCleanedUp();
-            Event::assertDispatched(Events\ExportFailed::class, fn ($event) => $event->published === $exception->published);
-            Event::assertNotDispatched(Events\ExportCompleted::class);
-        }
+        $published = [['disk' => null, 'path' => 'partial.mp4']];
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->toDisk($disk)->save('partial.mp4'),
+            fn (MediaException $exception) => $exception->phase === 'publication' && $exception->published === $published,
+        );
+
+        $this->assertWorkspacesAreCleanedUp();
+        Event::assertDispatched(Events\ExportFailed::class, fn ($event) => $event->published === $published);
+        Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
     #[DataProvider('callbackFailures')]
@@ -1101,21 +1081,20 @@ class ExportTest extends TestCase
         config(['laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg, 'laravel-ffmpeg.ffprobe.binaries' => $ffprobe]);
         $original = new $class('Stop this export');
 
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->export()->onProgress(function (Progress $progress) use ($original) {
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->onProgress(function (Progress $progress) use ($original) {
                 if ($progress->elapsedSeconds !== null) {
                     throw $original;
                 }
-            })->save('cancelled.mp4');
-            $this->fail('The callback exception must propagate.');
-        } catch (RuntimeException $exception) {
-            $this->assertSame($original, $exception);
-            $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
-            $this->assertFalse(Storage::disk('memory')->exists('cancelled.mp4'));
-            $this->assertWorkspacesAreCleanedUp();
-            Event::assertDispatched($class === ExportCancelled::class ? Events\ExportCancelled::class : Events\ExportFailed::class);
-            Event::assertNotDispatched(Events\ExportCompleted::class);
-        }
+            })->save('cancelled.mp4'),
+            fn (RuntimeException $exception) => $exception === $original,
+        );
+
+        $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
+        $this->assertFalse(Storage::disk('memory')->exists('cancelled.mp4'));
+        $this->assertWorkspacesAreCleanedUp();
+        Event::assertDispatched($class === ExportCancelled::class ? Events\ExportCancelled::class : Events\ExportFailed::class);
+        Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
     public static function callbackFailures(): array
@@ -1208,14 +1187,12 @@ class ExportTest extends TestCase
         $this->assertTrue(Process::run([$ffmpeg, '-v', 'error', '-xerror', '-i', $local->path('clips/trimmed.mp4'), '-f', 'null', '-'])->successful());
         $this->assertSame($original, Storage::disk('memory')->get('fixture.mkv'));
 
-        try {
-            $media->export()->map('0:s:0?')->save('unexpected.mp4');
-            $this->fail('An absent optional subtitle must not auto-select video/audio.');
-        } catch (MediaException $exception) {
-            $this->assertSame('mapping', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('unexpected.mp4'));
-        }
+        $this->assertThrows(
+            fn () => $media->export()->map('0:s:0?')->save('unexpected.mp4'),
+            fn (MediaException $exception) => $exception->category === 'mapping',
+        );
 
+        $this->assertFalse(Storage::disk('memory')->exists('unexpected.mp4'));
         $this->assertWorkspacesAreCleanedUp();
     }
 }

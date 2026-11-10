@@ -123,13 +123,11 @@ class ConcatTest extends TestCase
         $this->assertTrue(Storage::disk('memory')->exists('transcoded-default.mp4'));
 
         $different = FFMpeg::disk()->open(new File($this->root.'/2.mp4'));
-        try {
-            $first->concat($different)->export()->video('copy')->toDisk('memory')->save('mismatch.mp4');
-            $this->fail('Incompatible geometry was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('concat', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('mismatch.mp4'));
-        }
+        $this->assertThrows(
+            fn () => $first->concat($different)->export()->video('copy')->toDisk('memory')->save('mismatch.mp4'),
+            fn (MediaException $exception) => $exception->category === 'concat',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('mismatch.mp4'));
 
         $first->concatTranscoded($different)->conformVideo(128, 96, 10)->withoutAudio()
             ->video('libx264', crf: 20)
@@ -148,14 +146,12 @@ class ConcatTest extends TestCase
             ->map('[joined]')->video('libx264')->withoutMetadata(chapters: true)
             ->toDisk('memory')->save('raw.mp4');
 
-        try {
-            $first->concatTranscoded($different)->conformVideo(128, 96, 10)->conformAudio()
-                ->toDisk('memory')->save('missing-audio.mp4');
-            $this->fail('Missing audio was silently accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('mapping', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('missing-audio.mp4'));
-        }
+        $this->assertThrows(
+            fn () => $first->concatTranscoded($different)->conformVideo(128, 96, 10)->conformAudio()
+                ->toDisk('memory')->save('missing-audio.mp4'),
+            fn (MediaException $exception) => $exception->category === 'mapping',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('missing-audio.mp4'));
 
         foreach ([$copy, $normalized] as $media) {
             foreach ([[0.2, 'red'], [1.0, 'blue']] as [$at, $channel]) {
@@ -190,15 +186,14 @@ class ConcatTest extends TestCase
         $this->assertEqualsWithDelta(6554, unpack('v', substr($decoded->output(), 200, 2))[1], 1);
         $this->assertEqualsWithDelta(22938, unpack('v', substr($decoded->output(), 8000, 2))[1], 1);
 
-        try {
-            $first->concat(FFMpeg::disk()->open(new File($this->root.'/2.wav')))
-                ->export()->audio('copy')->toDisk('memory')->save('mismatch.wav');
-            $this->fail('A different channel layout was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('concat', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('mismatch.wav'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => $first->concat(FFMpeg::disk()->open(new File($this->root.'/2.wav')))
+                ->export()->audio('copy')->toDisk('memory')->save('mismatch.wav'),
+            fn (MediaException $exception) => $exception->category === 'concat',
+        );
+
+        $this->assertFalse(Storage::disk('memory')->exists('mismatch.wav'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_normalized_concat_preserves_audio_delays_across_different_inputs(): void
@@ -261,14 +256,12 @@ class ConcatTest extends TestCase
         $this->assertSame(2, $stereo->channels());
         $this->assertSame(48000, $stereo->sampleRate());
 
-        try {
-            $first->concatTranscoded($second)->conformVideo(128, 96, 10)->conformAudio(channel: 1)
-                ->toDisk('memory')->save('invalid-channel.mov');
-            $this->fail('A missing selected channel was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('mapping', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('invalid-channel.mov'));
-        }
+        $this->assertThrows(
+            fn () => $first->concatTranscoded($second)->conformVideo(128, 96, 10)->conformAudio(channel: 1)
+                ->toDisk('memory')->save('invalid-channel.mov'),
+            fn (MediaException $exception) => $exception->category === 'mapping',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('invalid-channel.mov'));
 
         $this->assertSame($hashes, [hash_file('sha256', $this->root.'/0.mov'), hash_file('sha256', $this->root.'/1.mov')]);
         $this->assertWorkspacesAreCleanedUp();
@@ -300,36 +293,30 @@ class ConcatTest extends TestCase
 
         $shifted = Process::run([$binary, '-v', 'error', '-i', $this->root.'/0.mov', '-c', 'copy', '-output_ts_offset', '1', $this->root.'/late.mov']);
         $this->assertProcessSucceeded($shifted);
-        try {
-            $first->concat(FFMpeg::disk()->open(new File($this->root.'/late.mov')))
-                ->export()->video('copy')->audio('copy')->toDisk('memory')->save('late.mov');
-            $this->fail('A nonzero presentation origin was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('metadata', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('late.mov'));
-        }
+        $this->assertThrows(
+            fn () => $first->concat(FFMpeg::disk()->open(new File($this->root.'/late.mov')))
+                ->export()->video('copy')->audio('copy')->toDisk('memory')->save('late.mov'),
+            fn (MediaException $exception) => $exception->category === 'metadata',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('late.mov'));
 
-        try {
-            $first->concatTranscoded(FFMpeg::disk()->open(new File($this->root.'/late.mov')))
-                ->conformVideo(128, 96, 10)->conformAudio()->toDisk('memory')->save('late-normalized.mov');
-            $this->fail('Transcoded concat accepted a nonzero presentation origin.');
-        } catch (MediaException $exception) {
-            $this->assertSame('metadata', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('late-normalized.mov'));
-        }
+        $this->assertThrows(
+            fn () => $first->concatTranscoded(FFMpeg::disk()->open(new File($this->root.'/late.mov')))
+                ->conformVideo(128, 96, 10)->conformAudio()->toDisk('memory')->save('late-normalized.mov'),
+            fn (MediaException $exception) => $exception->category === 'metadata',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('late-normalized.mov'));
 
         // Every video track is checked, not only the first.
         $tracks = Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'color=red:size=64x48:rate=10:duration=1',
             '-itsoffset', '1', '-f', 'lavfi', '-i', 'color=blue:size=64x48:rate=10:duration=1', '-f', 'lavfi', '-i', 'sine=sample_rate=48000:duration=1',
             '-map', '0:v', '-map', '1:v', '-map', '2:a', '-c:v', 'ffv1', '-c:a', 'pcm_s16le', $this->root.'/late-second-track.mkv']);
         $this->assertProcessSucceeded($tracks);
-        try {
-            $first->concatTranscoded(FFMpeg::disk()->open(new File($this->root.'/late-second-track.mkv')))
-                ->conformVideo(128, 96, 10)->conformAudio()->toDisk('memory')->save('late-track.mov');
-            $this->fail('Transcoded concat accepted a late second video track.');
-        } catch (MediaException $exception) {
-            $this->assertSame('metadata', $exception->category);
-        }
+        $this->assertThrows(
+            fn () => $first->concatTranscoded(FFMpeg::disk()->open(new File($this->root.'/late-second-track.mkv')))
+                ->conformVideo(128, 96, 10)->conformAudio()->toDisk('memory')->save('late-track.mov'),
+            fn (MediaException $exception) => $exception->category === 'metadata',
+        );
 
         $this->assertWorkspacesAreCleanedUp();
     }

@@ -38,14 +38,11 @@ class ExecutionPolicyTest extends TestCase
     {
         $this->binaries(probeDelay: 80000);
         $media = FFMpeg::disk('memory')->open('source.mp4');
-        try {
-            $media->export()->timeout(0.18)->save('limited.mp4');
-            $this->fail('The cumulative probing budget must expire.');
-        } catch (MediaException $exception) {
-            $this->assertSame('timeout', $exception->category);
-            $this->assertSame('probing', $exception->phase);
-            $this->assertFalse(Storage::disk('memory')->exists('limited.mp4'));
-        }
+        $this->assertThrows(
+            fn () => $media->export()->timeout(0.18)->save('limited.mp4'),
+            fn (MediaException $exception) => $exception->category === 'timeout' && $exception->phase === 'probing',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('limited.mp4'));
         $result = $media->export()->save('normal.mp4');
         $this->assertSame('normal.mp4', $result->file()->path);
         $this->assertSame('encoded', Storage::disk('memory')->get('normal.mp4'));
@@ -63,18 +60,15 @@ class ExecutionPolicyTest extends TestCase
         $pid = $this->root.'/pid';
         $this->binaries('file_put_contents('.var_export($pid, true).', getmypid()); '
             .'for ($i = 0; $i < 100; $i++) { '.($active ? 'echo "out_time_us=1000\nprogress=continue\n"; flush();' : '').' usleep(30000); }', probeDelay: 100000);
-        try {
-            // Allow preflight process startup before testing encoder termination.
-            FFMpeg::disk('memory')->open('source.mp4')->export()->{$method}(2)->save('late.mp4');
-            $this->fail('The encoder must not outlive its deadline.');
-        } catch (MediaException $exception) {
-            $this->assertSame('timeout', $exception->category);
-            $this->assertSame('encoding', $exception->phase);
-            $this->assertFileExists($pid);
-            $this->assertFalse(posix_kill((int) file_get_contents($pid), 0));
-            $this->assertFalse(Storage::disk('memory')->exists('late.mp4'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        // Allow preflight process startup before testing encoder termination.
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->{$method}(2)->save('late.mp4'),
+            fn (MediaException $exception) => $exception->category === 'timeout' && $exception->phase === 'encoding',
+        );
+        $this->assertFileExists($pid);
+        $this->assertFalse(posix_kill((int) file_get_contents($pid), 0));
+        $this->assertFalse(Storage::disk('memory')->exists('late.mp4'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_resetting_limits_restores_configuration_and_queue_plans_capture_limits(): void
@@ -84,14 +78,12 @@ class ExecutionPolicyTest extends TestCase
         $job = unserialize(serialize($export->queued()->job('queued.mp4')));
         $export->timeout(null)->idleTimeout(0.01)->idleTimeout(null)->save('normal.mp4');
         $this->assertSame('encoded', Storage::disk('memory')->get('normal.mp4'));
-        try {
-            $job->handle();
-            $this->fail('The queued snapshot must retain its shorter deadline.');
-        } catch (MediaException $exception) {
-            $this->assertSame('timeout', $exception->category);
-            $this->assertFalse(Storage::disk('memory')->exists('queued.mp4'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => $job->handle(),
+            fn (MediaException $exception) => $exception->category === 'timeout',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('queued.mp4'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_global_process_limits_still_cap_a_longer_operation_budget(): void
@@ -106,12 +98,11 @@ class ExecutionPolicyTest extends TestCase
     {
         foreach (['timeout', 'idleTimeout'] as $method) {
             foreach ([0, -1, INF, NAN] as $seconds) {
-                try {
-                    FFMpeg::disk('missing')->open('source.mp4')->export()->{$method}($seconds);
-                    $this->fail('Invalid deadlines must be rejected.');
-                } catch (InvalidArgumentException) {
-                    $this->assertWorkspacesAreCleanedUp();
-                }
+                $this->assertThrows(
+                    fn () => FFMpeg::disk('missing')->open('source.mp4')->export()->{$method}($seconds),
+                    InvalidArgumentException::class,
+                );
+                $this->assertWorkspacesAreCleanedUp();
             }
         }
     }
@@ -138,33 +129,29 @@ class ExecutionPolicyTest extends TestCase
     public function test_cancellation_during_analysis_reports_the_analysis_phase(): void
     {
         $this->binaries();
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->gif()->onProgress(function ($progress) {
-                if ($progress->phase === 'analysis') {
-                    throw new ExportCancelled;
-                }
-            })->save('out.gif');
-            $this->fail('The analysis callback must cancel the export.');
-        } catch (ExportCancelled) {
-            Event::assertDispatched(\ProtoneMedia\LaravelFFMpeg\Events\ExportCancelled::class, fn ($event) => $event->phase === 'analysis');
-        }
+        $this->assertThrows(fn () => FFMpeg::disk('memory')->open('source.mp4')->gif()->onProgress(function ($progress) {
+            if ($progress->phase === 'analysis') {
+                throw new ExportCancelled;
+            }
+        })->save('out.gif'), ExportCancelled::class);
+        Event::assertDispatched(\ProtoneMedia\LaravelFFMpeg\Events\ExportCancelled::class, fn ($event) => $event->phase === 'analysis');
     }
 
     public function test_invalid_progress_during_analysis_reports_the_analysis_phase(): void
     {
         $this->binaries('if (in_array("gif-prepared.nut", $argv, true)) { echo str_repeat("x", 9000); exit; }');
         $phases = [];
-        try {
-            FFMpeg::disk('memory')->open('source.mp4')->gif()
-                ->onProgress(function ($progress) use (&$phases) {
-                    $phases[] = $progress->phase;
-                })->save('out.gif');
-            $this->fail('An oversized progress record must fail the analysis pass.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['analysis', 'progress'], [$exception->phase, $exception->category]);
-            $this->assertContains('analysis', $phases);
-            $this->assertNotContains('encoding', $phases);
-            Event::assertDispatched(ExportFailed::class, fn ($event) => $event->phase === 'analysis');
-        }
+        $this->assertThrows(
+            function () use (&$phases) {
+                FFMpeg::disk('memory')->open('source.mp4')->gif()
+                    ->onProgress(function ($progress) use (&$phases) {
+                        $phases[] = $progress->phase;
+                    })->save('out.gif');
+            },
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['analysis', 'progress'],
+        );
+        $this->assertContains('analysis', $phases);
+        $this->assertNotContains('encoding', $phases);
+        Event::assertDispatched(ExportFailed::class, fn ($event) => $event->phase === 'analysis');
     }
 }

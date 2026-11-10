@@ -209,15 +209,16 @@ class HlsSelectionTest extends TestCase
         }
         $adapter = new ReadOnlyFilesystemAdapter($disk->getAdapter());
         Storage::set('selection', new FilesystemAdapter(new Filesystem($adapter), $adapter));
-        try {
+        $this->assertThrows(function () use ($first, $second) {
             FFMpeg::mergeHls(['one' => $first, 'two' => $second])->save('catalog/master.m3u8');
-            $this->fail('Read-only storage accepted a composed master.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
             $this->assertSame('selection', $exception->destination['disk']);
             $this->assertMatchesRegularExpression('~^catalog/master\.[a-f0-9]{32}\.m3u8$~', $exception->destination['path']);
             $this->assertSame([], $exception->published);
-        }
+
+            return true;
+        });
         $this->assertSame(array_keys($before), $disk->allFiles());
         foreach ($before as $path => $hash) {
             $this->assertSame($hash, hash('sha256', $disk->get($path)));
@@ -228,12 +229,12 @@ class HlsSelectionTest extends TestCase
     {
         $presentation = $this->export('original')->playback();
         foreach ([[], ['small', 'small'], ['unknown'], [123]] as $names) {
-            try {
-                $presentation->playbackForVariants($names);
-                $this->fail('Invalid selection was accepted.');
-            } catch (InvalidArgumentException|ItemNotFoundException $exception) {
+            $this->assertThrows(fn () => $presentation->playbackForVariants($names), function (\Throwable $exception) {
+                $this->assertTrue($exception instanceof InvalidArgumentException || $exception instanceof ItemNotFoundException);
                 $this->assertNotEmpty($exception->getMessage());
-            }
+
+                return true;
+            });
         }
         $this->expectException(ItemNotFoundException::class);
         $presentation->playbackForVariants(['small'])->playbackForVariants(['large']);
@@ -255,39 +256,31 @@ class HlsSelectionTest extends TestCase
         $disk = Storage::disk('selection');
         $before = $disk->allFiles();
         foreach ([[$first, $first], [$first, $badClock], [$first, $noProvenance], [$first, $badPath], [$first, $second]] as $inputs) {
-            try {
-                (new PendingHlsMerge($inputs))->save('catalog/master.m3u8');
-                $this->fail('Invalid composition was accepted.');
-            } catch (InvalidArgumentException $exception) {
+            $this->assertThrows(fn () => (new PendingHlsMerge($inputs))->save('catalog/master.m3u8'), function (InvalidArgumentException $exception) {
                 $this->assertNotEmpty($exception->getMessage());
-            }
+
+                return true;
+            });
             $this->assertSame($before, $disk->allFiles());
         }
-        try {
+        $this->assertThrows(function () use ($first, $second) {
             (new PendingHlsMerge(['one' => $first, 'two' => $second]))->save('first/small/segment-00000000.ts/master.m3u8');
-            $this->fail('An artifact-prefix destination was accepted.');
-        } catch (InvalidArgumentException $exception) {
-            $this->assertStringContainsString('prefix', $exception->getMessage());
-        }
+        }, InvalidArgumentException::class, 'prefix');
         $this->assertSame($before, $disk->allFiles());
         // A master that references a file outside its inventory is invalid input, not an HTTP 404.
         $master = collect($first['files'])->firstWhere('role', 'hls-master')['path'];
         $original = $disk->get($master);
         $disk->put($master, rtrim($original, "\n")."\n#EXT-X-STREAM-INF:BANDWIDTH=1\nmissing/index.m3u8\n");
-        try {
+        $this->assertThrows(function () use ($first, $second) {
             (new PendingHlsMerge(['one' => $first, 'two' => $second]))->save('catalog/master.m3u8');
-            $this->fail('A master with an unowned reference was accepted.');
-        } catch (InvalidArgumentException $exception) {
+        }, function (InvalidArgumentException $exception) {
             $this->assertInstanceOf(ItemNotFoundException::class, $exception->getPrevious());
-        }
+
+            return true;
+        });
         $disk->put($master, $original);
         $this->assertSame($before, $disk->allFiles());
-        try {
-            HlsPresentation::fromArray($first)->file('unknown');
-            $this->fail('An unknown resource was returned.');
-        } catch (ItemNotFoundException) {
-            $this->addToAssertionCount(1);
-        }
+        $this->assertThrows(fn () => HlsPresentation::fromArray($first)->file('unknown'), ItemNotFoundException::class);
         $disk->delete('second/small/segment-00000000.ts');
         $this->expectException(InvalidArgumentException::class);
         (new PendingHlsMerge(['one' => $first, 'two' => $second]))->save('catalog/master.m3u8');
@@ -305,12 +298,11 @@ class HlsSelectionTest extends TestCase
         foreach ($exports as $index => $export) {
             $second = $export->save('incompatible-'.$index.'/master.m3u8');
             $before = Storage::disk('selection')->allFiles();
-            try {
-                (new PendingHlsMerge([$first, $second]))->save('catalog/master.m3u8');
-                $this->fail('Incompatible native export was accepted.');
-            } catch (InvalidArgumentException $exception) {
+            $this->assertThrows(fn () => (new PendingHlsMerge([$first, $second]))->save('catalog/master.m3u8'), function (InvalidArgumentException $exception) {
                 $this->assertNotEmpty($exception->getMessage());
-            }
+
+                return true;
+            });
             $this->assertSame($before, Storage::disk('selection')->allFiles());
         }
     }

@@ -138,12 +138,7 @@ class IntegrationRecipeTest extends TestCase
     {
         $job = $this->request();
         DB::unprepared("CREATE TRIGGER recipe_fail BEFORE UPDATE ON recipe_media BEGIN SELECT RAISE(ABORT, 'persistence unavailable'); END");
-        try {
-            $job->handle();
-            $this->fail('Persistence failure must propagate.');
-        } catch (QueryException $exception) {
-            $this->assertStringContainsString('persistence unavailable', $exception->getMessage());
-        }
+        $this->assertThrows(fn () => $job->handle(), QueryException::class, 'persistence unavailable');
         $this->assertSame('pending', DB::table('recipe_conversions')->sole()->status);
         $this->assertNull(DB::table('recipe_conversions')->sole()->inventory);
         $this->assertNull(DB::table('recipe_media')->sole()->published_export_id);

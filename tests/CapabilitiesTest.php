@@ -83,13 +83,12 @@ class CapabilitiesTest extends TestCase
     {
         foreach (['9.0.1', '8.0.2'] as $version) {
             $this->fakeCapabilities(probeVersion: $version);
-            try {
-                new Capabilities;
-                $this->fail('Expected version failure.');
-            } catch (MediaException $exception) {
+            $this->assertThrows(fn () => new Capabilities, function (MediaException $exception) {
                 $this->assertSame('version', $exception->category);
                 $this->assertSame('', $exception->diagnostics);
-            }
+
+                return true;
+            });
             $this->assertWorkspacesAreCleanedUp();
         }
     }

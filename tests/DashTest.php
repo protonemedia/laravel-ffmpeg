@@ -200,14 +200,10 @@ class DashTest extends TestCase
                 throw new ExportCancelled;
             }
         });
-        try {
-            $export->save('cancel/manifest.mpd');
-            $this->fail('Expected cancellation.');
-        } catch (ExportCancelled) {
-            $this->assertSame([], Storage::disk('local')->allFiles('cancel'));
-            Event::assertDispatched(Events\ExportCancelled::class);
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(fn () => $export->save('cancel/manifest.mpd'), ExportCancelled::class);
+        $this->assertSame([], Storage::disk('local')->allFiles('cancel'));
+        Event::assertDispatched(Events\ExportCancelled::class);
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_partial_publication_reports_exact_children_and_never_publishes_the_manifest(): void
@@ -226,30 +222,28 @@ class DashTest extends TestCase
         $disk->shouldReceive('size')->andReturnUsing(function ($path) use (&$writes) {
             return $writes[$path];
         });
-        try {
-            $export->toDisk($disk)->save('partial/manifest.mpd');
-            $this->fail('Expected publication failure.');
-        } catch (MediaException $e) {
-            $this->assertSame(Progress::PUBLICATION, $e->phase);
-            $this->assertCount(2, $e->published);
-            $this->assertSame(array_keys($writes), array_column($e->published, 'path'));
-            $this->assertSame('partial/low/segment-00000002.m4s', $e->destination['path']);
-            Event::assertDispatched(Events\ExportFailed::class);
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(fn () => $export->toDisk($disk)->save('partial/manifest.mpd'), function (MediaException $exception) use (&$writes) {
+            $this->assertSame(Progress::PUBLICATION, $exception->phase);
+            $this->assertCount(2, $exception->published);
+            $this->assertSame(array_keys($writes), array_column($exception->published, 'path'));
+            $this->assertSame('partial/low/segment-00000002.m4s', $exception->destination['path']);
+
+            return true;
+        });
+        Event::assertDispatched(Events\ExportFailed::class);
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_wrong_stream_mapping_fails_before_encoding(): void
     {
         $export = (new PendingDashExport($this->source(), 'local', 1))->adaptationSet('v', 'video')
             ->representation('wrong', 'v', fn ($r) => $r->map('0:a:0'));
-        try {
-            $export->save('bad/manifest.mpd');
-            $this->fail('Expected mapping failure.');
-        } catch (MediaException $e) {
-            $this->assertSame('mapping', $e->category);
-            $this->assertSame([], Storage::disk('local')->allFiles('bad'));
-        }
+        $this->assertThrows(fn () => $export->save('bad/manifest.mpd'), function (MediaException $exception) {
+            $this->assertSame('mapping', $exception->category);
+
+            return true;
+        });
+        $this->assertSame([], Storage::disk('local')->allFiles('bad'));
     }
 
     public static function streamTypes(): array
@@ -279,16 +273,15 @@ class DashTest extends TestCase
         chmod($wrapper, 0700);
         config(['laravel-ffmpeg.ffmpeg.binaries' => $wrapper]);
         $export = (new PendingDashExport($source, 'local', 0.7))->adaptationSet('video', 'video')->representation('stream', 'video', fn ($r) => $r->map('0:v:0'));
-        try {
-            $export->save('corrupt/manifest.mpd');
-            $this->fail('Expected inventory rejection.');
-        } catch (MediaException $exception) {
+        $this->assertThrows(fn () => $export->save('corrupt/manifest.mpd'), function (MediaException $exception) {
             $this->assertSame(Progress::VALIDATION, $exception->phase);
             $this->assertSame('artifact', $exception->category);
-            $this->assertSame([], Storage::disk('local')->allFiles('corrupt'));
-            Event::assertDispatched(Events\ExportFailed::class);
-            $this->assertWorkspacesAreCleanedUp();
-        }
+
+            return true;
+        });
+        $this->assertSame([], Storage::disk('local')->allFiles('corrupt'));
+        Event::assertDispatched(Events\ExportFailed::class);
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public static function invalidConfigurations(): array

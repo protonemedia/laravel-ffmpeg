@@ -119,12 +119,10 @@ class OutputTracksTest extends TestCase
             fn ($export) => $export->video('libx264'),
             fn ($export) => $export->resize(32),
         ] as $configure) {
-            try {
-                $configure($this->media('source.mp4')->export()->coverArt($this->media('art.png')))->inspect();
-                $this->fail('Ambiguous cover configuration accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
+            $this->assertThrows(
+                fn () => $configure($this->media('source.mp4')->export()->coverArt($this->media('art.png')))->inspect(),
+                InvalidArgumentException::class,
+            );
         }
         $this->expectException(MediaException::class);
         $this->expectExceptionMessage('standalone PNG or JPEG');
@@ -180,15 +178,16 @@ class OutputTracksTest extends TestCase
     public function test_graph_pad_types_defer_missing_video_track_validation_until_before_publication(): void
     {
         $this->fixture();
-        try {
+        $this->assertThrows(function () {
             $this->media('source.mp4')->export()->filterComplex('[0:a:0]anull[audio]')->map('[audio]')
                 ->videoStream(0, fn ($video) => $video->codec('libx264'))->save('no-video.m4a');
-            $this->fail('A nonexistent graph output video track was accepted.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame('validation', $exception->phase);
             $this->assertSame('mapping', $exception->category);
             $this->assertStringContainsString('existing encoded output video tracks', $exception->getMessage());
-        }
+
+            return true;
+        });
         $this->assertFalse(Storage::disk('output-tracks')->exists('no-video.m4a'));
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -196,20 +195,18 @@ class OutputTracksTest extends TestCase
     public function test_rejects_missing_video_track_and_conflicting_rate_control(): void
     {
         $this->fixture();
-        try {
+        $this->assertThrows(function () {
             $this->media('source.mp4')->export()->videoStream(0, fn ($s) => $s->crf(20)->bitrate('100k'))->inspect();
-            $this->fail('Conflicting rate control accepted.');
-        } catch (InvalidArgumentException) {
-            $this->addToAssertionCount(1);
-        }
-        try {
+        }, InvalidArgumentException::class);
+        $this->assertThrows(function () {
             $this->media('source.mp4')->export()->videoStream(1, fn ($s) => $s->codec('libx264'))->save('missing.mp4');
-            $this->fail('A fully known missing video track was accepted.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame('probing', $exception->phase);
             $this->assertSame('mapping', $exception->category);
             $this->assertStringContainsString('existing output video tracks', $exception->getMessage());
-        }
+
+            return true;
+        });
         $this->assertFalse(Storage::disk('output-tracks')->exists('missing.mp4'));
     }
 
@@ -224,12 +221,7 @@ class OutputTracksTest extends TestCase
             fn ($e) => $e->videoStream(0, fn ($s) => $s->codec('copy'))->resize(32)->inspect(),
             fn ($e) => $e->videoStream(0, fn ($s) => $s->codec('libx264'))->videoStream(0, fn ($s) => $s->codec('mpeg4')),
         ] as $configure) {
-            try {
-                $configure($this->media('unopened.mp4')->export());
-                $this->fail('Invalid track configuration accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
+            $this->assertThrows(fn () => $configure($this->media('unopened.mp4')->export()), InvalidArgumentException::class);
         }
     }
 

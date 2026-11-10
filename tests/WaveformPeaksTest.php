@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Tests;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
+use InvalidArgumentException;
 use Mockery;
 use Orchestra\Testbench\Attributes\RequiresEnv;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -142,12 +143,10 @@ class WaveformPeaksTest extends TestCase
         $this->assertSame(16000, $peaks->sampleRate);
         $this->assertSame(5 / 16000, $peaks->duration());
         $this->assertSame([[[-500, -200], [-100, -100]]], $peaks->channels);
-        try {
-            $this->pending($first)->audioTrack(1)->get();
-            $this->fail('Missing track accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('mapping', $exception->category);
-        }
+        $this->assertThrows(
+            fn () => $this->pending($first)->audioTrack(1)->get(),
+            fn (MediaException $exception) => $exception->category === 'mapping',
+        );
         $this->clean();
     }
 
@@ -161,13 +160,11 @@ class WaveformPeaksTest extends TestCase
 
             return is_resource($stream) && json_decode(stream_get_contents($stream), true)['channels'] === [[[-30, 40]]];
         }), [])->andReturn(false);
-        try {
-            $this->pending($media)->toDisk($disk)->save('peaks.json');
-            $this->fail('False publication accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('publication', $exception->phase);
-            $this->assertSame('transfer', $exception->category);
-        }
+        $this->assertThrows(
+            fn () => $this->pending($media)->toDisk($disk)->save('peaks.json'),
+            fn (MediaException $exception) => $exception->phase === 'publication'
+                && $exception->category === 'transfer',
+        );
         $this->assertNotNull($publishedStream);
         $this->assertFalse(is_resource($publishedStream));
         $this->clean();
@@ -175,30 +172,24 @@ class WaveformPeaksTest extends TestCase
 
     public function test_keyframe_clips_are_rejected_before_io(): void
     {
-        try {
-            (new Media('peaks-fixtures', 'missing.wav'))->waveformPeaks()->clip(1, duration: 1, seek: 'keyframe')->inspect();
-            $this->fail('A keyframe clip was accepted.');
-        } catch (\InvalidArgumentException $exception) {
-            $this->assertStringContainsString('accurate clips', $exception->getMessage());
-        }
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('accurate clips');
+
+        (new Media('peaks-fixtures', 'missing.wav'))->waveformPeaks()->clip(1, duration: 1, seek: 'keyframe')->inspect();
     }
 
     public function test_aggregate_memory_is_bounded_and_filter_failures_clean_up(): void
     {
         $media = $this->wav('long.wav', [array_fill(0, 100001, 1)]);
-        try {
-            $this->pending($media, 1)->get();
-            $this->fail('Unbounded bucket count accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('output_limit', $exception->category);
-        }
+        $this->assertThrows(
+            fn () => $this->pending($media, 1)->get(),
+            fn (MediaException $exception) => $exception->category === 'output_limit',
+        );
         $this->assertSame([[[1, 1], [1, 1]]], $this->pending($media)->buckets(2)->get()->channels);
-        try {
-            $this->pending($media)->audioFilter('not_a_real_audio_filter')->get();
-            $this->fail('Invalid filter accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('encoding', $exception->phase);
-        }
+        $this->assertThrows(
+            fn () => $this->pending($media)->audioFilter('not_a_real_audio_filter')->get(),
+            fn (MediaException $exception) => $exception->phase === 'encoding',
+        );
         $this->clean();
     }
 }

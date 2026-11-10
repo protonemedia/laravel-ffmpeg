@@ -30,12 +30,8 @@ class SequenceTest extends TestCase
         $command = $sequence->export()->video('libx264', crf: 23)->inspect();
         $this->assertSame('30000/1001', $command[array_search('-framerate', $command) + 1]);
         $this->assertLessThan(array_search('-i', $command), array_search('-framerate', $command));
-        try {
-            $selector->open('one.png')->concat($sequence);
-            $this->fail('A multi-file input was accepted as a standalone concat input.');
-        } catch (InvalidArgumentException) {
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(fn () => $selector->open('one.png')->concat($sequence), InvalidArgumentException::class);
+        $this->assertWorkspacesAreCleanedUp();
         foreach ([['plain.png', 3, 2.5, 1], ['%d/%d.png', 3, 2.5, 1], ['%03d/photo.png', 3, 2.5, 1],
             ['photo-%s.png', 3, 2.5, 1], ['photo-%d.gif', 3, 2.5, 1], ['/photo-%d.png', 3, 2.5, 1],
             ['photo-%d.png', 0, 2.5, 1], ['photo-%d.png', 3, 2.5, -1], ['photo-%d.png', 3, 2.5, PHP_INT_MAX],
@@ -117,14 +113,12 @@ class SequenceTest extends TestCase
         Storage::disk('memory')->put('photo-0.png', $this->image([255, 0, 0]));
         Storage::disk('memory')->put('photo-1.png', substr($this->image([0, 255, 0]), 0, 33));
         Storage::disk('memory')->put('photo-2.png', $this->image([0, 0, 255]));
-        try {
-            FFMpeg::disk('memory')->openSequence('photo-%d.png', count: 3, framerate: 2, start: 0)
-                ->export()->video('libx264', crf: 23)->save('corrupt.mp4');
-            $this->fail('A timelapse with a missing decoded frame was published.');
-        } catch (MediaException $exception) {
-            $this->assertSame('encoding', $exception->phase);
-            $this->assertFalse(Storage::disk('memory')->exists('corrupt.mp4'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->openSequence('photo-%d.png', count: 3, framerate: 2, start: 0)
+                ->export()->video('libx264', crf: 23)->save('corrupt.mp4'),
+            fn (MediaException $exception) => $exception->phase === 'encoding',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('corrupt.mp4'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

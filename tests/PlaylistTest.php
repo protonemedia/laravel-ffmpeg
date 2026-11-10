@@ -174,14 +174,13 @@ class PlaylistTest extends TestCase
         $disk->put('show/master.m3u8', "#EXTM3U\n#EXTINF:1,\nsafe.ts\n#EXTINF:1,\n{$uri}\n");
         $disk->put('show/safe.ts', 'keep');
         $disk->put('outside.ts', 'keep');
-        try {
-            FFMpeg::disk($disk)->playlist('show/master.m3u8')->deleteAllFiles(function () {
+        $this->assertThrows(
+            fn () => FFMpeg::disk($disk)->playlist('show/master.m3u8')->deleteAllFiles(function () {
                 $this->fail('Approval ran before discovery finished.');
-            });
-            $this->fail('An unsafe reference was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('artifact', $exception->category);
-        }
+            }),
+            fn (MediaException $exception) => $exception->category === 'artifact',
+        );
+
         $this->assertCount(3, $disk->allFiles());
     }
 
@@ -192,14 +191,13 @@ class PlaylistTest extends TestCase
         $disk->put('master.m3u8', "#EXTM3U\n#EXTINF:1,\nsafe.ts\n#EXT-X-STREAM-INF:BANDWIDTH=1\nbad.m3u8\n");
         $disk->put('safe.ts', 'keep');
         $disk->put('bad.m3u8', $contents);
-        try {
-            FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function () {
+        $this->assertThrows(
+            fn () => FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function () {
                 $this->fail('Approval ran before validation finished.');
-            });
-            $this->fail('A malformed child playlist was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('artifact', $exception->category);
-        }
+            }),
+            fn (MediaException $exception) => $exception->category === 'artifact',
+        );
+
         $this->assertCount(3, $disk->allFiles());
     }
 
@@ -247,14 +245,12 @@ class PlaylistTest extends TestCase
         $disk->shouldReceive('readStream')->once()->with('master.m3u8')->andReturn($stream);
         $disk->shouldReceive('readStream')->once()->with('missing.m3u8')->andReturn(false);
         $disk->shouldNotReceive('delete');
-        try {
-            FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function () {
+        $this->assertThrows(
+            fn () => FFMpeg::disk($disk)->playlist('master.m3u8')->deleteAllFiles(function () {
                 $this->fail('Approval ran before every playlist was read.');
-            });
-            $this->fail('An unreadable playlist was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('filesystem', $exception->category);
-        }
+            }),
+            fn (MediaException $exception) => $exception->category === 'filesystem',
+        );
     }
 
     public function test_identical_relative_uris_in_different_variants_keep_their_own_context(): void
@@ -319,24 +315,21 @@ class PlaylistTest extends TestCase
             }
         }
         $failure = new \RuntimeException('application failure');
-        try {
-            FFMpeg::disk('memory')->playlist('index.m3u8')->mediaUrlsUsing(fn () => throw $failure)->get();
-            $this->fail('A callback exception was swallowed.');
-        } catch (\RuntimeException $exception) {
-            $this->assertSame($failure, $exception);
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->playlist('index.m3u8')->mediaUrlsUsing(fn () => throw $failure)->get(),
+            fn (\RuntimeException $exception) => $exception === $failure,
+        );
     }
 
     public function test_missing_playlists_report_sanitized_filesystem_errors(): void
     {
-        try {
-            FFMpeg::disk('memory')->playlist('secret-token.m3u8')->get();
-            $this->fail('Missing input was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['response', 'filesystem'], [$exception->phase, $exception->category]);
-            $this->assertStringNotContainsString('secret-token', $exception->getMessage());
-            $this->assertNull($exception->getPrevious());
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->playlist('secret-token.m3u8')->get(),
+            fn (MediaException $exception) => $exception->phase === 'response'
+                && $exception->category === 'filesystem'
+                && ! str_contains($exception->getMessage(), 'secret-token')
+                && $exception->getPrevious() === null,
+        );
     }
 
     public function test_input_and_rewritten_output_are_bounded_at_sixteen_mib(): void
@@ -346,12 +339,10 @@ class PlaylistTest extends TestCase
         $disk->put('exact.m3u8', $exact);
         $this->assertSame($exact, FFMpeg::disk('memory')->playlist('exact.m3u8')->get());
         $disk->put('large.m3u8', $exact.'x');
-        try {
-            FFMpeg::disk('memory')->playlist('large.m3u8')->get();
-            $this->fail('Oversized input was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('artifact', $exception->category);
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->playlist('large.m3u8')->get(),
+            fn (MediaException $exception) => $exception->category === 'artifact',
+        );
         $disk->put('index.m3u8', "#EXTM3U\n#EXTINF:1,\npart.ts\n");
         $this->expectException(MediaException::class);
         FFMpeg::disk('memory')->playlist('index.m3u8')->mediaUrlsUsing(fn () => '/'.str_repeat('x', 16777216))->get();
@@ -363,13 +354,11 @@ class PlaylistTest extends TestCase
         for ($index = 0; $index < 1024; $index++) {
             $disk->put($index.'.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n".($index + 1).".m3u8\n");
         }
-        try {
-            FFMpeg::disk('memory')->playlist('0.m3u8')->all();
-            $this->fail('More than 1024 playlists were followed.');
-        } catch (MediaException $exception) {
-            $this->assertSame('artifact', $exception->category);
-            $this->assertStringContainsString('1024', $exception->getMessage());
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->playlist('0.m3u8')->all(),
+            fn (MediaException $exception) => $exception->category === 'artifact'
+                && str_contains($exception->getMessage(), '1024'),
+        );
         $disk->put('1023.m3u8', "#EXTM3U\n# End\n");
         $this->assertCount(1024, FFMpeg::disk('memory')->playlist('0.m3u8')->all());
         $disk->put('master.m3u8', "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlarge.m3u8\n");

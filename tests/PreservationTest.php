@@ -6,6 +6,7 @@ use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
+use InvalidArgumentException;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 use League\Flysystem\PathPrefixing\PathPrefixedAdapter;
@@ -65,12 +66,7 @@ class PreservationTest extends TestCase
         foreach ([fn () => $media->export()->rotate(45), fn () => $media->export()->crop(31, 24),
             fn () => $media->export()->pad(40, 48, background: 'red;movie=/secret'),
             fn () => $media->export()->crop(32, 24)->video('copy')->inspect()] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Invalid geometry was accepted.');
-            } catch (\InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
+            $this->assertThrows($invalid, InvalidArgumentException::class);
         }
     }
 
@@ -89,19 +85,13 @@ class PreservationTest extends TestCase
         $this->assertFileExists($this->root.'/storage/tenant-42/exports/audio.flac');
         $this->assertFileDoesNotExist($this->root.'/storage/exports/audio.flac');
         $this->assertSame('flac', FFMpeg::disk($source)->open('exports/audio.flac')->probe()->audio()->codec());
-        try {
-            $media->export()->audio('flac')->toDisk($source)->save('blocked.flac');
-            $this->fail('A read-only adapter accepted publication.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
-            $this->assertFalse($writable->exists('blocked.flac'));
-        }
-        try {
-            $media->export()->toDisk($writable)->save('../outside.flac');
-            $this->fail('A destination escaped the disk root.');
-        } catch (PathTraversalDetected) {
-            $this->assertFileDoesNotExist($this->root.'/storage/outside.flac');
-        }
+        $this->assertThrows(
+            fn () => $media->export()->audio('flac')->toDisk($source)->save('blocked.flac'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['publication', 'transfer'],
+        );
+        $this->assertFalse($writable->exists('blocked.flac'));
+        $this->assertThrows(fn () => $media->export()->toDisk($writable)->save('../outside.flac'), PathTraversalDetected::class);
+        $this->assertFileDoesNotExist($this->root.'/storage/outside.flac');
         $this->assertSame(file_get_contents($this->root.'/source.wav'), $source->get('input.wav'));
     }
 

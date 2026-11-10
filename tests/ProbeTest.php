@@ -233,13 +233,12 @@ class ProbeTest extends TestCase
         Storage::disk('memory')->put('video.mp4', 'private media');
         $this->fakeProbe(Process::result(output: $output));
 
-        try {
-            FFMpeg::disk('memory')->open('video.mp4')->probe();
-            $this->fail('Invalid metadata must not become an empty successful probe.');
-        } catch (MediaException $exception) {
-            $this->assertSame('metadata', $exception->category);
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('video.mp4')->probe(),
+            fn (MediaException $exception) => $exception->category === 'metadata',
+        );
+
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public static function invalidMetadata(): array
@@ -254,15 +253,13 @@ class ProbeTest extends TestCase
         $disk->shouldReceive('size')->with('missing.mp4')->andReturn(100);
         $disk->shouldReceive('readStream')->with('missing.mp4')->andReturn(false);
 
-        try {
-            FFMpeg::disk($disk)->open('missing.mp4')->probe();
-            $this->fail('A failed read must not reach FFprobe.');
-        } catch (MediaException $exception) {
-            $this->assertSame('staging', $exception->phase);
-            $this->assertSame('transfer', $exception->category);
-            Process::assertNothingRan();
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk($disk)->open('missing.mp4')->probe(),
+            fn (MediaException $exception) => $exception->phase === 'staging' && $exception->category === 'transfer',
+        );
+
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_it_rejects_a_truncated_transfer_before_launch(): void
@@ -275,29 +272,27 @@ class ProbeTest extends TestCase
         $disk->shouldReceive('size')->andReturn(100);
         $disk->shouldReceive('readStream')->andReturn($stream);
 
-        try {
-            FFMpeg::disk($disk)->open('truncated.mp4')->probe();
-            $this->fail('A truncated transfer must not reach FFprobe.');
-        } catch (MediaException $exception) {
-            $this->assertSame('transfer', $exception->category);
-            $this->assertFalse(is_resource($stream));
-            Process::assertNothingRan();
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk($disk)->open('truncated.mp4')->probe(),
+            fn (MediaException $exception) => $exception->category === 'transfer',
+        );
+
+        $this->assertFalse(is_resource($stream));
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_it_rejects_a_remote_manifest_instead_of_losing_its_dependencies(): void
     {
         $this->fakeProbe();
 
-        try {
-            FFMpeg::disk('memory')->open('playlist.m3u8')->probe();
-            $this->fail('A manifest needs a separate dependency-staging contract.');
-        } catch (MediaException $exception) {
-            $this->assertSame('manifest', $exception->category);
-            Process::assertNothingRan();
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('playlist.m3u8')->probe(),
+            fn (MediaException $exception) => $exception->category === 'manifest',
+        );
+
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_it_detects_a_manifest_with_a_non_manifest_extension(): void
@@ -305,14 +300,13 @@ class ProbeTest extends TestCase
         $this->fakeProbe();
         Storage::disk('memory')->put('input.bin', "#EXTM3U\n#EXTINF:6,\n../private.ts");
 
-        try {
-            FFMpeg::disk('memory')->open('input.bin')->probe();
-            $this->fail('Renaming a manifest must not bypass dependency validation.');
-        } catch (MediaException $exception) {
-            $this->assertSame('manifest', $exception->category);
-            Process::assertNothingRan();
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('input.bin')->probe(),
+            fn (MediaException $exception) => $exception->category === 'manifest',
+        );
+
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_it_accepts_an_upload_without_using_its_untrusted_original_name(): void
@@ -360,15 +354,14 @@ class ProbeTest extends TestCase
             throw new \RuntimeException('Upstream private connection details');
         });
 
-        try {
-            FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe();
-            $this->fail('A launch failure must propagate without upstream details.');
-        } catch (MediaException $exception) {
-            $this->assertSame('process', $exception->category);
-            $this->assertStringNotContainsString('Upstream private', $exception->getMessage());
-            $this->assertNull($exception->getPrevious());
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe(),
+            fn (MediaException $exception) => $exception->category === 'process'
+                && ! str_contains($exception->getMessage(), 'Upstream private')
+                && $exception->getPrevious() === null,
+        );
+
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_it_removes_application_secrets_from_the_real_child_environment(): void
@@ -391,16 +384,15 @@ class ProbeTest extends TestCase
     {
         $this->binary('for ($i = 0; $i < 512; $i++) { fwrite(STDERR, str_repeat("N", 65536)); } fwrite(STDERR, end($argv)." THE-END"); exit(7);');
 
-        try {
-            FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe();
-            $this->fail('A nonzero exit must fail.');
-        } catch (MediaException $exception) {
-            $this->assertSame('exit', $exception->category);
-            $this->assertLessThanOrEqual(65536, strlen($exception->diagnostics));
-            $this->assertStringEndsWith('[input] THE-END', $exception->diagnostics);
-            $this->assertNull($exception->getPrevious());
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe(),
+            fn (MediaException $exception) => $exception->category === 'exit'
+                && strlen($exception->diagnostics) <= 65536
+                && str_ends_with($exception->diagnostics, '[input] THE-END')
+                && $exception->getPrevious() === null,
+        );
+
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     #[DataProvider('timeoutModes')]
@@ -410,15 +402,14 @@ class ProbeTest extends TestCase
         $this->binary('file_put_contents('.var_export($pidFile, true).', getmypid()); sleep(30);');
         config(['laravel-ffmpeg.'.$setting => 1]);
 
-        try {
-            FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe();
-            $this->fail('A silent child must time out.');
-        } catch (MediaException $exception) {
-            $this->assertSame('timeout', $exception->category);
-            $this->assertFileExists($pidFile);
-            $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe(),
+            fn (MediaException $exception) => $exception->category === 'timeout',
+        );
+
+        $this->assertFileExists($pidFile);
+        $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public static function timeoutModes(): array
@@ -431,14 +422,13 @@ class ProbeTest extends TestCase
         $pidFile = $this->root.'/pid';
         $this->binary('file_put_contents('.var_export($pidFile, true).', getmypid()); for ($i = 0; $i < 300; $i++) { echo str_repeat("X", 65536); } sleep(30);');
 
-        try {
-            FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe();
-            $this->fail('An oversized JSON response must fail.');
-        } catch (MediaException $exception) {
-            $this->assertSame('output_limit', $exception->category);
-            $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe(),
+            fn (MediaException $exception) => $exception->category === 'output_limit',
+        );
+
+        $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_it_requires_the_supported_ffprobe_release_line(): void

@@ -42,21 +42,16 @@ class StoryboardTest extends TestCase
         $this->assertNotContains('-t', $clipped);
         $this->assertStringStartsWith('trim=start=1:end=', $clipped[array_search('-filter:v', $clipped) + 1]);
         foreach ([$media->storyboard(every: 1), $media->frames(every: 1)] as $operation) {
-            try {
-                // A per-track -filter:v:0 would silently replace or be replaced by the sampling filter.
-                $operation->videoStream(0, fn ($video) => $video->color('bt709', 'bt709', 'bt709'))->inspect();
-                $this->fail('Per-track video filters must be rejected for sampled image operations.');
-            } catch (InvalidArgumentException) {
-            }
+            // A per-track -filter:v:0 would silently replace or be replaced by the sampling filter.
+            $this->assertThrows(
+                fn () => $operation->videoStream(0, fn ($video) => $video->color('bt709', 'bt709', 'bt709'))->inspect(),
+                InvalidArgumentException::class,
+            );
         }
         foreach ([[0, 2, 2, 0, 0], [INF, 2, 2, 0, 0], [0.0001, 2, 2, 0, 0], [0.0015, 2, 2, 0, 0],
             [1, 0, 2, 0, 0], [1, 2, 0, 0, 0], [1, 2, 2, -1, 0], [1, 2, 2, 0, -1], [1, PHP_INT_MAX, 2, 0, 0]] as $arguments) {
-            try {
-                $media->storyboard(...$arguments);
-                $this->fail('An invalid storyboard was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->assertWorkspacesAreCleanedUp();
-            }
+            $this->assertThrows(fn () => $media->storyboard(...$arguments), InvalidArgumentException::class);
+            $this->assertWorkspacesAreCleanedUp();
         }
         Process::assertNothingRan();
     }
@@ -136,16 +131,14 @@ class StoryboardTest extends TestCase
             $this->assertCount(1, $result->files());
         }
         $this->assertGreaterThan(Storage::disk('memory')->size('quality-31-1.jpg'), Storage::disk('memory')->size('quality-2-1.jpg'));
-        try {
-            $media->storyboard(every: 0.2, columns: 1, rows: 1)->vtt('invalid.vtt', fn () => "image.png\n\ninjected")
-                ->toDisk('memory')->save('invalid-%d.png');
-            $this->fail('A cue with an injected newline was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame('validation', $exception->phase);
-            $this->assertFalse(Storage::disk('memory')->exists('invalid-1.png'));
-            $this->assertFalse(Storage::disk('memory')->exists('invalid.vtt'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(
+            fn () => $media->storyboard(every: 0.2, columns: 1, rows: 1)->vtt('invalid.vtt', fn () => "image.png\n\ninjected")
+                ->toDisk('memory')->save('invalid-%d.png'),
+            fn (MediaException $exception) => $exception->phase === 'validation',
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('invalid-1.png'));
+        $this->assertFalse(Storage::disk('memory')->exists('invalid.vtt'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_a_failed_vtt_upload_reports_and_retains_the_published_sheets(): void
@@ -156,14 +149,12 @@ class StoryboardTest extends TestCase
         $disk->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $path === 'preview.vtt' ? false : $storage->put($path, $stream, $options));
         $disk->shouldReceive('size')->andReturnUsing(fn ($path) => $storage->size($path));
 
-        try {
-            $media->storyboard(every: 0.2, columns: 3, rows: 2)->vtt('preview.vtt')->toDisk($disk)->save('sheet-%d.png');
-            $this->fail('A failed VTT upload was accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
-            $this->assertSame([['disk' => null, 'path' => 'sheet-1.png'], ['disk' => null, 'path' => 'sheet-2.png']], $exception->published);
-            $this->assertSame(['disk' => null, 'path' => 'preview.vtt'], $exception->destination);
-        }
+        $this->assertThrows(
+            fn () => $media->storyboard(every: 0.2, columns: 3, rows: 2)->vtt('preview.vtt')->toDisk($disk)->save('sheet-%d.png'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['publication', 'transfer']
+                && $exception->published === [['disk' => null, 'path' => 'sheet-1.png'], ['disk' => null, 'path' => 'sheet-2.png']]
+                && $exception->destination === ['disk' => null, 'path' => 'preview.vtt'],
+        );
         $this->assertNotEmpty($storage->get('sheet-1.png'));
         $this->assertNotEmpty($storage->get('sheet-2.png'));
         $this->assertFalse($storage->exists('preview.vtt'));

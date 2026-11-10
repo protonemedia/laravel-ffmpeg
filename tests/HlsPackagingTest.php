@@ -300,12 +300,10 @@ class HlsPackagingTest extends TestCase
         if ($case === 'hook-map') {
             $export->playlistUsing(fn ($text) => preg_replace('/#EXT-X-MAP:[^\n]*\n/', '', $text));
         }
-        try {
-            $export->save('out/master.m3u8');
-            $this->fail('An invalid initialization or fragment inventory was published.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
-        }
+        $this->assertThrows(
+            fn () => $export->save('out/master.m3u8'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['validation', 'artifact'],
+        );
         $this->assertSame(['source.mp4'], $disk->allFiles());
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -369,13 +367,9 @@ class HlsPackagingTest extends TestCase
                     throw new ExportCancelled;
                 }
             });
-        try {
-            $export->save('out/master.m3u8');
-            $this->fail('Cancellation between passes did not stop publication.');
-        } catch (ExportCancelled) {
-            $this->assertFalse(Storage::disk('hls-packaging')->exists('out/master.m3u8'));
-            $this->assertSame([], Storage::disk('hls-packaging-keys')->allFiles());
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(fn () => $export->save('out/master.m3u8'), ExportCancelled::class);
+        $this->assertFalse(Storage::disk('hls-packaging')->exists('out/master.m3u8'));
+        $this->assertSame([], Storage::disk('hls-packaging-keys')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
     }
 }

@@ -221,22 +221,18 @@ class HlsTest extends TestCase
     public function test_invalid_playlist_types_and_non_vod_parallel_work_are_rejected_before_dispatch(): void
     {
         foreach (['', 'other', ' vod '] as $type) {
-            try {
-                FFMpeg::disk('absent')->open('source.mp4')->hls()->playlistType($type);
-                $this->fail('Invalid playlist type accepted.');
-            } catch (InvalidArgumentException $exception) {
-                $this->assertStringContainsString('playlist type', $exception->getMessage());
-            }
+            $this->assertThrows(
+                fn () => FFMpeg::disk('absent')->open('source.mp4')->hls()->playlistType($type),
+                InvalidArgumentException::class,
+                'playlist type',
+            );
         }
         foreach (['event', 'live'] as $type) {
-            try {
+            $this->assertThrows(function () use ($type) {
                 FFMpeg::disk('absent')->open('source.mp4')->hls()->playlistType($type)
                     ->variant('low', fn () => null)->variant('high', fn () => null)
                     ->queued(parallel: true)->job('master.m3u8');
-                $this->fail('Non-VOD parallel composition accepted.');
-            } catch (InvalidArgumentException $exception) {
-                $this->assertStringContainsString('requires VOD', $exception->getMessage());
-            }
+            }, InvalidArgumentException::class, 'requires VOD');
         }
     }
 
@@ -312,14 +308,15 @@ class HlsTest extends TestCase
     public function test_an_extra_unlabeled_graph_stream_is_rejected_before_hls_publication(): void
     {
         $media = $this->source(video: true, audio: false);
-        try {
+        $this->assertThrows(function () use ($media) {
             $media->hls(segmentDuration: 0.7)->filterComplex('[0:v]split=2[named]')
                 ->variant('test', fn (HlsVariant $variant) => $variant->map('[named]'))
                 ->toDisk('memory')->save('unexpected/master.m3u8');
-            $this->fail('An unmapped graph stream was published in HLS.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame(['validation', 'mapping'], [$exception->phase, $exception->category]);
-        }
+
+            return true;
+        });
         $this->assertSame([], Storage::disk('memory')->allFiles());
         $this->assertWorkspacesAreCleanedUp();
     }
@@ -383,12 +380,13 @@ class HlsTest extends TestCase
             };
             file_put_contents($path.'/playlist-0.m3u8', $playlist);
         });
-        try {
+        $this->assertThrows(function () {
             FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)->save('out/master.m3u8');
-            $this->fail('Invalid HLS artifacts were published.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
-        }
+
+            return true;
+        });
         $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
         $this->assertWorkspacesAreCleanedUp();
         Event::assertNotDispatched(Events\ExportCompleted::class);
@@ -408,14 +406,12 @@ class HlsTest extends TestCase
         $this->assertStringContainsString('#EXT-X-STREAM-INF:BANDWIDTH=4000,AVERAGE-BANDWIDTH=3520', $storage->get($result->playlist()->path));
         $this->assertSame('out/test/index.m3u8', $result->variant('test')->playlist()->path);
         $storage->put('protected/test/segment-00000000.ts', 'source bytes');
-        try {
+        $this->assertThrows(function () {
             FFMpeg::disk('memory')->open('protected/test/segment-00000000.ts')->hls()->variant('test', fn () => null)->save('protected/master.m3u8');
-            $this->fail('An owned segment replaced the source.');
-        } catch (InvalidArgumentException) {
-            $this->assertSame('source bytes', $storage->get('protected/test/segment-00000000.ts'));
-            $this->assertFalse($storage->exists('protected/master.m3u8'));
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        }, InvalidArgumentException::class);
+        $this->assertSame('source bytes', $storage->get('protected/test/segment-00000000.ts'));
+        $this->assertFalse($storage->exists('protected/master.m3u8'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_partial_publication_reports_concrete_siblings_and_keeps_the_old_master(): void
@@ -427,15 +423,16 @@ class HlsTest extends TestCase
         $disk = Mockery::mock(Filesystem::class);
         $disk->shouldReceive('put')->andReturnUsing(fn ($path, $stream, $options) => $path === 'out/high/index.m3u8' ? false : $storage->put($path, $stream, $options));
         $disk->shouldReceive('size')->andReturnUsing(fn ($path) => $storage->size($path));
-        try {
+        $this->assertThrows(function () use ($disk) {
             FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('low', fn () => null)->variant('high', fn () => null)
                 ->toDisk($disk)->save('out/master.m3u8');
-            $this->fail('A failed playlist upload was accepted.');
-        } catch (MediaException $exception) {
+        }, function (MediaException $exception) {
             $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
             $this->assertSame(['out/low/segment-00000000.ts', 'out/high/segment-00000000.ts', 'out/low/index.m3u8'], array_column($exception->published, 'path'));
             $this->assertSame(['disk' => null, 'path' => 'out/high/index.m3u8'], $exception->destination);
-        }
+
+            return true;
+        });
         $this->assertSame('old master', $storage->get('out/master.m3u8'));
         $this->assertSame('source', $storage->get('source.mp4'));
         $this->assertWorkspacesAreCleanedUp();
@@ -450,21 +447,14 @@ class HlsTest extends TestCase
             $held = $variant;
         })->onProgress(function (Progress $progress) use (&$held) {
             if ($progress->phase === Progress::STAGING) {
-                try {
-                    $held->resize(width: 42);
-                    $this->fail('An executing variant was mutable.');
-                } catch (\LogicException) {
-                    throw new ExportCancelled;
-                }
+                $this->assertThrows(fn () => $held->resize(width: 42), \LogicException::class);
+
+                throw new ExportCancelled;
             }
         });
-        try {
-            $export->save('out/master.m3u8');
-            $this->fail('Cancellation was swallowed.');
-        } catch (ExportCancelled) {
-            $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        $this->assertThrows(fn () => $export->save('out/master.m3u8'), ExportCancelled::class);
+        $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
         Event::assertDispatchedTimes(Events\ExportCancelled::class, 1);
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
@@ -699,17 +689,16 @@ class HlsTest extends TestCase
                 if ($identityHook && $case !== 'tamper') {
                     $export->playlistUsing(fn ($text) => $text);
                 }
-                try {
-                    $export->save('out/master.m3u8');
-                    $this->fail('Invalid encryption was published.');
-                } catch (\RuntimeException $exception) {
+                $this->assertThrows(fn () => $export->save('out/master.m3u8'), function (\RuntimeException $exception) use ($case) {
                     if ($case instanceof \Throwable) {
                         $this->assertSame($case, $exception);
                     } else {
                         $this->assertInstanceOf(MediaException::class, $exception);
                         $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
                     }
-                }
+
+                    return true;
+                });
                 $this->assertSame(['source.mp4'], $disk->allFiles());
                 $this->assertSame([], $secrets->allFiles());
                 $this->assertWorkspacesAreCleanedUp();
@@ -729,11 +718,10 @@ class HlsTest extends TestCase
             $secrets->shouldReceive('size')->andReturnUsing(fn ($path) => $storedKeys->size($path));
             $failedMedia = Mockery::mock(Filesystem::class);
             $failedMedia->shouldReceive('put')->andReturnFalse();
-            try {
+            $this->assertThrows(function () use ($secrets, $failedMedia) {
                 FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null)
                     ->encrypt($secrets, fn ($path) => '/keys/'.$path)->toDisk($failedMedia)->save('out/master.m3u8');
-                $this->fail('A failed encrypted export was accepted.');
-            } catch (MediaException $exception) {
+            }, function (MediaException $exception) use ($keysSucceed, $storedKeys) {
                 $this->assertSame(['publication', 'transfer'], [$exception->phase, $exception->category]);
                 $this->assertCount($keysSucceed ? 1 : 0, $exception->published);
                 if ($keysSucceed) {
@@ -742,7 +730,9 @@ class HlsTest extends TestCase
                 } else {
                     $this->assertStringEndsWith('.key', $exception->destination['path']);
                 }
-            }
+
+                return true;
+            });
         }
         $this->assertSame(['source.mp4'], $disk->allFiles());
         $this->assertWorkspacesAreCleanedUp();
@@ -783,12 +773,11 @@ class HlsTest extends TestCase
                     'target' => str_replace('#EXT-X-TARGETDURATION:2', '#EXT-X-TARGETDURATION:99', $contents),
                 };
             });
-        try {
-            $export->save('out/master.m3u8');
-            $this->fail('Invalid hook output was published.');
-        } catch (MediaException $exception) {
+        $this->assertThrows(fn () => $export->save('out/master.m3u8'), function (MediaException $exception) {
             $this->assertSame(['validation', 'artifact'], [$exception->phase, $exception->category]);
-        }
+
+            return true;
+        });
         $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
         $this->assertWorkspacesAreCleanedUp();
         Event::assertNotDispatched(Events\ExportCompleted::class);
@@ -801,19 +790,15 @@ class HlsTest extends TestCase
         foreach ([new \RuntimeException('application failure'), new ExportCancelled] as $failure) {
             $export = FFMpeg::disk('memory')->open('source.mp4')->hls()->variant('test', fn () => null);
             $export->playlistUsing(function () use ($export, $failure) {
-                try {
-                    $export->playlistUsing(fn ($contents) => $contents);
-                    $this->fail('A running playlist hook could be replaced.');
-                } catch (InvalidArgumentException) {
-                    throw $failure;
-                }
+                $this->assertThrows(fn () => $export->playlistUsing(fn ($contents) => $contents), InvalidArgumentException::class);
+
+                throw $failure;
             });
-            try {
-                $export->save('out/master.m3u8');
-                $this->fail('A playlist callback failure was swallowed.');
-            } catch (\RuntimeException $exception) {
+            $this->assertThrows(fn () => $export->save('out/master.m3u8'), function (\RuntimeException $exception) use ($failure) {
                 $this->assertSame($failure, $exception);
-            }
+
+                return true;
+            });
             $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
             $this->assertWorkspacesAreCleanedUp();
         }
@@ -826,16 +811,14 @@ class HlsTest extends TestCase
     {
         Storage::disk('memory')->put('source.mp4', 'source');
         $this->fakePipeline();
-        try {
+        $this->assertThrows(function () {
             FFMpeg::disk('memory')->open('source.mp4')->hls()
                 ->variant('low', fn () => null, segments: 'shared/part-%d.ts')
                 ->variant('high', fn () => null, segments: 'shared/part-%01d.ts')
                 ->save('master.m3u8');
-            $this->fail('Colliding concrete segment destinations were accepted.');
-        } catch (InvalidArgumentException) {
-            $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
-            $this->assertWorkspacesAreCleanedUp();
-        }
+        }, InvalidArgumentException::class);
+        $this->assertSame(['source.mp4'], Storage::disk('memory')->allFiles());
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_invalid_settings_fail_before_io(): void
@@ -863,12 +846,9 @@ class HlsTest extends TestCase
             fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', key: str_repeat('x', 16), rotateEvery: 2),
             fn () => $media->hls()->encrypt('secrets', fn () => '/keys/key', directory: '../escape'),
         ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Invalid HLS settings were accepted.');
-            } catch (InvalidArgumentException|PathTraversalDetected) {
-                $this->assertWorkspacesAreCleanedUp();
-            }
+            $this->assertThrows($invalid, fn (\Throwable $exception) => $exception instanceof InvalidArgumentException
+                || $exception instanceof PathTraversalDetected);
+            $this->assertWorkspacesAreCleanedUp();
         }
         Process::assertNothingRan();
     }

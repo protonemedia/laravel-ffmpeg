@@ -9,6 +9,7 @@ use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\LoudnessStats;
 use ProtoneMedia\LaravelFFMpeg\PendingLoudness;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use RuntimeException;
 
 class LoudnessTest extends TestCase
 {
@@ -53,12 +54,7 @@ class LoudnessTest extends TestCase
             $this->operation()->outputOptions(['-ac', '1']),
             $this->operation()->clip(0, duration: 1, seek: 'keyframe'),
         ] as $invalid) {
-            try {
-                $invalid->inspect();
-                $this->fail('Unsupported loudness configuration was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->assertTrue(true);
-            }
+            $this->assertThrows(fn () => $invalid->inspect(), InvalidArgumentException::class);
         }
     }
 
@@ -150,12 +146,11 @@ class LoudnessTest extends TestCase
             .'exit($code);');
         chmod($binary, 0700);
         config(['laravel-ffmpeg.ffmpeg.binaries' => $binary]);
-        try {
-            $this->operation()->save('normalized.wav');
-            $this->fail('Invalid loudness statistics were accepted.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['analysis', 'analysis', 'Invalid loudness statistics.'], [$exception->phase, $exception->category, $exception->getMessage()]);
-        }
+        $this->assertThrows(
+            fn () => $this->operation()->save('normalized.wav'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->getMessage()]
+                === ['analysis', 'analysis', 'Invalid loudness statistics.'],
+        );
         $this->assertFalse(Storage::disk('loudness')->exists('normalized.wav'));
     }
 
@@ -175,16 +170,15 @@ class LoudnessTest extends TestCase
         $this->assertContains('analysis', $events);
         $this->assertEqualsWithDelta(-18, $this->measure(Storage::disk('loudness')->path('normalized.wav'))->inputIntegrated, 0.2);
         foreach (['not_a_filter', 'volume=1'] as $filter) {
-            try {
-                $this->operation()->audioFilter($filter)->onProgress(function ($progress) use ($filter) {
+            $this->assertThrows(
+                fn () => $this->operation()->audioFilter($filter)->onProgress(function ($progress) use ($filter) {
                     if ($filter === 'volume=1' && $progress->phase === 'analysis') {
-                        throw new \RuntimeException('cancel loudness');
+                        throw new RuntimeException('cancel loudness');
                     }
-                })->save('failed.wav');
-                $this->fail('Loudness failure was accepted.');
-            } catch (\RuntimeException $exception) {
-                $this->assertTrue($exception instanceof MediaException || $exception->getMessage() === 'cancel loudness');
-            }
+                })->save('failed.wav'),
+                fn (RuntimeException $exception) => $exception instanceof MediaException
+                    || $exception->getMessage() === 'cancel loudness',
+            );
             $this->assertFalse(Storage::disk('loudness')->exists('failed.wav'));
             $this->assertWorkspacesAreCleanedUp();
         }

@@ -42,12 +42,7 @@ class GifTest extends TestCase
             fn () => $media->gif(loops: 0), fn () => $media->gif(loops: 65536), fn () => $media->gif(loop: false, loops: 2),
             fn () => $media->gif()->clip(1.0, duration: 1.0, seek: 'keyframe')->inspect(),
         ] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Invalid GIF configuration was accepted.');
-            } catch (InvalidArgumentException) {
-                $this->addToAssertionCount(1);
-            }
+            $this->assertThrows($invalid, InvalidArgumentException::class);
         }
 
         Process::assertNothingRan();
@@ -138,23 +133,16 @@ class GifTest extends TestCase
 
         Storage::disk('memory')->put('retained.gif', 'existing destination');
         $hash = hash_file('sha256', $source);
-        try {
-            $media->gif()->videoFilter('not_a_real_filter')->toDisk('memory')->save('retained.gif');
-            $this->fail('Invalid preprocessing succeeded.');
-        } catch (MediaException $exception) {
-            $this->assertSame('analysis', $exception->phase);
-        }
+        $this->assertThrows(
+            fn () => $media->gif()->videoFilter('not_a_real_filter')->toDisk('memory')->save('retained.gif'),
+            fn (MediaException $exception) => $exception->phase === 'analysis',
+        );
 
-        try {
-            $media->gif()->toDisk('memory')->onProgress(function ($progress) {
-                if ($progress->phase === 'analysis') {
-                    throw new ExportCancelled;
-                }
-            })->save('retained.gif');
-            $this->fail('Analysis cancellation was ignored.');
-        } catch (ExportCancelled) {
-            $this->addToAssertionCount(1);
-        }
+        $this->assertThrows(fn () => $media->gif()->toDisk('memory')->onProgress(function ($progress) {
+            if ($progress->phase === 'analysis') {
+                throw new ExportCancelled;
+            }
+        })->save('retained.gif'), ExportCancelled::class);
 
         $this->assertSame('existing destination', Storage::disk('memory')->get('retained.gif'));
         $this->assertSame($hash, hash_file('sha256', $source));

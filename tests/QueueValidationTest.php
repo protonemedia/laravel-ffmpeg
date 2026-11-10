@@ -71,12 +71,11 @@ class QueueValidationTest extends TestCase
                 $this->assertStringContainsString($message, $exception->getMessage());
             }
         }
-        try {
-            Bus::batch([$make()->queued(parallel: true)->job('invalid/master.m3u8')])->dispatch();
-            $this->fail('A nested coordinator cannot represent completion of its children.');
-        } catch (InvalidArgumentException $exception) {
-            $this->assertStringContainsString('not inside another', $exception->getMessage());
-        }
+        $this->assertThrows(
+            fn () => Bus::batch([$make()->queued(parallel: true)->job('invalid/master.m3u8')])->dispatch(),
+            InvalidArgumentException::class,
+            'not inside another',
+        );
         $this->assertSame(0, DB::table('jobs')->count());
     }
 

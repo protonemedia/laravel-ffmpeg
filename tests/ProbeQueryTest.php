@@ -42,12 +42,10 @@ class ProbeQueryTest extends TestCase
         Process::preventStrayProcesses();
         Process::fake(fn (PendingProcess $process) => in_array('-version', $process->command, true)
             ? Process::result(output: 'ffprobe version 5.1.9') : throw new \LogicException('Only the version check may run.'));
-        try {
-            $this->pendingQuery()->get();
-            $this->fail('An unsupported FFprobe must be rejected.');
-        } catch (MediaException $exception) {
-            $this->assertSame(['probing', 'version'], [$exception->phase, $exception->category]);
-        }
+        $this->assertThrows(
+            fn () => $this->pendingQuery()->get(),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'version'],
+        );
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -105,12 +103,7 @@ class ProbeQueryTest extends TestCase
             fn () => $this->pendingQuery()->entries(['program' => ['id']]), fn () => $this->pendingQuery()->entries([]),
             fn () => $this->pendingQuery()->limits(16777217), fn () => $this->pendingQuery()->limits(timeout: 121),
             fn () => $this->pendingQuery()->limits(timeout: NAN)] as $invalid) {
-            try {
-                $invalid();
-                $this->fail('Expected invalid query rejection.');
-            } catch (InvalidArgumentException) {
-                $this->assertTrue(true);
-            }
+            $this->assertThrows($invalid, InvalidArgumentException::class);
         }
         Process::assertNothingRan();
         $this->assertWorkspacesAreCleanedUp();
@@ -120,22 +113,18 @@ class ProbeQueryTest extends TestCase
     {
         foreach (['not json', '[]', '{"frames":[1]}', '{"frames":null}'] as $output) {
             $this->fakeProbe(fn () => Process::result(output: $output));
-            try {
-                $this->pendingQuery()->frames()->get();
-                $this->fail('Expected invalid JSON sections rejection.');
-            } catch (MediaException $exception) {
-                $this->assertSame('metadata', $exception->category);
-            }
+            $this->assertThrows(
+                fn () => $this->pendingQuery()->frames()->get(),
+                fn (MediaException $exception) => $exception->category === 'metadata',
+            );
             $this->assertWorkspacesAreCleanedUp();
         }
         $this->fakeProbe(fn (PendingProcess $process) => Process::result(exitCode: 1, errorOutput: end($process->command)));
-        try {
-            $this->pendingQuery()->get();
-            $this->fail('Expected failed process rejection.');
-        } catch (MediaException $exception) {
-            $this->assertSame('exit', $exception->category);
-            $this->assertSame('[input]', trim($exception->diagnostics));
-        }
+        $this->assertThrows(
+            fn () => $this->pendingQuery()->get(),
+            fn (MediaException $exception) => $exception->category === 'exit'
+                && trim($exception->diagnostics) === '[input]',
+        );
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -172,13 +161,11 @@ class ProbeQueryTest extends TestCase
                 'if (in_array("-version", $argv, true)) { echo "ffprobe version 9.0.2"; exit; }'.$body);
             chmod($binary, 0700);
             config(['laravel-ffmpeg.ffprobe.binaries' => $binary]);
-            try {
-                $this->pendingQuery()->limits(1024, 0.15)->get();
-                $this->fail('Expected query resource limit.');
-            } catch (MediaException $exception) {
-                $this->assertSame($category, $exception->category);
-                $this->assertStringNotContainsString($this->root, $exception->getMessage());
-            }
+            $this->assertThrows(
+                fn () => $this->pendingQuery()->limits(1024, 0.15)->get(),
+                fn (MediaException $exception) => $exception->category === $category
+                    && ! str_contains($exception->getMessage(), $this->root),
+            );
             $this->assertWorkspacesAreCleanedUp();
         }
     }
