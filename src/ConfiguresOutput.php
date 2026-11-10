@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
@@ -1068,8 +1069,8 @@ trait ConfiguresOutput
         foreach ($maps as $map) {
             // FFmpeg 9's metadata selector would read a trailing "?" as part of its value,
             // so we will give the optional marker a colon of its own.
-            if (str_ends_with($map, '?') && ! str_ends_with($map, ':?')) {
-                $map = substr($map, 0, -1).':?';
+            if (! str_ends_with($map, ':?')) {
+                $map = Str::replaceEnd('?', ':?', $map);
             }
 
             $options[] = '-map';

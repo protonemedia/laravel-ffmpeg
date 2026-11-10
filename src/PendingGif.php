@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
@@ -145,11 +146,7 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
         $graphIndex = array_search('-filter_complex', $command, true);
         $inputEnd = array_search('-i', $command, true) + 2;
         $prefix = array_slice($command, 0, $inputEnd);
-        $prefix[$graphIndex + 1] = substr(
-            $command[$graphIndex + 1],
-            0,
-            strpos($command[$graphIndex + 1], '[gif_frames]'),
-        ).',format=rgb24[gif_prepared]';
+        $prefix[$graphIndex + 1] = Str::before($command[$graphIndex + 1], '[gif_frames]').',format=rgb24[gif_prepared]';
         $prepared = 'gif-prepared.nut';
         $palette = 'gif-palette.png';
 

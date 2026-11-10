@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Http;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -64,8 +65,10 @@ class HlsPlaybackController
      */
     protected function resourceUrl(Request $request, string $id): string
     {
-        $parameters = array_replace($request->query(), $request->route()->parameters());
-        unset($parameters['_hlsPlayback'], $parameters['signature'], $parameters['expires']);
+        $parameters = Arr::except(
+            array_replace($request->query(), $request->route()->parameters()),
+            ['_hlsPlayback', 'signature', 'expires'],
+        );
         $parameters['hlsResource'] = $id;
 
         return URL::temporarySignedRoute($request->route()->getName(),

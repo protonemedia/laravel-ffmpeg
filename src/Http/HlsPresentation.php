@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Http;
 
+use Illuminate\Support\Arr;
 use Illuminate\Support\ItemNotFoundException;
 use InvalidArgumentException;
 use League\Flysystem\WhitespacePathNormalizer;
@@ -67,7 +68,7 @@ class HlsPresentation
                 throw new InvalidArgumentException('HLS playback inventory contains a duplicate destination.');
             }
 
-            $this->files[$id] = array_intersect_key($file, array_flip(['disk', 'path', 'role']));
+            $this->files[$id] = Arr::only($file, ['disk', 'path', 'role']);
         }
 
         if (! isset($this->files[$playlist])

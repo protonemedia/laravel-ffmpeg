@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 use DOMDocument;
 use DOMElement;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
@@ -349,10 +350,10 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             }
 
             $clip = $settings['clip'];
-            if ($type === 'video' && array_intersect(
+            if ($type === 'video' && Arr::hasAny(
+                $settings['video'],
                 ['g', 'keyint_min', 'sc_threshold', 'x264-params', 'x265-params'],
-                array_keys($settings['video']),
-            ) !== []) {
+            )) {
                 throw new InvalidArgumentException('DASH owns video encoder GOP and segment alignment settings.');
             }
 

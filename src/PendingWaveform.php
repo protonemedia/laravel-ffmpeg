@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
@@ -135,7 +136,7 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
         $command[$index] = str_replace('[0:a:0]', '[0:a:0]'.($audio === '' ? '' : "{$audio},"), $command[$index]);
 
         if (isset($filters['-filter:v'])) {
-            $command[$index] = substr($command[$index], 0, -strlen('[waveform]'))
+            $command[$index] = Str::beforeLast($command[$index], '[waveform]')
                 .",{$filters['-filter:v']}[waveform]";
         }
 

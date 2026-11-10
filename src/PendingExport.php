@@ -4,8 +4,10 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
@@ -368,8 +370,7 @@ class PendingExport implements Exportable
 
         $settings = $watermark->settings();
         $this->inputs[] = $image->forWatermark($settings['edits']);
-        unset($settings['edits']);
-        $this->watermarks[] = ['input' => array_key_last($this->inputs)] + $settings;
+        $this->watermarks[] = ['input' => array_key_last($this->inputs)] + Arr::except($settings, 'edits');
 
         return $this;
     }
@@ -1357,12 +1358,10 @@ class PendingExport implements Exportable
             );
 
             if ($process->exitCode !== 0) {
-                $category = str_contains(
-                    $process->diagnostics,
+                $category = Str::contains($process->diagnostics, [
                     'Streamcopy requested for output stream fed from a complex filtergraph',
-                )
-                    || str_contains($process->diagnostics, 'Simple and complex filtering cannot be used together')
-                    ? 'configuration' : 'exit';
+                    'Simple and complex filtering cannot be used together',
+                ]) ? 'configuration' : 'exit';
 
                 throw new MediaException(
                     "FFmpeg failed (exit {$process->exitCode}).",

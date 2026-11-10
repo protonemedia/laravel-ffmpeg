@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
@@ -203,7 +204,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         $prefix = array_slice($command, 0, $inputEnd);
         $mapIndex = array_search('-map', $command, true);
         $filterIndex = array_search('-filter:a', $command, true);
-        $preprocessing = substr($command[$filterIndex + 1], 0, -strlen(','.$this->loudnorm('loudness-final.json')));
+        $preprocessing = Str::beforeLast($command[$filterIndex + 1], ','.$this->loudnorm('loudness-final.json'));
         $prepared = 'loudness-prepared.nut';
 
         // We decode the selected, trimmed and channel-processed samples only once. Both passes
