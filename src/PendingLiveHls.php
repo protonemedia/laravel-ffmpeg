@@ -496,6 +496,8 @@ class PendingLiveHls
      */
     protected function encoderCommand(string $binary, array $input, int $start): array
     {
+        // RTSP sources rebase their audio timestamps once the first RTCP report arrives, and
+        // the backward jump is fatal under -xerror. Resampling keeps the audio monotonic.
         return [
             $binary, '-hide_banner', '-nostdin', '-nostats', '-loglevel', 'error', '-xerror',
             '-protocol_whitelist', $input['protocols'],
@@ -504,7 +506,7 @@ class PendingLiveHls
             '-i', $input['path'],
             '-map', '0:v:0?', '-map', '0:a:0?', '-sn', '-dn',
             '-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-threads', '1', '-c:a', 'aac',
-            '-force_key_frames', "expr:gte(t,n_forced*{$this->segmentDuration})",
+            '-af', 'aresample=async=1', '-force_key_frames', "expr:gte(t,n_forced*{$this->segmentDuration})",
             '-flags:v', '+cgop', '-f', 'hls', '-hls_time', (string) $this->segmentDuration,
             '-hls_list_size', (string) $this->window, '-hls_delete_threshold', (string) $this->window,
             '-hls_flags', 'delete_segments+temp_file', '-start_number', (string) $start,
