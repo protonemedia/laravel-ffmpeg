@@ -547,4 +547,19 @@ class ProbeTest extends TestCase
         $this->assertTrue($metadata->hasVideo());
         $this->assertWorkspacesAreCleanedUp();
     }
+
+    public function test_it_tells_whether_real_media_is_valid(): void
+    {
+        $this->useRealFFMpeg();
+        $this->addTestFile('video.mp4', 'local');
+
+        Storage::disk('local')->put('text.mp4', 'not a video');
+        Storage::disk('local')->put('captions.srt', "1\n00:00:00,000 --> 00:00:01,000\nHello\n");
+
+        $this->assertTrue(FFMpeg::disk('local')->open('video.mp4')->isValid());
+        $this->assertFalse(FFMpeg::disk('local')->open('text.mp4')->isValid());
+        $this->assertFalse(FFMpeg::disk('local')->open('missing.mp4')->isValid());
+        $this->assertFalse(FFMpeg::disk('local')->open('captions.srt')->isValid());
+        $this->assertWorkspacesAreCleanedUp();
+    }
 }

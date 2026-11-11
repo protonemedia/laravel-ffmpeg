@@ -258,6 +258,14 @@ $metadata->get('format.tags.title');
 $metadata->toArray();
 ```
 
+The `isValid` method returns `false` instead of throwing when FFprobe cannot read the media or finds no video or audio stream, which is useful for validating uploads:
+
+```php
+if (! FFMpeg::open($request->file('video'))->isValid()) {
+    // ...
+}
+```
+
 <a name="caching-metadata"></a>
 #### Caching Metadata
 

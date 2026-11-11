@@ -366,6 +366,20 @@ class Media
     }
 
     /**
+     * Determine if the media can be read and has a video or audio stream.
+     */
+    public function isValid(): bool
+    {
+        try {
+            $metadata = $this->probe();
+        } catch (MediaException) {
+            return false;
+        }
+
+        return $metadata->hasVideo() || $metadata->hasAudio();
+    }
+
+    /**
      * Probe the media and cache its metadata under the given versioned key.
      *
      * The key must change whenever the source bytes or object version change.

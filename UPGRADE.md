@@ -239,6 +239,15 @@ $chapters = $metadata->chapters();
 $data = $metadata->toArray();
 ```
 
+The `isValid()` method replaces PHP-FFMpeg's `FFProbe::isValid()`. It returns `false` instead of throwing a `MediaException` when FFprobe cannot read the media or finds no video or audio stream:
+
+```php
+// $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
+if (! $media->isValid()) {
+    // ...
+}
+```
+
 Version 9 can also cache probe results in a cache repository that you choose:
 
 ```php
