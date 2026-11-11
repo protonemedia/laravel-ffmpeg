@@ -91,7 +91,8 @@ class EncodingOptionsTest extends TestCase
 
         $this->assertSame($tokens, CommandCompiler::options($tokens, 'output'));
 
-        $flags = ['-movflags', '+faststart', '-disposition:a:0', 'default+forced', '-preset', 'ultra-fast'];
+        $flags = ['-movflags', '+faststart', '-disposition:a:0', 'default+forced', '-preset', 'ultra-fast',
+            '-strict:a', 'experimental'];
 
         $this->assertSame($flags, CommandCompiler::options($flags, 'output'));
         $this->assertSame(
@@ -121,6 +122,8 @@ class EncodingOptionsTest extends TestCase
             'trailing overwrite flag' => ['output', ['-bsf:v', 'h264_mp4toannexb', '-y']],
             'video option on audio' => ['output', ['-cpu-used:a', '6']],
             'audio option on video' => ['output', ['-sample_fmt:v', 's16']],
+            'strict on video' => ['output', ['-strict:v', 'experimental']],
+            'strict below experimental' => ['output', ['-strict:a', 'unofficial']],
             'muxer option on a stream' => ['output', ['-frag_duration:v', '1000']],
             'unknown color transfer' => ['output', ['-color_trc', 'unknown']],
             'file value' => ['output', ['-sample_fmt', 'file:/tmp/file']],
@@ -293,6 +296,22 @@ class EncodingOptionsTest extends TestCase
             ->save('hevc.mp4');
 
         $this->assertSame('hevc', $this->media('hevc.mp4')->probe()->streams()[0]->get('codec_name'));
+    }
+
+    public function test_real_experimental_audio_encoder(): void
+    {
+        $this->realFixture();
+
+        // FFmpeg's native Vorbis encoder only encodes stereo, and refuses to run unless
+        // experimental encoders are allowed.
+        $this->media('source.mkv')
+            ->export()
+            ->withoutVideo()
+            ->audio('vorbis')
+            ->audioOptions(['-strict', 'experimental', '-ac', '2'])
+            ->save('vorbis.ogg');
+
+        $this->assertSame('vorbis', $this->media('vorbis.ogg')->probe()->streams()[0]->get('codec_name'));
     }
 
     public function test_real_bitstream_remux_keeps_the_decoded_frames(): void

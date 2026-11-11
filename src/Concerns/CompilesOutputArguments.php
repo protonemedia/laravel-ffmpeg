@@ -269,7 +269,7 @@ trait CompilesOutputArguments
             'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'ar', 'ac', 'q', 'r', 'x264-params', 'x265-params',
             'cpu-used', 'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength',
             'color_primaries', 'color_trc', 'colorspace', 'color_range', 'compression_level', 'sample_fmt',
-            'channel_layout',
+            'channel_layout', 'strict',
         ];
 
         for ($i = 0; $i < count($this->outputOptions); $i += 2) {

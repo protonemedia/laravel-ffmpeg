@@ -153,6 +153,7 @@ class CommandCompiler
                 'color_primaries' => 'primaries', 'color_trc' => 'transfer', 'colorspace' => 'colorspace',
                 'color_range' => 'range',
                 'compression_level' => 'unsigned', 'sample_fmt' => 'sample-format', 'channel_layout' => 'layout',
+                'strict' => 'strict',
                 'bsf' => 'bitstream', 'avoid_negative_ts' => 'negative-ts', 'max_muxing_queue_size' => 'positive',
                 'muxdelay' => 'decimal', 'muxpreload' => 'decimal', 'flush_packets' => 'boolean',
                 'video_track_timescale' => 'positive', 'frag_duration' => 'positive', 'min_frag_duration' => 'positive',
@@ -206,7 +207,7 @@ class CommandCompiler
         $videoOnly = ['x264-params', 'x265-params', 'cpu-used', 'deadline', 'row-mt', 'rc', 'cq',
             'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength', 'color_primaries', 'color_trc', 'colorspace',
             'color_range'];
-        $audioOnly = ['compression_level', 'sample_fmt', 'channel_layout'];
+        $audioOnly = ['compression_level', 'sample_fmt', 'channel_layout', 'strict'];
         $fileOnly = ['avoid_negative_ts', 'muxdelay', 'muxpreload', 'flush_packets', 'video_track_timescale',
             'frag_duration', 'min_frag_duration', 'cluster_time_limit', 'cluster_size_limit', 'write_crc32'];
 
@@ -225,7 +226,7 @@ class CommandCompiler
      * @param  (
      *     'positive'|'unsigned'|'boolean'|'decimal'|'quality'|'device-name'|'hardware-init'|'x264'|'x265'
      *     |'deadline'|'rc'|'primaries'|'transfer'|'colorspace'|'range'|'sample-format'|'layout'|'bitstream'
-     *     |'negative-ts'|'hardware'|'device'|'rate'|'word'|'fps'|'format'|'subtitle-codec'|'streamid'
+     *     |'negative-ts'|'hardware'|'device'|'rate'|'word'|'fps'|'format'|'subtitle-codec'|'streamid'|'strict'
      * )  $type
      */
     protected static function validValue(string $type, string $value, ?string $stream): bool
@@ -283,6 +284,7 @@ class CommandCompiler
             ], true),
             'subtitle-codec' => $stream === 's' && (bool) preg_match('/\A[a-zA-Z0-9_]+\z/', $value),
             'streamid' => $stream === null && (bool) preg_match('/^[0-9]+:[0-9]+$/D', $value),
+            'strict' => $value === 'experimental',
         };
     }
 

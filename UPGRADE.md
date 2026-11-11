@@ -175,6 +175,8 @@ $result = $media->export()
 
 Bitrates accept positive integers in bits per second, such as `2500000`, or unit strings, such as `'2500k'`. Floats and unitless strings are invalid. The `save()` method returns a result, not the builder, so you may no longer chain another export after it.
 
+PHP-FFMpeg's `Vorbis` format used FFmpeg's native `vorbis` encoder, which is experimental and only encodes stereo. You should call `audio('vorbis')` with `audioOptions(['-strict', 'experimental', '-ac', '2'])`, or use `libvorbis` if your FFmpeg build includes it.
+
 <a name="driver-forwarding-and-raw-options"></a>
 ### Driver Forwarding and Raw Options
 
