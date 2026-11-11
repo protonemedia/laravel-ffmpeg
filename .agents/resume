@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Dependencies are installed during setup, never on resume.
+for tool in php composer; do
+    command -v "$tool" >/dev/null
+done
+for tool in ffmpeg ffprobe; do
+    if [[ ! -x "/opt/ffmpeg-9.0.2/bin/$tool" ]]; then
+        echo 'Native FFmpeg/FFprobe binaries are missing; run .agents/setup.' >&2
+        exit 1
+    fi
+done
+if [[ ! -f vendor/autoload.php ]]; then
+    echo 'Composer dependencies are missing; run .agents/setup.' >&2
+    exit 1
+fi

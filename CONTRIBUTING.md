@@ -40,7 +40,7 @@ Before submitting a pull request:
 
 If the project maintainer has any additional requirements, you will find them listed here.
 
-- **[PSR-2 Coding Standard](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-2-coding-style-guide.md)** - The easiest way to apply the conventions is to install [PHP Code Sniffer](https://pear.php.net/package/PHP_CodeSniffer).
+- **Laravel coding style and static analysis** - The PHP Quality and Style workflow runs Rector, [Laravel Pint](https://laravel.com/docs/pint) and a PHP CS Fixer rule that Pint lacks, commits their changes, then runs Larastan. Run `composer refactor`, `composer format` and `composer analyse` locally before you open a pull request.
 
 - **Add tests!** - Your patch won't be accepted if it doesn't have tests.
 

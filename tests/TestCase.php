@@ -1,35 +1,109 @@
 <?php
 
 namespace ProtoneMedia\LaravelFFMpeg\Tests;
-use PHPUnit\Framework\Attributes\Test;
-use FFMpeg\Format\Audio\Mp3;
-use FFMpeg\Format\Video\X264;
+
+use Illuminate\Contracts\Process\ProcessResult;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Storage;
-use League\Flysystem\Filesystem;
+use League\Flysystem\Filesystem as Flysystem;
 use League\Flysystem\InMemory\InMemoryFilesystemAdapter;
 use Orchestra\Testbench\TestCase as BaseTestCase;
-use ProtoneMedia\LaravelFFMpeg\FFMpeg\StdListener;
-use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use ProtoneMedia\LaravelFFMpeg\ProcessResult as MediaProcessResult;
 use ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider;
 
 abstract class TestCase extends BaseTestCase
 {
+    /**
+     * The temporary directory that is created for each test.
+     */
+    protected string $root;
+
+    /**
+     * The directory holding the media fixtures shared by every test in the class.
+     */
+    protected static ?string $fixtures = null;
+
+    /**
+     * Set up the test environment.
+     */
     protected function setUp(): void
     {
         parent::setUp();
 
-        FFMpeg::cleanupTemporaryFiles();
+        // Every test gets its own private directory, with the media workspaces in a
+        // "workspaces" subdirectory. Tests may keep fixtures and disks next to it,
+        // so asserting the workspaces directory is empty proves the cleanup.
+        $this->root = sys_get_temp_dir().'/laravel-ffmpeg-tests-'.bin2hex(random_bytes(8));
+
+        mkdir($this->root, 0700);
+        mkdir($this->root.'/workspaces', 0700);
+
+        config(['laravel-ffmpeg.temporary_files_root' => $this->root.'/workspaces']);
     }
 
+    /**
+     * Clean up the testing environment before the next test.
+     */
     protected function tearDown(): void
     {
-        FFMpeg::cleanupTemporaryFiles();
+        if (isset($this->root)) {
+            (new Filesystem)->deleteDirectory($this->root);
+        }
 
         parent::tearDown();
     }
 
-    protected function getEnvironmentSetUp($app)
+    /**
+     * Remove the fixture directory after the last test of the class.
+     */
+    public static function tearDownAfterClass(): void
+    {
+        // Every test class shares this one static property. That only works because
+        // PHPUnit finishes a class, including this method, before it starts the next
+        // one, and calls it even when tests in the class failed or were skipped.
+        if (static::$fixtures !== null) {
+            (new Filesystem)->deleteDirectory(static::$fixtures);
+
+            static::$fixtures = null;
+        }
+
+        parent::tearDownAfterClass();
+    }
+
+    /**
+     * Get the path of the given file in the fixture directory shared by the class.
+     */
+    protected function fixturePath(string $name): string
+    {
+        static::$fixtures ??= sys_get_temp_dir().'/laravel-ffmpeg-fixtures-'.bin2hex(random_bytes(8));
+
+        if (! is_dir(static::$fixtures)) {
+            mkdir(static::$fixtures, 0700);
+        }
+
+        return static::$fixtures.'/'.$name;
+    }
+
+    /**
+     * Write an executable PHP script to the given path and get the path.
+     */
+    protected function fakeBinary(string $path, string $script): string
+    {
+        file_put_contents($path, '#!'.PHP_BINARY."\n<?php\n".$script);
+
+        chmod($path, 0700);
+
+        return $path;
+    }
+
+    /**
+     * Define the environment setup.
+     *
+     * @param  Application  $app
+     */
+    protected function defineEnvironment($app): void
     {
         $app['config']->set('filesystems.default', 'local');
 
@@ -45,112 +119,79 @@ abstract class TestCase extends BaseTestCase
             $adapter = new InMemoryFilesystemAdapter;
 
             return new FilesystemAdapter(
-                new Filesystem($adapter, $config),
+                new Flysystem($adapter, $config),
                 $adapter,
                 $config
             );
         });
     }
 
-    protected function x264(): X264
-    {
-        return new X264('libmp3lame');
-    }
-
-    protected function Mp3(): Mp3
-    {
-        return new Mp3('libmp3lame');
-    }
-
-    protected function getPackageProviders($app)
+    /**
+     * Get the package providers.
+     *
+     * @param  Application  $app
+     * @return array<int, class-string>
+     */
+    protected function getPackageProviders($app): array
     {
         return [ServiceProvider::class];
     }
 
-    protected function fakeLocalDisk()
+    /**
+     * Point the package at the real FFmpeg 9 binaries and get the FFmpeg path.
+     */
+    protected function useRealFFMpeg(): string
+    {
+        // Most tests fake the processes, but some run the real binaries to prove the
+        // exact arguments work. Those tests are skipped unless FFMPEG_9_FFPROBE
+        // holds the path of an FFprobe 9 binary that has FFmpeg beside it.
+        if (! ($ffprobe = getenv('FFMPEG_9_FFPROBE'))) {
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run the tests against real FFmpeg 9.0.x binaries.');
+        }
+
+        $ffmpeg = dirname($ffprobe).'/ffmpeg';
+
+        config([
+            'laravel-ffmpeg.ffmpeg.binaries' => $ffmpeg,
+            'laravel-ffmpeg.ffprobe.binaries' => $ffprobe,
+        ]);
+
+        return $ffmpeg;
+    }
+
+    /**
+     * Replace the local disk with a fake disk.
+     */
+    protected function fakeLocalDisk(): FilesystemAdapter
     {
         Storage::fake('local');
 
         return Storage::disk('local');
     }
 
-    protected function fakeLocalAudioFile()
-    {
-        $this->fakeLocalDisk();
-        $this->addTestFile('guitar.m4a');
-    }
-
-    protected function fakeLocalVideoFile()
-    {
-        $this->fakeLocalDisk();
-        $this->addTestFile('video.mp4');
-    }
-
-    protected function fakeLocalWebmFile()
-    {
-        $this->fakeLocalDisk();
-        $this->addTestFile('video.webm');
-    }
-
-    protected function fakeLocalLogoFile()
-    {
-        $this->fakeLocalDisk();
-        $this->addTestFile('logo.png');
-    }
-
-    protected function addTestFile($file, $disk = 'local')
+    /**
+     * Copy the given test file to the given disk.
+     */
+    protected function addTestFile(string $file, string $disk = 'local'): void
     {
         Storage::disk($disk)->put($file, file_get_contents(__DIR__."/src/{$file}"));
     }
 
-    protected function fakeLocalImageFiles()
+    /**
+     * Assert that every media workspace has been removed from the temporary directory.
+     */
+    protected function assertWorkspacesAreCleanedUp(): void
     {
-        $disk = $this->fakeLocalDisk();
-
-        $disk->put('feature_0001.png', file_get_contents(__DIR__.'/src/feature_0001.png'));
-        $disk->put('feature_0002.png', file_get_contents(__DIR__.'/src/feature_0002.png'));
-        $disk->put('feature_0003.png', file_get_contents(__DIR__.'/src/feature_0003.png'));
-        $disk->put('feature_0004.png', file_get_contents(__DIR__.'/src/feature_0001.png'));
-        $disk->put('feature_0005.png', file_get_contents(__DIR__.'/src/feature_0002.png'));
-        $disk->put('feature_0006.png', file_get_contents(__DIR__.'/src/feature_0003.png'));
-        $disk->put('feature_0007.png', file_get_contents(__DIR__.'/src/feature_0001.png'));
-        $disk->put('feature_0008.png', file_get_contents(__DIR__.'/src/feature_0002.png'));
-        $disk->put('feature_0009.png', file_get_contents(__DIR__.'/src/feature_0003.png'));
+        $this->assertSame([], glob($this->root.'/workspaces/*'));
     }
 
-    protected function fakeLocalVideoFiles()
+    /**
+     * Assert that the given process finished successfully.
+     */
+    protected function assertProcessSucceeded(ProcessResult|MediaProcessResult $process): void
     {
-        $this->fakeLocalVideoFile();
-        $this->addTestFile('video2.mp4');
-    }
-
-    protected function fakeLongLocalVideoFile()
-    {
-        $this->fakeLocalDisk();
-        $this->addTestFile('video3.mp4');
-    }
-
-    protected function fakeLocalMultiAudioVideoFile()
-    {
-        $this->fakeLocalDisk();
-        $this->addTestFile('video_multi_audio.mp4');
-    }
-
-    protected function assertPlaylistPattern(string $playlist, array $patternLines, ?StdListener $listener = null): self
-    {
-        $playlist = preg_replace('/\n|\r\n?/', "\n", $playlist);
-
-        $pattern = '/'.implode("\n", $patternLines).'/';
-
-        $assertMethod = method_exists($this, 'assertMatchesRegularExpression')
-            ? 'assertMatchesRegularExpression'
-            : 'assertRegExp';
-
-        $this->{$assertMethod}($pattern, $playlist, implode(PHP_EOL.PHP_EOL, [
-            'Playlist does not match pattern',
-            $listener ? implode(PHP_EOL, $listener->get()->all()) : null,
-        ]));
-
-        return $this;
+        // The error output of FFmpeg explains why it failed, so we use it as the
+        // failure message instead of PHPUnit's bare "false is not true".
+        $this->assertTrue($process->successful(), $process->errorOutput());
     }
 }

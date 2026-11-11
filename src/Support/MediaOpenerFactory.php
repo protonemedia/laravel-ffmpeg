@@ -2,58 +2,79 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Support;
 
-use Illuminate\Support\Traits\ForwardsCalls;
-use ProtoneMedia\LaravelFFMpeg\Drivers\PHPFFMpeg;
-use ProtoneMedia\LaravelFFMpeg\Http\DynamicHLSPlaylist;
-use ProtoneMedia\LaravelFFMpeg\MediaOpener;
+use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Http\File;
+use Illuminate\Http\UploadedFile;
+use ProtoneMedia\LaravelFFMpeg\Capabilities;
+use ProtoneMedia\LaravelFFMpeg\InputSelector;
+use ProtoneMedia\LaravelFFMpeg\LiveHlsSource;
+use ProtoneMedia\LaravelFFMpeg\Media;
+use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
+use ProtoneMedia\LaravelFFMpeg\PendingLiveHls;
+use ProtoneMedia\LaravelFFMpeg\RtspCamera;
+use SensitiveParameter;
 
+/**
+ * The entry point behind the FFMpeg facade.
+ */
 class MediaOpenerFactory
 {
-    use ForwardsCalls;
-
-    private $defaultDisk;
-
-    private $driver;
-
-    private $driverResolver;
-
-    public function __construct(string $defaultDisk, ?PHPFFMpeg $driver = null, ?callable $driverResolver = null)
+    /**
+     * Get a fresh snapshot of the compiled-in FFmpeg capabilities.
+     */
+    public function capabilities(): Capabilities
     {
-        $this->defaultDisk = $defaultDisk;
-        $this->driver = $driver;
-        $this->driverResolver = $driverResolver;
-    }
-
-    private function driver(): PHPFFMpeg
-    {
-        if ($this->driver) {
-            return $this->driver;
-        }
-
-        $resolver = $this->driverResolver;
-
-        return $this->driver = $resolver();
-    }
-
-    public function new(): MediaOpener
-    {
-        return new MediaOpener($this->defaultDisk, $this->driver());
-    }
-
-    public function dynamicHLSPlaylist(): DynamicHLSPlaylist
-    {
-        return new DynamicHLSPlaylist($this->defaultDisk);
+        return new Capabilities;
     }
 
     /**
-     * Handle dynamic method calls into the MediaOpener.
-     *
-     * @param  string  $method
-     * @param  array  $parameters
-     * @return mixed
+     * Open a media file on the default disk.
      */
-    public function __call($method, $parameters)
+    public function open(string|File|UploadedFile $path, array $inputOptions = []): Media
     {
-        return $this->forwardCallTo($this->new(), $method, $parameters);
+        return $this->disk()->open($path, $inputOptions);
+    }
+
+    /**
+     * Open a media file at an HTTP(S) URL.
+     */
+    public function openUrl(string $url, array $headers = [], bool $download = false, array $inputOptions = []): Media
+    {
+        return $this->disk()->openUrl($url, $headers, $download, $inputOptions);
+    }
+
+    /**
+     * Open an RTSP camera for a snapshot.
+     */
+    public function openRtsp(string $url, string $transport = 'tcp', float $timeout = 15): RtspCamera
+    {
+        return new RtspCamera($url, $transport, $timeout);
+    }
+
+    /**
+     * Begin publishing a live HLS stream from the given URL.
+     */
+    public function liveHls(
+        #[SensitiveParameter] string $url,
+        float $segmentDuration = 6,
+        int $window = 6,
+    ): PendingLiveHls {
+        return new PendingLiveHls(new LiveHlsSource($url), config('filesystems.default'), $segmentDuration, $window);
+    }
+
+    /**
+     * Begin composing completed HLS presentations into one presentation.
+     */
+    public function mergeHls(array $presentations): PendingHlsMerge
+    {
+        return new PendingHlsMerge($presentations);
+    }
+
+    /**
+     * Select the disk to open media from.
+     */
+    public function disk(string|Filesystem|null $disk = null): InputSelector
+    {
+        return new InputSelector($disk ?? config('filesystems.default'));
     }
 }

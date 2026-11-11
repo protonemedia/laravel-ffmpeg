@@ -1,0 +1,81 @@
+<?php
+
+namespace ProtoneMedia\LaravelFFMpeg;
+
+use BadMethodCallException;
+use DateTimeInterface;
+use Illuminate\Contracts\Filesystem\Filesystem;
+
+/**
+ * A file that an export published to a disk.
+ */
+class GeneratedFile
+{
+    /**
+     * Create a new generated file instance.
+     */
+    public function __construct(
+        protected readonly Filesystem $filesystem,
+        public readonly ?string $disk,
+        public readonly string $path,
+        public readonly int $size,
+        public readonly string $role = 'media',
+        public readonly bool $owned = true,
+    ) {}
+
+    /**
+     * Get the URL of the file.
+     */
+    public function url(): string
+    {
+        if (! method_exists($this->filesystem, 'url')) {
+            throw new BadMethodCallException('This filesystem does not support URLs.');
+        }
+
+        return $this->filesystem->url($this->path);
+    }
+
+    /**
+     * Get a temporary URL for the file.
+     */
+    public function temporaryUrl(DateTimeInterface $expiration, array $options = []): string
+    {
+        if (! method_exists($this->filesystem, 'temporaryUrl')) {
+            throw new BadMethodCallException('This filesystem does not support temporary URLs.');
+        }
+
+        return $this->filesystem->temporaryUrl($this->path, $expiration, $options);
+    }
+
+    /**
+     * Get a read stream for the file.
+     *
+     * @return resource|null
+     */
+    public function readStream()
+    {
+        return $this->filesystem->readStream($this->path);
+    }
+
+    /**
+     * Delete the file when the export owns it.
+     */
+    public function delete(): bool
+    {
+        return $this->owned && $this->filesystem->delete($this->path);
+    }
+
+    /**
+     * Get the instance as an array.
+     */
+    public function toArray(): array
+    {
+        return [
+            'disk' => $this->disk,
+            'path' => $this->path,
+            'size' => $this->size,
+            'role' => $this->role,
+            'owned' => $this->owned,
+        ];
+    }
+}

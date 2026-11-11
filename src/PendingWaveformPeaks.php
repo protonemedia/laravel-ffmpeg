@@ -1,0 +1,394 @@
+<?php
+
+namespace ProtoneMedia\LaravelFFMpeg;
+
+use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
+use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\PackagesArtifacts;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesCommand;
+
+/**
+ * The audio peaks of a waveform as data, separate from the waveform image operation.
+ */
+class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArtifacts, ShapesCommand
+{
+    use Concerns\AudioFilters;
+    use Concerns\Clips;
+    use Concerns\Fades;
+    use Concerns\GlobalOptions;
+    use Concerns\OutputOptions;
+    use Concerns\RunsExport;
+    use Conditionable, Macroable;
+
+    /**
+     * The export pipeline this builder configures.
+     */
+    protected readonly PendingExport $export;
+
+    /**
+     * The zero-based ordinal of the audio track to read.
+     */
+    protected int $track = 0;
+
+    /**
+     * Indicates if the channels are downmixed to mono.
+     */
+    protected bool $mixMono = false;
+
+    /**
+     * The requested number of buckets, instead of a fixed bucket size.
+     */
+    protected ?int $targetBuckets = null;
+
+    /**
+     * The sample rate of the selected track, once the source has been probed.
+     */
+    protected int $rate = 0;
+
+    /**
+     * The channel count of the selected track, once the source has been probed.
+     */
+    protected int $inputChannels = 0;
+
+    /**
+     * The channel layout of the selected track, when FFmpeg can name it.
+     */
+    protected ?string $inputLayout = null;
+
+    /**
+     * The peaks reduced from the decoded audio.
+     */
+    protected ?WaveformPeaks $peaks = null;
+
+    /**
+     * The maximum number of channel buckets in the peaks.
+     *
+     * This limits aggregate cells, not the decoded input length. The PCM is spooled to the
+     * private operation workspace and read in bounded chunks, never from stdout.
+     */
+    protected const int MAX_CELLS = 100000;
+
+    /**
+     * Create a new pending waveform peaks instance.
+     */
+    public function __construct(
+        Media $media,
+        string|Filesystem $disk,
+        protected readonly int $samplesPerBucket = 256,
+    ) {
+        if ($samplesPerBucket < 1) {
+            throw new InvalidArgumentException('Samples per bucket must be positive.');
+        }
+
+        $this->export = new PendingExport($media, $disk, $this, 'waveform-peaks');
+    }
+
+    /**
+     * Read the audio track at the given zero-based ordinal, not the global stream index.
+     */
+    public function audioTrack(int $track): static
+    {
+        $this->export->assertOutputMutable();
+
+        if ($track < 0) {
+            throw new InvalidArgumentException('The audio track must be nonnegative.');
+        }
+
+        $this->track = $track;
+
+        return $this;
+    }
+
+    /**
+     * Downmix the channels with equal weight before reduction, instead of keeping them separate.
+     */
+    public function mono(bool $enabled = true): static
+    {
+        $this->export->assertOutputMutable();
+
+        $this->mixMono = $enabled;
+
+        return $this;
+    }
+
+    /**
+     * Request at most the given number of nonempty, evenly partitioned buckets.
+     */
+    public function buckets(int $count): static
+    {
+        $this->export->assertOutputMutable();
+
+        if ($count < 1 || $count > self::MAX_CELLS) {
+            throw new InvalidArgumentException('Bucket count must be between 1 and 100000.');
+        }
+
+        $this->targetBuckets = $count;
+
+        return $this;
+    }
+
+    /**
+     * Get the peaks without publishing a file.
+     */
+    public function get(): WaveformPeaks
+    {
+        $this->export->execute('peaks.json', contents: true);
+
+        return $this->peaks;
+    }
+
+    /**
+     * Save the peaks as JSON to the given path.
+     */
+    public function save(?string $path = null): WaveformPeaksResult
+    {
+        return new WaveformPeaksResult($this->export->save($path), $this->peaks);
+    }
+
+    /**
+     * Record the selected track's rate and layout for the PCM decode.
+     * Progress keeps the default duration.
+     *
+     * @internal
+     */
+    public function duration(array $metadata, ?float $default): ?float
+    {
+        $stream = $metadata[0]->audioStreams()->get($this->track);
+        $this->rate = (int) ($stream?->get('sample_rate') ?? 0);
+        $this->inputChannels = (int) ($stream?->get('channels') ?? 0);
+
+        if ($stream === null) {
+            throw MediaException::probing("The audio track [{$this->track}] does not exist.", 'mapping');
+        }
+
+        if ($this->rate < 1) {
+            throw MediaException::probing("The audio track [{$this->track}] has no known sample rate.", 'mapping');
+        }
+
+        if ($this->inputChannels < 1 || $this->inputChannels > 64) {
+            throw MediaException::probing(
+                "The audio track channel count [{$this->inputChannels}] must be between 1 and 64.",
+                'mapping',
+            );
+        }
+
+        // FFprobe reports custom orders as "4 channels (FL+FR+LFE+BC)".
+        $layout = (string) ($stream->get('channel_layout') ?? '');
+
+        if (preg_match('/\A[0-9]+ channels \(([A-Za-z0-9+]+)\)\z/', $layout, $match)) {
+            $layout = $match[1];
+        }
+
+        $this->inputLayout = $layout !== 'unknown' && preg_match('/\A[A-Za-z0-9.+()]+\z/', $layout) ? $layout : null;
+
+        return $default;
+    }
+
+    /**
+     * Decode exactly one audio track to raw PCM.
+     *
+     * @internal
+     */
+    public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
+    {
+        if ($outputs[0]->inputSeekOptions() !== []) {
+            throw new InvalidArgumentException('Peaks require accurate clips, not keyframe seek.');
+        }
+
+        $command = $default;
+
+        // Raw PCM holds a single stream, so we will replace the pipeline's default optional
+        // video and audio maps with exactly one required audio track.
+        while (($index = array_search('-map', $command, true)) !== false) {
+            array_splice($command, $index, 2);
+        }
+
+        // We preserve the decoded track's rate and channel layout even when the caller's
+        // preprocessing changes the format, because the JSON timing describes these PCM
+        // frames. Using -ac alone would remix any layout that is not FFmpeg's default.
+        $channels = $this->mixMono ? 1 : ($this->inputChannels ?: 1);
+
+        if ($this->mixMono && $this->inputChannels > 0) {
+            $pan = 'pan=mono|c0='.collect(range(0, $this->inputChannels - 1))
+                ->map(fn ($i): string => sprintf('%.17g', 1 / $this->inputChannels)."*c{$i}")
+                ->implode('+');
+            $index = array_search('-filter:a', $command, true);
+
+            if ($index === false) {
+                array_splice($command, -1, 0, ['-filter:a', $pan]);
+            } else {
+                $command[$index + 1] .= ",{$pan}";
+            }
+        }
+
+        array_splice($command, -1, 0, ['-map', "0:a:{$this->track}", '-vn', '-sn', '-dn', '-c:a', 'pcm_s16le',
+            '-ar', (string) ($this->rate ?: 48000),
+            ...($this->mixMono || $this->inputLayout === null
+                ? ['-ac', (string) $channels]
+                : ['-ch_layout', $this->inputLayout]),
+            '-f', 's16le']);
+
+        return $command;
+    }
+
+    /**
+     * Get the private path that FFmpeg decodes the PCM to.
+     *
+     * @internal
+     */
+    public function outputPaths(array $default, array $outputs, Workspace $workspace): array
+    {
+        return ["{$workspace->path}/decoded.s16le"];
+    }
+
+    /**
+     * Reduce the decoded PCM to bounded extrema and publish them as version 1 JSON.
+     *
+     * @internal
+     */
+    public function artifacts(array $default, array $outputs, array $paths): array
+    {
+        $path = $paths[0];
+        $channels = $this->mixMono ? 1 : $this->inputChannels;
+        $frames = $this->decodedFrames($path, $channels);
+        $count = $this->bucketCount($frames, $channels);
+
+        [$lengths, $data] = $this->readPeaks($path, $frames, $count, $channels);
+
+        $this->peaks = new WaveformPeaks(
+            $this->rate,
+            $this->inputChannels,
+            $this->track,
+            $this->mixMono ? 'mono' : 'separate',
+            $frames,
+            $this->targetBuckets === null ? $this->samplesPerBucket : null,
+            $lengths,
+            $data,
+        );
+        $json = json_encode($this->peaks, JSON_THROW_ON_ERROR);
+        $target = dirname($path).'/peaks.json';
+
+        if (@file_put_contents($target, $json) !== strlen($json) || ! chmod($target, 0600)) {
+            throw MediaException::validation('Cannot write waveform peaks.', 'filesystem');
+        }
+
+        return [['path' => $target, 'output' => 0, 'destination' => $outputs[0]->destination()]];
+    }
+
+    /**
+     * Get the number of complete frames in the decoded PCM file.
+     */
+    protected function decodedFrames(string $path, int $channels): int
+    {
+        clearstatcache(true, $path);
+
+        $size = is_file($path) ? filesize($path) : false;
+
+        if ($size === false || $size % ($channels * 2) !== 0) {
+            throw MediaException::validation('The decoded PCM has an incomplete frame.', 'artifact');
+        }
+
+        return intdiv($size, $channels * 2);
+    }
+
+    /**
+     * Get the number of buckets the given frames are divided into.
+     */
+    protected function bucketCount(int $frames, int $channels): int
+    {
+        $count = match (true) {
+            $frames === 0 => 0,
+            $this->targetBuckets === null => intdiv($frames - 1, $this->samplesPerBucket) + 1,
+            default => min($frames, $this->targetBuckets),
+        };
+
+        if ($count > intdiv(self::MAX_CELLS, $channels)) {
+            throw MediaException::validation(
+                'Peaks exceed 100000 channel buckets; request fewer buckets.',
+                'output_limit',
+            );
+        }
+
+        return $count;
+    }
+
+    /**
+     * Read the bucket lengths and the per-channel minimum and maximum of each bucket.
+     *
+     * @return array{0: list<int>, 1: list<list<array{0: int, 1: int}>>}
+     */
+    protected function readPeaks(string $path, int $frames, int $count, int $channels): array
+    {
+        $data = array_fill(0, $channels, []);
+        $lengths = [];
+        $file = @fopen($path, 'rb');
+
+        if ($file === false) {
+            throw MediaException::validation('Cannot read decoded PCM.', 'filesystem');
+        }
+
+        try {
+            for ($bucket = 0; $bucket < $count; $bucket++) {
+                // A quotient and remainder split avoids overflowing frames * bucket.
+                if ($this->targetBuckets === null) {
+                    $length = min($this->samplesPerBucket, $frames - $bucket * $this->samplesPerBucket);
+                } else {
+                    $length = intdiv($frames, $count) + ($bucket < $frames % $count ? 1 : 0);
+                }
+
+                $lengths[] = $length;
+                [$min, $max] = $this->readBucket($file, $length, $channels);
+
+                for ($channel = 0; $channel < $channels; $channel++) {
+                    $data[$channel][] = [$min[$channel], $max[$channel]];
+                }
+            }
+        } finally {
+            fclose($file);
+        }
+
+        return [$lengths, $data];
+    }
+
+    /**
+     * Read the given number of frames and get the minimum and maximum sample of each channel.
+     *
+     * @param  resource  $file
+     * @return array{0: list<int>, 1: list<int>}
+     */
+    protected function readBucket($file, int $length, int $channels): array
+    {
+        $frameBytes = $channels * 2;
+        $min = array_fill(0, $channels, 32767);
+        $max = array_fill(0, $channels, -32768);
+        $remaining = $length;
+
+        while ($remaining > 0) {
+            $take = min($remaining, 2048);
+            $bytes = fread($file, $take * $frameBytes);
+
+            if ($bytes === false || strlen($bytes) !== $take * $frameBytes) {
+                throw MediaException::validation('Cannot read complete PCM frames.', 'filesystem');
+            }
+
+            // The v format is unsigned little-endian 16-bit, independent of the host
+            // byte order, so we will convert from two's complement explicitly.
+            foreach (unpack('v*', $bytes) as $index => $unsigned) {
+                $channel = ($index - 1) % $channels;
+                $sample = $unsigned >= 32768 ? $unsigned - 65536 : $unsigned;
+                $min[$channel] = min($min[$channel], $sample);
+                $max[$channel] = max($max[$channel], $sample);
+            }
+
+            $remaining -= $take;
+        }
+
+        return [$min, $max];
+    }
+}

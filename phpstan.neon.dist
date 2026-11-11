@@ -1,0 +1,13 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    reportUnmatchedIgnoredErrors: false
+
+    # Public methods validate untrusted input against their documented types at runtime.
+    treatPhpDocTypesAsCertain: false
+
+    level: 5
+
+    paths:
+        - src

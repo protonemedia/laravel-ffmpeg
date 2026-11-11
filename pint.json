@@ -1,0 +1,14 @@
+{
+    "preset": "laravel",
+    "rules": {
+        "blank_line_before_statement": {
+            "statements": ["continue", "do", "for", "foreach", "if", "return", "switch", "throw", "try", "while"]
+        },
+        "global_namespace_import": {
+            "import_classes": true,
+            "import_constants": false,
+            "import_functions": false
+        },
+        "single_class_element_per_statement": false
+    }
+}
