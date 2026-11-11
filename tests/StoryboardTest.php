@@ -56,7 +56,10 @@ class StoryboardTest extends TestCase
 
         $this->assertNotContains('-ss', $clipped);
         $this->assertNotContains('-t', $clipped);
-        $this->assertStringStartsWith('trim=start=1:end=', $clipped[array_search('-filter:v', $clipped) + 1]);
+        $this->assertStringStartsWith(
+            'scale=w=-1:h=ih:reset_sar=1,trim=start=1:end=',
+            $clipped[array_search('-filter:v', $clipped) + 1],
+        );
         Process::assertNothingRan();
     }
 

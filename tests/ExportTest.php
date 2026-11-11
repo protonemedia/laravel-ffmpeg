@@ -730,6 +730,36 @@ class ExportTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    #[DataProvider('anamorphicImageProvider')]
+    public function test_real_images_of_anamorphic_video_have_square_pixels(Closure $capture, string $path): void
+    {
+        // A 320x240 picture with 4:3 pixels displays at 16:9, so the image must be 426x240.
+        $fixture = $this->fixture('anamorphic.mp4', [
+            '-f', 'lavfi', '-i', 'testsrc2=size=320x240:rate=10:duration=1',
+            '-vf', 'setsar=4/3', '-c:v', 'libx264', '-threads', '1',
+        ]);
+
+        Storage::disk('memory')->put('anamorphic.mp4', file_get_contents($fixture));
+
+        $capture(FFMpeg::disk('memory')->open('anamorphic.mp4'))
+            ->toDisk('memory')
+            ->save($path);
+
+        $image = Storage::disk('memory')->get(str_replace('%d', '1', $path));
+
+        $this->assertSame([426, 240], array_slice(getimagesizefromstring($image), 0, 2));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public static function anamorphicImageProvider(): array
+    {
+        return [
+            'frame' => [fn (Media $media) => $media->frame(at: 0.5), 'frame.png'],
+            'frames' => [fn (Media $media) => $media->frames(count: 1), 'frames-%d.jpg'],
+            'storyboard' => [fn (Media $media) => $media->storyboard(every: 1, columns: 1, rows: 1), 'sheet-%d.jpg'],
+        ];
+    }
+
     public function test_real_frames_beyond_the_final_frame_are_not_published(): void
     {
         $media = $this->openSparseVideo();

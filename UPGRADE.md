@@ -638,7 +638,7 @@ $analysis->errorOutput();
 $analysis->throw();
 ```
 
-The `get()` method returns raw JPEG bytes, not Base64. Storyboard geometry applies to each tile before assembly. `waveform()` writes an image, while `waveformPeaks()` returns versioned amplitude data. Analysis-only nonzero exits remain inspectable until `throw()` is called.
+The `get()` method returns raw JPEG bytes, not Base64. Frames, image sequences, and storyboards of anamorphic video are stretched to square pixels at the display aspect ratio, so PHP-FFMpeg's `fixDisplayRatio()` frame filter is no longer needed. Images of anamorphic sources may therefore be wider than in version 8, while square-pixel sources keep their dimensions. Storyboard geometry applies to each tile before assembly. `waveform()` writes an image, while `waveformPeaks()` returns versioned amplitude data. Analysis-only nonzero exits remain inspectable until `throw()` is called.
 
 Waveform `colors` accepts a string or a nonempty list of color strings. For example, `waveform(colors: 'blue')` selects one color. A scalar string is not a delimited list. RGB and RGBA hexadecimal colors require a `#` or `0x` prefix.
 

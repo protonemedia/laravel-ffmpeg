@@ -587,6 +587,8 @@ $bytes = $media->frame(at: 12.5)
     ->get();
 ```
 
+Frames, image sequences, and storyboards always have square pixels. Anamorphic video, such as DVD footage, is stretched to its display aspect ratio first, because image viewers ignore the pixel aspect ratio.
+
 The `frames` method samples at an interval or as an evenly spaced count. Patterns need one integer placeholder:
 
 ```php

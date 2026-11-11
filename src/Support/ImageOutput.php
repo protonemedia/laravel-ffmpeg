@@ -14,6 +14,13 @@ use ProtoneMedia\LaravelFFMpeg\ExportOutput;
 class ImageOutput
 {
     /**
+     * The filter that stretches anamorphic video to square pixels at its display aspect ratio.
+     *
+     * Image viewers ignore the pixel aspect ratio, so an anamorphic frame would look squashed.
+     */
+    public const SQUARE_PIXELS = 'scale=w=-1:h=ih:reset_sar=1';
+
+    /**
      * Get the encoder for the image extension of the given destination.
      */
     public static function codec(?string $path): string
