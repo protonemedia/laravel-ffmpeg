@@ -91,7 +91,7 @@ You should set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to the matching pair. Se
 
 **Likelihood Of Impact: High**
 
-The `fromDisk()` and `fromFilesystem()` methods have been replaced by `disk()`. You should call `disk('uploads')` to select a Storage disk, or `disk($filesystem)` to use a filesystem instance you supply. `FFMpeg::open($key)` opens a disk-relative key on the current `filesystems.default` disk. When you pass a Laravel `File` or `UploadedFile` directly to `FFMpeg::open()`, it reads that local file instead of a Storage key.
+The `fromDisk()` and `fromFilesystem()` methods have been replaced by `disk()`. You should call `disk('uploads')` to select a Storage disk, or `disk($filesystem)` to use a filesystem instance you supply. `FFMpeg::open($key)` opens a disk-relative key on the current `filesystems.default` disk. You may also pass a Laravel `File` or `UploadedFile` directly to `FFMpeg::open()`, which reads that local file instead of a Storage key.
 
 The `openUrl()` method still accepts request headers, but headers now require `download: true`:
 
@@ -433,7 +433,7 @@ $media->concatTranscoded($second)
 
 **Likelihood Of Impact: Low**
 
-If you mixed audio with a custom `amix` graph and output mapping, you should use the `backgroundMusic()` or `mixAudio()` methods instead:
+You should replace custom `amix` graphs and output mapping with the `backgroundMusic()` or `mixAudio()` methods:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -485,7 +485,7 @@ Both inputs require finite positive durations, and the added input requires audi
 
 **Likelihood Of Impact: Low**
 
-If you changed playback speed with raw filter arguments, or built GIFs with your own palette graph, you should use the `speed()` and `gif()` methods instead:
+You should replace raw speed filter arguments with the `speed()` method, and custom GIF palette graphs with the `gif()` method:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -769,7 +769,7 @@ For protected Laravel playback, you should replace handwritten playlist and key 
 
 Register `Hls::define()` in a service provider with a mandatory authorization callback, such as `fn (Lesson $lesson) => Gate::authorize('view', $lesson)`. You should register `Route::model('lesson', Lesson::class)` explicitly, since Laravel does not infer model bindings from definition callbacks. Register `Hls::routes()` in your routes file, then issue `Hls::url(..., expires: now()->addMinutes(10))` from an authorized endpoint. Follow the [complete protected playback setup](README.md#serve-protected-hls-with-laravel).
 
-Routes default to the `['web', 'auth']` middleware and support route caching. Definition and application configuration closures are not cached route actions. If Sanctum is installed, you may replace the middleware with `['api', 'auth:sanctum']`. Deliberate bearer-URL playback can use `['web']` only with authorized URL issuance. There is no automatic global authentication in signed-only mode. URLs are bearer credentials, and the definition's authorization callback remains mandatory on every request.
+Routes default to the `['web', 'auth']` middleware and support route caching. Definition and application configuration closures are not cached route actions. You may replace the middleware with `['api', 'auth:sanctum']` if Sanctum is installed. Deliberate bearer-URL playback can use `['web']` only with authorized URL issuance. There is no automatic global authentication in signed-only mode. URLs are bearer credentials, and the definition's authorization callback remains mandatory on every request.
 
 All child URLs keep the entry URL's exact deadline without renewal. They preserve validated signed query context, such as grants or editions, with route parameters taking precedence. Every request revalidates the signature and authorization. Only inventory-owned resources are served, using opaque IDs and `private, no-store` headers. Media supports single byte ranges and `HEAD`, and key responses contain 16 raw bytes. You should keep inventories server-side and use named disks with private, immutable published media and keys. Publish replacements to new paths.
 

@@ -22,7 +22,7 @@ Use the typed v9 API in `ProtoneMedia\LaravelFFMpeg`. PHP-FFMpeg format objects 
 - Configure encoding with `video()` and `audio()`. Bitrates are positive integers in bits per second or unit strings such as `'1500k'`.
 - Use `Media::frame()`, `frames()`, `storyboard()`, and `hls()` directly. Do not add an extra `export()` after these methods.
 - Pass a `Media` object to `watermark()`, not a legacy watermark callback.
-- Receive a `Progress` object in `onProgress()`. Its percentage and time estimates can be null.
+- Receive a `Progress` object in `onProgress()`. Its percentage and time estimates may be null.
 - Use durable named disks for queued exports. Do not capture service objects in queued callbacks.
 - Let each operation clean up its temporary workspace. Published outputs remain until the application deletes them.
 - Do not use `fromDisk()`, `inFormat()`, `addFormat()`, `exportForHLS()`, `getFrameFromSeconds()`, or `cleanupTemporaryFiles()` from older releases.

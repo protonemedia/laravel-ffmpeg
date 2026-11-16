@@ -92,10 +92,10 @@ The profile runs before the `queued` method snapshots the builder, so the serial
 You should keep an application conversion record for each attempt. The media ID, immutable source revision, profile name, and profile version identify the requested conversion, while the attempt's `exportId` is stored separately: retrying persistence reuses that ID, whereas a new encoding attempt gets a new ID and destination prefix. A typical flow looks like this:
 
 1. In a database transaction, lock the media row, insert the conversion request, and then set the media row's current export ID and desired source and profile versions.
-2. Commit before dispatching, either by calling `Bus::dispatch($job)` after the transaction or by using Laravel's after-commit dispatch inside it. If dispatch must survive a crash between the commit and the enqueue, use an application outbox.
+2. Commit before dispatching, either by calling `Bus::dispatch($job)` after the transaction or by using Laravel's after-commit dispatch inside it. To make dispatch survive a crash between the commit and the enqueue, use an application outbox.
 3. Register a synchronous listener for the `QueuedExportCompleted` event, keep the `laravel-ffmpeg.enable_events` option enabled, and verify that the export ID belongs to a trusted request.
 4. Before updating application state, write a private completion receipt containing the `exportId`, `files`, and `playback` values to durable storage. Check for write failures, or configure the disk with `throw => true`. Serialize receipt writers per media row or use atomic create-if-absent storage, since an `exists` call followed by a `put` call is not a concurrency guard on its own.
-5. In a transaction, lock the media and conversion rows in a consistent order. If the conversion has already been applied, return without replacing its inventory. Otherwise, persist the full receipt and set the media's published export ID only if the current export ID, source version, and profile version still match the request, marking any other completion as stale.
+5. In a transaction, lock the media and conversion rows in a consistent order. Return without replacing the inventory if the conversion has already been applied. Otherwise, persist the full receipt and set the media's published export ID only if the current export ID, source version, and profile version still match the request, marking any other completion as stale.
 
 Once your listener implements this storage policy, you may register it in a service provider:
 
@@ -139,7 +139,7 @@ For HLS, also check whether another retained presentation references an artifact
 <a name="run-plank-conversions-in-an-application-job"></a>
 ## Running Plank Conversions in an Application Job
 
-When you use Plank MediaLibrary, you may keep its upload and relationship handling and dispatch a normal Laravel job after your upload transaction commits. Do not register FFmpeg as an image-variant plugin, since video processing needs a queue timeout, an immutable source, and an inventory of outputs rather than an image transformation callback.
+You may keep Plank MediaLibrary's upload and relationship handling and dispatch a normal Laravel job after your upload transaction commits. Do not register FFmpeg as an image-variant plugin, since video processing needs a queue timeout, an immutable source, and an inventory of outputs rather than an image transformation callback.
 
 Pass the Plank media ID and your conversion request ID to the job as scalar arguments. In the `handle` method, reload the Plank record and your trusted source mapping, and obtain the named disk and relative path from that mapping. Never pass a temporary upload path or the Plank model into a queued export plan.
 
@@ -206,7 +206,7 @@ Check the source and profile versions before expensive work and again when apply
 
 The `inspect` method lets you assert profile options without storage access or processes, `Bus::fake()` lets you assert dispatch and job metadata rather than encoding success, and `Storage::fake()` covers input staging, publication, receipts, and cleanup assertions.
 
-For application-policy tests, you may use `Process::fake()` together with `Process::preventStrayProcesses()`, returning FFmpeg 9.0.x version output and valid FFprobe JSON. Because publication needs a real file, the fake encoder must create the staged destination file as well as return success. When testing the listener, do not fake the completion event.
+For application-policy tests, you may use `Process::fake()` together with `Process::preventStrayProcesses()`, returning FFmpeg 9.0.x version output and valid FFprobe JSON. Because publication needs a real file, the fake encoder must create the staged destination file as well as return success. Do not fake the completion event in listener tests.
 
 You may run the complete fixture without FFmpeg binaries:
 

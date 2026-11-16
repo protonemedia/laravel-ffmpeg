@@ -18,7 +18,7 @@ quality to benefit the project. Many developers have different skillsets, streng
 
 ## Viability
 
-When requesting or submitting new features, first consider whether it might be useful to others. Open
+Before requesting or submitting a new feature, consider whether it might be useful to others. Open
 source projects are used by many developers, who may have entirely different needs to your own. Think about
 whether or not your feature is likely to be used by other users of the project.
 
@@ -38,7 +38,7 @@ Before submitting a pull request:
 
 ## Requirements
 
-If the project maintainer has any additional requirements, you will find them listed here.
+The project maintainer lists any additional requirements here.
 
 - **Laravel coding style and static analysis** - The PHP Quality and Style workflow runs Rector, [Laravel Pint](https://laravel.com/docs/pint) and a PHP CS Fixer rule that Pint lacks, commits their changes, then runs Larastan. Run `composer refactor`, `composer format` and `composer analyse` locally before you open a pull request.
 
@@ -50,6 +50,6 @@ If the project maintainer has any additional requirements, you will find them li
 
 - **One pull request per feature** - If you want to do more than one thing, send multiple pull requests.
 
-- **Send coherent history** - Make sure each individual commit in your pull request is meaningful. If you had to make multiple intermediate commits while developing, please [squash them](https://www.git-scm.com/book/en/v2/Git-Tools-Rewriting-History#Changing-Multiple-Commit-Messages) before submitting.
+- **Send coherent history** - Make sure each individual commit in your pull request is meaningful. Please [squash](https://www.git-scm.com/book/en/v2/Git-Tools-Rewriting-History#Changing-Multiple-Commit-Messages) any intermediate commits you made while developing before submitting.
 
 **Happy coding**!

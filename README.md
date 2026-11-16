@@ -113,7 +113,7 @@ sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffmpeg -version
 sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
 ```
 
-If this succeeds but the application fails, check permissions and write access to the temporary root and Storage destinations. After changing paths, rebuild the configuration cache and restart queue workers.
+The application may still fail after both commands succeed. You should then check permissions and write access to the temporary root and Storage destinations. After changing paths, rebuild the configuration cache and restart queue workers.
 
 Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause: a launch failure means the executable could not start, a version failure means an unsupported or mismatched pair, and an encoding failure means FFmpeg rejected the command or media. Categories name conditions, such as `metadata` for an unknown duration and `mapping` for a missing track.
 
@@ -185,7 +185,7 @@ The `crf` argument sets constant quality, while the `bitrate` argument accepts p
 <a name="two-pass-encoding-and-clipping"></a>
 #### Two-Pass Encoding and Clipping
 
-When targeting a bitrate, you may call the `twoPass` method, which keeps private statistics for each output. The `clip` method cuts accurately by default, transcoding the affected streams, while `seek: 'keyframe'` allows stream copying but may start early:
+Two-pass encoding requires a target video bitrate. You may enable it using the `twoPass` method, which keeps private statistics for each output. The `clip` method cuts accurately by default, transcoding the affected streams, while `seek: 'keyframe'` allows stream copying but may start early:
 
 ```php
 $media->export()
@@ -1185,7 +1185,7 @@ The `run` method blocks while publishing one H.264/AAC MPEG-TS rendition over a 
 
 A clean EOF returns `completed` with `ENDLIST`; `stop` or `cancelWhen` returns `cancelled` and the timeout `timed_out`, keeping the last playlist without `ENDLIST`. The `retry` budget is finite, and `reconnectOnEof: true` reconnects after clean EOF too. Restarts keep sequence numbers monotonic, with discontinuities. Storage and exhausted-source failures throw a sanitized `MediaException` with a bounded published inventory; global process deadlines remain hard limits.
 
-Continuous HLS has no adaptive masters, fMP4, encryption, or low-latency mode. Sources must be HTTP, HTTPS, or RTSP URLs without user information; `openRtsp` stays the snapshot API. Local, HTTP, and RTSP ingestion are acceptance-tested, the RTSP case against a MediaMTX server. When a camera or relay closes the stream, FFmpeg sees a clean end of stream, so you should pass `reconnectOnEof: true` to the `retry` method if the session should wait for the source to return.
+Continuous HLS has no adaptive masters, fMP4, encryption, or low-latency mode. Sources must be HTTP, HTTPS, or RTSP URLs without user information; `openRtsp` stays the snapshot API. Local, HTTP, and RTSP ingestion are acceptance-tested, the RTSP case against a MediaMTX server. FFmpeg treats a camera or relay that closes the stream as a clean end of stream. To wait for the source to return, you should pass `reconnectOnEof: true` to the `retry` method.
 
 > [!WARNING]
 > Use a fresh, empty namespace per session, supervise the worker, and guarantee one writer per namespace on storage that replaces objects atomically. A restarted PHP worker cannot resume a session. URL validation does not prevent SSRF, so restrict reachable hosts.
@@ -1336,7 +1336,7 @@ $export = $media->export()
     });
 ```
 
-The result exposes the generated files and redacted process summaries. When encoding, validation, or publication fails, the `save` method throws a `MediaException` instead:
+The result exposes the generated files and redacted process summaries. The `save` method throws a `MediaException` instead if encoding, validation, or publication fails:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
