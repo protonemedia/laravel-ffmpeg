@@ -137,7 +137,9 @@ class HlsPlaybackController
             default => 'application/octet-stream',
         };
 
-        if (($range = $request->header('Range')) !== null) {
+        $range = $request->header('Range');
+
+        if ($range !== null) {
             $bounds = $this->byteRange($range, $size);
 
             if ($bounds === null) {

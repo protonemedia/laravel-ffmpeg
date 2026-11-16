@@ -299,9 +299,12 @@ class RtspServerTest extends TestCase
 
         $deadline = microtime(true) + 5;
 
-        while (! ($socket = @fsockopen('127.0.0.1', static::$port, timeout: 0.1)) && $server->isRunning()
-            && microtime(true) < $deadline) {
+        $socket = @fsockopen('127.0.0.1', static::$port, timeout: 0.1);
+
+        while (! $socket && $server->isRunning() && microtime(true) < $deadline) {
             usleep(20000);
+
+            $socket = @fsockopen('127.0.0.1', static::$port, timeout: 0.1);
         }
 
         $this->assertNotFalse($socket, $server->getOutput().$server->getErrorOutput());

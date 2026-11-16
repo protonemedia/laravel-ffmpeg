@@ -13,7 +13,13 @@ if ($server === false) {
 echo stream_socket_get_name($server, false)."\n";
 flush();
 
-while ($client = stream_socket_accept($server, 15)) {
+while (true) {
+    $client = stream_socket_accept($server, 15);
+
+    if ($client === false) {
+        break;
+    }
+
     stream_set_timeout($client, 5);
 
     if (isset($argv[3]) && ! @stream_socket_enable_crypto($client, true, STREAM_CRYPTO_METHOD_TLS_SERVER)) {
@@ -26,7 +32,13 @@ while ($client = stream_socket_accept($server, 15)) {
     $path = parse_url(explode(' ', $line ?: '')[1] ?? '/', PHP_URL_PATH);
     $headers = [];
 
-    while (($line = fgets($client)) !== false && trim($line) !== '') {
+    while (true) {
+        $line = fgets($client);
+
+        if ($line === false || trim($line) === '') {
+            break;
+        }
+
         [$name, $value] = explode(':', $line, 2);
         $headers[strtolower($name)] = trim($value);
     }

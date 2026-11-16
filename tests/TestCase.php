@@ -142,10 +142,12 @@ abstract class TestCase extends BaseTestCase
      */
     protected function useRealFFMpeg(): string
     {
+        $ffprobe = getenv('FFMPEG_9_FFPROBE');
+
         // Most tests fake the processes, but some run the real binaries to prove the
         // exact arguments work. Those tests are skipped unless FFMPEG_9_FFPROBE
         // holds the path of an FFprobe 9 binary that has FFmpeg beside it.
-        if (! ($ffprobe = getenv('FFMPEG_9_FFPROBE'))) {
+        if (! $ffprobe) {
             $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run the tests against real FFmpeg 9.0.x binaries.');
         }
 

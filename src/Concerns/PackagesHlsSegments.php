@@ -187,9 +187,13 @@ trait PackagesHlsSegments
      */
     protected function extinfDuration(string $line, ?float $pending): float
     {
-        if ($pending !== null
-            || ! preg_match('/\A#EXTINF:([0-9]+(?:\.[0-9]+)?),\z/', $line, $match)
-            || ! is_finite($duration = (float) $match[1]) || $duration <= 0) {
+        if ($pending !== null || ! preg_match('/\A#EXTINF:([0-9]+(?:\.[0-9]+)?),\z/', $line, $match)) {
+            throw MediaException::validation('Invalid HLS segment duration.', 'artifact');
+        }
+
+        $duration = (float) $match[1];
+
+        if (! is_finite($duration) || $duration <= 0) {
             throw MediaException::validation('Invalid HLS segment duration.', 'artifact');
         }
 

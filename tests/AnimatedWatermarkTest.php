@@ -29,7 +29,9 @@ class AnimatedWatermarkTest extends TestCase
     {
         $binary = $this->useRealFFMpeg();
 
-        if (is_file($path = $this->fixturePath($name))) {
+        $path = $this->fixturePath($name);
+
+        if (is_file($path)) {
             return $path;
         }
 

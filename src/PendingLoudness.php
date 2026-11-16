@@ -311,7 +311,9 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             throw new MediaException('Loudness statistics exceed 64 KiB.', $phase, 'analysis');
         }
 
-        if (($json = file_get_contents($path)) === false) {
+        $json = file_get_contents($path);
+
+        if ($json === false) {
             throw new MediaException('Loudness statistics cannot be read.', $phase, 'analysis');
         }
 

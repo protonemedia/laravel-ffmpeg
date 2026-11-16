@@ -407,8 +407,9 @@ class HlsPlaylist implements Responsable
         try {
             $disk = is_string($this->disk) ? Storage::disk($this->disk) : $this->disk;
             $stream = $disk->readStream($path);
+            $content = is_resource($stream) ? stream_get_contents($stream, $limit + 1) : false;
 
-            if (! is_resource($stream) || ($content = stream_get_contents($stream, $limit + 1)) === false) {
+            if ($content === false) {
                 throw new InvalidArgumentException;
             }
         } catch (Throwable) {
@@ -441,17 +442,32 @@ class HlsPlaylist implements Responsable
      */
     protected function validateUri(mixed $uri): void
     {
-        if (! is_string($uri) || $uri === '' || ! preg_match('//u', $uri)
-            || preg_match('/[\s\x00-\x1F\x7F-\x9F"\\\\#]/u', $uri)
-            || preg_match('/%(?![0-9a-f]{2})/i', $uri) || str_starts_with($uri, '//') || parse_url($uri) === false
-            || (($scheme = parse_url($uri, PHP_URL_SCHEME)) !== null
-                && (! in_array(strtolower($scheme), ['http', 'https'], true)
-                    || ! filter_var($uri, FILTER_VALIDATE_URL)))) {
+        if (! $this->isValidUri($uri)) {
             throw MediaException::response(
                 'HLS resolvers and references require an HTTP(S) URL or a valid relative URI.',
                 'artifact',
             );
         }
+    }
+
+    /**
+     * Determine if the given value is an HTTP(S) URL or a valid relative URI.
+     */
+    protected function isValidUri(mixed $uri): bool
+    {
+        if (! is_string($uri) || $uri === '' || ! preg_match('//u', $uri)
+            || preg_match('/[\s\x00-\x1F\x7F-\x9F"\\\\#]/u', $uri)
+            || preg_match('/%(?![0-9a-f]{2})/i', $uri) || str_starts_with($uri, '//') || parse_url($uri) === false) {
+            return false;
+        }
+
+        $scheme = parse_url($uri, PHP_URL_SCHEME);
+
+        if ($scheme === null) {
+            return true;
+        }
+
+        return in_array(strtolower($scheme), ['http', 'https'], true) && filter_var($uri, FILTER_VALIDATE_URL);
     }
 
     /**

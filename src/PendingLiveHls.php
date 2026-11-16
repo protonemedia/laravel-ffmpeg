@@ -609,12 +609,7 @@ class PendingLiveHls
 
         foreach ($lines as $line) {
             if (str_starts_with($line, '#EXTINF:')) {
-                if ($duration !== null
-                    || ! preg_match('/\A#EXTINF:([0-9]+(?:\.[0-9]+)?),\z/', $line, $match)
-                    || ! is_finite($duration = (float) $match[1]) || $duration <= 0
-                    || $duration > ceil($this->segmentDuration) + 1) {
-                    throw MediaException::publication('Invalid live segment duration.', 'artifact');
-                }
+                $duration = $this->extinfDuration($line, $duration);
             } elseif ($line !== '' && $line[0] !== '#') {
                 // Ownership derives from our generated prefix and contiguous counter, never from
                 // arbitrary, changing playlist references or from scanning the destination.
@@ -656,6 +651,24 @@ class PendingLiveHls
         }
 
         return $changed;
+    }
+
+    /**
+     * Parse the duration of an EXTINF line that must follow a published segment.
+     */
+    protected function extinfDuration(string $line, ?float $pending): float
+    {
+        if ($pending !== null || ! preg_match('/\A#EXTINF:([0-9]+(?:\.[0-9]+)?),\z/', $line, $match)) {
+            throw MediaException::publication('Invalid live segment duration.', 'artifact');
+        }
+
+        $duration = (float) $match[1];
+
+        if (! is_finite($duration) || $duration <= 0 || $duration > ceil($this->segmentDuration) + 1) {
+            throw MediaException::publication('Invalid live segment duration.', 'artifact');
+        }
+
+        return $duration;
     }
 
     /**

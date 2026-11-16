@@ -127,8 +127,9 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
     {
         $settings = $this->export->outputConfiguration();
         $filters = ['setpts=PTS-STARTPTS'];
+        $clip = $settings['clip'];
 
-        if (($clip = $settings['clip']) !== null) {
+        if ($clip !== null) {
             $filters[] = 'trim=start='.CommandCompiler::timestamp($clip['start'])
                 .':duration='.CommandCompiler::timestamp($clip['duration']);
             $filters[] = 'setpts=PTS-STARTPTS';

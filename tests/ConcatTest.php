@@ -620,10 +620,12 @@ class ConcatTest extends TestCase
     {
         $ffmpeg = $this->useRealFFMpeg();
 
+        $path = $this->fixturePath($name);
+
         // Several tests check different things about one generated file, so we only
         // encode each fixture the first time a test asks for it. The directory is
         // removed once every test in the class has finished.
-        if (! is_file($path = $this->fixturePath($name))) {
+        if (! is_file($path)) {
             $this->assertProcessSucceeded(Process::run([$ffmpeg, '-v', 'error', ...$arguments, $path]));
         }
 

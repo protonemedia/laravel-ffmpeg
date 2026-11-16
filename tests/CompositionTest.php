@@ -93,11 +93,12 @@ class CompositionTest extends TestCase
     protected function fixture(string $name): string
     {
         $ffmpeg = $this->useRealFFMpeg();
+        $path = $this->fixturePath($name);
 
         // Several tests start from the same small synthetic videos. Generating each one
         // once per class keeps the real FFmpeg tests fast, and every test still copies
         // the video to its own disk so it can never change what the next test reads.
-        if (is_file($path = $this->fixturePath($name))) {
+        if (is_file($path)) {
             return $path;
         }
 

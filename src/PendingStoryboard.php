@@ -158,8 +158,13 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
             $duration = max(0, min($clip['duration'], $duration - $clip['start']));
         }
 
-        if ($duration === null || $duration <= 0 || $duration > intdiv(PHP_INT_MAX, 1000000)
-            || ($this->duration = (int) round($duration * 1000000)) < 1) {
+        if ($duration === null || $duration <= 0 || $duration > intdiv(PHP_INT_MAX, 1000000)) {
+            throw MediaException::probing('Storyboards require a known, positive media duration.', 'metadata');
+        }
+
+        $this->duration = (int) round($duration * 1000000);
+
+        if ($this->duration < 1) {
             throw MediaException::probing('Storyboards require a known, positive media duration.', 'metadata');
         }
 

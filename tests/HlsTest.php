@@ -613,8 +613,9 @@ class HlsTest extends TestCase
             }
 
             if ($tool === 'ffprobe') {
-                if (($selector = array_search('-select_streams', $process->command, true)) !== false
-                    && $process->command[$selector + 1] === 'a:0') {
+                $selector = array_search('-select_streams', $process->command, true);
+
+                if ($selector !== false && $process->command[$selector + 1] === 'a:0') {
                     return Process::result(output: '{"format":{"duration":"2"},"streams":[]}');
                 }
 

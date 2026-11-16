@@ -91,10 +91,12 @@ class QueueTest extends TestCase
      */
     protected function sourceFixture(string $ffmpeg): string
     {
+        $path = $this->fixturePath('source.mp4');
+
         // Every test converts the same short clip, so we encode it once per class
         // and copy it onto each test's disk. The directory is removed once every
         // test in the class has finished.
-        if (! is_file($path = $this->fixturePath('source.mp4'))) {
+        if (! is_file($path)) {
             $result = Process::run([
                 $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=96x64:rate=10:duration=1.6',
                 '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1.6',

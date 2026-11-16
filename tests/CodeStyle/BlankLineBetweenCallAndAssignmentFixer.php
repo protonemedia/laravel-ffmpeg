@@ -87,7 +87,13 @@ class BlankLineBetweenCallAndAssignmentFixer implements WhitespacesAwareFixerInt
     public function fix(SplFileInfo $file, Tokens $tokens): void
     {
         for ($index = 0; $index < $tokens->count(); $index++) {
-            if (! $tokens[$index]->equals(';') || ! ($next = $tokens->getNextMeaningfulToken($index))) {
+            if (! $tokens[$index]->equals(';')) {
+                continue;
+            }
+
+            $next = $tokens->getNextMeaningfulToken($index);
+
+            if ($next === null) {
                 continue;
             }
 
@@ -121,7 +127,9 @@ class BlankLineBetweenCallAndAssignmentFixer implements WhitespacesAwareFixerInt
                 return $start;
             }
 
-            if ($block = Tokens::detectBlockType($token)) {
+            $block = Tokens::detectBlockType($token);
+
+            if ($block !== null) {
                 // Reaching an opening token means the semicolon is inside it, which is a
                 // block statement for a brace and a for loop header for a parenthesis.
                 if ($block['isStart']) {
@@ -151,7 +159,9 @@ class BlankLineBetweenCallAndAssignmentFixer implements WhitespacesAwareFixerInt
                 return $index;
             }
 
-            if ($block = Tokens::detectBlockType($tokens[$index])) {
+            $block = Tokens::detectBlockType($tokens[$index]);
+
+            if ($block !== null) {
                 if (! $block['isStart']) {
                     return null;
                 }
@@ -194,7 +204,9 @@ class BlankLineBetweenCallAndAssignmentFixer implements WhitespacesAwareFixerInt
                 return 'assignment';
             }
 
-            if (($block = Tokens::detectBlockType($tokens[$index])) && $block['isStart']) {
+            $block = Tokens::detectBlockType($tokens[$index]);
+
+            if ($block !== null && $block['isStart']) {
                 $index = $tokens->findBlockEnd($block['type'], $index);
             } elseif (! $tokens[$index]->isGivenKind(self::CHAIN)) {
                 $chain = false;

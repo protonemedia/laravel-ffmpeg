@@ -145,7 +145,9 @@ trait VerifiesArtifacts
     {
         clearstatcache(true, $path);
 
-        if (! is_file($path) || ($size = filesize($path)) === false || $size === 0) {
+        $size = is_file($path) ? filesize($path) : false;
+
+        if ($size === false || $size === 0) {
             throw MediaException::validation('FFmpeg did not produce a nonempty media file.', 'artifact');
         }
 

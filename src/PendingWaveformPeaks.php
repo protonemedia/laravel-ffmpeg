@@ -205,8 +205,12 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
 
         // Raw PCM holds a single stream, so we will replace the pipeline's default optional
         // video and audio maps with exactly one required audio track.
-        while (($index = array_search('-map', $command, true)) !== false) {
+        $index = array_search('-map', $command, true);
+
+        while ($index !== false) {
             array_splice($command, $index, 2);
+
+            $index = array_search('-map', $command, true);
         }
 
         // We preserve the decoded track's rate and channel layout even when the caller's
