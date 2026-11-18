@@ -1003,6 +1003,39 @@ class CompositionTest extends TestCase
         $this->assertSame('encoded', Storage::disk('local')->get($result->file('full.mkv', disk: 'local')->path));
     }
 
+    public function test_outputs_publish_to_the_first_inputs_disk_by_default(): void
+    {
+        $this->fakePipeline();
+        $this->fakeLocalDisk();
+
+        Storage::disk('local')->put('overlay.mkv', 'overlay media');
+
+        $export = FFMpeg::disk('memory')->open('source.mkv')->export();
+
+        $export->addInput(FFMpeg::disk('local')->open('overlay.mkv'));
+
+        $combined = $export->map('0:v')
+            ->metadataFrom(0)
+            ->chaptersFrom(0)
+            ->save('combined.mkv');
+
+        $composed = FFMpeg::disk('memory')
+            ->open('source.mkv')
+            ->export()
+            ->output('full.mkv', fn ($out) => $out->mapVideo(0))
+            ->output('preview.mkv', fn ($out) => $out->mapVideo(0)->toDisk('local'))
+            ->save();
+
+        // The configured default disk is "local", so these outputs prove the default
+        // follows the first input to the "memory" disk instead of the configuration.
+        $this->assertSame('memory', $combined->file()->disk);
+        $this->assertSame('memory', $composed->file('full.mkv')->disk);
+        $this->assertSame('local', $composed->file('preview.mkv')->disk);
+        $this->assertTrue(Storage::disk('memory')->exists('combined.mkv'));
+        $this->assertTrue(Storage::disk('memory')->exists('full.mkv'));
+        $this->assertFalse(Storage::disk('local')->exists('combined.mkv'));
+    }
+
     #[DataProvider('ambiguousFileLookupProvider')]
     public function test_file_lookups_must_identify_exactly_one_generated_file(
         array $arguments,

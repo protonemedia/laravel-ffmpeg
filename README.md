@@ -174,6 +174,8 @@ $result = $media->export()
     ->save('lesson.mp4');
 ```
 
+Without the `toDisk` method, outputs publish to the first input's disk, or to your `filesystems.default` disk for uploads, local files, and URLs.
+
 <a name="copying-streams"></a>
 #### Copying Streams
 
@@ -942,7 +944,7 @@ $result = $export
     ->save();
 ```
 
-Each output needs explicit maps, a metadata and chapter policy, and a destination, and each label may be consumed once, so branch with `split` or `asplit`. Declare files with `resource('look', $media)` and use the placeholder as the whole value, as in `lut3d=file={{look}}`.
+Each output needs explicit maps and a metadata and chapter policy, and each label may be consumed once, so branch with `split` or `asplit`. Declare files with `resource('look', $media)` and use the placeholder as the whole value, as in `lut3d=file={{look}}`.
 
 <a name="streaming"></a>
 ## Streaming

@@ -283,10 +283,6 @@ class PendingExport implements Exportable
 
         $this->inputs[] = $media;
 
-        if (! $this->outputDiskExplicit) {
-            $this->disk = config('filesystems.default');
-        }
-
         return array_key_last($this->inputs);
     }
 
@@ -425,7 +421,7 @@ class PendingExport implements Exportable
             throw new InvalidArgumentException('Do not combine root output settings with output() callbacks.');
         }
 
-        $output = new ExportOutput($path, config('filesystems.default'));
+        $output = new ExportOutput($path, $this->disk);
 
         $configure($output);
 

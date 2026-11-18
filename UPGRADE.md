@@ -552,6 +552,8 @@ $export->map('0:v:0')
     ->save('new_video.mp4');
 ```
 
+Outputs no longer need a `Media` instance with its own disk. Every output publishes to the first input's disk unless you call `toDisk()`, including each output declared with `output()`.
+
 Without maps, ordinary exports select the first motion-video and audio streams. Existing subtitles and cover art require explicit maps and container-compatible codecs; the `coverArt()` attachment helper below owns its maps instead. General multiple-input outputs require explicit maps and a metadata and chapter policy. Stream tags and dispositions address the output order, not input indexes:
 
 ```php

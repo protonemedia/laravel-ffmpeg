@@ -79,10 +79,6 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         $this->export = new PendingExport($source, $disk, $this);
 
         $this->export->addInput($added);
-
-        // Adding an input resets the destination to the default disk, so we will set the
-        // primary input's disk again.
-        $this->export->toDisk($disk);
     }
 
     /**

@@ -30,11 +30,6 @@ trait ConfiguresOutput
     protected string|Filesystem $disk;
 
     /**
-     * Indicates if the output disk was set explicitly.
-     */
-    protected bool $outputDiskExplicit = false;
-
-    /**
      * The encoder settings shared by every output video track.
      */
     protected array $video = [];
@@ -184,7 +179,6 @@ trait ConfiguresOutput
         $this->assertOutputMutable();
 
         $this->disk = $disk;
-        $this->outputDiskExplicit = true;
         $this->writeOptions = array_replace($this->writeOptions, $options);
 
         return $this;
@@ -267,7 +261,6 @@ trait ConfiguresOutput
     {
         return [
             'disk' => $this->disk,
-            'outputDiskExplicit' => $this->outputDiskExplicit,
             'video' => $this->video,
             'videoStreams' => $this->videoStreams,
             'audio' => $this->audio,
@@ -298,7 +291,7 @@ trait ConfiguresOutput
     protected function inherit(array $shared): array
     {
         foreach ($this->outputConfiguration() as $key => $value) {
-            if (in_array($key, ['disk', 'outputDiskExplicit', 'writeOptions'], true)) {
+            if (in_array($key, ['disk', 'writeOptions'], true)) {
                 continue;
             }
 

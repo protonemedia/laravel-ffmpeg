@@ -58,10 +58,6 @@ class PendingConcat implements Exportable, MeasuresDuration, OwnsGraph, ShapesOu
         foreach (array_slice($sources, 1) as $source) {
             $this->export->addInput($source);
         }
-
-        // Adding an input resets the destination to the default disk, so we will set the
-        // first input's disk again.
-        $this->export->toDisk($disk);
     }
 
     /**

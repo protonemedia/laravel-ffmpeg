@@ -236,7 +236,7 @@ The `concatTranscoded` method requires `conformVideo` and either `conformAudio` 
 
 ## Multiple Outputs
 
-Each `output` closure configures one output of a single run. Call `toDisk` in every closure, because these outputs publish to the `filesystems.default` disk instead of the input's disk:
+Each `output` closure configures one output of a single run, and publishes to the first input's disk unless it calls `toDisk`:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
