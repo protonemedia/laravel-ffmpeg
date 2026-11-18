@@ -854,7 +854,7 @@ Edits use the image's pixels, while placement, `size`, and `opacity` use output 
 <a name="join-clips"></a>
 ### Joining Clips
 
-The `concatTranscoded` method encodes clips with different formats to a common one, while `concat` joins compatible streams by copying:
+The `concatTranscoded` method encodes clips with different formats to a common one, while `concat` joins clips that share codec parameters, so you may copy their video:
 
 ```php
 $first = FFMpeg::disk('clips')
@@ -874,11 +874,11 @@ $first->concatTranscoded($second)
 $first->concat($second)
     ->export()
     ->video('copy')
-    ->audio('copy')
+    ->audio('aac')
     ->save('joined.mkv');
 ```
 
-The `concatTranscoded` method requires `conformVideo` and either `conformAudio` or `withoutAudio`, uses each source's first video and audio streams, and rejects stream copy. Sources need zero container and video origins, and conforming audio requires audio in every source. The `concat` method never falls back to transcoding, and URL inputs need `download: true`. Neither keeps chapters, and both publish to the first input's disk unless you call `toDisk`.
+The `concatTranscoded` method requires `conformVideo` and either `conformAudio` or `withoutAudio`, uses each source's first video and audio streams, and rejects stream copy. Sources need zero container and video origins, and conforming audio requires audio in every source. The `concat` method never falls back to transcoding, and URL inputs need `download: true`. You should still encode AAC audio, because FFmpeg rejects copied AAC timestamps that overlap at the boundary between clips. Neither keeps chapters, and both publish to the first input's disk unless you call `toDisk`.
 
 <a name="compose-multiple-inputs-and-outputs"></a>
 ### Composing Multiple Inputs and Outputs

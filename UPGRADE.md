@@ -415,7 +415,7 @@ $second = FFMpeg::disk('uploads')
 $media->concat($second)
     ->export()
     ->video('copy')
-    ->audio('copy')
+    ->audio('aac')
     ->save('joined.mkv');
 
 $media->concatTranscoded($second)
@@ -426,7 +426,7 @@ $media->concatTranscoded($second)
     ->save('joined.mp4');
 ```
 
-`concat()` joins compatible streams without silently transcoding. `concatTranscoded()` returns an export builder with one output, and you should choose `conformVideo()` and either `conformAudio()` or `withoutAudio()` before saving. Transcoded concatenation selects each input's first motion-video and audio streams, preserves audio delays, and requires finite sources with zero container and video origins. It rejects root filters, custom graphs, and stream copy. Sources without audio require `withoutAudio()` or a custom graph, since the helper does not create missing audio tracks. Source chapters are not combined.
+`concat()` joins compatible streams without silently transcoding. You should still encode AAC audio, as in the example above, because FFmpeg rejects copied AAC timestamps that overlap at the boundary between clips. `concatTranscoded()` returns an export builder with one output, and you should choose `conformVideo()` and either `conformAudio()` or `withoutAudio()` before saving. Transcoded concatenation selects each input's first motion-video and audio streams, preserves audio delays, and requires finite sources with zero container and video origins. It rejects root filters, custom graphs, and stream copy. Sources without audio require `withoutAudio()` or a custom graph, since the helper does not create missing audio tracks. Source chapters are not combined.
 
 <a name="audio-mixing"></a>
 ### Audio Mixing
