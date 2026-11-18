@@ -2,6 +2,17 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## [Unreleased](https://github.com/protonemedia/laravel-ffmpeg/compare/8.9.0...9.x)
+
+* Replace PHP-FFMpeg with Laravel's Process, Storage, and Http components, and remove format objects, driver forwarding, and filter factories
+* Require PHP 8.4, Laravel 13.20, and FFmpeg and FFprobe 9.0.x
+* Add dedicated builders for HLS, DASH, frames, storyboards, waveforms, GIFs, speed changes, concatenation, and audio mixing
+* Add protected HLS playback through signed `Support\Hls` routes
+* Add native queued exports, including parallel HLS batches
+* Report failures through `MediaException` and progress through a structured `Progress` value
+* Add Laravel Boost guidelines and a `developing-laravel-ffmpeg` skill for AI agents
+* See [UPGRADE.md](UPGRADE.md) for the upgrade guide
+
 ## 8.1.2 - 2022-05-23
 
 -   Don't resolve driver until needed.
@@ -29,10 +40,10 @@ Support for Laravel 9, dropped support for Laravel 8 and earlier.
 ### Upgrading to v8
 
 * As Laravel 9 has migrated from [Flysystem 1.x to 3.x](https://laravel.com/docs/9.x/upgrade#flysystem-3), this version is not compatible with Laravel 8 or earlier.
-* If you're using the [Watermark manipulation](#watermark-manipulation) feature, make sure you upgrade [`spatie/image`](https://github.com/spatie/image) to v2.
-* The `set_command_and_error_output_on_exception` configuration key now defaults to `true`, making exceptions more informative. Read more at the [Handling exceptions](#handling-exceptions) section.
-* The `enable_logging` configuration key has been replaced by `log_channel` to choose the log channel used when writing messages to the logs. If you still want to disable logging entirely, you may set the new configuration key to `false`.
-* The *segment length* and *keyframe interval* of [HLS exports](#HLS) should be `2` or more; less is not supported anymore.
+* Upgrade [`spatie/image`](https://github.com/spatie/image) to v2 if you use the [Watermark manipulation](https://github.com/protonemedia/laravel-ffmpeg/blob/8.0.0/README.md#watermark-manipulation) feature.
+* The `set_command_and_error_output_on_exception` configuration key now defaults to `true`, making exceptions more informative. Read more at the [Handling exceptions](https://github.com/protonemedia/laravel-ffmpeg/blob/8.0.0/README.md#handling-exceptions) section.
+* The `enable_logging` configuration key has been replaced by `log_channel` to choose the log channel used when writing messages to the logs. To disable logging entirely, you may set the new configuration key to `false`.
+* The *segment length* and *keyframe interval* of [HLS exports](https://github.com/protonemedia/laravel-ffmpeg/blob/8.0.0/README.md#hls) should be `2` or more; less is not supported anymore.
 
 ## 7.8.1 - 2022-02-10
 

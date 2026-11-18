@@ -13,22 +13,11 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: [ubuntu-22.04]
-                php: [8.5, 8.4, 8.3, 8.2]
-                laravel: ["11.*", "12.*", "13.*"]
+                os: [ubuntu-26.04]
+                php: [8.5, 8.4]
                 dependency-version: [prefer-lowest, prefer-stable]
-                include:
-                    - laravel: 11.*
-                      testbench: ^9.10
-                    - laravel: 12.*
-                      testbench: 10.*
-                    - laravel: 13.*
-                      testbench: 11.*
-                exclude:
-                    - laravel: 13.*
-                      php: 8.2
 
-        name: ${{ matrix.os }} - P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.dependency-version }}
+        name: ${{ matrix.os }} - P${{ matrix.php }} - ${{ matrix.dependency-version }}
 
         steps:
             - name: Checkout code
@@ -41,24 +30,75 @@ jobs:
                   extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, mysql, mysqli, pdo_mysql, fileinfo
                   coverage: none
 
-            - name: Install FFmpeg
-              run: |
-                  sudo apt-get update
-                  sudo apt-get install -y ffmpeg
+            - name: Cache native FFmpeg
+              uses: actions/cache@v4
+              with:
+                  path: ${{ runner.temp }}/ffmpeg-9.0.2
+                  key: native-ffmpeg-${{ matrix.os }}-${{ runner.arch }}-${{ hashFiles('.agents/install-ffmpeg') }}
 
-            - name: Install dependencies
-              run: |
-                  composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
-                  composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-suggest
+            - name: Install native FFmpeg 9.0.2
+              run: .agents/install-ffmpeg "${{ runner.temp }}/ffmpeg-9.0.2"
+
+            - name: Get Composer cache directory
+              id: composer-cache
+              run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
             - name: Cache dependencies
               uses: actions/cache@v4
               with:
-                  path: ~/.composer/cache/files
-                  key: dependencies-laravel-${{ matrix.laravel }}-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}-dep-${{ matrix.dependency-version }}
+                  path: ${{ steps.composer-cache.outputs.dir }}
+                  key: dependencies-php-${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}-dep-${{ matrix.dependency-version }}
+
+            - name: Install dependencies
+              run: composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction
+
+            # MinIO no longer publishes binaries or images, so we build the last
+            # release from source once and cache the binary for later runs.
+            - name: Cache MinIO
+              id: minio-cache
+              uses: actions/cache@v4
+              with:
+                  path: ~/minio/bin
+                  key: minio-RELEASE.2025-10-15T17-29-55Z-${{ runner.os }}-${{ runner.arch }}
+
+            - name: Setup Go
+              if: steps.minio-cache.outputs.cache-hit != 'true'
+              uses: actions/setup-go@v5
+              with:
+                  go-version: stable
+                  cache: false
+
+            - name: Start MinIO
+              run: |
+                  if [ ! -x ~/minio/bin/minio ]; then
+                      GOBIN=~/minio/bin CGO_ENABLED=0 go install github.com/minio/minio@RELEASE.2025-10-15T17-29-55Z
+                  fi
+                  mkdir -p "$RUNNER_TEMP/minio-data"
+                  MINIO_ROOT_USER=ffmpeg-test MINIO_ROOT_PASSWORD=ffmpeg-test-secret MINIO_BROWSER=off \
+                      nohup ~/minio/bin/minio server "$RUNNER_TEMP/minio-data" \
+                      --address 127.0.0.1:9000 --console-address 127.0.0.1:9001 > "$RUNNER_TEMP/minio.log" 2>&1 &
+                  for attempt in $(seq 1 30); do
+                      curl -fsS -o /dev/null http://127.0.0.1:9000/minio/health/ready && exit 0
+                      sleep 1
+                  done
+                  cat "$RUNNER_TEMP/minio.log"
+                  exit 1
+
+            - name: Install MediaMTX 1.21.3
+              run: |
+                  curl -fsSL -o "$RUNNER_TEMP/mediamtx.tar.gz" \
+                      https://github.com/bluenviron/mediamtx/releases/download/v1.21.3/mediamtx_v1.21.3_linux_amd64.tar.gz
+                  echo "0a2ea7eba96023631efa1bea7804823a9145b043b6646a8a05798d4ac24ed635  $RUNNER_TEMP/mediamtx.tar.gz" | sha256sum --check
+                  mkdir -p "$RUNNER_TEMP/mediamtx"
+                  tar -xzf "$RUNNER_TEMP/mediamtx.tar.gz" -C "$RUNNER_TEMP/mediamtx" mediamtx
 
             - name: Execute tests
-              run: vendor/bin/phpunit --order-by random
+              run: vendor/bin/phpunit --order-by random --display-deprecations --display-phpunit-deprecations --fail-on-deprecation --fail-on-phpunit-deprecation
               env:
                   FFMPEG_TEMPORARY_FILES_ROOT: ${{ github.workspace }}
-                  FFMPEG_TEMPORARY_ENCRYPTED_HLS: /dev/shm
+                  FFMPEG_9_FFPROBE: ${{ runner.temp }}/ffmpeg-9.0.2/bin/ffprobe
+                  FFMPEG_S3_ENDPOINT: http://127.0.0.1:9000
+                  FFMPEG_S3_KEY: ffmpeg-test
+                  FFMPEG_S3_SECRET: ffmpeg-test-secret
+                  FFMPEG_S3_BUCKET: laravel-ffmpeg
+                  FFMPEG_RTSP_SERVER: ${{ runner.temp }}/mediamtx/mediamtx

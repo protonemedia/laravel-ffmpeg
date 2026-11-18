@@ -20,19 +20,28 @@
         }
     ],
     "require": {
-        "php": "^8.2|^8.3|^8.4|^8.5",
-        "illuminate/contracts": "^11.0|^12.0|^13.0",
-        "php-ffmpeg/php-ffmpeg": "^1.2",
-        "ramsey/collection": "^2.0"
+        "php": "^8.4",
+        "ext-dom": "*",
+        "laravel/framework": "^13.20",
+        "laravel/serializable-closure": "^2.0"
     },
     "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "intervention/image": "^4.2",
+        "larastan/larastan": "^3.9",
+        "laravel/pint": "^1.14",
+        "league/flysystem-aws-s3-v3": "^3.25.1",
         "league/flysystem-memory": "^3.10",
+        "league/flysystem-path-prefixing": "^3.0",
+        "league/flysystem-read-only": "^3.0",
         "mockery/mockery": "^1.4.4",
         "nesbot/carbon": "^2.66|^3.0",
-        "orchestra/testbench": "^9.10|^10.0|^11.0",
-        "phpunit/phpunit": "^10.4|^11.5.3|^12.5.12",
-        "spatie/image": "^2.2|^3.3",
-        "spatie/phpunit-snapshot-assertions": "^5.0"
+        "orchestra/testbench": "^11.0",
+        "phpunit/phpunit": "^11.5.3|^12.5.12",
+        "rector/rector": "^2.3"
+    },
+    "suggest": {
+        "intervention/image": "Required to edit watermark images, for example grayscale() or blur() (^4.2)."
     },
     "autoload": {
         "psr-4": {
@@ -45,6 +54,12 @@
         }
     },
     "scripts": {
+        "analyse": "vendor/bin/phpstan analyse --memory-limit=512M",
+        "format": [
+            "vendor/bin/pint",
+            "vendor/bin/php-cs-fixer fix"
+        ],
+        "refactor": "vendor/bin/rector",
         "test": "vendor/bin/phpunit",
         "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
     },
