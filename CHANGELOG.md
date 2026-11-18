@@ -10,6 +10,7 @@ All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 * Add protected HLS playback through signed `Support\Hls` routes
 * Add native queued exports, including parallel HLS batches
 * Report failures through `MediaException` and progress through a structured `Progress` value
+* Add Laravel Boost guidelines and a `developing-laravel-ffmpeg` skill for AI agents
 * See [UPGRADE.md](UPGRADE.md) for the upgrade guide
 
 ## 8.1.2 - 2022-05-23

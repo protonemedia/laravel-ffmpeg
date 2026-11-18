@@ -1,30 +1,32 @@
 ---
 name: developing-laravel-ffmpeg
-description: "Builds media processing with pbmedia/laravel-ffmpeg v9. Use for conversion, HLS, frames, watermarks, storage, progress, or queued exports in Laravel."
+description: "Builds and changes media processing with pbmedia/laravel-ffmpeg v9 in Laravel: encoding, probing and validating uploads, resizing, watermarks, thumbnails, storyboards, GIFs, audio mixing, HLS and DASH streaming, protected playback, progress, queued exports, and tests. Use it to upgrade v8 code too."
 license: MIT
 ---
 
 # Develop with Laravel FFMpeg
 
-Use the typed v9 API in `ProtoneMedia\LaravelFFMpeg`. PHP-FFMpeg format objects and legacy exporter builders are not part of this API.
+Version 9 has a new API. Code written for v8 or PHP-FFMpeg does not run, so write each call from this skill or the installed source, not from memory of earlier versions.
 
 ## Workflow
 
-1. Check the installed package version and the application's filesystem disks.
-2. Read [the v9 reference](references/laravel-ffmpeg-guide.md) for the operation you need.
-3. Choose FFmpeg encoder names available in the deployment, such as `libx264` and `aac`.
-4. Configure the pending operation, then call `save()` to execute or dispatch it. Use `inspect()` for redacted command inspection without execution.
-5. Test the generated media and the destination disk. For queued work, verify that workers can access the named disks.
+1. Read the reference for the task. Every example opens its own source, so you may copy one whole.
+    - [Encoding](references/encoding.md): opening and probing media, validating uploads, codecs and stream copy, clipping, resizing and filters, watermarks, tracks, speed, joining clips, and multiple outputs.
+    - [Frames and previews](references/frames-and-previews.md): thumbnails, frame sequences, storyboards, GIFs, waveform images, title cards, and camera snapshots.
+    - [Audio](references/audio.md): background music, mixing, loudness normalization, waveform peaks, and analysis.
+    - [Streaming](references/streaming.md): HLS variants and encryption, fMP4, DASH, protected playback routes, and continuous HLS.
+    - [Running exports](references/running-exports.md): results, failures, progress, events, timeouts, queued exports, job chains, and deleting outputs.
+    - [Testing](references/testing.md): inspecting commands, faking FFmpeg, faking queued exports, and checking the FFmpeg build.
+2. For an option the reference does not show, read the matching `###` section of `vendor/pbmedia/laravel-ffmpeg/README.md`, then the method's docblock in `vendor/pbmedia/laravel-ffmpeg/src/`. To port v8 code, read the matching section of `vendor/pbmedia/laravel-ffmpeg/UPGRADE.md`.
+3. Choose encoders that the deployment's FFmpeg build includes, such as `libx264` and `aac`. The `php artisan ffmpeg:doctor --encoder=libx264` command checks the build.
 
 ## Rules
 
-- Open disk-relative keys with `FFMpeg::disk('uploads')->open('video.mp4')`. Use `Illuminate\Http\File` for an absolute local file.
-- Configure encoding with `video()` and `audio()`. Bitrates are positive integers in bits per second or unit strings such as `'1500k'`.
-- Use `Media::frame()`, `frames()`, `storyboard()`, and `hls()` directly. Do not add an extra `export()` after these methods.
-- Pass a `Media` object to `watermark()`, not a legacy watermark callback.
-- Receive a `Progress` object in `onProgress()`. Its percentage and time estimates may be null.
-- Use durable named disks for queued exports. Do not capture service objects in queued callbacks.
-- Let each operation clean up its temporary workspace. Published outputs remain until the application deletes them.
-- Do not use `fromDisk()`, `inFormat()`, `addFormat()`, `exportForHLS()`, `getFrameFromSeconds()`, or `cleanupTemporaryFiles()` from older releases.
-
-For operations beyond this reference, read the installed package source and its current documentation instead of adapting legacy examples by name alone.
+- Open a disk-relative path with `FFMpeg::disk('uploads')->open('videos/intro.mov')`. Pass an upload or an absolute local file as an `UploadedFile` or `Illuminate\Http\File` instance, and open an HTTP source with `FFMpeg::openUrl()`. A path string is never a URL or an absolute path.
+- Call `export()` before configuring a plain encode. The `frame`, `frames`, `storyboard`, `gif`, `waveform`, `still`, `speed`, `backgroundMusic`, `mixAudio`, `normalizeLoudness`, `waveformPeaks`, `concatTranscoded`, `hls`, and `dash` methods return their own builders, so call `toDisk()` and `save()` on them without `export()`. The `concat` method returns a `Media`, so it does need `export()`.
+- Choose codecs with `video()` and `audio()`. A bitrate is an integer in bits per second or a unit string such as `'128k'`, and `crf` and `bitrate` exclude each other.
+- Filters need encoding. A stream passed `copy` cannot be resized, filtered, watermarked, or clipped accurately.
+- The `watermark()` method takes the opened image and an optional closure that receives a `Watermark`, as in `->watermark($logo, fn (Watermark $watermark) => $watermark->right(20)->bottom(20)->size(width: 160))`. It has no position or size arguments.
+- The `save()` method returns a result, such as an `ExportResult` or `HlsExportResult`, not the builder. Read the outputs from `$result->file()` and `$result->files()`.
+- Queued exports read and write named disks that every worker can reach, and their callbacks are static closures that capture only scalars or arrays. The `queued()->save()` call returns Laravel's `PendingDispatch`, and the `QueuedExportCompleted` event delivers the outputs.
+- Failures throw `ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException`, whose `phase`, `category`, and `diagnostics` properties explain the cause.

@@ -143,6 +143,15 @@ $capabilities->toArray();
 > [!NOTE]
 > Compiled-in hardware support does not prove device access, driver compatibility, or encoder usability.
 
+<a name="laravel-boost"></a>
+#### Laravel Boost
+
+The package includes [Laravel Boost](https://laravel.com/docs/13.x/boost) guidelines and a `developing-laravel-ffmpeg` skill, so AI agents write version 9 code instead of calls from earlier releases. Boost offers them when you run the `boost:install` Artisan command, and you may add them to an existing installation using the `--discover` option:
+
+```bash
+php artisan boost:update --discover
+```
+
 <a name="working-with-media"></a>
 ## Working With Media
 
