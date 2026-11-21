@@ -23,7 +23,7 @@ This package provides an integration with FFmpeg for Laravel 12 and 13. [Laravel
 * Built-in support for watermarks (positioning and manipulation).
 * Built-in support for creating a mosaic/sprite/tile from a video.
 * Built-in support for generating *VTT Preview Thumbnail* files.
-* Requires PHP 8.2 or higher.
+* Requires PHP 8.3 or higher.
 * Tested with FFmpeg 4.4 and 5.0.
 
 ## Installation
