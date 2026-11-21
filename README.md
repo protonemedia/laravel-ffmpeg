@@ -1613,7 +1613,7 @@ FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by ran
     --fail-on-deprecation --fail-on-phpunit-deprecation
 ```
 
-Real-media tests are skipped unless `FFMPEG_9_FFPROBE` points to FFprobe 9.0.x with a matching `ffmpeg` beside it, and font tests need `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`. CI runs PHP 8.4 and 8.5 on Ubuntu 26.04 with lowest and stable dependencies.
+Real-media tests are skipped unless `FFMPEG_9_FFPROBE` points to FFprobe 9.0.x with a matching `ffmpeg` beside it, and font tests need `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`. CI runs PHP 8.4, 8.5, and 8.6 on Ubuntu 26.04 with lowest and stable dependencies.
 
 <a name="community"></a>
 ## Community

@@ -677,7 +677,7 @@ class Media
 
             if ($bytes === false
                 || $bytes !== $expectedBytes
-                || ! feof($input)
+                || fread($input, 1) !== ''
                 || ! fflush($output)
                 || fstat($output)['size'] !== $bytes) {
                 throw MediaException::staging('The media input transfer did not complete.', 'transfer');
