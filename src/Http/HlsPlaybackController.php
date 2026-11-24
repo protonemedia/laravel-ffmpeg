@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
@@ -27,7 +28,7 @@ class HlsPlaybackController
     public function __invoke(Request $request, HlsPlayback $playback): Response
     {
         $presentation = $playback->resolve($request);
-        $file = $presentation->file($request->route('hlsResource'));
+        $file = $this->requestedFile($request, $presentation);
         $headers = ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff'];
 
         if (in_array($file['role'], ['hls-master', 'hls-playlist'], true)) {
@@ -44,6 +45,35 @@ class HlsPlaybackController
     }
 
     /**
+     * Get the inventory file that the request's resource name points to.
+     */
+    protected function requestedFile(Request $request, HlsPresentation $presentation): array
+    {
+        $resource = $request->route('hlsResource');
+
+        if ($resource === HlsPlayback::ENTRY_PLAYLIST) {
+            return $presentation->file();
+        }
+
+        $file = $presentation->file(Str::before($resource, '.'));
+
+        abort_unless($this->resourceName($file) === $resource, 404);
+
+        return $file;
+    }
+
+    /**
+     * Get the resource name of the given file, which is its opaque ID followed by the file's extension.
+     */
+    protected function resourceName(array $file): string
+    {
+        $id = HlsPresentation::id($file['disk'], $file['path']);
+        $extension = Str::lower(pathinfo($file['path'], PATHINFO_EXTENSION));
+
+        return preg_match('/\A[a-z0-9]+\z/', $extension) ? "{$id}.{$extension}" : $id;
+    }
+
+    /**
      * Render the playlist with signed URLs for each of its resources.
      */
     protected function playlistResponse(
@@ -53,7 +83,8 @@ class HlsPlaybackController
         array $headers,
     ): Response {
         try {
-            $content = $presentation->render($file, fn ($id): string => $this->resourceUrl($request, $id));
+            $content = $presentation->render($file,
+                fn ($id): string => $this->resourceUrl($request, $presentation->file($id)));
 
             return response($content, 200, [...$headers, 'Content-Type' => 'application/vnd.apple.mpegurl']);
         } catch (MediaException) {
@@ -62,15 +93,15 @@ class HlsPlaybackController
     }
 
     /**
-     * Sign a URL for the given resource that expires with the current request's URL.
+     * Sign a URL for the given file that expires with the current request's URL.
      */
-    protected function resourceUrl(Request $request, string $id): string
+    protected function resourceUrl(Request $request, array $file): string
     {
         $parameters = Arr::except(
             array_replace($request->query(), $request->route()->parameters()),
             ['_hlsPlayback', 'signature', 'expires'],
         );
-        $parameters['hlsResource'] = $id;
+        $parameters['hlsResource'] = $this->resourceName($file);
 
         return URL::temporarySignedRoute($request->route()->getName(),
             CarbonImmutable::createFromTimestamp((int) $request->query('expires')), $parameters);

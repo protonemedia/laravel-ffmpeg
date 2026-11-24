@@ -200,9 +200,14 @@ class HlsSelectionTest extends TestCase
         $this->actingAs(new GenericUser(['id' => 42]));
     }
 
-    protected function url(?string $id = null): string
+    protected function url(?array $file = null): string
     {
-        return Hls::url('selection.hls', array_filter(['asset' => 'lesson', 'hlsResource' => $id]));
+        return Hls::url('selection.hls', array_filter([
+            'asset' => 'lesson',
+            'hlsResource' => $file === null
+                ? null
+                : HlsPresentation::id($file['disk'], $file['path']).'.'.pathinfo($file['path'], PATHINFO_EXTENSION),
+        ]));
     }
 
     public static function packaging(): array
@@ -252,7 +257,7 @@ class HlsSelectionTest extends TestCase
 
         foreach ($result->playback()->toArray()['files'] as $file) {
             if (! in_array($file['path'], $paths, true)) {
-                $old[] = $this->url(HlsPresentation::id($file['disk'], $file['path']));
+                $old[] = $this->url($file);
             }
         }
 
@@ -267,12 +272,12 @@ class HlsSelectionTest extends TestCase
         }
 
         foreach ($selected->toArray()['files'] as $file) {
-            $this->get($this->url(HlsPresentation::id($file['disk'], $file['path'])))->assertOk();
+            $this->get($this->url($file))->assertOk();
         }
 
         $this->allowed = false;
         $this->get($masterUrl)->assertForbidden();
-        $this->get($this->url($selected->toArray()['playlist']))->assertForbidden();
+        $this->get($this->url($selected->file()))->assertForbidden();
 
         $this->assertWorkspacesAreCleanedUp();
     }

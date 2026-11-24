@@ -77,8 +77,11 @@ class PlaybackTest extends TestCase
 
     protected function url(?string $path = null, int $lesson = 42): string
     {
+        $resource = $path === null ? null : HlsPresentation::id('memory', $path);
+        $extension = pathinfo($path ?? '', PATHINFO_EXTENSION);
+
         return Hls::url('lessons.hls', array_filter([
-            'lesson' => $lesson, 'hlsResource' => $path === null ? null : HlsPresentation::id('memory', $path),
+            'lesson' => $lesson, 'hlsResource' => $extension === '' ? $resource : "{$resource}.{$extension}",
         ]), expires: now()->addMinutes(5));
     }
 
@@ -107,7 +110,7 @@ class PlaybackTest extends TestCase
 
         $this->login();
 
-        $this->getJson('/lessons/42/hls')->assertForbidden();
+        $this->getJson('/lessons/42/hls/index.m3u8')->assertForbidden();
         $this->getJson($master.'&extra=1')->assertForbidden();
         $this->getJson(str_replace('/lessons/42/', '/lessons/43/', $master))->assertForbidden();
         $this->getJson($this->url(lesson: 43))->assertForbidden();
@@ -145,6 +148,27 @@ class PlaybackTest extends TestCase
         foreach ([$master, $variant, ...$links] as $url) {
             $this->getJson($url)->assertForbidden();
         }
+    }
+
+    public function test_playback_urls_end_with_the_file_extension(): void
+    {
+        $this->login();
+
+        [$variant, $links] = $this->variantLinks();
+        $path = fn (string $file): string => '/lessons/42/hls/'.HlsPresentation::id('memory', $file);
+
+        $this->assertSame('/lessons/42/hls/index.m3u8', parse_url($this->url(), PHP_URL_PATH));
+        $this->assertSame($path('lesson/low/index.m3u8').'.m3u8', parse_url($variant, PHP_URL_PATH));
+        $this->assertSame([
+            $path('private/key'),
+            $path('lesson/low/init.mp4').'.mp4',
+            $path('lesson/low/part.m4s').'.m4s',
+        ], array_map(fn (string $url): string => parse_url($url, PHP_URL_PATH), $links));
+
+        $this->get(Hls::url('lessons.hls', [
+            'lesson' => 42,
+            'hlsResource' => HlsPresentation::id('memory', 'lesson/low/part.m4s').'.ts',
+        ]))->assertNotFound();
     }
 
     public function test_variant_playlists_are_never_cached(): void

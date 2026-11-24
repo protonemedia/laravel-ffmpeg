@@ -17,6 +17,11 @@ use InvalidArgumentException;
 class HlsPlayback
 {
     /**
+     * The resource name of the entry playlist in playback URLs.
+     */
+    public const string ENTRY_PLAYLIST = 'index.m3u8';
+
+    /**
      * The registered resolve and authorize callbacks, keyed by definition name.
      */
     protected array $presentations = [];
@@ -38,19 +43,21 @@ class HlsPlayback
      */
     public function routes(string $uri, string $name, string $playback, array $middleware = ['web', 'auth']): Route
     {
-        return Router::get(rtrim($uri, '/').'/{hlsResource?}', HlsPlaybackController::class)
-            ->where('hlsResource', '[a-f0-9]{64}')->defaults('_hlsPlayback', $playback)
+        return Router::get(rtrim($uri, '/').'/{hlsResource}', HlsPlaybackController::class)
+            ->where('hlsResource', preg_quote(self::ENTRY_PLAYLIST).'|[a-f0-9]{64}(?:\.[a-z0-9]+)?')
+            ->defaults('_hlsPlayback', $playback)
             ->middleware($middleware)->name($name);
     }
 
     /**
-     * Create a temporary signed URL for the given playback route.
+     * Create a temporary signed URL for the entry playlist of the given playback route.
      *
      * The URL expires after 30 minutes by default.
      */
     public function url(string $route, array $parameters = [], ?DateTimeInterface $expires = null): string
     {
-        return URL::temporarySignedRoute($route, $expires ?? now()->addMinutes(30), $parameters);
+        return URL::temporarySignedRoute($route, $expires ?? now()->addMinutes(30),
+            $parameters + ['hlsResource' => self::ENTRY_PLAYLIST]);
     }
 
     /**
