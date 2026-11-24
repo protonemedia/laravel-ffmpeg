@@ -1279,6 +1279,8 @@ $url = Hls::url('lessons.hls', ['lesson' => $lesson], expires: now()->addMinutes
 
 Child playlists, segments, init files, and keys get signed URLs with the entry URL's exact deadline, never renewed, keeping validated signed query context such as grants, with route parameters taking precedence. Every request revalidates its signature and reruns `authorize`. The controller serves only inventory-owned files by opaque ID, never by disk path, with `private, no-store` and `nosniff`. Media supports single byte ranges and `HEAD`; keys return 16 raw bytes, not hex or Base64. CORS and trusted proxies are yours to configure.
 
+Playback URLs have no file extensions, so you should give the entry URL's type to players that detect the format from the URL, such as `type: 'application/vnd.apple.mpegurl'` in Video.js or `MimeTypes.APPLICATION_M3U8` in Android's Media3. To read the stream with FFmpeg itself, pass the `-extension_picky 0` input option, since FFmpeg rejects HLS segment URLs without a known extension.
+
 > [!WARNING]
 > Keep the inventory server-side, never in request data or public responses. Media and keys must stay private and immutable, so publish replacements to new paths and swap the stored inventory. Neither signed playback nor AES-128 is DRM.
 
