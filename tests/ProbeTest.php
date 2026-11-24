@@ -479,6 +479,21 @@ class ProbeTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    public function test_a_child_killed_by_a_signal_reports_the_signal_and_its_diagnostics(): void
+    {
+        $this->binary('fwrite(STDERR, end($argv)." BEFORE-THE-KILL"); posix_kill(getmypid(), SIGKILL); sleep(30);');
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('local')->open(new File(__DIR__.'/src/video.mp4'))->probe(),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->getMessage()]
+                === ['probing', 'signal', 'The media process was terminated by signal [9].']
+                && $exception->diagnostics === '[input] BEFORE-THE-KILL'
+                && $exception->getPrevious() === null,
+        );
+
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
     #[DataProvider('timeoutModes')]
     public function test_it_stops_and_reaps_a_timed_out_child_before_cleanup(string $setting): void
     {
