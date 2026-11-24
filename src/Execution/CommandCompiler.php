@@ -146,7 +146,7 @@ class CommandCompiler
                 'fps_mode' => 'fps', 'threads' => 'positive', 'disposition' => 'word', 'streamid' => 'streamid',
                 'tag' => 'word', 'q' => 'unsigned', 'r' => 'rate',
                 'c' => 'subtitle-codec',
-                'x264-params' => 'x264', 'x265-params' => 'x265',
+                'x264-params' => 'x264', 'x265-params' => 'x265', 'svtav1-params' => 'svtav1',
                 'cpu-used' => 'unsigned', 'deadline' => 'deadline', 'row-mt' => 'boolean',
                 'rc' => 'rc', 'cq' => 'quality', 'rc-lookahead' => 'unsigned',
                 'spatial-aq' => 'boolean', 'temporal-aq' => 'boolean', 'aq-strength' => 'unsigned',
@@ -204,7 +204,7 @@ class CommandCompiler
      */
     protected static function ensureStreamSpecifierIsSupported(string $name, ?string $stream): void
     {
-        $videoOnly = ['x264-params', 'x265-params', 'cpu-used', 'deadline', 'row-mt', 'rc', 'cq',
+        $videoOnly = ['x264-params', 'x265-params', 'svtav1-params', 'cpu-used', 'deadline', 'row-mt', 'rc', 'cq',
             'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength', 'color_primaries', 'color_trc', 'colorspace',
             'color_range'];
         $audioOnly = ['compression_level', 'sample_fmt', 'channel_layout', 'strict'];
@@ -224,7 +224,7 @@ class CommandCompiler
      * Determine if the given value satisfies the option's value rule.
      *
      * @param  (
-     *     'positive'|'unsigned'|'boolean'|'decimal'|'quality'|'device-name'|'hardware-init'|'x264'|'x265'
+     *     'positive'|'unsigned'|'boolean'|'decimal'|'quality'|'device-name'|'hardware-init'|'x264'|'x265'|'svtav1'
      *     |'deadline'|'rc'|'primaries'|'transfer'|'colorspace'|'range'|'sample-format'|'layout'|'bitstream'
      *     |'negative-ts'|'hardware'|'device'|'rate'|'word'|'fps'|'format'|'subtitle-codec'|'streamid'|'strict'
      * )  $type
@@ -242,7 +242,7 @@ class CommandCompiler
                 '/\A(?:cuda|vaapi|qsv|vulkan|videotoolbox|d3d11va)=[a-zA-Z][a-zA-Z0-9_]*(?::(?:[0-9]+|\/dev\/dri\/renderD[0-9]+)|@[a-zA-Z][a-zA-Z0-9_]*)?\z/',
                 $value,
             ),
-            'x264', 'x265' => self::encoderParameters($value, $type),
+            'x264', 'x265', 'svtav1' => self::encoderParameters($value, $type),
             'deadline' => in_array($value, ['best', 'good', 'realtime'], true),
             'rc' => in_array($value, ['constqp', 'vbr', 'cbr'], true),
             'primaries' => in_array($value, [
@@ -326,7 +326,7 @@ class CommandCompiler
     }
 
     /**
-     * Determine if the given x264 or x265 parameter string uses only allowed numeric parameters.
+     * Determine if the given x264, x265 or SVT-AV1 parameter string uses only allowed numeric parameters.
      */
     protected static function encoderParameters(string $value, string $encoder): bool
     {
@@ -338,6 +338,13 @@ class CommandCompiler
 
         if ($encoder === 'x265') {
             $allowed = [...$allowed, 'pools', 'frame-threads', 'wpp', 'sao', 'rect', 'amp', 'rd', 'ctu', 'log-level'];
+        }
+
+        // SVT-AV1 ignores FFmpeg's threads option, so its level of parallelism is the
+        // only way to limit its threads, and one level also makes its output
+        // repeatable, since multithreaded SVT-AV1 2.3 output varies per run.
+        if ($encoder === 'svtav1') {
+            $allowed = ['lp'];
         }
 
         $seen = [];

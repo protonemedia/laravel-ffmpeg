@@ -89,8 +89,12 @@ class Av1Test extends TestCase
     {
         $media = $this->source();
 
+        // Multithreaded SVT-AV1 2.3 output varies per run, and about one encode in thirty
+        // of this source has a frame that no decoder accepts, so we pin the encoder to
+        // one level of parallelism to make every run produce the same valid stream.
         $media->export()
             ->video('libsvtav1', crf: 40, preset: '12')
+            ->videoOptions(['-svtav1-params', 'lp=1'])
             ->audio('aac')
             ->save('svt.mp4');
 
@@ -137,9 +141,11 @@ class Av1Test extends TestCase
             ->fmp4()
             ->variant('small', fn (HlsVariant $variant) => $variant
                 ->resize(width: 160)
-                ->video('libsvtav1', bitrate: '100k', preset: '12'))
+                ->video('libsvtav1', bitrate: '100k', preset: '12')
+                ->videoOptions(['-svtav1-params', 'lp=1']))
             ->variant('large', fn (HlsVariant $variant) => $variant
-                ->video('libsvtav1', bitrate: '200k', preset: '12'))
+                ->video('libsvtav1', bitrate: '200k', preset: '12')
+                ->videoOptions(['-svtav1-params', 'lp=1']))
             ->toDisk('local')
             ->save('hls/master.m3u8');
 

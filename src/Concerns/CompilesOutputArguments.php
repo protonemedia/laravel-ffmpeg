@@ -267,9 +267,9 @@ trait CompilesOutputArguments
         $encoderOptions = [
             'preset', 'tune', 'profile', 'level', 'pix_fmt', 'maxrate', 'minrate', 'bufsize',
             'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'ar', 'ac', 'q', 'r', 'x264-params', 'x265-params',
-            'cpu-used', 'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength',
-            'color_primaries', 'color_trc', 'colorspace', 'color_range', 'compression_level', 'sample_fmt',
-            'channel_layout', 'strict',
+            'svtav1-params', 'cpu-used', 'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq', 'temporal-aq',
+            'aq-strength', 'color_primaries', 'color_trc', 'colorspace', 'color_range', 'compression_level',
+            'sample_fmt', 'channel_layout', 'strict',
         ];
 
         for ($i = 0; $i < count($this->outputOptions); $i += 2) {
