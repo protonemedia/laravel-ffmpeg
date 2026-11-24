@@ -136,7 +136,7 @@ Gate::authorize('view', $lesson);
 $url = Hls::url('lessons.hls', ['lesson' => $lesson], expires: now()->addMinutes(10));
 ```
 
-Media and keys must live on named private disks. The routes use the `web` and `auth` middleware by default, and pass `middleware: ['api', 'auth:sanctum']` to `routes` for Sanctum. To serve only some variants, store `$result->playbackForVariants(['720p'])->toArray()` instead.
+Media and keys must live on named private disks. The routes use the `web` and `auth` middleware by default, and pass `middleware: ['api', 'auth:sanctum']` to `routes` for Sanctum. To serve only some variants, store `$result->playbackForVariants(['720p'])->toArray()` instead. The entry URL ends in `index.m3u8` and every other playback URL ends in its file's extension, so players and FFmpeg detect HLS from the URL.
 
 ## DASH
 

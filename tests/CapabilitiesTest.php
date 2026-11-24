@@ -142,14 +142,20 @@ class CapabilitiesTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
-    #[TestWith(['9.0.1'])]
-    #[TestWith(['8.0.2'])]
-    public function test_mismatched_and_wrong_major_versions_fail_sanitized(string $version): void
+    #[TestWith(['9.0.1', 'FFmpeg [9.0.2] and FFprobe [9.0.1] must have matching release versions.'])]
+    #[TestWith(['8.0.2', 'FFprobe 9.0.x is required, but the configured binary reports version [8.0.2].'])]
+    #[TestWith([
+        "5.1.9-0+deb12u1 Copyright (c) 2007-2026\nconfiguration: --prefix=/private/build",
+        'FFprobe 9.0.x is required, but the configured binary reports version [5.1.9-0+deb12u1].',
+    ])]
+    #[TestWith(['/private/build/ffprobe', 'FFprobe 9.0.x is required.'])]
+    public function test_mismatched_and_wrong_major_versions_fail_sanitized(string $version, string $message): void
     {
         $this->fakeCapabilities(probeVersion: $version);
 
-        $this->assertThrows(fn () => new Capabilities, function (MediaException $exception) {
+        $this->assertThrows(fn () => new Capabilities, function (MediaException $exception) use ($message) {
             $this->assertSame('version', $exception->category);
+            $this->assertSame($message, $exception->getMessage());
             $this->assertSame('', $exception->diagnostics);
 
             return true;

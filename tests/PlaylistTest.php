@@ -535,7 +535,8 @@ class PlaylistTest extends TestCase
             ->assertForbidden();
         $response = $this->get('/native-playlist?token=allowed')
             ->assertOk()
-            ->assertHeader('Content-Type', 'application/vnd.apple.mpegurl');
+            ->assertHeader('Content-Type', 'application/vnd.apple.mpegurl')
+            ->assertHeader('Content-Length', '65');
 
         $this->assertSame(<<<'M3U8'
             #EXTM3U

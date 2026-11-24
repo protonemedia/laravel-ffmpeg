@@ -186,8 +186,11 @@ class HlsPlaylist implements Responsable
      */
     public function toResponse($request): Response
     {
-        return response($this->get(), 200, [
+        $content = $this->get();
+
+        return response($content, 200, [
             'Content-Type' => 'application/vnd.apple.mpegurl',
+            'Content-Length' => (string) strlen($content),
             'Cache-Control' => 'private, no-store',
         ]);
     }
