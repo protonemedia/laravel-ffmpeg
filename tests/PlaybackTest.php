@@ -181,6 +181,7 @@ class PlaybackTest extends TestCase
             ->assertHeader('Content-Type', 'application/vnd.apple.mpegurl');
 
         $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+        $this->assertSame((string) strlen($response->getContent()), $response->headers->get('Content-Length'));
     }
 
     public function test_keys_are_returned_raw(): void

@@ -86,7 +86,8 @@ class HlsPlaybackController
             $content = $presentation->render($file,
                 fn ($id): string => $this->resourceUrl($request, $presentation->file($id)));
 
-            return response($content, 200, [...$headers, 'Content-Type' => 'application/vnd.apple.mpegurl']);
+            return response($content, 200, [...$headers,
+                'Content-Type' => 'application/vnd.apple.mpegurl', 'Content-Length' => (string) strlen($content)]);
         } catch (MediaException) {
             abort(404);
         }
