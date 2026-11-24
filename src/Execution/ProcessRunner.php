@@ -105,14 +105,33 @@ class ProcessRunner
                 $result->output,
                 $matches,
             )) {
-            throw new MediaException(
-                ($tool === 'ffprobe' ? 'FFprobe' : 'FFmpeg').' 9.0.x is required.',
-                $phase,
-                'version',
-            );
+            throw new MediaException($this->unsupportedVersionMessage($tool, $result), $phase, 'version');
         }
 
         return $matches[1];
+    }
+
+    /**
+     * Get the message for a binary that does not report a 9.0.x release.
+     */
+    protected function unsupportedVersionMessage(string $tool, ProcessResult $result): string
+    {
+        $name = $tool === 'ffprobe' ? 'FFprobe' : 'FFmpeg';
+
+        if ($result->exitCode !== 0) {
+            return "{$name} 9.0.x is required.";
+        }
+
+        // The version output also lists the build configuration, which may contain
+        // paths, so we only quote a release that looks like a version number and
+        // leave the remaining output out of the message entirely.
+        $pattern = '/^'.preg_quote($tool, '/').' version ([\w.+~-]{1,64})(?:\s|$)/';
+
+        if (! preg_match($pattern, $result->output, $matches)) {
+            return "{$name} 9.0.x is required.";
+        }
+
+        return "{$name} 9.0.x is required, but the configured binary reports version [{$matches[1]}].";
     }
 
     /**
@@ -121,9 +140,13 @@ class ProcessRunner
     public function pairVersion(string $ffmpeg, string $ffprobe, string $directory): string
     {
         $version = $this->version($ffmpeg, 'ffmpeg', $directory);
+        $probeVersion = $this->version($ffprobe, 'ffprobe', $directory);
 
-        if ($this->version($ffprobe, 'ffprobe', $directory) !== $version) {
-            throw MediaException::probing('FFmpeg and FFprobe must have matching release versions.', 'version');
+        if ($probeVersion !== $version) {
+            throw MediaException::probing(
+                "FFmpeg [{$version}] and FFprobe [{$probeVersion}] must have matching release versions.",
+                'version',
+            );
         }
 
         return $version;
