@@ -476,7 +476,7 @@ $media->export()
 
 A missing output track fails before encoding, and only the callbacks' scalar settings are kept, not the closures. Audio tracks may set the codec, bitrate, sample rate, channels, sample format, channel layout, compression level, and filters, which run after shared filters.
 
-The `videoOptions` and `audioOptions` methods accept curated pairs, such as numeric x264 and x265 parameters, selected VPx, AV1, and NVENC settings, color signaling, and `['-strict', 'experimental']` for experimental audio encoders such as FFmpeg's native `vorbis`; unknown parameters and file-producing options are rejected. The `color` method only sets metadata, so use a color-conversion filter to change pixel values. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
+The `videoOptions` and `audioOptions` methods accept curated pairs, such as numeric x264 and x265 parameters, SVT-AV1's `lp` level of parallelism, selected VPx, AV1, and NVENC settings, color signaling, and `['-strict', 'experimental']` for experimental audio encoders such as FFmpeg's native `vorbis`; unknown parameters and file-producing options are rejected. The `color` method only sets metadata, so use a color-conversion filter to change pixel values. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
 
 The `outputOptions` method also accepts single-file muxer settings and argument-free bitstream filters, such as `['-bsf:v', 'h264_mp4toannexb']`, but not sidecar paths. The `globalOptions` method accepts named hardware device declarations, where a derived device must reference an earlier one:
 
@@ -488,6 +488,9 @@ $export = $media->export()
         '-filter_hw_device', 'derived',
     ]);
 ```
+
+> [!WARNING]
+> Multithreaded SVT-AV1 2.3 encodes, including those of Ubuntu 26.04's `libsvtav1enc2` package, may differ between runs and occasionally contain a frame that decoders reject. You should use SVT-AV1 3.1.2 or later, or pass `['-svtav1-params', 'lp=1']` to the `videoOptions` method, which encodes with one level of parallelism at a lower speed.
 
 <a name="transforming-media"></a>
 ## Transforming Media

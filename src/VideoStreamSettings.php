@@ -85,9 +85,9 @@ class VideoStreamSettings
             $name = substr($tokens[$i], 1);
 
             if (! in_array($name, ['preset', 'tune', 'profile', 'level', 'pix_fmt', 'maxrate', 'minrate', 'bufsize',
-                'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'x264-params', 'x265-params', 'cpu-used',
-                'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength',
-                'color_primaries', 'color_trc', 'colorspace', 'color_range'], true)) {
+                'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'x264-params', 'x265-params', 'svtav1-params',
+                'cpu-used', 'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq', 'temporal-aq',
+                'aq-strength', 'color_primaries', 'color_trc', 'colorspace', 'color_range'], true)) {
                 throw new InvalidArgumentException('Unsupported video stream setting.');
             }
 

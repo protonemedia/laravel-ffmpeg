@@ -85,6 +85,7 @@ class EncodingOptionsTest extends TestCase
     {
         $tokens = ['-cpu-used:v:1', '6', '-deadline:v', 'realtime', '-row-mt:v', '1', '-rc:v', 'vbr',
             '-cq:v', '23', '-rc-lookahead:v', '20', '-spatial-aq:v', '1', '-temporal-aq:v', '1', '-aq-strength:v', '8',
+            '-svtav1-params:v', 'lp=1',
             '-bsf:v', 'h264_mp4toannexb', '-avoid_negative_ts', 'make_zero', '-video_track_timescale', '90000',
             '-frag_duration', '1000000', '-min_frag_duration', '500000', '-flush_packets', '1',
             '-max_muxing_queue_size', '1024', '-cluster_time_limit', '1000', '-write_crc32', '1', '-muxdelay', '0.2'];
@@ -117,6 +118,8 @@ class EncodingOptionsTest extends TestCase
             'x265 analysis file' => ['output', ['-x265-params', 'analysis-save=1']],
             'repeated x264 key' => ['output', ['-x264-params', 'keyint=10:keyint=20']],
             'x264 zones' => ['output', ['-x264-params', 'keyint=10:zones=0,10,q=20']],
+            'SVT-AV1 stats report' => ['output', ['-svtav1-params', 'lp=1:enable-stat-report=1']],
+            'SVT-AV1 on audio' => ['output', ['-svtav1-params:a', 'lp=1']],
             'tracing bitstream filter' => ['output', ['-bsf:v', 'trace_headers']],
             'bitstream filter file' => ['output', ['-bsf:v', 'h264_metadata=sei_user_data=/tmp/file']],
             'trailing overwrite flag' => ['output', ['-bsf:v', 'h264_mp4toannexb', '-y']],
