@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Process;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ProcessResult;
+use Symfony\Component\Process\Exception\ProcessSignaledException;
 use Throwable;
 
 /**
@@ -192,9 +193,7 @@ class ProcessRunner
                 $phase,
             );
         } catch (Throwable $throwable) {
-            $failure = $throwable instanceof MediaException || $throwable === $this->applicationFailure
-                ? $throwable
-                : new MediaException('Cannot execute the media process.', $phase, 'process');
+            $failure = $this->failure($throwable, $phase, $redactions);
 
             throw $failure;
         } finally {
@@ -206,6 +205,30 @@ class ProcessRunner
                 $this->stopTracking();
             }
         }
+    }
+
+    /**
+     * Get the exception that reports the given failure of the running process.
+     */
+    protected function failure(Throwable $throwable, string $phase, array $redactions): Throwable
+    {
+        if ($throwable instanceof MediaException || $throwable === $this->applicationFailure) {
+            return $throwable;
+        }
+
+        // A signal we did not send ourselves, such as SIGKILL from the out-of-memory killer,
+        // ends the process without an exit code. We will name the signal and keep the
+        // diagnostics the binary wrote before it was stopped.
+        if ($throwable instanceof ProcessSignaledException) {
+            return new MediaException(
+                "The media process was terminated by signal [{$throwable->getSignal()}].",
+                $phase,
+                'signal',
+                strtr($this->capture['diagnostics'], $redactions),
+            );
+        }
+
+        return new MediaException('Cannot execute the media process.', $phase, 'process');
     }
 
     /**
