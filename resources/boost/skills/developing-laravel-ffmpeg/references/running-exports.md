@@ -33,7 +33,7 @@ $url = $file->temporaryUrl(now()->addMinutes(10));
 $size = $file->size;
 ```
 
-Each `GeneratedFile` has `disk`, `path`, `size`, `role`, and `owned` properties, plus the `url`, `temporaryUrl`, `readStream`, and `delete` methods. The exception's `phase` names the step that failed, such as `staging`, `encoding`, or `publication`, and its `category` names the condition, such as `input` for unreadable media, `encoder` for an encoder the FFmpeg build lacks, `dimensions` for odd frame sizes, `permission` for an unwritable local destination, `mapping` for a missing track, or `exit` for any other process failure. Keep its `diagnostics` out of public responses, because they may contain URLs. A failed export never deletes the files it already published, and lists them in the exception's `published` property.
+Each `GeneratedFile` has `disk`, `path`, `size`, `role`, and `owned` properties, plus the `url`, `temporaryUrl`, `readStream`, and `delete` methods. The exception's `phase` names the step that failed, such as `staging`, `encoding`, or `publication`, and its `category` names the condition, such as `launch` for a binary that cannot start, `input` for unreadable media, `encoder` for an encoder the FFmpeg build lacks, `dimensions` for odd frame sizes, `permission` for an unwritable local destination, `mapping` for a missing track, or `exit` for any other process failure. Keep its `diagnostics` out of public responses, because they may contain URLs. A failed export never deletes the files it already published, and lists them in the exception's `published` property.
 
 ## Progress and Events
 

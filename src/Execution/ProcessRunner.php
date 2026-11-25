@@ -156,6 +156,8 @@ class ProcessRunner
     {
         $result = $this->run([$binary, '-version'], $directory, outputLimit: 65536, phase: $phase);
 
+        $this->ensureBinaryStarted($result, $tool);
+
         if ($result->exitCode !== 0
             || ! preg_match(
                 '/^'.preg_quote($tool, '/').' version (?:n)?(9\.0\.\d+)(?:\s|-|$)/',
@@ -169,11 +171,44 @@ class ProcessRunner
     }
 
     /**
+     * Ensure the shell started the binary, since it exits with 126 or 127 when it cannot.
+     */
+    protected function ensureBinaryStarted(ProcessResult $result, string $tool): void
+    {
+        if (! in_array($result->exitCode, [126, 127], true)) {
+            return;
+        }
+
+        throw new MediaException($this->launchFailureMessage($tool, $result), $result->phase, 'launch');
+    }
+
+    /**
+     * Get the message for a binary that the shell could not start.
+     */
+    protected function launchFailureMessage(string $tool, ProcessResult $result): string
+    {
+        $name = $this->toolName($tool);
+
+        if ($result->exitCode === 126) {
+            return "The configured {$name} binary is not executable.";
+        }
+
+        // The dynamic linker also exits with 127 when the binary exists but cannot load one
+        // of its shared libraries. Its error names the library, which holds no path, so we
+        // will quote that name while the binary's own path stays out of the message.
+        if (preg_match('/error while loading shared libraries: ([\w.+-]{1,128}):/', $result->diagnostics, $matches)) {
+            return "The configured {$name} binary cannot load the shared library [{$matches[1]}].";
+        }
+
+        return "The configured {$name} binary cannot be found.";
+    }
+
+    /**
      * Get the message for a binary that does not report a 9.0.x release.
      */
     protected function unsupportedVersionMessage(string $tool, ProcessResult $result): string
     {
-        $name = $tool === 'ffprobe' ? 'FFprobe' : 'FFmpeg';
+        $name = $this->toolName($tool);
 
         if ($result->exitCode !== 0) {
             return "{$name} 9.0.x is required.";
@@ -189,6 +224,14 @@ class ProcessRunner
         }
 
         return "{$name} 9.0.x is required, but the configured binary reports version [{$matches[1]}].";
+    }
+
+    /**
+     * Get the display name of the given tool.
+     */
+    protected function toolName(string $tool): string
+    {
+        return $tool === 'ffprobe' ? 'FFprobe' : 'FFmpeg';
     }
 
     /**

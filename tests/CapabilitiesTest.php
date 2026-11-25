@@ -183,6 +183,30 @@ class CapabilitiesTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    #[TestWith(['missing', 'The configured FFmpeg binary cannot be found.'])]
+    #[TestWith(['not-executable', 'The configured FFmpeg binary is not executable.'])]
+    #[TestWith(['without-library', 'The configured FFmpeg binary cannot load the shared library [libavdevice.so.62].'])]
+    public function test_binaries_that_cannot_start_report_the_launch_category(string $binary, string $message): void
+    {
+        file_put_contents("{$this->root}/not-executable", "#!/bin/sh\n");
+        chmod("{$this->root}/not-executable", 0600);
+
+        $this->fakeBinary("{$this->root}/without-library", <<<'PHP'
+            fwrite(STDERR, "/private/build/ffmpeg: error while loading shared libraries: libavdevice.so.62: "
+                ."cannot open shared object file: No such file or directory\n");
+            exit(127);
+            PHP);
+
+        config(['laravel-ffmpeg.ffmpeg.binaries' => "{$this->root}/{$binary}"]);
+
+        $this->assertSame(1, Artisan::call('ffmpeg:doctor', ['--json' => true]));
+        $this->assertSame(
+            ['error' => $message, 'category' => 'launch'],
+            json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR),
+        );
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
     public function test_failed_capture_is_reported_without_binary_details(): void
     {
         $this->fakeCapabilities(brokenOption: '-encoders');

@@ -319,7 +319,7 @@ class VolumeDetectTest extends TestCase
 
         $this->assertThrows(
             fn () => FFMpeg::disk('memory')->open('audio.wav')->analyze(),
-            fn (MediaException $exception) => in_array($exception->category, ['process', 'version'], true)
+            fn (MediaException $exception) => $exception->category === 'launch'
                 && $exception->phase === 'analysis',
         );
         $this->assertWorkspacesAreCleanedUp();
