@@ -845,6 +845,28 @@ class ExportTest extends TestCase
         ];
     }
 
+    public function test_image_sequence_directories_may_contain_a_percent_sign(): void
+    {
+        $image = file_get_contents(__DIR__.'/src/logo.png');
+        $this->fakePipeline(function (PendingProcess $process) use ($image) {
+            $pattern = end($process->command);
+            file_put_contents(sprintf($pattern, 1), $image);
+            file_put_contents(sprintf($pattern, 2), $image);
+
+            return Process::result();
+        });
+
+        $result = FFMpeg::disk('memory')
+            ->open('source.mp4')
+            ->frames(count: 2)
+            ->save('frames 100%/shot-%02d.png');
+
+        $this->assertSame(
+            ['frames 100%/shot-01.png', 'frames 100%/shot-02.png'],
+            $result->files()->pluck('path')->all(),
+        );
+    }
+
     public function test_count_sampling_requires_a_known_duration(): void
     {
         $this->fakePipeline(metadata: '{"format":{},"streams":[{"index":0,"codec_type":"video"}]}');

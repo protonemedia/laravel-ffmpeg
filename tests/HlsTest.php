@@ -902,6 +902,27 @@ class HlsTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    public function test_custom_segment_directories_may_contain_a_percent_sign(): void
+    {
+        Storage::disk('memory')->put('source.mp4', 'source');
+        $this->fakePipeline();
+
+        $result = FFMpeg::disk('memory')
+            ->open('source.mp4')
+            ->hls()
+            ->variant('test', fn () => null, segments: 'a 50%/part-%03d.ts')
+            ->save('out/master.m3u8');
+
+        $this->assertSame(
+            ['a 50%/part-000.ts', 'out/test/index.m3u8'],
+            $result->variant('test')->files()->pluck('path')->all(),
+        );
+        $this->assertStringContainsString(
+            "\n../../a%2050%25/part-000.ts\n",
+            Storage::disk('memory')->get('out/test/index.m3u8'),
+        );
+    }
+
     public function test_custom_nested_playlists_decode_with_segments_in_separate_directories(): void
     {
         $media = $this->source();

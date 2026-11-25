@@ -86,8 +86,7 @@ class ImageOutput
     {
         $path = new ExportOutput($path, 'local')->destination()['path'];
 
-        if (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', $path)
-            || str_contains(dirname($path), '%')) {
+        if (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', basename($path))) {
             throw new InvalidArgumentException(
                 'A sequence destination requires exactly one %d or %01d to %09d placeholder in its filename.'
             );
@@ -113,15 +112,25 @@ class ImageOutput
         $artifacts = [];
 
         foreach ($files as $index => $file) {
-            if ($file !== sprintf($path, $index + 1)) {
+            if ($file !== static::numberedPath($path, $index + 1)) {
                 throw MediaException::validation('The generated image sequence is not contiguous.', 'artifact');
             }
 
             $artifacts[] = ['path' => $file, 'output' => 0, 'destination' => [
-                'disk' => $destination['disk'], 'path' => sprintf($destination['path'], $index + 1),
+                'disk' => $destination['disk'], 'path' => static::numberedPath($destination['path'], $index + 1),
             ]];
         }
 
         return $artifacts;
+    }
+
+    /**
+     * Get the path of the given number from a pattern that carries its placeholder in the filename.
+     */
+    protected static function numberedPath(string $pattern, int $number): string
+    {
+        $directory = dirname($pattern);
+
+        return ($directory === '.' ? '' : "{$directory}/").sprintf(basename($pattern), $number);
     }
 }
