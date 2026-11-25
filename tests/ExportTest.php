@@ -651,6 +651,36 @@ class ExportTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    public function test_frames_at_the_duration_fail_before_encoding(): void
+    {
+        $this->fakePipeline();
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->frame(at: 10)->save('end.jpg'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->getMessage()]
+                === ['probing', 'duration', 'The frame time [10s] must be before the media duration [10s].'],
+        );
+
+        Process::assertDidntRun(fn (PendingProcess $process) => in_array('-frames:v', $process->command, true));
+    }
+
+    public function test_frames_of_media_without_a_known_duration_are_encoded(): void
+    {
+        $image = file_get_contents(__DIR__.'/src/logo.png');
+        $this->fakePipeline(function (PendingProcess $process) use ($image) {
+            file_put_contents(end($process->command), $image);
+
+            return Process::result();
+        }, '{"format":{},"streams":[{"index":0,"codec_type":"video"}],"chapters":[]}');
+
+        FFMpeg::disk('memory')
+            ->open('source.mp4')
+            ->frame(at: 99)
+            ->save('frame.png');
+
+        $this->assertSame($image, Storage::disk('memory')->get('frame.png'));
+    }
+
     #[DataProvider('invalidFrameProvider')]
     public function test_frames_require_a_valid_timestamp_and_an_image_destination(Closure $capture): void
     {

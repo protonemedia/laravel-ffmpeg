@@ -6,6 +6,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
@@ -93,12 +94,28 @@ class PendingFrame implements Exportable, MeasuresDuration, ShapesCommand, Valid
     }
 
     /**
-     * Get no progress duration, since seeking makes encoded time unrelated to the source duration.
+     * Ensure the timestamp is before the known source duration, and get no progress duration.
+     *
+     * Seeking makes encoded time unrelated to the source duration.
      *
      * @internal
      */
     public function duration(array $metadata, ?float $default): ?float
     {
+        $duration = $metadata[0]->duration();
+
+        // FFmpeg would seek past the last frame and fail without naming the cause, so we
+        // will reject a timestamp at or beyond a known duration before encoding starts.
+        if ($duration !== null && $this->at >= $duration) {
+            $at = CommandCompiler::timestamp($this->at);
+            $end = CommandCompiler::timestamp($duration);
+
+            throw MediaException::probing(
+                "The frame time [{$at}s] must be before the media duration [{$end}s].",
+                'duration',
+            );
+        }
+
         return null;
     }
 

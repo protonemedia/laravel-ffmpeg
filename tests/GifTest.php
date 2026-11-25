@@ -221,6 +221,17 @@ class GifTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    public function test_clips_starting_at_the_duration_fail_before_palette_preparation(): void
+    {
+        $media = FFMpeg::disk()->open(new File($this->colorsFixture()));
+
+        $this->assertThrows(
+            fn () => $media->gif()->clip(2, duration: 1)->toDisk('memory')->save('empty.gif'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->getMessage()]
+                === ['probing', 'duration', 'The GIF clip start [2s] must be before the media duration [2s].'],
+        );
+    }
+
     public function test_failed_preprocessing_keeps_the_existing_destination(): void
     {
         $source = $this->colorsFixture();
