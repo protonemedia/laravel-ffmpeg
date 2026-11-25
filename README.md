@@ -1270,6 +1270,17 @@ Hls::routes('/lessons/{lesson}/hls', name: 'lessons.hls', playback: 'lesson');
 
 The route uses the `web` and `auth` middleware by default and a controller action, so `route:cache` works; keep your own closures out of route actions. With Sanctum, pass `middleware: ['api', 'auth:sanctum']`. Bearer-URL playback with `middleware: ['web']` is acceptable only if URLs are issued behind an authorized endpoint: the URLs become bearer credentials with no global authentication, so `authorize` must enforce your policy on every request, including sessionless ones.
 
+Laravel redirects guests to the route named `login`, which a new application does not define, so a guest's playback request fails with a 500 error. You may define a `login` route, although players then receive a redirect to an HTML page, and `auth:sanctum` redirects guests the same way. To answer guests with a `401` response instead, you may customize Laravel's guest redirect in your application's `bootstrap/app.php` file:
+
+```php
+use Illuminate\Http\Request;
+
+// Inside the withMiddleware callback, which receives the $middleware configuration.
+$middleware->redirectGuestsTo(
+    fn (Request $request) => $request->routeIs('lessons.hls') ? null : route('login'),
+);
+```
+
 <a name="generating-playback-urls"></a>
 #### Generating Playback URLs
 

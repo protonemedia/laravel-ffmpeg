@@ -138,6 +138,17 @@ $url = Hls::url('lessons.hls', ['lesson' => $lesson], expires: now()->addMinutes
 
 Media and keys must live on named private disks. The routes use the `web` and `auth` middleware by default, and pass `middleware: ['api', 'auth:sanctum']` to `routes` for Sanctum. To serve only some variants, store `$result->playbackForVariants(['720p'])->toArray()` instead. The entry URL ends in `index.m3u8` and every other playback URL ends in its file's extension, so players and FFmpeg detect HLS from the URL.
 
+Laravel redirects guests to the route named `login`, which a new application does not define, so a guest's playback request fails with a 500 error. You may define a `login` route, although players then receive a redirect to an HTML page, and `auth:sanctum` redirects guests the same way. To answer guests with a `401` response instead, customize the guest redirect in `bootstrap/app.php`:
+
+```php
+use Illuminate\Http\Request;
+
+// Inside the withMiddleware callback, which receives the $middleware configuration.
+$middleware->redirectGuestsTo(
+    fn (Request $request) => $request->routeIs('lessons.hls') ? null : route('login'),
+);
+```
+
 ## DASH
 
 The `dash` method builds adaptation sets and their representations, and `sharedHls` adds HLS playlists over the same segments:
