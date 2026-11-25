@@ -42,8 +42,7 @@ return [
     |
     | Before using the binaries, the package verifies that both report the
     | same release, 9.0 or later. Setting this option to false skips that
-    | check, so older builds and development snapshots will run, but the
-    | package only supports the releases that this check would accept.
+    | check, but only the releases that it would accept are supported.
     |
     */
 
@@ -55,9 +54,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | This value is the total deadline, in seconds, of each FFmpeg or FFprobe
-    | process. An operation's timeout method may set its own budget, but it
-    | still applies, so the first limit that is reached wins. Set it to
-    | null to remove the deadline from the processes entirely.
+    | process. The timeout method may set a budget per operation, but the
+    | first limit reached wins. Setting it to null removes the deadline.
     |
     */
 
@@ -102,9 +100,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | Setting this option to false suppresses every package event, including
-    | QueuedExportCompleted. Callbacks, cancellation, publication and queue
-    | chains still run, so keep the events enabled if your listeners keep
-    | the completion inventories that your application relies upon.
+    | QueuedExportCompleted. Callbacks, publication and queue chains still
+    | run, so keep them enabled for the listeners your application needs.
     |
     */
 
@@ -115,20 +112,9 @@ return [
     | Credential Redaction
     |--------------------------------------------------------------------------
     |
-    | This option is disabled by default. When enabled, credentials will be
-    | replaced in exception diagnostics, process summaries and commands,
-    | analyze() output, and the probe() and probeQuery() results. The
-    | arguments passed to FFmpeg itself never change.
-    |
-    | The entire openUrl() URL becomes [url], the whole RTSP URL [rtsp], and
-    | the whole query string [query]. A query value becomes [redacted] when
-    | its name contains token, sig, key, auth, pass, secret, credential or
-    | policy, or when it has 16 or more characters, and so do the RTSP
-    | user:password pair and the password alone.
-    |
-    | Shorter query values with other names, such as dl=1, and RTSP usernames
-    | are kept, since they also occur inside numbers and metadata. Matching
-    | is a plain string replacement, applied longest first.
+    | Here you may enable the redaction of signed URLs and other credentials
+    | in diagnostics, process summaries, analyze() output and probe results.
+    | The arguments that are given to FFmpeg itself will never be changed.
     |
     */
 
@@ -141,8 +127,7 @@ return [
     |
     | Each operation creates a private workspace within this directory where
     | it stages media for FFmpeg. The directory must exist and be writable
-    | by your web server and queue worker users. When it is not set, the
-    | system's temporary directory will be used instead.
+    | by the users that run your web server and your queue workers.
     |
     */
 
