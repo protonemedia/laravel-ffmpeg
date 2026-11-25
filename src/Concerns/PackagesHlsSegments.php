@@ -74,7 +74,7 @@ trait PackagesHlsSegments
         $this->ensureSegmentInventoryIsComplete($index, $path, $media);
 
         $destination = $output->destination()['path'];
-        $attributes = $this->streamAttributes($index, $path);
+        $attributes = $this->streamAttributes($index, $path, $media['video']);
         $info = [
             'peak' => $media['peak'],
             'average' => (int) ceil(8 * $media['bytes'] / $media['total']),
@@ -160,6 +160,7 @@ trait PackagesHlsSegments
             'start' => null,
             'streamType' => 'subtitle',
             'subtitle' => null,
+            'video' => null,
         ];
 
         foreach ($media['lines'] as $lineIndex => $line) {
@@ -280,7 +281,7 @@ trait PackagesHlsSegments
         if ($this->isSubtitle($index)) {
             $media['subtitle'] = $local;
         } elseif ($media['count'] === 1) {
-            [$media['streamType'], $media['start']] = $this->probeFirstSegment($probePath);
+            [$media['streamType'], $media['start'], $media['video']] = $this->probeFirstSegment($probePath);
         }
 
         $media['segments'][] = [
@@ -357,16 +358,17 @@ trait PackagesHlsSegments
     }
 
     /**
-     * Probe the first segment for its primary stream type and start time.
+     * Probe the first segment for its primary stream type, start time and video stream.
      *
-     * @return array{0: string, 1: mixed}
+     * @return array{0: string, 1: mixed, 2: Stream|null}
      */
     protected function probeFirstSegment(string $path): array
     {
         $metadata = $this->media->probeArtifact($path, $this->workspace);
-        $stream = $metadata->video() ?? $metadata->audio();
+        $video = $metadata->video();
+        $stream = $video ?? $metadata->audio();
 
-        return [$metadata->video() instanceof Stream ? 'video' : 'audio', $stream?->get('start_time')];
+        return [$video instanceof Stream ? 'video' : 'audio', $stream?->get('start_time'), $video];
     }
 
     /**

@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
 use ProtoneMedia\LaravelFFMpeg\HlsVariant;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
+use ProtoneMedia\LaravelFFMpeg\Stream;
 
 /**
  * Writes the master playlist of an HLS export.
@@ -11,9 +12,9 @@ use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 trait WritesHlsMasterPlaylist
 {
     /**
-     * Get the stream attributes FFmpeg reported for the variant, without its bandwidth.
+     * Get the stream attributes of the variant, without its bandwidth.
      */
-    protected function streamAttributes(int $index, string $path): string
+    protected function streamAttributes(int $index, string $path, ?Stream $video): string
     {
         $info = $this->isSubtitle($index) ? [] : $this->playlistLines(dirname($path)."/master-{$index}.m3u8");
         $attributes = '';
@@ -24,7 +25,55 @@ trait WritesHlsMasterPlaylist
             }
         }
 
-        return $attributes;
+        if (! $video instanceof Stream) {
+            return $attributes;
+        }
+
+        return $this->withVideoAttributes($attributes, $video);
+    }
+
+    /**
+     * Replace the coded RESOLUTION with the display size of the given video.
+     */
+    protected function withVideoAttributes(string $attributes, Stream $video): string
+    {
+        $resolution = $this->displayResolution($video);
+
+        if ($resolution === null) {
+            return $attributes;
+        }
+
+        return preg_replace('/(?<=^|,)RESOLUTION=[0-9]+x[0-9]+/', "RESOLUTION={$resolution}", $attributes);
+    }
+
+    /**
+     * Get the size the given video displays at, with its pixels stretched to square ones.
+     */
+    protected function displayResolution(Stream $video): ?string
+    {
+        $width = $video->width();
+        $height = $video->height();
+
+        if ($width === null || $height === null) {
+            return null;
+        }
+
+        if (! preg_match('/\A([1-9][0-9]*):([1-9][0-9]*)\z/', (string) $video->get('sample_aspect_ratio'), $ratio)) {
+            return "{$width}x{$height}";
+        }
+
+        $horizontal = (int) $ratio[1];
+        $vertical = (int) $ratio[2];
+
+        // Players stretch anamorphic pixels along a single axis, widening wide pixels and
+        // heightening narrow ones, so the display size never drops any coded pixels.
+        if ($horizontal >= $vertical) {
+            $width = (int) round($width * $horizontal / $vertical);
+        } else {
+            $height = (int) round($height * $vertical / $horizontal);
+        }
+
+        return "{$width}x{$height}";
     }
 
     /**

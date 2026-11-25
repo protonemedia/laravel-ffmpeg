@@ -268,6 +268,24 @@ class HlsTest extends TestCase
         $this->assertStringContainsString("large/index.m3u8\n", $master);
     }
 
+    public function test_anamorphic_variants_list_their_display_resolution(): void
+    {
+        $disk = $this->fakeLocalDisk();
+
+        $this->assertProcessSucceeded(Process::run([
+            $this->useRealFFMpeg(), '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=90x72:rate=10:duration=1',
+            '-vf', 'setsar=64/45', '-c:v', 'libx264', '-preset', 'ultrafast', $disk->path('anamorphic.mkv'),
+        ]));
+
+        $result = FFMpeg::disk('local')
+            ->open('anamorphic.mkv')
+            ->hls(segmentDuration: 1)
+            ->variant('picture', fn () => null)
+            ->save('anamorphic/master.m3u8');
+
+        $this->assertStringContainsString('RESOLUTION=128x72,', $disk->get($result->playlist()->path));
+    }
+
     public function test_real_variants_have_aligned_keyframed_segments_that_decode(): void
     {
         $result = $this->savedRealVariants();
