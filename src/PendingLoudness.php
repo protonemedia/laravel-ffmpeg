@@ -222,25 +222,49 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         $this->normalization = null;
         $this->workspace = $workspace;
         $inputEnd = array_search('-i', $command, true) + 2;
-        $prefix = array_slice($command, 0, $inputEnd);
-        $mapIndex = array_search('-map', $command, true);
-        $filterIndex = array_search('-filter:a', $command, true);
-        $preprocessing = Str::beforeLast($command[$filterIndex + 1], ','.$this->loudnorm('loudness-final.json'));
         $prepared = 'loudness-prepared.nut';
 
         // We decode the selected, trimmed and channel-processed samples only once. Both passes
         // reopen this private lossless file, never a mutable remote or local source.
-        $analyze([...$prefix, '-map', $command[$mapIndex + 1], '-vn', '-af', $preprocessing,
-            '-map_metadata', '0', '-c:a', 'pcm_f64le', '-f', 'nut', $prepared], 'Loudness analysis failed.');
+        $analyze($this->preparationCommand($command, $inputEnd, $prepared), 'Loudness analysis failed.');
 
-        $measure = [
-            $command[0], '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1', '-i', $prepared,
-            '-af', $this->loudnorm('loudness-measure.json'), '-f', 'null', '-',
-        ];
-
-        $analyze($measure, 'Loudness analysis failed.');
+        $analyze($this->measurementCommand($command[0], $prepared), 'Loudness analysis failed.');
 
         $this->measurement = $this->readStats("{$workspace->path}/loudness-measure.json", Progress::ANALYSIS);
+
+        return $this->normalizationCommand($command, $inputEnd, $prepared);
+    }
+
+    /**
+     * Build the pass that decodes the selected and preprocessed audio into the prepared file.
+     */
+    protected function preparationCommand(array $command, int $inputEnd, string $prepared): array
+    {
+        $prefix = array_slice($command, 0, $inputEnd);
+        $mapIndex = array_search('-map', $command, true);
+        $filterIndex = array_search('-filter:a', $command, true);
+        $preprocessing = Str::beforeLast($command[$filterIndex + 1], ','.$this->loudnorm('loudness-final.json'));
+
+        return [...$prefix, '-map', $command[$mapIndex + 1], '-vn', '-af', $preprocessing,
+            '-map_metadata', '0', '-c:a', 'pcm_f64le', '-f', 'nut', $prepared];
+    }
+
+    /**
+     * Build the pass that measures the loudness of the prepared file.
+     */
+    protected function measurementCommand(string $binary, string $prepared): array
+    {
+        return [
+            $binary, '-hide_banner', '-nostdin', '-y', '-xerror', '-progress', 'pipe:1', '-i', $prepared,
+            '-af', $this->loudnorm('loudness-measure.json'), '-f', 'null', '-',
+        ];
+    }
+
+    /**
+     * Build the loudnorm filter of the final pass from the measurement.
+     */
+    protected function normalizer(): string
+    {
         $normalizer = $this->loudnorm('loudness-final.json');
 
         // Linear normalization needs the measured values, so we will pass them to the final
@@ -253,6 +277,16 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
                 .":measured_thresh={$this->number($stats->inputThreshold)}"
                 .":offset={$this->number($stats->targetOffset)}";
         }
+
+        return $normalizer;
+    }
+
+    /**
+     * Build the final pass that normalizes the prepared file with the given command's settings.
+     */
+    protected function normalizationCommand(array $command, int $inputEnd, string $prepared): array
+    {
+        $normalizer = $this->normalizer();
 
         // The final pass reads the prepared file but keeps the encoder, container, metadata
         // and publication settings of the ordinary pipeline.

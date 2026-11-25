@@ -528,45 +528,13 @@ class PendingExport implements Exportable
         $this->reportProgress = fn (Progress $progress) => $this->notify($progress, $operationId, $destinations);
 
         try {
-            $this->runner = new ProcessRunner($this->timeoutSeconds, $this->idleTimeoutSeconds);
-
-            // A queue worker may interrupt the export before this runner exists, so we will
-            // hand it the signal now. Any later signal reaches the runner directly.
-            if ($this->interruptedBy !== null) {
-                $this->runner->interrupt($this->interruptedBy);
-            }
-
-            if (config('laravel-ffmpeg.enable_events', true)) {
-                Event::dispatch(new Events\ExportStarting($operationId, $destinations));
-            }
-
-            ($this->reportProgress)(new Progress($this->phase));
-
-            if (! $contents) {
-                $this->ensureLocalDestinationsAreWritable($outputs);
-            }
-
-            $result = $this->media->withInput(
-                fn (string $input, Workspace $workspace): string|ExportResult => $this->exportInWorkspace(
-                    $workspace,
-                    $outputs,
-                    $contents,
-                ),
-                $this->runner,
-            );
+            $result = $this->runExport($outputs, $contents, $operationId, $destinations);
         } catch (Throwable $throwable) {
             // A failure reports the phase it stopped in and every destination already
             // published, so listeners and callers can clean up a partial publication.
             throw $this->reportFailure($throwable, $operationId, $destinations);
         } finally {
-            $this->running = false;
-            $this->runner = null;
-            $this->phase = null;
-            $this->published = [];
-            $this->summaries = [];
-            $this->workspace = null;
-            $this->redactions = [];
-            $this->reportProgress = null;
+            $this->resetExecution();
         }
 
         if (config('laravel-ffmpeg.enable_events', true)) {
@@ -577,6 +545,58 @@ class PendingExport implements Exportable
         }
 
         return $result;
+    }
+
+    /**
+     * Start the process runner, announce the export, and run it inside a workspace.
+     */
+    protected function runExport(
+        array $outputs,
+        bool $contents,
+        string $operationId,
+        array $destinations,
+    ): string|ExportResult {
+        $this->runner = new ProcessRunner($this->timeoutSeconds, $this->idleTimeoutSeconds);
+
+        // A queue worker may interrupt the export before this runner exists, so we will
+        // hand it the signal now. Any later signal reaches the runner directly.
+        if ($this->interruptedBy !== null) {
+            $this->runner->interrupt($this->interruptedBy);
+        }
+
+        if (config('laravel-ffmpeg.enable_events', true)) {
+            Event::dispatch(new Events\ExportStarting($operationId, $destinations));
+        }
+
+        ($this->reportProgress)(new Progress($this->phase));
+
+        if (! $contents) {
+            $this->ensureLocalDestinationsAreWritable($outputs);
+        }
+
+        return $this->media->withInput(
+            fn (string $input, Workspace $workspace): string|ExportResult => $this->exportInWorkspace(
+                $workspace,
+                $outputs,
+                $contents,
+            ),
+            $this->runner,
+        );
+    }
+
+    /**
+     * Reset the state of the finished execution.
+     */
+    protected function resetExecution(): void
+    {
+        $this->running = false;
+        $this->runner = null;
+        $this->phase = null;
+        $this->published = [];
+        $this->summaries = [];
+        $this->workspace = null;
+        $this->redactions = [];
+        $this->reportProgress = null;
     }
 
     /**

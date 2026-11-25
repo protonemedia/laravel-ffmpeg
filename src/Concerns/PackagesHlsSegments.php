@@ -531,55 +531,75 @@ trait PackagesHlsSegments
         }
 
         if ($destination !== null && $this->playlistCallback instanceof Closure) {
-            $modified = ($this->playlistCallback)($bytes, $destination, $variant);
+            $bytes = $this->applyPlaylistCallback($bytes, $lines, $destination, $variant);
+        }
 
-            if (! is_string($modified) || strlen($modified) > Media::MAX_MANIFEST_BYTES) {
+        if (@file_put_contents($path, $bytes) !== strlen($bytes) || ! chmod($path, 0600)) {
+            throw MediaException::validation('Cannot finalize the generated HLS playlist.', 'filesystem');
+        }
+    }
+
+    /**
+     * Run the playlist callback and get its playlist once it only added lines to the generated ones.
+     */
+    protected function applyPlaylistCallback(string $bytes, array $lines, string $destination, ?string $variant): string
+    {
+        $modified = ($this->playlistCallback)($bytes, $destination, $variant);
+
+        if (! is_string($modified) || strlen($modified) > Media::MAX_MANIFEST_BYTES) {
+            throw MediaException::validation(
+                'Playlist hooks must return text within the 16 MiB limit.',
+                'artifact',
+            );
+        }
+
+        $bytes = str_replace("\r\n", "\n", $modified);
+        $modified = array_values(array_filter(
+            explode("\n", rtrim($bytes, "\n")),
+            fn ($line): bool => $line !== '',
+        ));
+
+        if (! str_starts_with($bytes, "#EXTM3U\n")
+            || preg_match('/[\x00-\x09\x0B-\x1F\x7F]/', $bytes)
+            || ! preg_match('//u', $bytes)) {
+            throw MediaException::validation(
+                'Playlist hooks must return a UTF-8 playlist without control characters.',
+                'artifact',
+            );
+        }
+
+        $this->ensurePlaylistCallbackOnlyAddedLines($modified, $lines);
+
+        return $bytes;
+    }
+
+    /**
+     * Ensure the playlist callback kept every generated line in order and only added safe lines.
+     *
+     * @param  list<string>  $modified
+     */
+    protected function ensurePlaylistCallbackOnlyAddedLines(array $modified, array $lines): void
+    {
+        $position = 0;
+
+        foreach ($modified as $line) {
+            if ($line === ($lines[$position] ?? null)) {
+                $position++;
+            } elseif (! str_starts_with($line, '#') || (str_starts_with($line, '#EXT')
+                && (! preg_match('/\A#EXT-X-(?:START|SESSION-DATA|DATERANGE|PROGRAM-DATE-TIME):/', $line)
+                    || preg_match('/\bURI\s*=/i', $line)))) {
                 throw MediaException::validation(
-                    'Playlist hooks must return text within the 16 MiB limit.',
-                    'artifact',
-                );
-            }
-
-            $bytes = str_replace("\r\n", "\n", $modified);
-            $modified = array_values(array_filter(
-                explode("\n", rtrim($bytes, "\n")),
-                fn ($line): bool => $line !== '',
-            ));
-
-            if (! str_starts_with($bytes, "#EXTM3U\n")
-                || preg_match('/[\x00-\x09\x0B-\x1F\x7F]/', $bytes)
-                || ! preg_match('//u', $bytes)) {
-                throw MediaException::validation(
-                    'Playlist hooks must return a UTF-8 playlist without control characters.',
-                    'artifact',
-                );
-            }
-
-            $position = 0;
-
-            foreach ($modified as $line) {
-                if ($line === ($lines[$position] ?? null)) {
-                    $position++;
-                } elseif (! str_starts_with($line, '#') || (str_starts_with($line, '#EXT')
-                    && (! preg_match('/\A#EXT-X-(?:START|SESSION-DATA|DATERANGE|PROGRAM-DATE-TIME):/', $line)
-                        || preg_match('/\bURI\s*=/i', $line)))) {
-                    throw MediaException::validation(
-                        'Playlist hooks may only add comments and non-resource START, SESSION-DATA, DATERANGE, or PROGRAM-DATE-TIME tags.',
-                        'artifact',
-                    );
-                }
-            }
-
-            if ($position !== count($lines)) {
-                throw MediaException::validation(
-                    'Playlist hooks must preserve generated lines in order.',
+                    'Playlist hooks may only add comments and non-resource START, SESSION-DATA, DATERANGE, or PROGRAM-DATE-TIME tags.',
                     'artifact',
                 );
             }
         }
 
-        if (@file_put_contents($path, $bytes) !== strlen($bytes) || ! chmod($path, 0600)) {
-            throw MediaException::validation('Cannot finalize the generated HLS playlist.', 'filesystem');
+        if ($position !== count($lines)) {
+            throw MediaException::validation(
+                'Playlist hooks must preserve generated lines in order.',
+                'artifact',
+            );
         }
     }
 }

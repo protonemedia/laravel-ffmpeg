@@ -214,32 +214,7 @@ class FilterGraph
         $consumed = [];
 
         foreach (self::split($expression, ',;') as [$chain]) {
-            $labels = [];
-            $quoted = false;
-            $escaped = false;
-
-            for ($i = 0; $i < strlen($chain); $i++) {
-                $character = $chain[$i];
-
-                if ($escaped) {
-                    $escaped = false;
-                } elseif ($character === '\\') {
-                    $escaped = true;
-                } elseif ($character === "'") {
-                    $quoted = ! $quoted;
-                } elseif (! $quoted && $character === '[') {
-                    $end = strpos($chain, ']', $i);
-
-                    if ($end === false) {
-                        throw new InvalidArgumentException('Unclosed graph label.');
-                    }
-
-                    $labels[] = [substr($chain, $i + 1, $end - $i - 1), $i, $end];
-                    $i = $end;
-                }
-            }
-
-            foreach ($labels as [$label, $start, $end]) {
+            foreach (self::labels($chain) as [$label, $start]) {
                 $prefix = trim(substr($chain, 0, $start));
                 $isInput = preg_match('/^(?:\[[^\]]+\]\s*)*$/D', $prefix);
 
@@ -268,6 +243,41 @@ class FilterGraph
                 );
             }
         }
+    }
+
+    /**
+     * Get the graph labels of the given chain with their start offsets, outside quotes and escapes.
+     *
+     * @return list<array{string, int}>
+     */
+    protected static function labels(string $chain): array
+    {
+        $labels = [];
+        $quoted = false;
+        $escaped = false;
+
+        for ($offset = 0; $offset < strlen($chain); $offset++) {
+            $character = $chain[$offset];
+
+            if ($escaped) {
+                $escaped = false;
+            } elseif ($character === '\\') {
+                $escaped = true;
+            } elseif ($character === "'") {
+                $quoted = ! $quoted;
+            } elseif (! $quoted && $character === '[') {
+                $end = strpos($chain, ']', $offset);
+
+                if ($end === false) {
+                    throw new InvalidArgumentException('Unclosed graph label.');
+                }
+
+                $labels[] = [substr($chain, $offset + 1, $end - $offset - 1), $offset];
+                $offset = $end;
+            }
+        }
+
+        return $labels;
     }
 
     /**

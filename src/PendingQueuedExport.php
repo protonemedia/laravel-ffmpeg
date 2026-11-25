@@ -124,6 +124,14 @@ class PendingQueuedExport
             return $this->configure(new ExportJob($this->id, $this->plan, $path));
         }
 
+        return $this->batchJob($partExports, $prefix, $path, $disk);
+    }
+
+    /**
+     * Build the batch of part jobs and the finalizer that merges their inventories.
+     */
+    protected function batchJob(array $partExports, string $prefix, string $path, string $disk): HlsBatchJob
+    {
         // Every part becomes a batched job that writes its playback inventory. Once the
         // batch completes, the chained finalizer merges those inventories into the master
         // playlist at the requested path.

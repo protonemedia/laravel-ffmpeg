@@ -300,12 +300,7 @@ class PendingLiveHls
         $this->running = true;
 
         try {
-            if ($disk->allFiles($directory) !== []) {
-                throw MediaException::publication(
-                    'Live HLS requires an empty, exclusively owned destination namespace.',
-                    'ownership',
-                );
-            }
+            $this->ensureNamespaceIsEmpty($disk, $directory);
 
             $this->interruptIfNecessary();
 
@@ -328,21 +323,42 @@ class PendingLiveHls
 
             throw $this->publicationFailure($throwable, $playlist);
         } finally {
-            // A stop() request only ends this session, so we will clear it here to let later
-            // runs of the same builder proceed.
-            $this->running = false;
-            $this->stopped = false;
+            $this->endSession($workspace, $failed);
+        }
+    }
 
-            $this->resetSession();
+    /**
+     * Ensure the destination namespace holds no files before the session claims it.
+     */
+    protected function ensureNamespaceIsEmpty(Filesystem $filesystem, string $directory): void
+    {
+        if ($filesystem->allFiles($directory) !== []) {
+            throw MediaException::publication(
+                'Live HLS requires an empty, exclusively owned destination namespace.',
+                'ownership',
+            );
+        }
+    }
 
-            try {
-                $workspace?->delete();
-            } catch (Throwable $exception) {
-                // As in Media::withInput(), a cleanup failure must not replace a failure that is
-                // already in flight.
-                if (! $failed) {
-                    throw $exception;
-                }
+    /**
+     * End the session and delete its workspace without hiding a failure in flight.
+     */
+    protected function endSession(?Workspace $workspace, bool $failed): void
+    {
+        // A stop() request only ends this session, so we will clear it here to let later
+        // runs of the same builder proceed.
+        $this->running = false;
+        $this->stopped = false;
+
+        $this->resetSession();
+
+        try {
+            $workspace?->delete();
+        } catch (Throwable $throwable) {
+            // As in Media::withInput(), a cleanup failure must not replace a failure that is
+            // already in flight.
+            if (! $failed) {
+                throw $throwable;
             }
         }
     }
