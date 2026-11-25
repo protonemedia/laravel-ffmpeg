@@ -48,10 +48,11 @@ class OutputTracksTest extends TestCase
             ],
         );
 
+        // The JPEG outgrows FFprobe's first read, so it probes as image2 instead of jpeg_pipe.
         foreach (['png', 'jpg'] as $extension) {
             $this->ffmpeg(
                 [
-                    '-f', 'lavfi', '-i', 'color=red:s=32x32', '-frames:v', '1', '-threads', '1',
+                    '-f', 'lavfi', '-i', 'testsrc2=s=128x96', '-frames:v', '1', '-threads', '1',
                     $this->path('art.'.$extension),
                 ],
             );
@@ -83,7 +84,7 @@ class OutputTracksTest extends TestCase
 
         $this->assertNotNull($cover);
         $this->assertSame($codec, $cover->get('codec_name'));
-        $this->assertSame(32, $cover->get('width'));
+        $this->assertSame(128, $cover->get('width'));
         $this->assertSame($this->decoded('source.mp4', '0:V:0'), $this->decoded($name, '0:V:0'));
         $this->assertSame($this->decoded('source.mp4', '0:a:0'), $this->decoded($name, '0:a:0'));
         $this->assertWorkspacesAreCleanedUp();
