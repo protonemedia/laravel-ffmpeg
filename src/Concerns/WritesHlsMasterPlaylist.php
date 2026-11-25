@@ -33,17 +33,23 @@ trait WritesHlsMasterPlaylist
     }
 
     /**
-     * Replace the coded RESOLUTION with the display size of the given video.
+     * Replace the coded RESOLUTION with the display size and add the FRAME-RATE of the given video.
      */
     protected function withVideoAttributes(string $attributes, Stream $video): string
     {
         $resolution = $this->displayResolution($video);
 
-        if ($resolution === null) {
+        if ($resolution !== null) {
+            $attributes = preg_replace('/(?<=^|,)RESOLUTION=[0-9]+x[0-9]+/', "RESOLUTION={$resolution}", $attributes);
+        }
+
+        $frameRate = $video->frameRate();
+
+        if ($frameRate === null) {
             return $attributes;
         }
 
-        return preg_replace('/(?<=^|,)RESOLUTION=[0-9]+x[0-9]+/', "RESOLUTION={$resolution}", $attributes);
+        return $attributes.($attributes === '' ? '' : ',').'FRAME-RATE='.sprintf('%.3f', $frameRate);
     }
 
     /**

@@ -268,6 +268,15 @@ class HlsTest extends TestCase
         $this->assertStringContainsString("large/index.m3u8\n", $master);
     }
 
+    public function test_real_master_playlists_list_the_frame_rate_of_every_variant(): void
+    {
+        $result = $this->savedRealVariants();
+
+        $master = Storage::disk('real-variants')->get($result->playlist()->path);
+
+        $this->assertSame(2, substr_count($master, ',FRAME-RATE=20.000'));
+    }
+
     public function test_anamorphic_variants_list_their_display_resolution(): void
     {
         $disk = $this->fakeLocalDisk();
