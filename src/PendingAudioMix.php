@@ -166,7 +166,9 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
             );
         }
 
-        $settings['maps'] = $settings['omitVideo'] ? [] : ['0:V:0?'];
+        $output = new ExportOutput($path ?? 'inspection.mp4', $settings['disk']);
+
+        $settings['maps'] = $settings['omitVideo'] || $output->holdsAudioOnly() ? [] : ['0:V:0?'];
         $settings['maps'][] = '[mixed_audio]';
         $settings['omitVideo'] = false;
 
@@ -175,7 +177,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         $settings['metadataSource'] ??= 0;
         $settings['chapterSource'] ??= 0;
 
-        return [new ExportOutput($path ?? 'inspection.mp4', $settings['disk'])->configure($settings)];
+        return [$output->configure($settings)];
     }
 
     /**

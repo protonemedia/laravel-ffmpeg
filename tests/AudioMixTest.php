@@ -287,9 +287,9 @@ class AudioMixTest extends TestCase
         $this->ffmpeg(
             ['-f', 'lavfi', '-i', 'aevalsrc=0.3|-0.1:s=48000:d=5', '-c:a', 'pcm_f64le', $this->path('long.wav')],
         );
+        // The WAV destination holds audio only, so the mix leaves out the source's video.
         $this->media()
             ->mixAudio($this->media('long.wav'), volume: 0.5, originalVolume: 0)
-            ->withoutVideo()
             ->audio('pcm_f64le')
             ->volume(0.5)
             ->save('trimmed.wav');

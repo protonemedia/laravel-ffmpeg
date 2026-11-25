@@ -102,4 +102,16 @@ class ExportOutput
     {
         return ['disk' => is_string($this->disk) ? $this->disk : null, 'path' => $this->path];
     }
+
+    /**
+     * Determine if the destination's extension names an audio-only container.
+     *
+     * @internal
+     */
+    public function holdsAudioOnly(): bool
+    {
+        return in_array(strtolower(pathinfo($this->path, PATHINFO_EXTENSION)), [
+            'aac', 'aif', 'aiff', 'caf', 'flac', 'm4a', 'm4b', 'mka', 'mp3', 'oga', 'ogg', 'opus', 'wav',
+        ], true);
+    }
 }

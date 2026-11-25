@@ -204,7 +204,7 @@ $result = $media->export()
 
 Without the `toDisk` method, outputs publish to the first input's disk, or to your `filesystems.default` disk for uploads, local files, and URLs. To change only the visibility of the published files, you may call the `visibility` method, such as `->visibility('public')`.
 
-Other formats work the same way, such as VP9 and Opus in WebM, or MP3 audio. An export maps the first video stream unless you choose its streams, and an `.mp3` file would embed that video's first frame as cover art, so you should call the `mapAudio` method for audio-only exports:
+Other formats work the same way, such as VP9 and Opus in WebM, or MP3 audio. An export to an audio-only file, such as `.mp3`, `.m4a`, or `.wav`, keeps only the source's first audio stream:
 
 ```php
 $media->export()
@@ -214,7 +214,6 @@ $media->export()
     ->save('lesson.webm');
 
 $media->export()
-    ->mapAudio()
     ->audio('libmp3lame', bitrate: '192k')
     ->save('lesson.mp3');
 ```
@@ -447,7 +446,7 @@ A query reads the first 10 seconds by default; seeking is approximate, and packe
 <a name="tracks-and-metadata"></a>
 ### Selecting Tracks and Metadata
 
-By default, an export selects the first motion-video and audio stream. The `mapVideo`, `mapAudio`, and `map` methods replace that selection; subtitles and cover art must be mapped explicitly with container-compatible codecs. Stream tags and dispositions address output order:
+By default, an export selects the first motion-video and audio stream. An audio-only destination, whose extension is `aac`, `aif`, `aiff`, `caf`, `flac`, `m4a`, `m4b`, `mka`, `mp3`, `oga`, `ogg`, `opus`, or `wav`, selects only the first audio stream, which must exist. The `mapVideo`, `mapAudio`, and `map` methods replace that selection; subtitles and cover art must be mapped explicitly with container-compatible codecs. Stream tags and dispositions address output order:
 
 ```php
 $media->export()
@@ -479,7 +478,7 @@ $media->export()
 
 Each probed `Stream` offers the `language`, `isForced`, `isDefault`, and `isCoverArt` methods, plus raw fields through `get`.
 
-Either default stream may be missing, so an audio-only source exports its audio. An export or HLS variant that configures its video, such as through `video`, `resize`, or `videoFilter`, requires a video stream instead and throws a `MediaException` with the `mapping` category for an audio-only source. Copying the video with `video('copy')` keeps whatever streams the source has.
+Either default stream may be missing, so an audio-only source exports its audio. An export or HLS variant that configures its video, such as through `video`, `resize`, or `videoFilter`, requires a video stream instead and throws a `MediaException` with the `mapping` category for an audio-only source. An audio-only destination ignores video settings, and watermarks and `twoPass` reject it. Copying the video with `video('copy')` keeps whatever streams the source has.
 
 <a name="attaching-cover-art"></a>
 #### Attaching Cover Art

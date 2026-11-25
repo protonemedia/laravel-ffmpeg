@@ -47,7 +47,7 @@ trait CompilesOutputArguments
             throw new InvalidArgumentException('Use maps alone to omit tracks when explicit mapping is enabled.');
         }
 
-        if ($this->maps === [] && $this->omitAudio && $this->omitVideo) {
+        if ($this->maps === [] && $this->omitAudio && ($this->omitVideo || $this->holdsAudioOnly())) {
             throw new InvalidArgumentException('An export must select audio or video.');
         }
 

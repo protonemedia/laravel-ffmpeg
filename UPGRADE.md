@@ -260,15 +260,15 @@ PHP-FFMpeg also added its own x264 tuning options, such as `-refs 6` and `-subq 
 |---|---|
 | `new X264` | `video('libx264', bitrate: '1000k')->audio('aac', bitrate: '128k')->twoPass()` |
 | `new WebM` | `video('libvpx', bitrate: '1000k')->audio('libvorbis', bitrate: '128k')` |
-| `new Mp3` | `mapAudio()->audio('libmp3lame', bitrate: '128k')` |
-| `new Aac` | `mapAudio()->audio('aac', bitrate: '128k')`, or `libfdk_aac` if your build includes it |
-| `new Wav` | `mapAudio()->audio('pcm_s16le')` |
+| `new Mp3` | `audio('libmp3lame', bitrate: '128k')` |
+| `new Aac` | `audio('aac', bitrate: '128k')`, or `libfdk_aac` if your build includes it |
+| `new Wav` | `audio('pcm_s16le')` |
 | `new CopyFormat` | `video('copy')->audio('copy')` |
 | `setKiloBitrate(2500)` | `video('libx264', bitrate: '2500k')`, plus `twoPass()` to match `X264` |
 | `setAudioKiloBitrate(192)` | `audio('aac', bitrate: '192k')` |
 | `setAudioChannels(1)` | `audioOptions(['-ac', '1'])` |
 
-PHP-FFMpeg's audio formats wrote only the audio stream. Version 9 maps the first video and audio streams by default, whatever the extension, so an `.m4a` export keeps the source's video, an `.mp3` export embeds the first frame as cover art, and a `.wav` export fails. You should call `mapAudio()` or `withoutVideo()` for every audio-only export:
+PHP-FFMpeg's audio formats wrote only the audio stream. Version 9 decides by the extension instead: an audio-only destination, such as `.mp3`, `.m4a`, `.wav`, `.flac`, or `.ogg`, keeps only the first audio stream, while other destinations also keep the first video stream. For audio in another container, such as `.mp4`, you should call `mapAudio()` or `withoutVideo()`:
 
 ```php
 // $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
@@ -284,7 +284,6 @@ $media->export()
 
 // Version 9.x
 $media->export()
-    ->mapAudio()
     ->audio('libmp3lame', bitrate: '192k')
     ->audioOptions(['-ac', '1'])
     ->save('lesson.mp3');
@@ -765,7 +764,7 @@ Outputs no longer need a `Media` instance with its own disk. Every output publis
 
 An export with `output()` callbacks accepts output settings only inside them, so you should call `toDisk()` and `visibility()` in each callback, as in the example above. An output setting on the export root, such as `toDisk()`, `visibility()`, `video()`, `audio()`, `map()`, a filter, `metadata()`, `clip()`, or `outputOptions()`, throws an `InvalidArgumentException` in such an export, whether you call it before or after `output()`. The root still accepts settings of the whole command, such as `addInput()`, `filterComplex()`, `globalOptions()`, and `onProgress()`.
 
-Without maps, ordinary exports select the first motion-video and audio streams. Existing subtitles and cover art require explicit maps and container-compatible codecs; the `coverArt()` attachment helper below owns its maps instead. General multiple-input outputs require explicit maps and a metadata and chapter policy. Stream tags and dispositions address the output order, not input indexes:
+Without maps, ordinary exports select the first motion-video and audio streams, and audio-only destinations only the first audio stream. Existing subtitles and cover art require explicit maps and container-compatible codecs; the `coverArt()` attachment helper below owns its maps instead. General multiple-input outputs require explicit maps and a metadata and chapter policy. Stream tags and dispositions address the output order, not input indexes:
 
 ```php
 // $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().

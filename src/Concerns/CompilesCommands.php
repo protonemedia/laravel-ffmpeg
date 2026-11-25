@@ -273,7 +273,7 @@ trait CompilesCommands
         $settings = $output->outputConfiguration();
         $video = $settings['video'];
 
-        if ($settings['omitVideo']) {
+        if ($settings['omitVideo'] || $output->holdsAudioOnly()) {
             throw new InvalidArgumentException('Two-pass outputs must keep their video.');
         }
 

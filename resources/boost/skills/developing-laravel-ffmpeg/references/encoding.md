@@ -225,7 +225,7 @@ FFMpeg::disk('uploads')
     ->save('videos/english.mkv');
 ```
 
-An audio-only output, such as an `.m4a` or `.mp3` file, needs `mapAudio()`, or it keeps the video stream, and an `.mp3` file embeds its first frame as cover art. Subtitles and cover art need explicit maps, such as `map('0:s:0')`. The `videoStream`, `audioStream`, `coverArt`, and `withoutMetadata` methods are covered in the README's "Selecting Tracks and Metadata" section.
+An audio-only destination, such as an `.mp3`, `.m4a`, `.wav`, `.flac`, or `.ogg` file, selects only the first audio stream, which must exist, and ignores video settings. Audio in another container, such as `.mp4`, needs `mapAudio()`. Subtitles and cover art need explicit maps, such as `map('0:s:0')`. The `videoStream`, `audioStream`, `coverArt`, and `withoutMetadata` methods are covered in the README's "Selecting Tracks and Metadata" section.
 
 ## Changing Playback Speed
 

@@ -47,11 +47,11 @@ FFMpeg::disk('uploads')
 - `(new X264)->setKiloBitrate(0)` encoded one pass without a bitrate, as `video('libx264')` does.
 - `new CopyFormat` becomes `video('copy')->audio('copy')`.
 - `new WebM` becomes `video('libvpx', bitrate: '1000k')->audio('libvorbis', bitrate: '128k')`, in one pass. The package does not check the codecs of a `.webm` output, and FFmpeg's WebM muxer takes VP8, VP9, or AV1 video with Vorbis or Opus audio, so a build without `libvpx` may use `video('libsvtav1', bitrate: '1000k')`, and a build without `libvorbis` the native `vorbis` encoder below.
-- `new Wav` becomes `mapAudio()->audio('pcm_s16le')`, `new Mp3` becomes `mapAudio()->audio('libmp3lame', bitrate: '128k')`, and `new Flac` becomes `mapAudio()->audio('flac')`.
-- `new Aac` used the `libfdk_aac` encoder. Call `mapAudio()->audio('aac', bitrate: '128k')` for FFmpeg's own encoder, or pass `libfdk_aac` when the build includes it.
-- `new Vorbis` becomes `mapAudio()->audio('vorbis')->audioOptions(['-strict', 'experimental', '-ac', '2'])`, or `audio('libvorbis')` when the build includes it.
+- `new Wav` becomes `audio('pcm_s16le')`, `new Mp3` becomes `audio('libmp3lame', bitrate: '128k')`, and `new Flac` becomes `audio('flac')`.
+- `new Aac` used the `libfdk_aac` encoder. Call `audio('aac', bitrate: '128k')` for FFmpeg's own encoder, or pass `libfdk_aac` when the build includes it.
+- `new Vorbis` becomes `audio('vorbis')->audioOptions(['-strict', 'experimental', '-ac', '2'])`, or `audio('libvorbis')` when the build includes it.
 
-An export selects the first video stream as well as the first audio stream, so an audio-only output, such as an `.m4a` or `.mp3` file, keeps the video unless you call `mapAudio`:
+Audio in another container, such as `.mp4`, needs `mapAudio`. An audio-only destination, such as an `.mp3`, `.m4a`, `.wav`, `.flac`, or `.ogg` file, keeps only the first audio stream, as v8's audio formats did:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -59,7 +59,6 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 FFMpeg::disk('uploads')
     ->open('videos/intro.mov')
     ->export()
-    ->mapAudio()
     ->audio('aac', bitrate: '128k')
     ->toDisk('audio')
     ->save('audio/intro.m4a');

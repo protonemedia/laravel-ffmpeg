@@ -419,8 +419,9 @@ class EncodingOptionsTest extends TestCase
                     ->twoPass(),
                 'vp9.webm', ['vp9', 'opus'], 2,
             ],
+            // An audio-only container maps only the audio, where the video would become cover art.
             'MP3 audio' => [
-                fn ($export) => $export->mapAudio()->audio('libmp3lame', bitrate: '128k'),
+                fn ($export) => $export->audio('libmp3lame', bitrate: '128k'),
                 'audio.mp3', ['mp3'], 1,
             ],
         ];

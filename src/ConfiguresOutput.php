@@ -226,9 +226,23 @@ trait ConfiguresOutput
             return $this->maps;
         }
 
+        if ($this->holdsAudioOnly()) {
+            return $this->omitAudio ? [] : ['0:a:0'];
+        }
+
         return collect([
             $this->omitVideo ? null : $this->defaultVideoMap(), $this->omitAudio ? null : '0:a:0?',
         ])->filter()->values()->all();
+    }
+
+    /**
+     * Determine if the destination is an audio-only container, which maps only the required audio by default.
+     *
+     * The export root has no destination until it is saved.
+     */
+    protected function holdsAudioOnly(): bool
+    {
+        return false;
     }
 
     /**

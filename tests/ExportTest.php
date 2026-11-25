@@ -2129,6 +2129,75 @@ class ExportTest extends TestCase
         $this->assertLectureIsUnchanged();
     }
 
+    public static function audioOnlyDestinations(): array
+    {
+        return [
+            'M4A' => ['lecture.m4a', fn (PendingExport $export) => $export->audio('aac'), [0, 1]],
+            'WAV with video settings' => [
+                'lecture.WAV', fn (PendingExport $export) => $export->video('libx264')->audio('pcm_s16le'), [0, 1],
+            ],
+            'explicit video map' => [
+                'lecture.m4a',
+                fn (PendingExport $export) => $export->mapVideo()->mapAudio()->video('copy')->audio('aac'),
+                [1, 1],
+            ],
+        ];
+    }
+
+    #[DataProvider('audioOnlyDestinations')]
+    public function test_audio_only_destinations_map_only_the_audio_by_default(
+        string $path,
+        Closure $configure,
+        array $counts,
+    ): void {
+        $selection = $configure($this->openLecture()->export())->save($path);
+        $metadata = FFMpeg::disk('memory')
+            ->open($selection->file()->path)
+            ->probe();
+
+        $this->assertSame($counts, [$metadata->videoStreams()->count(), $metadata->audioStreams()->count()]);
+        $this->assertLectureIsUnchanged();
+    }
+
+    public function test_audio_only_destinations_require_an_audio_stream(): void
+    {
+        $this->useRealFFMpeg();
+        Storage::disk('memory')->put('silent.mp4', file_get_contents($this->fixture('silent.mp4', [
+            '-f', 'lavfi', '-i', 'testsrc2=s=64x48:r=10:d=0.5', '-c:v', 'libx264',
+        ])));
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('silent.mp4')->export()->audio('libmp3lame')->save('silent.mp3'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('silent.mp3'));
+    }
+
+    public static function videoOnlyOperations(): array
+    {
+        return [
+            'two-pass' => [fn (Media $media) => $media->export()->video('libx264', bitrate: '150k')->twoPass()],
+            'watermark' => [fn (Media $media) => $media->export()->watermark(FFMpeg::disk('memory')->open('logo.png'))],
+        ];
+    }
+
+    #[DataProvider('videoOnlyOperations')]
+    public function test_video_only_operations_reject_audio_only_destinations(Closure $configure): void
+    {
+        $this->fakePipeline();
+        Storage::disk('memory')->put('logo.png', file_get_contents(__DIR__.'/src/logo.png'));
+
+        $this->assertThrows(
+            fn () => $configure(FFMpeg::disk('memory')->open('source.mp4'))->save('audio.m4a'),
+            fn (InvalidArgumentException $exception) => str_ends_with(
+                $exception->getMessage(),
+                'must keep their video.',
+            ),
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('audio.m4a'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
     public function test_keyframe_clips_start_at_the_preceding_keyframe(): void
     {
         $ffmpeg = $this->useRealFFMpeg();

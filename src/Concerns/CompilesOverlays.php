@@ -159,7 +159,7 @@ trait CompilesOverlays
             );
         }
 
-        if ($settings['omitVideo']) {
+        if ($settings['omitVideo'] || $output->holdsAudioOnly()) {
             throw new InvalidArgumentException('Watermarked outputs must keep their video.');
         }
 
