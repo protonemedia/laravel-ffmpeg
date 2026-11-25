@@ -643,6 +643,8 @@ $media->storyboard(every: 5, columns: 5, rows: 3, margin: 2, padding: 1)
     ->save('sheets/lesson-%03d.jpg');
 ```
 
+Each tile shows the frame nearest the middle of its interval, so the first tile of this storyboard shows the video at about 2.5 seconds. A video that ends before the middle of its last interval shows its final frame in the last tile.
+
 The `waveform` method renders a PNG, distinct from [waveform peaks data](#waveform-peaks-data). Its `colors` argument takes a name such as `'blue'` or an RGB or RGBA hex value prefixed with `#` or `0x`, or a list of them; a single string is never split into several colors:
 
 ```php
