@@ -5,6 +5,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
+use ProtoneMedia\LaravelFFMpeg\Metadata;
 
 /**
  * Compiles the watermark and cover art overlays of an export.
@@ -264,8 +265,7 @@ trait CompilesOverlays
         if ($this->coverInput !== null) {
             $image = $metadata[$this->coverInput];
 
-            if (! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true)
-                || $image->streams()->count() !== 1) {
+            if (! $this->isPngOrJpeg($image) || $image->streams()->count() !== 1) {
                 throw MediaException::probing('Cover art requires a standalone PNG or JPEG image.', 'cover-art');
             }
 
@@ -293,8 +293,7 @@ trait CompilesOverlays
             $image = $metadata[$mark['input']];
             $gif = $image->get('format.format_name') === 'gif' && $image->video()?->get('codec_name') === 'gif';
 
-            if ((! $gif && ! in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe'], true))
-                || $image->streams()->count() !== 1) {
+            if ((! $gif && ! $this->isPngOrJpeg($image)) || $image->streams()->count() !== 1) {
                 throw MediaException::probing('Watermarks require a standalone PNG, JPEG, or GIF image.', 'watermark');
             }
 
@@ -302,5 +301,17 @@ trait CompilesOverlays
                 throw MediaException::probing('Only GIF watermarks can loop().', 'watermark');
             }
         }
+    }
+
+    /**
+     * Determine if the probed image is a PNG or JPEG.
+     */
+    protected function isPngOrJpeg(Metadata $image): bool
+    {
+        // FFprobe reports a .jpg file larger than its first read as image2 instead of jpeg_pipe,
+        // and an image2 file it cannot decode with a width of zero.
+        return in_array($image->get('format.format_name'), ['png_pipe', 'jpeg_pipe', 'image2'], true)
+            && in_array($image->video()?->get('codec_name'), ['png', 'mjpeg'], true)
+            && $image->video()->get('width') > 0;
     }
 }
