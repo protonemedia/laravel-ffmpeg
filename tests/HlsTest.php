@@ -268,6 +268,33 @@ class HlsTest extends TestCase
         $this->assertStringContainsString("large/index.m3u8\n", $master);
     }
 
+    public function test_real_master_playlists_list_the_frame_rate_of_every_variant(): void
+    {
+        $result = $this->savedRealVariants();
+
+        $master = Storage::disk('real-variants')->get($result->playlist()->path);
+
+        $this->assertSame(2, substr_count($master, ',FRAME-RATE=20.000'));
+    }
+
+    public function test_anamorphic_variants_list_their_display_resolution(): void
+    {
+        $disk = $this->fakeLocalDisk();
+
+        $this->assertProcessSucceeded(Process::run([
+            $this->useRealFFMpeg(), '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=90x72:rate=10:duration=1',
+            '-vf', 'setsar=64/45', '-c:v', 'libx264', '-preset', 'ultrafast', $disk->path('anamorphic.mkv'),
+        ]));
+
+        $result = FFMpeg::disk('local')
+            ->open('anamorphic.mkv')
+            ->hls(segmentDuration: 1)
+            ->variant('picture', fn () => null)
+            ->save('anamorphic/master.m3u8');
+
+        $this->assertStringContainsString('RESOLUTION=128x72,', $disk->get($result->playlist()->path));
+    }
+
     public function test_real_variants_have_aligned_keyframed_segments_that_decode(): void
     {
         $result = $this->savedRealVariants();
@@ -317,6 +344,25 @@ class HlsTest extends TestCase
 
         $this->assertSame($durations['small'], $durations['large']);
         $this->assertEqualsWithDelta(0.7, $durations['small'][0], 0.05);
+    }
+
+    public function test_real_variants_of_a_444_source_advertise_the_high_profile(): void
+    {
+        $binary = $this->useRealFFMpeg();
+        $disk = $this->fakeLocalDisk();
+
+        $this->assertProcessSucceeded(Process::run([
+            $binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=1',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv444p', '-threads', '1', $disk->path('screen.mkv'),
+        ]));
+
+        FFMpeg::disk('local')
+            ->open('screen.mkv')
+            ->hls(segmentDuration: 1)
+            ->variant('small', fn (HlsVariant $variant) => $variant->resize(width: 80))
+            ->save('screen/master.m3u8');
+
+        $this->assertMatchesRegularExpression('/CODECS="avc1\.64[0-9a-f]{4}"/i', $disk->get('screen/master.m3u8'));
     }
 
     protected function typedExport(Media $media, string $type, bool $fragmented): PendingHlsExport
@@ -581,6 +627,19 @@ class HlsTest extends TestCase
         $this->assertTrue($disk->exists('source.mkv'));
         $this->assertSame([24, 16], array_slice(getimagesize($disk->path('logo.png')), 0, 2));
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_video_variants_of_an_audio_only_source_fail_while_mapping(): void
+    {
+        $media = $this->source(video: false);
+
+        $this->assertThrows(
+            fn () => $media->hls(segmentDuration: 0.7)
+                ->variant('360p', fn (HlsVariant $variant) => $variant->resize(height: 360))
+                ->save('voice/master.m3u8'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+        );
+        $this->assertSame(['source.mkv'], Storage::disk('local')->allFiles());
     }
 
     public function test_an_extra_unlabeled_graph_stream_is_rejected_before_hls_publication(): void
@@ -873,6 +932,27 @@ class HlsTest extends TestCase
             $result->variant('literal')->files()->pluck('path')->all(),
         );
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_custom_segment_directories_may_contain_a_percent_sign(): void
+    {
+        Storage::disk('memory')->put('source.mp4', 'source');
+        $this->fakePipeline();
+
+        $result = FFMpeg::disk('memory')
+            ->open('source.mp4')
+            ->hls()
+            ->variant('test', fn () => null, segments: 'a 50%/part-%03d.ts')
+            ->save('out/master.m3u8');
+
+        $this->assertSame(
+            ['a 50%/part-000.ts', 'out/test/index.m3u8'],
+            $result->variant('test')->files()->pluck('path')->all(),
+        );
+        $this->assertStringContainsString(
+            "\n../../a%2050%25/part-000.ts\n",
+            Storage::disk('memory')->get('out/test/index.m3u8'),
+        );
     }
 
     public function test_custom_nested_playlists_decode_with_segments_in_separate_directories(): void

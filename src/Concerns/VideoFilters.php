@@ -20,7 +20,7 @@ trait VideoFilters
     }
 
     /**
-     * Resize the video to the given width, height, or both.
+     * Resize the video to the given even width, height, or both.
      *
      * One dimension preserves the display aspect ratio, while two dimensions stretch the video.
      */

@@ -49,6 +49,19 @@ class GifTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    public function test_gif_widths_may_be_odd(): void
+    {
+        $command = FFMpeg::disk('missing')
+            ->open('missing.mp4')
+            ->gif(width: 81)
+            ->inspect();
+
+        $this->assertStringContainsString(
+            'scale=w=81:h=-2:reset_sar=1',
+            $command[array_search('-filter_complex', $command) + 1],
+        );
+    }
+
     #[DataProvider('invalidSettingsProvider')]
     public function test_invalid_settings_fail_without_io(Closure $configure): void
     {
@@ -206,6 +219,31 @@ class GifTest extends TestCase
         $this->assertSame(40, $whole->video()->get('height'));
         $this->assertEqualsWithDelta(2.0, $whole->duration(), 0.01);
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_clips_starting_at_the_duration_fail_before_palette_preparation(): void
+    {
+        $media = FFMpeg::disk()->open(new File($this->colorsFixture()));
+
+        $this->assertThrows(
+            fn () => $media->gif()->clip(2, duration: 1)->toDisk('memory')->save('empty.gif'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->getMessage()]
+                === ['probing', 'duration', 'The GIF clip start [2s] must be before the media duration [2s].'],
+        );
+    }
+
+    public function test_audio_only_sources_fail_while_mapping(): void
+    {
+        $binary = $this->useRealFFMpeg();
+        $source = $this->root.'/voice.m4a';
+
+        $this->assertProcessSucceeded(Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'sine=duration=1',
+            '-c:a', 'aac', $source]));
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk()->open(new File($source))->gif()->toDisk('memory')->save('voice.gif'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+        );
     }
 
     public function test_failed_preprocessing_keeps_the_existing_destination(): void

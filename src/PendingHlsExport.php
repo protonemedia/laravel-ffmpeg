@@ -46,6 +46,11 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     use Conditionable, Macroable;
 
     /**
+     * The seconds that every playlist output's timestamps are offset by.
+     */
+    protected const int TIMELINE_OFFSET = 10;
+
+    /**
      * The export pipeline this builder configures.
      */
     protected readonly PendingExport $export;
@@ -126,7 +131,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
 
         $this->export = new PendingExport($media, $disk, $this, 'hls-playlist');
 
-        $this->export->video('libx264')->audio('aac');
+        $this->export->defaultVideoEncoder('libx264')->audio('aac');
     }
 
     /**
@@ -537,6 +542,11 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
             $options[] = '+cgop';
         }
 
+        // Each playlist is its own output, and a muxer shifts an output that starts below
+        // zero, such as B-frame delay or AAC priming, by its own first timestamp. We will
+        // offset every output equally so no muxer shifts one and the clocks stay shared.
+        $options[] = '-output_ts_offset';
+        $options[] = (string) self::TIMELINE_OFFSET;
         $options[] = '-f';
         $options[] = 'hls';
         $options[] = '-hls_time';
@@ -560,6 +570,11 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         if ($this->segmentType === 'fmp4') {
             $options[] = '-hls_fmp4_init_filename';
             $options[] = "init-{$index}.mp4";
+
+            // The MP4 muxer would write the timeline offset as an empty edit, which browsers
+            // ignore, so we will start each first fragment at its offset timestamp instead.
+            $options[] = '-hls_segment_options';
+            $options[] = 'movflags=+frag_discont';
         }
 
         return $options;
@@ -619,8 +634,9 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
 
         for ($index = 0; $index < count($command); $index++) {
             if (in_array($command[$index], [
-                '-f', '-hls_time', '-hls_list_size', '-hls_playlist_type', '-hls_segment_type',
+                '-output_ts_offset', '-f', '-hls_time', '-hls_list_size', '-hls_playlist_type', '-hls_segment_type',
                 '-start_number', '-hls_segment_filename', '-master_pl_name', '-hls_fmp4_init_filename',
+                '-hls_segment_options',
             ], true)) {
                 $index++;
             } else {

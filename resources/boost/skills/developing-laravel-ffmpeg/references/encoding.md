@@ -41,6 +41,8 @@ if (! FFMpeg::open($request->file('video'))->isValid()) {
 }
 ```
 
+The `isValid` method reads only the container header. A truncated upload whose header comes first, such as a faststart MP4 cut short, still passes, and its export fails later with the `input` category.
+
 ## Encoding and Copying
 
 Each call to `export` starts an independent configuration. The output goes to the input's disk unless you call `toDisk`:
@@ -71,6 +73,42 @@ FFMpeg::disk('uploads')
     ->video('copy')
     ->audio('copy')
     ->save('videos/intro.mkv');
+```
+
+## Pixel Formats
+
+Every video track encoded with `libx264` uses the 8-bit 4:2:0 `yuv420p` pixel format of the High profile, so 10-bit, 4:2:2, and 4:4:4 sources still play in browsers. Other encoders keep the source's pixel format. To keep a 10-bit source as the High 10 profile, pass another pixel format to the `videoOptions` method:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+
+FFMpeg::disk('uploads')
+    ->open('videos/intro.mov')
+    ->export()
+    ->video('libx264')
+    ->videoOptions(['-pix_fmt', 'yuv420p10le'])
+    ->save('videos/intro-10-bit.mp4');
+```
+
+## HDR and SDR Video
+
+An export keeps the PQ or HLG color tags of an HDR source and its HDR10 mastering display and content light level metadata. The `color` method only relabels the video: a transfer other than `smpte2084` or `arib-std-b67` also drops the HDR10 metadata, but the pixel values stay HDR. Converting to SDR requires a tonemapping filter, such as `zscale` with `tonemap`, or `libplacebo`, so check for them with `FFMpeg::capabilities()` first:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+
+$capabilities = FFMpeg::capabilities();
+
+if ($capabilities->has('filters', 'zscale') && $capabilities->has('filters', 'tonemap')) {
+    FFMpeg::disk('uploads')
+        ->open('videos/intro-hdr.mov')
+        ->export()
+        ->videoFilter('zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,'
+            .'tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p')
+        ->color('bt709', 'bt709', 'bt709')
+        ->video('libx264')
+        ->save('videos/intro-sdr.mp4');
+}
 ```
 
 ## Clipping and Two-Pass Encoding
@@ -137,6 +175,8 @@ $media->export()
     ->save('videos/treated.mp4');
 ```
 
+The `resize`, `crop`, `pad`, `contain`, and `cover` methods take even dimensions, as most video encoders require. A source with odd dimensions needs an even `resize` or `crop` before `libx264` encodes it, or the export fails with the `dimensions` category.
+
 The builder also offers `pad`, `deinterlace`, `frameRate`, `flipHorizontally`, `flipVertically`, `delayAudio`, `audioFilter`, `drawText`, `burnSubtitles`, and `lut3d`. Fades affect video and audio unless you pass `video: false` or `audio: false`. Pass only trusted expressions to `videoFilter` and `audioFilter`.
 
 ## Watermarks
@@ -169,7 +209,7 @@ Without a closure, the mark appears at its original size in the bottom-right cor
 
 ## Tracks and Metadata
 
-An export selects the first video and audio stream. The `mapVideo`, `mapAudio`, and `map` methods replace that selection:
+An export selects the first video and audio stream, and either may be missing. An export that configures its video, such as through `video`, `resize`, or `videoFilter`, requires a video stream and fails with the `mapping` category for an audio-only source. The `mapVideo`, `mapAudio`, and `map` methods replace that selection:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;

@@ -115,7 +115,7 @@ sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
 
 The application may still fail after both commands succeed. You should then check permissions and write access to the temporary root and Storage destinations. After changing paths, rebuild the configuration cache and restart queue workers.
 
-Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause: a launch failure means the executable could not start, a version failure means an unsupported or mismatched pair, and an encoding failure means FFmpeg rejected the command or media. Categories name conditions, such as `metadata` for an unknown duration, `mapping` for a missing track, `signal` for a process that another process or the operating system stopped, such as the out-of-memory killer, and `interrupted` for an export that a [queue worker stopped](#timeouts-and-retries) after a signal.
+Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause: a launch failure means the executable could not start, a version failure means an unsupported or mismatched pair, and an encoding failure means FFmpeg rejected the command or media. Categories name conditions, such as `input` for media that FFprobe or FFmpeg cannot read, `encoder` for an encoder the FFmpeg build lacks, `dimensions` for odd frame sizes, `duration` for a frame time or clip start past the end of the media, `permission` for a local destination the process may not write, `metadata` for an unknown duration, `mapping` for a missing track, `signal` for a process that another process or the operating system stopped, such as the out-of-memory killer, and `interrupted` for an export that a [queue worker stopped](#timeouts-and-retries) after a signal. Other process failures have the `exit` category.
 
 > [!WARNING]
 > Raw commands and unredacted process exceptions may contain credentials, so never publish them in logs or error responses.
@@ -193,6 +193,40 @@ $media->export()
 
 The `crf` argument sets constant quality, while the `bitrate` argument accepts positive integer bits per second, such as `2500000`, or a unit string, such as `'2500k'`, but not floats or unitless strings. The two may not be combined.
 
+<a name="pixel-formats"></a>
+#### Pixel Formats
+
+Every video track encoded with `libx264`, including HLS variants and two-pass outputs, uses the 8-bit 4:2:0 `yuv420p` pixel format of the High profile, which browsers and Apple devices play. A 10-bit, 4:2:2, or 4:4:4 source, such as a phone's HEVC recording or a ProRes master, is converted to it. Other encoders keep the source's pixel format.
+
+You may choose another pixel format using the `videoOptions` method, such as `yuv420p10le` for the High 10 profile:
+
+```php
+$media->export()
+    ->video('libx264')
+    ->videoOptions(['-pix_fmt', 'yuv420p10le'])
+    ->save('lesson-10-bit.mp4');
+```
+
+<a name="hdr-and-sdr-video"></a>
+#### HDR and SDR Video
+
+An export keeps the PQ (`smpte2084`) or HLG (`arib-std-b67`) color tags of an HDR source, along with its HDR10 mastering display and content light level metadata, even after converting the pixel format. The `color` method only relabels the video: it changes the tags, and a transfer other than PQ or HLG also drops the HDR10 metadata, but the pixel values stay HDR.
+
+Converting HDR to SDR requires a tonemapping filter, such as `zscale` together with `tonemap`, or `libplacebo`. You may check for them using the `capabilities` method, then pass the chain to the `videoFilter` method and signal the SDR result with `color`:
+
+```php
+$capabilities = FFMpeg::capabilities();
+
+if ($capabilities->has('filters', 'zscale') && $capabilities->has('filters', 'tonemap')) {
+    $media->export()
+        ->videoFilter('zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,'
+            .'tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p')
+        ->color('bt709', 'bt709', 'bt709')
+        ->video('libx264')
+        ->save('lesson-sdr.mp4');
+}
+```
+
 <a name="two-pass-encoding-and-clipping"></a>
 #### Two-Pass Encoding and Clipping
 
@@ -247,7 +281,7 @@ $private = FFMpeg::openUrl(
 );
 ```
 
-Paths are never URLs or absolute local paths, and opened media keeps its disk if your configuration changes. Nothing is read until an export runs: local files are read in place, while other disks stream into a private workspace. Scoped and read-only input disks keep their boundaries, and publishing to a read-only destination fails.
+Paths are never URLs or absolute local paths, and opened media keeps its disk if your configuration changes. Nothing is read until an export runs: local files are read in place, while other disks stream into a private workspace. Scoped and read-only input disks keep their boundaries, and publishing to a read-only destination fails. An export checks local destinations before encoding and fails with the `permission` category when the nearest existing directory is not writable, while remote destinations are only written at publication.
 
 > [!WARNING]
 > HTTP inputs with credentials require `download: true`, which streams to a private file with deadlines, no redirects, and HTTPS verification. Otherwise the URL appears in FFmpeg's arguments, so never put reusable credentials in it. URL inputs publish to `filesystems.default` unless you call `toDisk`.
@@ -276,6 +310,8 @@ if (! FFMpeg::open($request->file('video'))->isValid()) {
     // ...
 }
 ```
+
+The `isValid` method reads only the container header, so it does not prove that every frame decodes. A truncated upload whose header comes first, such as a faststart MP4 cut short, still passes, and its export then fails with the `input` category.
 
 <a name="caching-metadata"></a>
 #### Caching Metadata
@@ -400,6 +436,8 @@ $media->export()
 
 Each probed `Stream` offers the `language`, `isForced`, `isDefault`, and `isCoverArt` methods, plus raw fields through `get`.
 
+Either default stream may be missing, so an audio-only source exports its audio. An export or HLS variant that configures its video, such as through `video`, `resize`, or `videoFilter`, requires a video stream instead and throws a `MediaException` with the `mapping` category for an audio-only source. Copying the video with `video('copy')` keeps whatever streams the source has.
+
 <a name="attaching-cover-art"></a>
 #### Attaching Cover Art
 
@@ -476,7 +514,23 @@ $media->export()
 
 A missing output track fails before encoding, and only the callbacks' scalar settings are kept, not the closures. Audio tracks may set the codec, bitrate, sample rate, channels, sample format, channel layout, compression level, and filters, which run after shared filters.
 
-The `videoOptions` and `audioOptions` methods accept curated pairs, such as numeric x264 and x265 parameters, SVT-AV1's `lp` level of parallelism, selected VPx, AV1, and NVENC settings, color signaling, and `['-strict', 'experimental']` for experimental audio encoders such as FFmpeg's native `vorbis`; unknown parameters and file-producing options are rejected. The `color` method only sets metadata, so use a color-conversion filter to change pixel values. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
+The `aac` encoder keeps the source's channel layout, so a 5.1 source stays 5.1. To encode stereo for web playback, you may pass `-ac` to the `audioOptions` method, or call the `channels` method on an individual audio track:
+
+```php
+$media->export()
+    ->video('libx264')
+    ->audio('aac', bitrate: '128k')
+    ->audioOptions(['-ac', '2'])
+    ->save('stereo.mp4');
+
+$media->export()
+    ->video('libx264')
+    ->audio('aac', bitrate: '128k')
+    ->audioStream(0, fn ($audio) => $audio->channels(2))
+    ->save('stereo-track.mp4');
+```
+
+The `videoOptions` and `audioOptions` methods accept curated pairs, such as numeric x264 and x265 parameters, SVT-AV1's `lp` level of parallelism, selected VPx, AV1, and NVENC settings, color signaling, and `['-strict', 'experimental']` for experimental audio encoders such as FFmpeg's native `vorbis`; unknown parameters and file-producing options are rejected. The `color` method only sets metadata, so use a color-conversion filter to change pixel values, as [HDR and SDR Video](#hdr-and-sdr-video) shows. A transfer other than PQ (`smpte2084`) or HLG (`arib-std-b67`) also drops the HDR10 mastering display and content light level metadata. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
 
 The `outputOptions` method also accepts single-file muxer settings and argument-free bitstream filters, such as `['-bsf:v', 'h264_mp4toannexb']`, but not sidecar paths. The `globalOptions` method accepts named hardware device declarations, where a derived device must reference an earlier one:
 
@@ -526,7 +580,16 @@ $media->export()
     ->save('covered.mp4');
 ```
 
-Passing one dimension to `resize` preserves the display aspect ratio, while two dimensions stretch the video. Crop and pad take positive even dimensions and center the video unless you pass offsets, and `rotate` accepts clockwise quarter turns or their negative equivalents, applied after the input's autorotation. FFmpeg validates geometry that depends on the source.
+Passing one dimension to `resize` preserves the display aspect ratio, while two dimensions stretch the video. Resize, crop, and pad take positive even dimensions, crop and pad center the video unless you pass offsets, and `rotate` accepts clockwise quarter turns or their negative equivalents, applied after the input's autorotation. FFmpeg validates geometry that depends on the source.
+
+Most video encoders, including `libx264`, require even frame dimensions. A source with odd dimensions, such as 1081x607, therefore needs an even `resize` or `crop`, or the export fails with the `dimensions` category:
+
+```php
+$media->export()
+    ->resize(width: 1080)
+    ->video('libx264')
+    ->save('even.mp4');
+```
 
 Raw probe dimensions are the encoded size, but sizing follows the autorotated display, so a portrait video stays portrait:
 
@@ -609,6 +672,8 @@ $bytes = $media->frame(at: 12.5)
     ->get();
 ```
 
+A `frame` time, or a `gif` clip start, at or beyond the source's known duration throws a `MediaException` with the `duration` category before FFmpeg runs.
+
 Frames, image sequences, and storyboards always have square pixels. Anamorphic video, such as DVD footage, is stretched to its display aspect ratio first, because image viewers ignore the pixel aspect ratio.
 
 The `frames` method samples at an interval or as an evenly spaced count. Patterns need one integer placeholder:
@@ -642,6 +707,8 @@ $media->storyboard(every: 5, columns: 5, rows: 3, margin: 2, padding: 1)
     ->toDisk('images')
     ->save('sheets/lesson-%03d.jpg');
 ```
+
+Each tile shows the frame nearest the middle of its interval, so the first tile of this storyboard shows the video at about 2.5 seconds. A video that ends before the middle of its last interval shows its final frame in the last tile.
 
 The `waveform` method renders a PNG, distinct from [waveform peaks data](#waveform-peaks-data). Its `colors` argument takes a name such as `'blue'` or an RGB or RGBA hex value prefixed with `#` or `0x`, or a list of them; a single string is never split into several colors:
 
@@ -970,7 +1037,7 @@ $result = $media->hls(segmentDuration: 6)
         ->resize(height: 720)
         ->video('libx264', bitrate: '2500k'),
         playlist: 'lists/720p/index.m3u8', segments: 'segments/720p/part-%03d.ts')
-    ->encrypt('secrets', fn (string $keyPath) => route('lesson.key', ['key' => basename($keyPath)]),
+    ->encrypt('secrets', static fn (string $keyPath) => route('lesson.key', ['key' => basename($keyPath)]),
         rotateEvery: 3, directory: 'lessons/42/keys')
     ->toDisk('streams')
     ->save('lessons/42/master.m3u8');
@@ -1267,6 +1334,17 @@ Hls::routes('/lessons/{lesson}/hls', name: 'lessons.hls', playback: 'lesson');
 ```
 
 The route uses the `web` and `auth` middleware by default and a controller action, so `route:cache` works; keep your own closures out of route actions. With Sanctum, pass `middleware: ['api', 'auth:sanctum']`. Bearer-URL playback with `middleware: ['web']` is acceptable only if URLs are issued behind an authorized endpoint: the URLs become bearer credentials with no global authentication, so `authorize` must enforce your policy on every request, including sessionless ones.
+
+Laravel redirects guests to the route named `login`, which a new application does not define, so a guest's playback request fails with a 500 error. You may define a `login` route, although players then receive a redirect to an HTML page, and `auth:sanctum` redirects guests the same way. To answer guests with a `401` response instead, you may customize Laravel's guest redirect in your application's `bootstrap/app.php` file:
+
+```php
+use Illuminate\Http\Request;
+
+// Inside the withMiddleware callback, which receives the $middleware configuration.
+$middleware->redirectGuestsTo(
+    fn (Request $request) => $request->routeIs('lessons.hls') ? null : route('login'),
+);
+```
 
 <a name="generating-playback-urls"></a>
 #### Generating Playback URLs

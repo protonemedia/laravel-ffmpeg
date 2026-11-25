@@ -100,6 +100,11 @@ trait ConfiguresOutput
     protected bool $omitVideo = false;
 
     /**
+     * Indicates if the user configured the video, so the output requires a video stream.
+     */
+    protected bool $requiresVideo = false;
+
+    /**
      * The input the container metadata is copied from, or -1 to omit it.
      */
     protected ?int $metadataSource = null;
@@ -216,8 +221,23 @@ trait ConfiguresOutput
         }
 
         return collect([
-            $this->omitVideo ? null : '0:V:0?', $this->omitAudio ? null : '0:a:0?',
+            $this->omitVideo ? null : $this->defaultVideoMap(), $this->omitAudio ? null : '0:a:0?',
         ])->filter()->values()->all();
+    }
+
+    /**
+     * Get the default video map, which is optional unless the user configured the video.
+     */
+    protected function defaultVideoMap(): string
+    {
+        // Copying passes along whatever video the source has, so only an encoder, a filter,
+        // or another video setting the user chose turns a source without video into a
+        // mapping failure instead of a published output without its video.
+        if ($this->requiresVideo && ($this->video['codec'] ?? null) !== 'copy') {
+            return '0:V:0';
+        }
+
+        return '0:V:0?';
     }
 
     /**
@@ -275,6 +295,7 @@ trait ConfiguresOutput
             'dispositions' => $this->dispositions,
             'omitAudio' => $this->omitAudio,
             'omitVideo' => $this->omitVideo,
+            'requiresVideo' => $this->requiresVideo,
             'metadataSource' => $this->metadataSource,
             'chapterSource' => $this->chapterSource,
             'clip' => $this->clip,

@@ -542,6 +542,10 @@ class PendingExport implements Exportable
 
             ($this->reportProgress)(new Progress($this->phase));
 
+            if (! $contents) {
+                $this->ensureLocalDestinationsAreWritable($outputs);
+            }
+
             $result = $this->media->withInput(
                 fn (string $input, Workspace $workspace): string|ExportResult => $this->exportInWorkspace(
                     $workspace,
@@ -697,7 +701,7 @@ class PendingExport implements Exportable
         $this->ensureNotStoppedBySignal($process);
 
         if ($process->exitCode !== 0) {
-            throw MediaException::analysis($failure, 'exit', $process->diagnostics);
+            throw $process->toException($failure);
         }
 
         $this->summaries[] = $process->summary();
@@ -732,17 +736,7 @@ class PendingExport implements Exportable
             $this->ensureNotStoppedBySignal($process);
 
             if ($process->exitCode !== 0) {
-                $category = Str::contains($process->diagnostics, [
-                    'Streamcopy requested for output stream fed from a complex filtergraph',
-                    'Simple and complex filtering cannot be used together',
-                ]) ? 'configuration' : 'exit';
-
-                throw new MediaException(
-                    "FFmpeg failed (exit {$process->exitCode}).",
-                    $this->phase,
-                    $category,
-                    $process->diagnostics,
-                );
+                throw $process->toException("FFmpeg failed (exit {$process->exitCode}).");
             }
 
             $this->summaries[] = $process->summary();

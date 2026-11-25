@@ -78,7 +78,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
 
         $this->export = new PendingExport($media, $disk, $this, 'dash-manifest');
 
-        $this->export->video('libx264')->audio('aac');
+        $this->export->defaultVideoEncoder('libx264')->audio('aac');
     }
 
     /**

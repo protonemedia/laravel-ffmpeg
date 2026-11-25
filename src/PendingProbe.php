@@ -270,11 +270,7 @@ class PendingProbe
         $result = $runner->run($command, $workspace->path, $redactions, $this->outputLimit, timeout: $this->timeout);
 
         if ($result->exitCode !== 0) {
-            throw MediaException::probing(
-                "FFprobe query failed (exit {$result->exitCode}).",
-                'exit',
-                $result->diagnostics,
-            );
+            throw $result->toException("FFprobe query failed (exit {$result->exitCode}).");
         }
 
         $data = Media::redactProbeData($this->decode($result->output), $redactions);

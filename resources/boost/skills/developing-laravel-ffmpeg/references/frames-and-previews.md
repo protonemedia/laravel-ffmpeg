@@ -57,6 +57,8 @@ FFMpeg::disk('uploads')
     ->save('storyboards/intro-%03d.jpg');
 ```
 
+Each tile shows the frame nearest the middle of its interval, such as the frame at about 2.5 seconds for the first cue with `every: 5`. A video that ends before the middle of its last interval shows its final frame in the last tile.
+
 ## GIFs
 
 The `gif` method creates a silent, looping preview. Pass `loop: false` to play it once:

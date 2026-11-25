@@ -14,6 +14,11 @@ use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 trait CompilesOutputArguments
 {
     /**
+     * The pixel format libx264 encodes with unless the user chooses one.
+     */
+    protected const DEFAULT_PIXEL_FORMAT = 'yuv420p';
+
+    /**
      * Compile the FFmpeg options of the output, using the given callback to compile each filter.
      */
     public function outputArguments(callable $compileFilter, array $maps): array
@@ -120,7 +125,7 @@ trait CompilesOutputArguments
         $options = [];
 
         foreach ([
-            ['v', $this->video, $this->videoFilters],
+            ['v', $this->videoEncoding(), $this->videoFilters],
             ['a', $this->audio, $this->audioFilters],
         ] as [$type, $encoding, $filters]) {
             foreach ($encoding as $name => $value) {
@@ -148,7 +153,7 @@ trait CompilesOutputArguments
         $options = [];
 
         foreach ([
-            ['v', $this->videoStreams, $this->videoFilters],
+            ['v', $this->videoTrackEncodings(), $this->videoFilters],
             ['a', $this->audioStreams, $this->audioFilters],
         ] as [$type, $streams, $baseFilters]) {
             foreach ($streams as $track => $encoding) {
@@ -170,6 +175,56 @@ trait CompilesOutputArguments
         }
 
         return $options;
+    }
+
+    /**
+     * Get the encoder settings shared by every video track, with libx264's default pixel format.
+     */
+    protected function videoEncoding(): array
+    {
+        // libx264 keeps a 10-bit, 4:2:2 or 4:4:4 source format, which yields High 10 or
+        // higher profiles that browsers cannot play. So we will encode the 8-bit 4:2:0
+        // format of the High profile unless the user chose a pixel format.
+        if (! $this->needsDefaultPixelFormat($this->video)) {
+            return $this->video;
+        }
+
+        return [...$this->video, 'pix_fmt' => self::DEFAULT_PIXEL_FORMAT];
+    }
+
+    /**
+     * Get the encoder overrides of individual video tracks, with libx264's default pixel format.
+     */
+    protected function videoTrackEncodings(): array
+    {
+        // The shared settings already give every track the default when they use libx264,
+        // so only a track that switches to libx264 itself needs a pixel format of its own.
+        if ($this->needsDefaultPixelFormat($this->video)) {
+            return $this->videoStreams;
+        }
+
+        return array_map(function (array $overrides): array {
+            if (! $this->needsDefaultPixelFormat(array_replace($this->video, $overrides))) {
+                return $overrides;
+            }
+
+            return [...$overrides, 'pix_fmt' => self::DEFAULT_PIXEL_FORMAT];
+        }, $this->videoStreams);
+    }
+
+    /**
+     * Determine if the given encoding uses libx264 without a pixel format chosen by the user.
+     */
+    protected function needsDefaultPixelFormat(array $encoding): bool
+    {
+        if (($encoding['codec'] ?? null) !== 'libx264' || isset($encoding['pix_fmt'])) {
+            return false;
+        }
+
+        return ! array_any(
+            $this->outputOptions,
+            fn ($token): bool => (bool) preg_match('/^-pix_fmt(?::|$)/', $token),
+        );
     }
 
     /**

@@ -1,5 +1,29 @@
 # Audio
 
+## Stereo for the Web
+
+The `aac` encoder keeps the source's channel layout, so a 5.1 source stays 5.1. To encode stereo for web playback, pass `-ac` to the `audioOptions` method, or call `channels` on an individual audio track:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\AudioStreamSettings;
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+
+$media = FFMpeg::disk('uploads')
+    ->open('videos/surround.mkv');
+
+$media->export()
+    ->video('libx264')
+    ->audio('aac', bitrate: '128k')
+    ->audioOptions(['-ac', '2'])
+    ->save('videos/stereo.mp4');
+
+$media->export()
+    ->video('libx264')
+    ->audio('aac', bitrate: '128k')
+    ->audioStream(0, fn (AudioStreamSettings $audio) => $audio->channels(2))
+    ->save('videos/stereo-track.mp4');
+```
+
 ## Background Music
 
 The `backgroundMusic` method mixes a quieter track under the video's audio, looping it until the video ends. The `at` method delays the music, and `loop: false` plays it once:
