@@ -270,7 +270,7 @@ $media->export()
     ->save('keyframe.mkv');
 ```
 
-Timeline changes omit chapters unless you map them explicitly.
+Without a duration or an end, the clip runs to the end of the media, so `clip(30)` drops the first 30 seconds. Timeline changes omit chapters unless you map them explicitly.
 
 <a name="inputs-and-probing"></a>
 ### Opening and Probing Media

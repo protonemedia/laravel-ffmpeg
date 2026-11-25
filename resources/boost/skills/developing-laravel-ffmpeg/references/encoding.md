@@ -113,7 +113,7 @@ if ($capabilities->has('filters', 'zscale') && $capabilities->has('filters', 'to
 
 ## Clipping and Two-Pass Encoding
 
-The `clip` method cuts accurately by transcoding. Passing `seek: 'keyframe'` allows stream copy, but the clip may start early. Two-pass encoding requires a video bitrate:
+The `clip` method cuts accurately by transcoding. Passing `seek: 'keyframe'` allows stream copy, but the clip may start early. Without a duration or an end, the clip runs to the end of the media, so `clip(30)` drops the first 30 seconds. Two-pass encoding requires a video bitrate:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;

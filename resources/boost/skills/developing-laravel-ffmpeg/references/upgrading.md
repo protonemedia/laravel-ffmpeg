@@ -103,7 +103,7 @@ foreach ([1, 4, 7] as $key => $seconds) {
 
 - `addFilter()` callbacks and PHP-FFMpeg filter objects become builder methods, such as `resize`, `crop`, `rotate`, and `clip`, from the [encoding reference](encoding.md).
 - `addFilter('-vf', 'hflip')` becomes `flipHorizontally()`, and `addFilter(['-af', 'volume=0.5'])` becomes `volume(0.5)`. Pass other expressions to `videoFilter` and `audioFilter`.
-- `new ClipFilter(TimeCode::fromSeconds(12.5), TimeCode::fromSeconds(8))` becomes `clip(12.5, duration: 8)`.
+- `new ClipFilter(TimeCode::fromSeconds(12.5), TimeCode::fromSeconds(8))` becomes `clip(12.5, duration: 8)`, and `new ClipFilter(TimeCode::fromSeconds(30))`, which ran to the end of the media, becomes `clip(30)`.
 - `addWatermark(fn (WatermarkFactory $watermark) => ...)` becomes `watermark($logo, fn (Watermark $watermark) => ...)` with an opened image, and the factory's `width(100)` and `greyscale()` become `size(width: 100)` and `grayscale()`.
 - `concatWithoutTranscoding()` and `concatWithTranscoding()` become `$first->concat($second)` and `$first->concatTranscoded($second)`.
 - `withVisibility('public')` becomes `visibility('public')`, or `toDisk('public', ['visibility' => 'public'])`.

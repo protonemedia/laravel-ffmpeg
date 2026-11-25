@@ -412,6 +412,8 @@ $media->export()
     ->save('copy.mkv');
 ```
 
+A `ClipFilter` with only a start time kept everything after it. The `clip()` method does the same without a duration or an end, so `clip(30)` drops the first 30 seconds.
+
 The raw forms of `addFilter()` map to the new `videoFilter()`, `audioFilter()`, and `filterComplex()` methods, which take trusted filter expressions. None of these methods existed in version 8:
 
 | Version 8.x | Version 9.x |
