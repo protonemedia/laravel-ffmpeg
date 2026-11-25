@@ -41,6 +41,8 @@ if (! FFMpeg::open($request->file('video'))->isValid()) {
 }
 ```
 
+The `isValid` method reads only the container header. A truncated upload whose header comes first, such as a faststart MP4 cut short, still passes, and its export fails later with the `input` category.
+
 ## Encoding and Copying
 
 Each call to `export` starts an independent configuration. The output goes to the input's disk unless you call `toDisk`:

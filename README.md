@@ -311,6 +311,8 @@ if (! FFMpeg::open($request->file('video'))->isValid()) {
 }
 ```
 
+The `isValid` method reads only the container header, so it does not prove that every frame decodes. A truncated upload whose header comes first, such as a faststart MP4 cut short, still passes, and its export then fails with the `input` category.
+
 <a name="caching-metadata"></a>
 #### Caching Metadata
 
