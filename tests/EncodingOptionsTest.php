@@ -353,6 +353,39 @@ class EncodingOptionsTest extends TestCase
         $this->assertSame('High', $video->get('profile'));
     }
 
+    public function test_real_sdr_color_drops_the_hdr10_metadata(): void
+    {
+        $this->realFixture();
+        $this->runTool(['-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=0.3', '-c:v', 'libx265', '-pix_fmt', 'yuv420p10le',
+            '-x265-params', 'log-level=0:hdr10=1:master-display=G(13250,34500)B(7500,3000)R(34000,16000)'
+                .'WP(15635,16450)L(10000000,1):max-cll=1000,400',
+            '-color_primaries', 'bt2020', '-color_trc', 'smpte2084', '-colorspace', 'bt2020nc', $this->path('hdr.mp4')]);
+
+        $this->media('hdr.mp4')
+            ->export()
+            ->video('libx264')
+            ->color('bt709', 'bt709', 'bt709')
+            ->save('sdr.mp4');
+
+        $this->assertContains('Mastering display metadata', $this->frameSideData('hdr.mp4'));
+        $this->assertNotContains('Mastering display metadata', $this->frameSideData('sdr.mp4'));
+        $this->assertNotContains('Content light level metadata', $this->frameSideData('sdr.mp4'));
+    }
+
+    /**
+     * Get the side data types of the first video frame of the given file.
+     */
+    protected function frameSideData(string $name): array
+    {
+        $result = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'v:0',
+            '-read_intervals', '%+#1', '-show_frames', '-show_entries', 'frame=side_data_list', '-of', 'json',
+            $this->path($name)]);
+
+        $this->assertProcessSucceeded($result);
+
+        return array_column(json_decode($result->output(), true)['frames'][0]['side_data_list'] ?? [], 'side_data_type');
+    }
+
     public function test_real_x265_private_settings(): void
     {
         $this->realFixture();

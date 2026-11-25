@@ -48,7 +48,7 @@ trait VideoCodec
     /**
      * Signal the color characteristics of the output video.
      *
-     * This does not transform pixel values.
+     * This does not transform pixel values, but an SDR transfer drops the HDR10 metadata.
      */
     public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): static
     {
