@@ -75,6 +75,16 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     protected const int MAX_CELLS = 100000;
 
     /**
+     * The smallest value of a signed 16-bit PCM sample.
+     */
+    protected const int MIN_SAMPLE = -32768;
+
+    /**
+     * The largest value of a signed 16-bit PCM sample.
+     */
+    protected const int MAX_SAMPLE = 32767;
+
+    /**
      * Create a new pending waveform peaks instance.
      */
     public function __construct(
@@ -381,8 +391,8 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
     protected function readBucket($file, int $length, int $channels): array
     {
         $frameBytes = $channels * 2;
-        $min = array_fill(0, $channels, 32767);
-        $max = array_fill(0, $channels, -32768);
+        $min = array_fill(0, $channels, self::MAX_SAMPLE);
+        $max = array_fill(0, $channels, self::MIN_SAMPLE);
         $remaining = $length;
 
         while ($remaining > 0) {
@@ -397,7 +407,7 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
             // byte order, so we will convert from two's complement explicitly.
             foreach (unpack('v*', $bytes) as $index => $unsigned) {
                 $channel = ($index - 1) % $channels;
-                $sample = $unsigned >= 32768 ? $unsigned - 65536 : $unsigned;
+                $sample = $unsigned > self::MAX_SAMPLE ? $unsigned - 65536 : $unsigned;
                 $min[$channel] = min($min[$channel], $sample);
                 $max[$channel] = max($max[$channel], $sample);
             }

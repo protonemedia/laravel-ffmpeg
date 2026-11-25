@@ -66,6 +66,11 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     protected ?Closure $imageUrl = null;
 
     /**
+     * The number of microseconds in a second, the unit the clipped duration is kept in.
+     */
+    protected const int MICROSECONDS_PER_SECOND = 1000000;
+
+    /**
      * Create a new pending storyboard instance.
      */
     public function __construct(
@@ -77,7 +82,7 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         protected readonly int $margin,
         protected readonly int $padding,
     ) {
-        if (! is_finite($every) || $every < 0.001 || $every > intdiv(PHP_INT_MAX, 1000000)
+        if (! is_finite($every) || $every < 0.001 || $every > intdiv(PHP_INT_MAX, self::MICROSECONDS_PER_SECOND)
             || abs($every * 1000 - round($every * 1000)) > 0.000001) {
             throw new InvalidArgumentException(
                 'The storyboard interval must be a positive whole number of milliseconds.'
@@ -158,11 +163,11 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
             $duration = max(0, min($clip['duration'], $duration - $clip['start']));
         }
 
-        if ($duration === null || $duration <= 0 || $duration > intdiv(PHP_INT_MAX, 1000000)) {
+        if ($duration === null || $duration <= 0 || $duration > intdiv(PHP_INT_MAX, self::MICROSECONDS_PER_SECOND)) {
             throw MediaException::probing('Storyboards require a known, positive media duration.', 'metadata');
         }
 
-        $this->duration = (int) round($duration * 1000000);
+        $this->duration = (int) round($duration * self::MICROSECONDS_PER_SECOND);
 
         if ($this->duration < 1) {
             throw MediaException::probing('Storyboards require a known, positive media duration.', 'metadata');
@@ -200,7 +205,12 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         ImageOutput::assertNoTrackVideoFilters($outputs[0]);
 
         $start = $this->export->clipSettings()['start'] ?? 0;
-        $end = $this->duration === null ? '[end]' : CommandCompiler::timestamp($start + $this->duration / 1000000);
+        $end = '[end]';
+
+        if ($this->duration !== null) {
+            $end = CommandCompiler::timestamp($start + $this->duration / self::MICROSECONDS_PER_SECOND);
+        }
+
         $filter = 'trim=start='.CommandCompiler::timestamp($start).":end={$end},setpts=PTS-STARTPTS,"
             .'fps=fps=1/'.CommandCompiler::timestamp($this->interval / 1000).':start_time=0:round=near:eof_action=pass,'
             ."tile=layout={$this->columns}x{$this->rows}:nb_frames=".($this->columns * $this->rows)
