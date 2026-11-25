@@ -33,11 +33,11 @@ $url = $file->temporaryUrl(now()->addMinutes(10));
 $size = $file->size;
 ```
 
-Each `GeneratedFile` has `disk`, `path`, `size`, `role`, and `owned` properties, plus the `url`, `temporaryUrl`, `readStream`, and `delete` methods. The exception's `phase` names the step that failed, such as `staging`, `encoding`, or `publication`, and its `category` names the condition, such as `launch` for a binary that cannot start, `input` for unreadable media, `encoder` for an encoder the FFmpeg build lacks, `dimensions` for odd frame sizes, `permission` for an unwritable local destination, `mapping` for a missing track, or `exit` for any other process failure. Keep its `diagnostics` out of public responses, because they may contain URLs. A failed export never deletes the files it already published, and lists them in the exception's `published` property.
+Each `GeneratedFile` has `disk`, `path`, `size`, `role`, and `owned` properties, plus the `url`, `temporaryUrl`, `readStream`, and `delete` methods. The exception's `phase` names the step that failed, such as `staging`, `encoding`, or `publication`, and its `category` names the condition, such as `launch` for a binary that cannot start, `input` for unreadable media, `encoder` for an encoder the FFmpeg build lacks, `dimensions` for odd frame sizes, `permission` for an unwritable local destination, `mapping` for a missing track, or `exit` for any other process failure. Its `diagnostics` hold FFmpeg's error output, with the staged files shown as placeholders such as `[input:0]` and `[output:0]`. Keep them out of public responses, because they may contain URLs. A failed export never deletes the files it already published, and lists them in the exception's `published` property.
 
 ## Progress and Events
 
-The `onProgress` method receives a `Progress` instance. Its `percentage`, `speed`, and `remainingSeconds` properties are null outside the encoding phase and whenever FFmpeg cannot tell:
+The `onProgress` method receives a `Progress` instance. Its `percentage`, `speed`, and `remainingSeconds` properties are null outside the encoding phase, at the start of each pass, and whenever FFmpeg cannot tell. With `twoPass`, the percentage runs from 0 to 100 once per pass, so combine it with the `pass` and `totalPasses` properties for one overall value:
 
 ```php
 use Illuminate\Support\Facades\Cache;
@@ -47,15 +47,20 @@ use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 FFMpeg::disk('uploads')
     ->open('videos/intro.mov')
     ->export()
-    ->video('libx264')
+    ->video('libx264', bitrate: '2500k')
     ->audio('aac')
+    ->twoPass()
     ->onProgress(function (Progress $progress) {
         if ($progress->isEncoding() && $progress->percentage !== null) {
-            Cache::put('videos.intro.progress', $progress->percentage);
+            $overall = (($progress->pass - 1) * 100 + $progress->percentage) / $progress->totalPasses;
+
+            Cache::put('videos.intro.progress', round($overall));
         }
     })
     ->save('videos/intro.mp4');
 ```
+
+The v8 callback's `$percentage`, `$remaining`, and `$rate` arguments become the `percentage`, `remainingSeconds`, and `speed` properties. FFmpeg reports `speed` as a multiple of real time, such as `2.5` for an encode that runs 2.5 times faster than playback.
 
 To stop the encoder, throw `ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled` from the callback. Every export also dispatches the `ExportStarting`, `ExportProgress`, `ExportCompleted`, `ExportFailed`, and `ExportCancelled` events from the `ProtoneMedia\LaravelFFMpeg\Events` namespace, so a listener may observe all exports without configuring each one.
 

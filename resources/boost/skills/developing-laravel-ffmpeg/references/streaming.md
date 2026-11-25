@@ -48,6 +48,8 @@ FFMpeg::disk('uploads')
     ->save('lessons/42/master.m3u8');
 ```
 
+The package generates each key and stores it under a random name, such as `hls-keys/3d19d3da094dcffa469aacd5ad94da10.key`, and the `directory` argument replaces `hls-keys`. To encrypt with one key of your own, pass its 16 bytes as `key` instead of `rotateEvery`. Each rotated key covers the same segment numbers in every variant, and the result's `files()` lists the keys with the `hls-key` role. The URL closure receives the key path, the variant playlist path, the variant name, and the rotation index, in that order.
+
 AES-128 is not DRM, so the application must authorize every key request. The protected playback routes below do that for you.
 
 ## Protected Playback
@@ -199,7 +201,7 @@ Run it in a supervised worker, and give every session a fresh, empty directory. 
 ## Other Streaming Methods
 
 - `FFMpeg::mergeHls(['main' => $first, 'alternate' => $second])` combines completed HLS results of the same timeline into one master playlist without transcoding.
-- `FFMpeg::disk('streams')->playlist($path)` returns a `Responsable` playlist whose `mediaUrlsUsing`, `playlistUrlsUsing`, and `keyUrlsUsing` closures rewrite its URLs for your own routes.
+- `FFMpeg::disk('streams')->playlist($path)` returns a `Responsable` playlist whose `mediaUrlsUsing`, `playlistUrlsUsing`, and `keyUrlsUsing` closures rewrite its URLs for your own routes. Each closure receives `?string $target`, `string $source`, and `string $uri`: the reference's disk path, or `null` for an HTTP(S) or root-relative URL, the path of the playlist that contains it, and the reference as the playlist writes it, which v8 resolvers received as the filename.
 - The `audioRendition` and `subtitleRendition` methods add alternate audio and subtitle groups to an HLS export.
 
 The README's "Streaming" sections show each of these in full.

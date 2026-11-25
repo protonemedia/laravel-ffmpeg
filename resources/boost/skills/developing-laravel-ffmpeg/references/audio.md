@@ -24,6 +24,8 @@ $media->export()
     ->save('videos/stereo-track.mp4');
 ```
 
+The `audioOptions` method accepts only the `-ar`, `-ac`, `-sample_fmt`, `-channel_layout`, `-compression_level`, and `-strict` options, each with a string value. An experimental encoder, such as FFmpeg's own `vorbis`, needs `['-strict', 'experimental']`, since the `-2` value that FFmpeg suggests is rejected.
+
 ## Background Music
 
 The `backgroundMusic` method mixes a quieter track under the video's audio, looping it until the video ends. The `at` method delays the music, and `loop: false` plays it once:

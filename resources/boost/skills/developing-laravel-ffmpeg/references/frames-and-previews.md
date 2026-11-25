@@ -39,7 +39,9 @@ $media->frames(count: 10)
     ->save('frames/intro-%05d.png');
 ```
 
-The `FFMpeg::disk('images')->openSequence('frame-%04d.png', count: 90, framerate: 30)` call turns numbered images back into a video through `export()`.
+Each frame is the one nearest the middle of its interval, such as the frame at about 1 second for the first image with `every: 2`. To take frames at exact times, call `frame(at:)` for each time.
+
+The `FFMpeg::disk('images')->openSequence('frame-%04d.png', count: 90, framerate: 30)` call turns numbered images back into a video through `export()`. The `count` argument is required, because the package stages exactly that many images, numbered from 1 unless you pass `start`.
 
 ## Storyboards
 

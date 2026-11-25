@@ -49,10 +49,13 @@ Version 9 requires PHP 8.4 or later and Laravel 13.44.1 or later. You should upd
 - `php` to `^8.4`
 - `laravel/framework` to `^13.44.1`
 - `pbmedia/laravel-ffmpeg` to `9.x-dev`
+- `intervention/image` to `^4.2`, which replaces `spatie/image` for [watermark](#watermarks) image edits
 
 ```shell
-composer require pbmedia/laravel-ffmpeg:9.x-dev
+composer require pbmedia/laravel-ffmpeg:9.x-dev intervention/image:^4.2
 ```
+
+Version 9 no longer depends on `php-ffmpeg/php-ffmpeg`, so Composer removes it unless your application requires it directly. Every `FFMpeg\...` class, such as `FFMpeg\Format\Video\X264` or `FFMpeg\Coordinate\TimeCode`, is then unavailable, so you should remove those imports as you follow this guide.
 
 You should also install matching FFmpeg and FFprobe binaries of release 9.0 or later. CI tests release 9.0.2. Install the codecs, filters, fonts, and HTTPS support that your application needs.
 
@@ -67,15 +70,30 @@ You should republish the configuration file and review your application's values
 php artisan vendor:publish --provider="ProtoneMedia\LaravelFFMpeg\Support\ServiceProvider" --tag=config --force
 ```
 
-The `ffmpeg.binaries`, `ffprobe.binaries`, `ffmpeg.threads`, `timeout`, and `temporary_files_root` options remain. The new `idle_timeout` option is separate from the total `timeout` deadline. The legacy `log_channel` option and the encrypted-HLS temporary root, `temporary_files_encrypted_hls`, no longer apply, so you may remove them:
+The `ffmpeg.binaries`, `ffprobe.binaries`, `ffmpeg.threads`, `timeout`, and `temporary_files_root` options remain. Version 9 adds the `verify_version`, `idle_timeout`, `queue`, `enable_events`, and `redact_credentials` options. The legacy `log_channel` option and the encrypted-HLS temporary root, `temporary_files_encrypted_hls`, no longer apply, so you may remove them:
 
 ```php
 // config/laravel-ffmpeg.php
 return [
+    // New in 9.x: require both binaries to report the same release, 9.0 or later.
+    'verify_version' => env('FFMPEG_VERIFY_VERSION', true),
+
     'timeout' => 3600,
 
     // New in 9.x: how many seconds a process may run without output.
     'idle_timeout' => null,
+
+    // New in 9.x: the defaults of queued exports.
+    'queue' => [
+        'connection' => null,
+        'queue' => null,
+        'tries' => 1,
+        'backoff' => 0,
+        'timeout' => null,
+    ],
+
+    // New in 9.x: set to false to suppress every package event.
+    'enable_events' => env('FFMPEG_ENABLE_EVENTS', true),
 
     // New in 9.x: redact credentials from diagnostics and process summaries.
     'redact_credentials' => env('FFMPEG_REDACT_CREDENTIALS', false),
@@ -84,7 +102,7 @@ return [
 ];
 ```
 
-You should set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to the matching pair. Set `FFMPEG_REDACT_CREDENTIALS=true` to redact signed URLs and credentials from diagnostics and process summaries.
+You should set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to the matching pair. Setting `FFMPEG_VERIFY_VERSION=false` skips the release check, so older builds will run, but only the releases that the check accepts are supported. The `idle_timeout` option is separate from the total `timeout` deadline. The `queue` options are the defaults of [queued exports](#queued-exports): the `queued()` arguments override the connection and queue, and a `null` timeout derives the worker timeout from the operation or process limit. Set `FFMPEG_REDACT_CREDENTIALS=true` to redact signed URLs and credentials from diagnostics and process summaries.
 
 <a name="opening-media"></a>
 ### Opening Media
@@ -126,6 +144,32 @@ $private = FFMpeg::openUrl($url, headers: ['Authorization' => 'Bearer '.$token],
 
 `FFMpeg::openUrl()` uses the same HTTP rules as the disk selector. Downloads use Laravel's Http client with TLS verification and reject redirects. Direct URLs enter the media process arguments, so you should not include reusable credentials in them. See [credential redaction](README.md#credential-redaction) for the redaction rules.
 
+With `download: true`, Laravel's Http client downloads the URL once per operation, such as a `probe()` call or an export, so probing before an export downloads the file twice. To download it only once, you may store the file on a disk first and open it from there.
+
+The `each()` method has been removed. You should loop over one opened `Media` instance instead, since every builder you create from it is independent:
+
+```php
+// Version 8.x
+FFMpeg::fromDisk('uploads')
+    ->open('lesson.mp4')
+    ->each([1, 4, 7], function ($ffmpeg, $seconds, $key) {
+        $ffmpeg->getFrameFromSeconds($seconds)
+            ->export()
+            ->toDisk('thumbnails')
+            ->save("thumb_{$key}.png");
+    });
+
+// Version 9.x
+$media = FFMpeg::disk('uploads')
+    ->open('lesson.mp4');
+
+foreach ([1, 4, 7] as $key => $seconds) {
+    $media->frame(at: $seconds)
+        ->toDisk('thumbnails')
+        ->save("thumb_{$key}.png");
+}
+```
+
 Version 9 can also capture snapshots from RTSP cameras and pass input-scoped options, such as hardware decoding flags, to `open()`:
 
 ```php
@@ -149,7 +193,9 @@ Hardware decoding flags passed as validated pairs through `inputOptions:` are in
 
 **Likelihood Of Impact: High**
 
-PHP-FFMpeg format objects such as `X264` are no longer accepted, and the `inFormat()` method has been removed. Instead, you should choose the encoders with the `video()` and `audio()` methods:
+PHP-FFMpeg format objects such as `X264` are no longer accepted, and the `inFormat()` method has been removed. Instead, you should choose the encoders with the `video()` and `audio()` methods.
+
+PHP-FFMpeg's `X264` format encoded in two passes at 1000 kb/s video and 128 kb/s audio by default, while `video('libx264')` encodes a single pass at the encoder's default quality, CRF 23. To keep the version 8 rate control, you should pass both bitrates and call `twoPass()`:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
@@ -167,10 +213,54 @@ $media = FFMpeg::disk('uploads')
     ->open('lesson.mov');
 
 $result = $media->export()
+    ->video('libx264', bitrate: '1000k')
+    ->audio('aac', bitrate: '128k')
+    ->twoPass()
+    ->toDisk('videos')
+    ->save('lesson.mp4');
+
+// Or a single pass at constant quality:
+$result = $media->export()
     ->video('libx264', crf: 23)
     ->audio('aac', bitrate: '128k')
     ->toDisk('videos')
     ->save('lesson.mp4');
+```
+
+PHP-FFMpeg also added its own x264 tuning options, such as `-refs 6` and `-subq 7`, which version 9 leaves at the encoder's defaults, so file sizes may differ slightly. The format objects and their setters map to these calls:
+
+| Version 8.x | Version 9.x |
+|---|---|
+| `new X264` | `video('libx264', bitrate: '1000k')->audio('aac', bitrate: '128k')->twoPass()` |
+| `new WebM` | `video('libvpx', bitrate: '1000k')->audio('libvorbis', bitrate: '128k')` |
+| `new Mp3` | `mapAudio()->audio('libmp3lame', bitrate: '128k')` |
+| `new Aac` | `mapAudio()->audio('aac', bitrate: '128k')`, or `libfdk_aac` if your build includes it |
+| `new Wav` | `mapAudio()->audio('pcm_s16le')` |
+| `new CopyFormat` | `video('copy')->audio('copy')` |
+| `setKiloBitrate(2500)` | `video('libx264', bitrate: '2500k')`, plus `twoPass()` to match `X264` |
+| `setAudioKiloBitrate(192)` | `audio('aac', bitrate: '192k')` |
+| `setAudioChannels(1)` | `audioOptions(['-ac', '1'])` |
+
+PHP-FFMpeg's audio formats wrote only the audio stream. Version 9 maps the first video and audio streams by default, whatever the extension, so an `.m4a` export keeps the source's video and a `.wav` export fails. You should call `mapAudio()` or `withoutVideo()` for every audio-only export:
+
+```php
+// $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
+
+// Version 8.x
+$format = (new \FFMpeg\Format\Audio\Mp3)
+    ->setAudioKiloBitrate(192)
+    ->setAudioChannels(1);
+
+$media->export()
+    ->inFormat($format)
+    ->save('lesson.mp3');
+
+// Version 9.x
+$media->export()
+    ->mapAudio()
+    ->audio('libmp3lame', bitrate: '192k')
+    ->audioOptions(['-ac', '1'])
+    ->save('lesson.mp3');
 ```
 
 Bitrates accept positive integers in bits per second, such as `2500000`, or unit strings, such as `'2500k'`. Floats and unitless strings are invalid. The `save()` method returns a result, not the builder, so you may no longer chain another export after it.
@@ -192,7 +282,11 @@ $command = FFMpeg::open('lesson.mp4')
     ->export()
     ->inFormat(new \FFMpeg\Format\Video\X264)
     ->addFilter(['-movflags', '+faststart'])
-    ->beforeSaving(fn (array $commands) => [...$commands, '-tune', 'film'])
+    ->beforeSaving(fn (array $passes) => array_map(function (array $pass) {
+        $output = array_pop($pass);
+
+        return [...$pass, '-tune', 'film', '-metadata', 'title=Lesson', $output];
+    }, $passes))
     ->getCommand('lesson-web.mp4');
 
 // Version 9.x
@@ -200,12 +294,15 @@ $export = FFMpeg::open('lesson.mp4')
     ->export()
     ->video('libx264', bitrate: '2500k')
     ->globalOptions(['-filter_threads', '2'])
-    ->outputOptions(['-movflags', '+faststart', '-tune', 'film']);
+    ->outputOptions(['-movflags', '+faststart', '-tune', 'film'])
+    ->metadata('title', 'Lesson');
 
 $arguments = $export->inspect();
 
 $result = $export->save('lesson-web.mp4');
 ```
+
+The `beforeSaving()` callback received one argument list per encoding pass, with the output path last. In version 9, `outputOptions()` accepts only a curated list of options and rejects `-metadata`, so you should set container tags with the `metadata()` method. The `inspect()` method replaces `getCommand()`. It returns one argument list with `[input:0]` and `[output:0]` placeholders instead of paths, and for a `twoPass()` export it shows the final pass. The PHP-FFMpeg media object that `$media()` returned has no counterpart.
 
 <a name="probing-and-metadata"></a>
 ### Probing and Metadata
@@ -219,6 +316,7 @@ Because driver forwarding has been removed, methods such as `getDurationInSecond
 
 // Version 8.x
 $seconds = $media->getDurationInSeconds();
+$milliseconds = $media->getDurationInMiliseconds();
 
 $codec = $media->getVideoStream()
     ->get('codec_name');
@@ -227,6 +325,7 @@ $codec = $media->getVideoStream()
 $metadata = $media->probe();
 
 $seconds = $metadata->duration();
+$milliseconds = (int) round($seconds * 1000);
 
 $codec = $metadata->video()
     ?->codec();
@@ -238,6 +337,8 @@ $audioStreams = $metadata->audioStreams();
 $chapters = $metadata->chapters();
 $data = $metadata->toArray();
 ```
+
+The `duration()` method returns the container duration in seconds as a `?float`, where version 8 returned an integer that preferred the first stream's duration. It returns `null` for an unknown duration instead of throwing, so you should check for `null` before converting it to milliseconds.
 
 The `isValid()` method replaces PHP-FFMpeg's `FFProbe::isValid()`. It returns `false` instead of throwing a `MediaException` when FFprobe cannot read the media or finds no video or audio stream:
 
@@ -268,7 +369,7 @@ You should use `probeCached()` only with an application-owned source-version key
 
 **Likelihood Of Impact: High**
 
-The `addFilter()` callbacks, PHP-FFMpeg filter objects, and filter factories have been removed. You should call the dedicated filter and clipping methods on the builder instead:
+Every form of the `addFilter()` method has been removed, along with PHP-FFMpeg filter objects and filter factories. You should call the dedicated filter and clipping methods on the builder instead:
 
 ```php
 use FFMpeg\Filters\Video\VideoFilters;
@@ -311,13 +412,23 @@ $media->export()
     ->save('copy.mkv');
 ```
 
+The raw forms of `addFilter()` map to the new `videoFilter()`, `audioFilter()`, and `filterComplex()` methods, which take trusted filter expressions. None of these methods existed in version 8:
+
+| Version 8.x | Version 9.x |
+|---|---|
+| `addFilter('-vf', 'hflip')` or `addFilter(['-vf', 'hflip'])` | `videoFilter('hflip')` |
+| `addFilter('-af', 'volume=0.5')` or `addFilter(['-af', 'volume=0.5'])` | `audioFilter('volume=0.5')` |
+| `addFilter('[0:v][1:v]', 'hstack', '[v]')` | `filterComplex('[0:v][1:v]hstack[v]')` with explicit maps, as in [multiple outputs](#stream-selection-and-output-metadata) |
+| `addFilter(['-movflags', '+faststart'])` and other non-filter options | `outputOptions(['-movflags', '+faststart'])` |
+| `addFilter()` and `addLegacyFilter()` in an HLS format callback | `videoFilter()`, `resize()`, and the other filter methods of the `HlsVariant`, as in [HLS exports](#hls-exports) |
+
 Ordinary filters run in registration order. All output video filters run before generated watermark overlays, even filters called after `watermark()`. A one-dimension resize preserves the display aspect ratio, while two explicit dimensions stretch. You should use `contain()` or `cover()` for an exact canvas, as in Laravel's image manipulation. Stream copy rejects filters and accurate clipping. Keyframe cuts can begin before the requested time. Timeline changes omit chapters unless they are explicitly mapped.
 
 For portrait sources, you should use `resize(height: 1920)` to preserve the autorotated display aspect ratio, or `contain(1080, 1920)` for an exact canvas. Probe width and height remain the encoded dimensions, before display rotation.
 
 You should use `frameRate()`, `flipHorizontally()`, `flipVertically()`, `grayscale()`, and `deinterlace()` instead of filter-factory callbacks. Deinterlace before resizing. `volume()` takes a linear multiplier, and `delayAudio()` inserts silence on all channels. `fadeIn()` and `fadeOut()` affect video and audio by default, and a fade-out requires an explicit start in seconds. You may disable either stream type with `video: false` or `audio: false`.
 
-You should use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Watermark images are edited inside the `watermark()` callback. `videoFilter()` and `audioFilter()` remain available for trusted expressions.
+You should use `drawText()` and `burnSubtitles()` for staged fonts, literal text, and subtitle files. Watermark images are edited inside the `watermark()` callback.
 
 You may use `lut3d($look)` with a `Media` descriptor for a privately staged LUT. In each `output()` callback, call `lut3d($look)->resize(...)` to configure that output independently. The helper does not share LUT processing or generate a `split`. You should keep raw `resource()` and `filterComplex()` graphs when you need to apply a LUT once before splitting it into outputs. See the [composition example](README.md#compose-multiple-inputs-and-outputs).
 
@@ -552,7 +663,53 @@ $export->map('0:v:0')
     ->save('new_video.mp4');
 ```
 
-Outputs no longer need a `Media` instance with its own disk. Every output publishes to the first input's disk unless you call `toDisk()`, including each output declared with `output()`.
+To write several files from one command, which version 8 did with several `addFormatOutputMapping()` calls, you should declare the graph with `filterComplex()` and each file with its own `output()` callback:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\ExportOutput;
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+
+// Version 8.x
+FFMpeg::fromDisk('local')
+    ->open(['left.mp4', 'right.mp4'])
+    ->export()
+    ->addFilter('[0:v][1:v]', 'hstack', '[v]')
+    ->addFormatOutputMapping(
+        new \FFMpeg\Format\Video\X264,
+        \ProtoneMedia\LaravelFFMpeg\Filesystem\Media::make('local', 'stacked.mp4'),
+        ['0:a', '[v]'],
+    )
+    ->addFormatOutputMapping(
+        new \FFMpeg\Format\Audio\Wav,
+        \ProtoneMedia\LaravelFFMpeg\Filesystem\Media::make('local', 'audio.wav'),
+        ['0:a'],
+    )
+    ->save();
+
+// Version 9.x
+$export = FFMpeg::disk('local')
+    ->open('left.mp4')
+    ->export();
+
+$right = $export->addInput(FFMpeg::disk('local')
+    ->open('right.mp4'));
+
+$result = $export->filterComplex("[0:v][{$right}:v]hstack[v]")
+    ->output('stacked.mp4', fn (ExportOutput $output) => $output
+        ->map('[v]')
+        ->map('0:a:0')
+        ->video('libx264')
+        ->audio('aac')
+        ->metadataFrom(0)
+        ->chaptersFrom(0))
+    ->output('audio.wav', fn (ExportOutput $output) => $output
+        ->map('0:a:0')
+        ->audio('pcm_s16le')
+        ->withoutMetadata(chapters: true))
+    ->save();
+```
+
+Outputs no longer need a `Media` instance with its own disk. Every output publishes to the first input's disk unless you call `toDisk()`, including each output declared with `output()`. You should replace `withVisibility('public')` with the `visibility('public')` method, or pass the option to `toDisk('public', ['visibility' => 'public'])`.
 
 Without maps, ordinary exports select the first motion-video and audio streams. Existing subtitles and cover art require explicit maps and container-compatible codecs; the `coverArt()` attachment helper below owns its maps instead. General multiple-input outputs require explicit maps and a metadata and chapter policy. Stream tags and dispositions address the output order, not input indexes:
 
@@ -628,6 +785,8 @@ $output = $media->export()
     ->addFilter(['-filter:a', 'volumedetect', '-f', 'null'])
     ->getProcessOutput();
 
+$errors = $output->errors();
+
 // Version 9.x
 $jpeg = $media->frame(at: 12.5)
     ->get();
@@ -645,9 +804,35 @@ $media->waveform()
     ->save('waveform.png');
 
 $analysis = $media->analyze('volumedetect');
-$analysis->errorOutput();
+$errors = explode("\n", $analysis->errorOutput());
 $analysis->throw();
 ```
+
+The other frame methods map to these calls:
+
+| Version 8.x | Version 9.x |
+|---|---|
+| `getFrameFromString('00:00:05.50')` | `frame(at: '00:00:05.50')` |
+| `getFrameFromTimecode(new TimeCode(0, 0, 8, 0))` | `frame(at: 8)` |
+| `accurate()` | none, since `frame()` always seeks accurately |
+| `exportFramesByAmount(5, 320, 180)` | `frames(count: 5)->resize(320, 180)` |
+| The quality argument, such as `exportFramesByInterval(2, 640, 360, 5)` | `frames(every: 2)->resize(640, 360)->outputOptions(['-q:v', '5'])` |
+| `asTimelapseWithFramerate(4)` | `openSequence('sequence/frame_%04d.png', count: 24, framerate: 4)` on the disk selector |
+
+`frames(every:)` and `frames(count:)` take the last frame before the middle of each interval. For example, `frames(every: 2)` on a 30 fps video returns the frames at 0.967, 2.967, and 4.967 seconds, where version 8 returned the frames at 0, 2, and 4 seconds. Storyboard tiles are sampled the same way. To keep the version 8 times, you may loop over `frame(at:)`:
+
+```php
+// $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
+foreach (range(0, 8, 2) as $index => $seconds) {
+    $media->frame(at: $seconds)
+        ->resize(width: 320)
+        ->save(sprintf('frames/%05d.jpg', $index + 1));
+}
+```
+
+Storyboard cues reference each sheet relative to the cue file, such as `../sheets/001.jpg` in the example above, where version 8 wrote paths relative to the disk root, such as `sheets/001.jpg`. The optional second argument of `vtt()` is a callback that receives each sheet's disk path and number and returns its URL, so `vtt('previews/lesson.vtt', fn (string $path, int $sheet) => $path)` keeps the version 8 paths.
+
+`openSequence()` requires the number of images in the sequence, and its `start` argument defaults to 1. `analyze()` runs one audio filter over one audio track and returns a `ProcessResult`. Its `output()` and `errorOutput()` methods replace `out()` and `errors()` and return strings instead of arrays of lines. FFmpeg writes filter reports such as `volumedetect` to the error output, and there is no counterpart of `all()`.
 
 The `get()` method returns raw JPEG bytes, not Base64. Frames, image sequences, and storyboards of anamorphic video are stretched to square pixels at the display aspect ratio, so PHP-FFMpeg's `fixDisplayRatio()` frame filter is no longer needed. Images of anamorphic sources may therefore be wider than in version 8, while square-pixel sources keep their dimensions. Storyboard geometry applies to each tile before assembly. `waveform()` writes an image, while `waveformPeaks()` returns versioned amplitude data. Analysis-only nonzero exits remain inspectable until `throw()` is called.
 
@@ -694,7 +879,7 @@ $result = $media->hls(segmentDuration: 6)
     ->variant('360p', fn (HlsVariant $variant) => $variant
         ->resize(height: 360)
         ->video('libx264', bitrate: '800k'))
-    ->encrypt('secrets', fn ($path) => route('lesson.key', ['key' => basename($path)]), rotateEvery: 3)
+    ->encrypt('secrets', fn (string $path) => route('lesson.key', ['key' => basename($path)]), rotateEvery: 3, directory: 'lesson-keys')
     ->toDisk('streams')
     ->save('lesson/master.m3u8');
 
@@ -702,9 +887,41 @@ $playlist = $result->playlist();
 
 $files = $result->variant('360p')
     ->files();
+
+$keys = $result->files()
+    ->where('role', 'hls-key')
+    ->pluck('path');
 ```
 
 Variants configure encoding only. MPEG-TS remains the default segment format. Private key storage is explicit, and key routes return 16 raw bytes after authorization. Keys rotate deterministically by segment group, with a random IV per segment.
+
+Each variant now writes its playlist and segments to a directory named after the variant, such as `lesson/360p/index.m3u8` and `lesson/360p/segment-00000000.ts`. Version 8 wrote flat files next to the master, such as `lesson/master_0_800.m3u8` and `lesson/master_0_800_00000.ts`, so routes and storage rules that match those flat names no longer match. You may keep the version 8 names by passing disk-relative `playlist` and `segments` paths to `variant()`:
+
+```php
+// $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
+$result = $media->hls()
+    ->variant('360p', fn (HlsVariant $variant) => $variant
+        ->resize(height: 360)
+        ->video('libx264', bitrate: '800k'),
+        playlist: 'lesson/master_0_800.m3u8',
+        segments: 'lesson/master_0_800_%05d.ts')
+    ->toDisk('streams')
+    ->save('lesson/master.m3u8');
+```
+
+The other HLS exporter methods map to these calls:
+
+| Version 8.x | Version 9.x |
+|---|---|
+| `setSegmentLength(10)` | `hls(segmentDuration: 10)`, whose default is 6 seconds instead of 10 |
+| `useSegmentFilenameGenerator()` | the `playlist` and `segments` arguments of each `variant()` call |
+| `setKeyFrameInterval(48)` | none, since version 9 forces a keyframe at the start of every segment; `videoOptions(['-g', '48', '-sc_threshold', '0'])` keeps the version 8 keyframe interval within segments |
+| `scale()`, `addFilter()`, and `addLegacyFilter()` in an `addFormat()` callback | `resize()`, `videoFilter()`, and the other filter methods of the `HlsVariant` |
+| `withEncryptionKey($key)` | `encrypt('secrets', $keyUrl, key: $key)` |
+| `withRotatingEncryptionKey($callback, 3)` | `encrypt('secrets', $keyUrl, rotateEvery: 3)` |
+| `HLSExporter::generateEncryptionKey()` | `random_bytes(16)`, or omit `key` to let `encrypt()` generate the keys |
+
+The `encrypt()` method stores every key on the given disk itself, in the `directory`, which defaults to `hls-keys`, under a generated name such as `3ba876a00fd6f8d26f842df7ef939e06.key`. The file name, such as `secret.key`, is no longer configurable, and no callback receives each new key, so you should list the keys from the result, as in the example above. The `$keyUrl` closure receives the key's disk path, the variant playlist's path, the variant name, and the rotation index, and returns the URI that the playlist references. Rotation is shared across variants, so every variant uses the same key for the same group of segments and an export creates fewer keys than version 8 did.
 
 You should replace the legacy `setPlaylistType()` method with `playlistType()`, passing `vod`, `event`, or `live`. The default is VOD. EVENT writes its type tag, while live omits the type tag rather than passing an unsupported FFmpeg value. All modes still finish encoding and validation before publication and retain `ENDLIST` and every segment; this is not continuous live publication. Parallel queued composition remains VOD-only, so you should use an ordinary queued export for other playlist types.
 
@@ -741,7 +958,7 @@ To combine completed presentations for the same timeline, see [`PendingHlsMerge`
 
 **Likelihood Of Impact: High**
 
-The `dynamicHLSPlaylist()` method and its URL resolvers have been replaced by `playlist()` on the disk selector, with additive URL hooks:
+The `dynamicHLSPlaylist()` method and its URL resolvers have been replaced by `playlist()` on the disk selector and its URL resolver methods:
 
 ```php
 use Illuminate\Support\Facades\Storage;
@@ -759,11 +976,19 @@ return FFMpeg::dynamicHLSPlaylist()
 // Version 9.x
 return FFMpeg::disk('streams')
     ->playlist('lesson/master.m3u8')
-    ->mediaUrlsUsing(fn ($target, $source, $uri) => $target === null ? $uri : Storage::disk('streams')
-        ->temporaryUrl($target, now()->addMinutes(10)));
+    ->keyUrlsUsing(fn (?string $target, string $source, string $uri) => route('lesson.key', ['key' => basename($uri)]))
+    ->mediaUrlsUsing(fn (?string $target, string $source, string $uri) => $target === null
+        ? $uri
+        : Storage::disk('streams')
+            ->temporaryUrl($target, now()->addMinutes(10)))
+    ->playlistUrlsUsing(fn (?string $target, string $source, string $uri) => $target === null
+        ? $uri
+        : route('lesson.playlist', ['playlist' => $target]));
 ```
 
-Playlist hooks are additive and cannot replace generated references or encryption lines. URL resolvers receive the canonical target, the containing playlist, and the original URI, not just a basename.
+The `setKeyUrlResolver()`, `setMediaUrlResolver()`, and `setPlaylistUrlResolver()` methods map to `keyUrlsUsing()`, `mediaUrlsUsing()`, and `playlistUrlsUsing()`. Instead of a basename, every resolver receives three arguments: the canonical disk path of a relative reference, which is `null` for HTTP(S) and root-relative references, the path of the playlist that contains the reference, and the original URI. Variant playlist targets such as `lesson/360p/index.m3u8` contain slashes, so a route parameter that receives them needs `->where('playlist', '.*')`. Key URIs are the values that the `encrypt()` callback returned during the export, and their target resolves against the playlist's disk, not the keys disk.
+
+The resolvers only replace the URI of each reference, including the `URI` attribute of `#EXT-X-KEY` lines, and leave every other line and attribute unchanged. The export-time `playlistUsing()` hook is the additive one: it may only add comments and non-resource tags, so it cannot change generated references or encryption lines.
 
 To clean up an old same-disk presentation, you may call `playlist($path)->deleteAllFiles($approve)`. The required approval callback receives every unique canonical disk path, including the opened playlist, and must return exactly `true` before any deletion starts. You should verify exclusive ownership and prevent concurrent playlist changes in your application. URL resolvers are ignored, and external references and malformed playlists fail before deletion. Adapter failures can leave a partial deletion. You should prefer the trusted root result inventory when available, especially with private keys on another disk or borrowed merged artifacts.
 
@@ -782,7 +1007,7 @@ Keep the raw playlist API above for custom URL policies. You should not expose a
 
 **Likelihood Of Impact: Medium**
 
-The `onProgress()` callback now receives a single `Progress` instance instead of the percentage, remaining seconds, and rate as separate arguments:
+The `onProgress()` callback now receives a single `Progress` instance instead of the percentage, remaining seconds, and rate as separate arguments. It also reports the staging, probing, analysis, validation, and publication phases, with a `null` percentage, and each pass of a `twoPass()` export runs from 0 to 100 percent again. To feed a progress bar, you should only use encoding reports with a percentage and combine the passes:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Progress;
@@ -799,14 +1024,22 @@ $media->export()
 
 // Version 9.x
 $result = $media->export()
-    ->video('libx264')
+    ->video('libx264', bitrate: '1000k')
+    ->audio('aac', bitrate: '128k')
+    ->twoPass()
     ->onProgress(function (Progress $progress) {
-        // The percentage, speed, and remainingSeconds properties can be null.
-        // The pass and totalPasses properties describe encoding passes.
-        info("{$progress->percentage}% transcoded in pass {$progress->pass} of {$progress->totalPasses}");
+        if (! $progress->isEncoding() || $progress->percentage === null) {
+            return;
+        }
+
+        $percentage = floor((($progress->pass - 1) * 100 + $progress->percentage) / $progress->totalPasses);
+
+        info("{$percentage}% transcoded, {$progress->remainingSeconds} seconds left in this pass at {$progress->speed}x");
     })
     ->save('lesson.mp4');
 ```
+
+The `remainingSeconds` property replaces `$remaining`, but it estimates the current pass only. The `speed` property replaces `$rate` and reports FFmpeg's encoding speed as a multiple of real time, so `2.5` means 2.5 seconds of media per second of encoding. The `elapsedSeconds` property is the encoded position in the media, not the time spent. All three may be `null`.
 
 Completion follows validation, publication, and cleanup. You may throw `ExportCancelled` from a callback to stop the operation. Other callback exceptions propagate unchanged.
 
@@ -836,19 +1069,24 @@ try {
 }
 
 // Version 9.x
+$export = $media->export()
+    ->video('libx264');
+
+$command = $export->inspect();
+
 try {
-    $result = $media->export()
-        ->video('libx264')
-        ->save('lesson.mp4');
+    $result = $export->save('lesson.mp4');
 
     $file = $result->file();
 } catch (MediaException $exception) {
     $phase = $exception->phase;
     $category = $exception->category;
-    $diagnostics = $exception->diagnostics;
+    $errorLog = $exception->diagnostics;
     $published = $exception->published;
 }
 ```
+
+The exception does not carry the command, so you should call `inspect()` before `save()` to log it. The `diagnostics` property replaces `getErrorOutput()`. For an export, it holds the last 64 KiB of FFmpeg's error output at the `warning` log level, with the same `[input:0]` and `[output:0]` placeholders that `inspect()` uses instead of local paths.
 
 All artifacts validate before the first Storage write, but publication is not transactional. A later transfer failure can leave earlier outputs or replaced objects. Failures report successful writes without deleting them. Streams returned by `GeneratedFile::readStream()` belong to the caller and must be closed.
 

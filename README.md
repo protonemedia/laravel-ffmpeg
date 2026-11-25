@@ -148,10 +148,26 @@ $capabilities->toArray();
 <a name="laravel-boost"></a>
 #### Laravel Boost
 
-The package includes [Laravel Boost](https://laravel.com/docs/13.x/boost) guidelines and a `developing-laravel-ffmpeg` skill, so AI agents write version 9 code instead of calls from earlier releases. Boost offers them when you run the `boost:install` Artisan command, and you may add them to an existing installation using the `--discover` option:
+The package includes [Laravel Boost](https://laravel.com/docs/13.x/boost) guidelines and a `developing-laravel-ffmpeg` skill, so AI agents write version 9 code instead of calls from earlier releases. The `boost:install` Artisan command offers them in its package prompt, and you may add them to an existing installation using the `--discover` option of the `boost:update` command:
 
 ```bash
+php artisan boost:install
+
 php artisan boost:update --discover
+```
+
+Both prompts need a terminal. Without one, such as when an AI agent or a CI job runs the command, Boost installs only the packages that your `boost.json` file already lists, and `boost:update` still reports success. To install the guidance without a prompt, add the package to the `packages` list in `boost.json`:
+
+```json
+"packages": [
+    "pbmedia/laravel-ffmpeg"
+]
+```
+
+Then run the `boost:install` command without interaction. Later `boost:update` runs keep the guidance installed:
+
+```bash
+php artisan boost:install --no-interaction
 ```
 
 <a name="working-with-media"></a>
@@ -176,7 +192,7 @@ $result = $media->export()
     ->save('lesson.mp4');
 ```
 
-Without the `toDisk` method, outputs publish to the first input's disk, or to your `filesystems.default` disk for uploads, local files, and URLs.
+Without the `toDisk` method, outputs publish to the first input's disk, or to your `filesystems.default` disk for uploads, local files, and URLs. To change only the visibility of the published files, you may call the `visibility` method, such as `->visibility('public')`.
 
 <a name="copying-streams"></a>
 #### Copying Streams

@@ -27,7 +27,7 @@ $width = $metadata->video()
 $audioStreams = $metadata->audioStreams();
 ```
 
-Headers require `download: true`, which streams the URL to a private file. Without it, FFmpeg reads the URL directly and the URL appears in its arguments.
+Headers require `download: true`, which streams the URL to a private file through Laravel's Http client once per operation, such as once for `probe` and again for `save`, so FFmpeg never contacts the URL. Without `download: true`, FFmpeg reads the URL directly and the URL appears in its arguments.
 
 To validate an upload, use the `isValid` method. It returns `false` instead of throwing when FFprobe cannot read the file or finds no audio or video stream:
 
@@ -205,7 +205,7 @@ FFMpeg::disk('uploads')
     ->save('videos/branded.mp4');
 ```
 
-Without a closure, the mark appears at its original size in the bottom-right corner. The `left`, `right`, `top`, and `bottom` methods take a margin in output pixels, and `center` centers each axis that no edge method pins. Call `watermark` again to add another mark. Marks are drawn after every other video filter. Image edits on the `Watermark`, such as `grayscale`, `blur`, and `rotate`, require `intervention/image`.
+Without a closure, the mark appears at its original size in the bottom-right corner. The `left`, `right`, `top`, and `bottom` methods take a margin in output pixels, and `center` centers each axis that no edge method pins. Call `watermark` again to add another mark. Marks are drawn after every other video filter. Image edits on the `Watermark`, such as `grayscale`, `blur`, and `rotate`, require `intervention/image:^4.2`.
 
 ## Tracks and Metadata
 
@@ -225,7 +225,7 @@ FFMpeg::disk('uploads')
     ->save('videos/english.mkv');
 ```
 
-Subtitles and cover art need explicit maps, such as `map('0:s:0')`. The `videoStream`, `audioStream`, `coverArt`, and `withoutMetadata` methods are covered in the README's "Selecting Tracks and Metadata" section.
+An audio-only output, such as an `.m4a` file, needs `mapAudio()`, or it keeps the video stream. Subtitles and cover art need explicit maps, such as `map('0:s:0')`. The `videoStream`, `audioStream`, `coverArt`, and `withoutMetadata` methods are covered in the README's "Selecting Tracks and Metadata" section.
 
 ## Changing Playback Speed
 

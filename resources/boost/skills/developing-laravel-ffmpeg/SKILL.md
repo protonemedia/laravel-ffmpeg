@@ -17,7 +17,8 @@ Version 9 has a new API. Code written for v8 or PHP-FFMpeg does not run, so writ
     - [Streaming](references/streaming.md): HLS variants and encryption, fMP4, DASH, protected playback routes, and continuous HLS.
     - [Running exports](references/running-exports.md): results, failures, progress, events, timeouts, queued exports, job chains, and deleting outputs.
     - [Testing](references/testing.md): inspecting commands, faking FFmpeg, faking queued exports, and checking the FFmpeg build.
-2. For an option the reference does not show, read the matching `###` section of `vendor/pbmedia/laravel-ffmpeg/README.md`, then the method's docblock in `vendor/pbmedia/laravel-ffmpeg/src/`. To port v8 code, read the matching section of `vendor/pbmedia/laravel-ffmpeg/UPGRADE.md`.
+    - [Upgrading from v8](references/upgrading.md): dependencies, and the v9 counterpart of each v8 format, filter, frame, HLS, playlist, progress, and exception call.
+2. For an option the reference does not show, read the matching `###` section of `vendor/pbmedia/laravel-ffmpeg/README.md`, then the method's docblock in `vendor/pbmedia/laravel-ffmpeg/src/`. To port a v8 call that the upgrading reference does not list, read the matching section of `vendor/pbmedia/laravel-ffmpeg/UPGRADE.md`.
 3. Choose encoders that the deployment's FFmpeg build includes, such as `libx264` and `aac`. The `php artisan ffmpeg:doctor --encoder=libx264` command checks the build.
 
 ## Rules
