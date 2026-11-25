@@ -11,8 +11,8 @@
     - `->addWatermark(fn ($factory) => ...)` becomes `->watermark($logo, fn (Watermark $watermark) => $watermark->right(20)->bottom(20))`, where `$logo` is an opened `Media`.
     - `->exportForHLS()->addFormat(...)` becomes `->hls()->variant('720p', fn (HlsVariant $variant) => ...)`.
     - `->getFrameFromSeconds(10)->export()->save('poster.jpg')` becomes `->frame(at: 10)->save('poster.jpg')`.
-    - `->getDurationInSeconds()` becomes `->probe()->duration()`, which returns a `?float`.
+    - `->getDurationInSeconds()` becomes `->probe()->duration()`, which returns a `?float`, so `(int) round($duration)` gives v8's whole seconds.
     - `->concatWithoutTranscoding()` and `->concatWithTranscoding()` become `$first->concat($second)` and `$first->concatTranscoded($second)`.
     - `FFMpeg::dynamicHLSPlaylist()` becomes `FFMpeg::disk('streams')->playlist($path)`, or the `Hls` facade's signed playback routes.
-    - `->onProgress(fn ($percentage, $remaining, $rate) => ...)` becomes `->onProgress(fn (Progress $progress) => ...)` with the `percentage`, `remainingSeconds`, and `speed` properties, where `speed` is a multiple of real time. Each may be null, and with `twoPass()` the percentage runs from 0 to 100 once per pass.
+    - `->onProgress(fn ($percentage, $remaining, $rate) => ...)` becomes `->onProgress(fn (Progress $progress) => ...)` with the `percentage`, `remainingSeconds`, and `speed` properties, where `speed` is a multiple of real time. Each is a `?float`, such as a percentage of `27.09333`, and with `twoPass()` the percentage runs from 0 to 100 and `remainingSeconds` restarts once per pass.
     - `EncodingException` becomes `MediaException`, and `FFMpeg::cleanupTemporaryFiles()` has no replacement because every operation removes its own workspace.

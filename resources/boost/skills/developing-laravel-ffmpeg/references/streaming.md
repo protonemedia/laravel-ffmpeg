@@ -48,7 +48,7 @@ FFMpeg::disk('uploads')
     ->save('lessons/42/master.m3u8');
 ```
 
-The package generates each key and stores it under a random name, such as `hls-keys/3d19d3da094dcffa469aacd5ad94da10.key`, and the `directory` argument replaces `hls-keys`. To encrypt with one key of your own, pass its 16 bytes as `key` instead of `rotateEvery`. Each rotated key covers the same segment numbers in every variant, and the result's `files()` lists the keys with the `hls-key` role. The URL closure receives the key path, the variant playlist path, the variant name, and the rotation index, in that order.
+The package generates each key and stores it under a random name, such as `hls-keys/3d19d3da094dcffa469aacd5ad94da10.key`, and the `directory` argument replaces `hls-keys`. To encrypt with one key of your own, pass its 16 bytes as `key` instead of `rotateEvery`. Each rotated key covers the same segment numbers in every variant, and the result's `files()` lists the keys with the `hls-key` role. The URL closure receives the key path, the variant playlist path, the variant name, and the rotation index, in that order. The protected playback routes below and the `keyUrlsUsing` closure of `playlist` replace each key URI as they serve a playlist, so with either one the closure may return a relative URI, such as `basename($keyPath)`, instead of a route URL.
 
 AES-128 is not DRM, so the application must authorize every key request. The protected playback routes below do that for you.
 

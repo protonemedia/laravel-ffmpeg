@@ -77,6 +77,8 @@ Laravel discovers the service provider and facade automatically. To edit waterma
 composer require intervention/image:^4.2
 ```
 
+To give AI agents the version 9 guidance, follow the [Laravel Boost](#laravel-boost) steps: an agent that runs `boost:install --no-interaction` installs the guidance only when your `boost.json` file already lists the package.
+
 <a name="publishing-the-configuration"></a>
 #### Publishing the Configuration
 
@@ -169,6 +171,14 @@ Then run the `boost:install` command without interaction. Later `boost:update` r
 ```bash
 php artisan boost:install --no-interaction
 ```
+
+To check the installation, search your agent's guidelines file, such as `AGENTS.md` or `CLAUDE.md`, for the package's rules heading, `=== pbmedia/laravel-ffmpeg/core rules ===`:
+
+```bash
+grep 'pbmedia/laravel-ffmpeg/core' AGENTS.md
+```
+
+No match means Boost skipped the package, so you should add it to `boost.json` and run the command again.
 
 <a name="working-with-media"></a>
 ## Working With Media
@@ -1132,7 +1142,7 @@ It keeps the selected variants' audio, subtitle, initialization, and key depende
 <a name="encryption-and-publication"></a>
 #### Encryption and Publication
 
-Segments are MPEG-TS by default. Paths are disk-relative, and playlist references are relative to their playlist. Keys go to the private disk passed to `encrypt` and publish before media. A custom `key` must be 16 raw bytes and cannot rotate; otherwise each save generates fresh keys, shared across variants per rotation group. Every segment gets a random IV, and OpenSSL is required. After validation, segments, playlists, and the master publish in that order, but not transactionally.
+Segments are MPEG-TS by default. Paths are disk-relative, and playlist references are relative to their playlist, except key references, which are the URIs your `encrypt` closure returns. [Protected playback](#serve-protected-hls-with-laravel) and the [`keyUrlsUsing` resolver](#customize-raw-hls-responses) replace those URIs when they serve a playlist, while players that read the published playlists directly use them as written, so an absolute `route` URL carries the host of the process that ran the export, such as a queue worker's `APP_URL`. For a key route on the host that serves the playlists, you may pass `absolute: false` to the `route` helper. Keys go to the private disk passed to `encrypt` and publish before media. A custom `key` must be 16 raw bytes and cannot rotate; otherwise each save generates fresh keys, shared across variants per rotation group. Every segment gets a random IV, and OpenSSL is required. After validation, segments, playlists, and the master publish in that order, but not transactionally.
 
 > [!WARNING]
 > AES-128 is not DRM. Your application must authorize each key request before serving its 16 raw bytes.

@@ -55,6 +55,12 @@ Version 9 requires PHP 8.4 or later and Laravel 13.44.1 or later. You should upd
 composer require pbmedia/laravel-ffmpeg:9.x-dev intervention/image:^4.2
 ```
 
+Version 8 edited watermark images with `spatie/image`, which your application installed itself. You may remove it when only watermark edits used it:
+
+```shell
+composer remove spatie/image
+```
+
 Version 9 no longer depends on `php-ffmpeg/php-ffmpeg`, so Composer removes it unless your application requires it directly. Every `FFMpeg\...` class, such as `FFMpeg\Format\Video\X264` or `FFMpeg\Coordinate\TimeCode`, is then unavailable, so you should remove those imports as you follow this guide.
 
 You should also install matching FFmpeg and FFprobe binaries of release 9.0 or later. CI tests release 9.0.2. Install the codecs, filters, fonts, and HTTPS support that your application needs.
@@ -103,6 +109,27 @@ return [
 ```
 
 You should set `FFMPEG_BINARIES` and `FFPROBE_BINARIES` to the matching pair. Setting `FFMPEG_VERIFY_VERSION=false` skips the release check, so older builds will run, but only the releases that the check accepts are supported. The `idle_timeout` option is separate from the total `timeout` deadline. The `queue` options are the defaults of [queued exports](#queued-exports): the `queued()` arguments override the connection and queue, and a `null` timeout derives the worker timeout from the operation or process limit. Set `FFMPEG_REDACT_CREDENTIALS=true` to redact signed URLs and credentials from diagnostics and process summaries.
+
+Version 8 logged every FFmpeg and FFprobe command to the `log_channel`, while version 9 logs no commands. The package events carry operation IDs, destinations, progress, and published files, but no commands, so a listener cannot log them either. To keep a log, you may record the `inspect()` plan before `save()` and the redacted command of every pass from the result's `processes()` afterward:
+
+```php
+use Illuminate\Support\Facades\Log;
+
+// $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
+$export = $media->export()
+    ->video('libx264')
+    ->audio('aac');
+
+Log::info('Starting FFmpeg', ['arguments' => $export->inspect()]);
+
+$result = $export->save('lesson.mp4');
+
+foreach ($result->processes() as $process) {
+    Log::info('FFmpeg finished', ['command' => $process['command'], 'seconds' => $process['elapsed_seconds']]);
+}
+```
+
+A failed export throws a `MediaException` instead, whose `diagnostics` hold FFmpeg's error output, as described in [exceptions and publication](#exceptions-and-publication).
 
 <a name="opening-media"></a>
 ### Opening Media
@@ -267,6 +294,17 @@ Bitrates accept positive integers in bits per second, such as `2500000`, or unit
 
 PHP-FFMpeg's `Vorbis` format used FFmpeg's native `vorbis` encoder, which is experimental and only encodes stereo. You should call `audio('vorbis')` with `audioOptions(['-strict', 'experimental', '-ac', '2'])`, or use `libvorbis` if your FFmpeg build includes it.
 
+The package passes any encoder name to FFmpeg, and FFmpeg's WebM muxer accepts VP8, VP9, or AV1 video with Vorbis or Opus audio. Many FFmpeg builds lack `libvpx` and `libvorbis`, which `php artisan ffmpeg:doctor --encoder=libvpx --encoder=libvorbis` reports. Without them, you may encode AV1 with `libsvtav1` and use the native `vorbis` encoder for a `.webm` export:
+
+```php
+// $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
+$media->export()
+    ->video('libsvtav1', crf: 35)
+    ->audio('vorbis', bitrate: '128k')
+    ->audioOptions(['-strict', 'experimental', '-ac', '2'])
+    ->save('lesson.webm');
+```
+
 <a name="driver-forwarding-and-raw-options"></a>
 ### Driver Forwarding and Raw Options
 
@@ -302,7 +340,14 @@ $arguments = $export->inspect();
 $result = $export->save('lesson-web.mp4');
 ```
 
-The `beforeSaving()` callback received one argument list per encoding pass, with the output path last. In version 9, `outputOptions()` accepts only a curated list of options and rejects `-metadata`, so you should set container tags with the `metadata()` method. The `inspect()` method replaces `getCommand()`. It returns one argument list with `[input:0]` and `[output:0]` placeholders instead of paths, and for a `twoPass()` export it shows the final pass. The PHP-FFMpeg media object that `$media()` returned has no counterpart.
+The `beforeSaving()` callback received one argument list per encoding pass, with the output path last. In version 9, `outputOptions()` accepts only a curated list of options and rejects `-metadata`, so you should set container tags with the `metadata()` method. The PHP-FFMpeg media object that `$media()` returned has no counterpart.
+
+The `inspect()` method replaces `getCommand()`. Version 8 returned one string per encoding pass, such as both passes of `X264`, with the arguments joined by spaces, without quotes, and without the FFmpeg binary. The `inspect()` method returns one argument list instead, starting with the FFmpeg binary, with `[input:0]` and `[output:0]` placeholders instead of paths, and for a `twoPass()` export it shows the final pass. To log it as one string, you may quote each argument:
+
+```php
+// $export is the export builder from the example above.
+$command = implode(' ', array_map('escapeshellarg', $export->inspect()));
+```
 
 <a name="probing-and-metadata"></a>
 ### Probing and Metadata
@@ -325,6 +370,7 @@ $codec = $media->getVideoStream()
 $metadata = $media->probe();
 
 $seconds = $metadata->duration();
+$wholeSeconds = (int) round($seconds);
 $milliseconds = (int) round($seconds * 1000);
 
 $codec = $metadata->video()
@@ -338,7 +384,7 @@ $chapters = $metadata->chapters();
 $data = $metadata->toArray();
 ```
 
-The `duration()` method returns the container duration in seconds as a `?float`, where version 8 returned an integer that preferred the first stream's duration. It returns `null` for an unknown duration instead of throwing, so you should check for `null` before converting it to milliseconds.
+The `duration()` method returns the container duration in seconds as a `?float`, where version 8 returned an integer that preferred the first stream's duration. Version 8 rounded that duration to the nearest whole second, so `(int) round($seconds)` gives code that expects an integer the same kind of value. The `duration()` method returns `null` for an unknown duration instead of throwing, so you should check for `null` before converting it to whole seconds or milliseconds.
 
 The `isValid()` method replaces PHP-FFMpeg's `FFProbe::isValid()`. It returns `false` instead of throwing a `MediaException` when FFprobe cannot read the media or finds no video or audio stream:
 
@@ -392,6 +438,14 @@ FFMpeg::open('lesson.mp4')
 
 // Version 9.x
 $media->export()
+    ->resize(1280, 720)
+    ->clip(12.5, duration: 8)
+    ->video('libx264', bitrate: '1000k')
+    ->audio('aac', bitrate: '128k')
+    ->twoPass()
+    ->save('clip.mp4');
+
+$media->export()
     ->video('libx264')
     ->audio('copy')
     ->resize(width: 1280)
@@ -400,19 +454,13 @@ $media->export()
     ->save('portrait.mp4');
 
 $media->export()
-    ->video('libx264')
-    ->audio('aac')
-    ->clip('00:00:12.500', duration: 8)
-    ->save('clip.mp4');
-
-$media->export()
     ->video('copy')
     ->audio('copy')
-    ->clip(12.5, end: 20.5, seek: 'keyframe')
+    ->clip('00:00:12.500', end: 20.5, seek: 'keyframe')
     ->save('copy.mkv');
 ```
 
-A `ClipFilter` with only a start time kept everything after it. The `clip()` method does the same without a duration or an end, so `clip(30)` drops the first 30 seconds.
+PHP-FFMpeg's `resize()` filter stretched the video to the given dimension by default, as `resize(1280, 720)` does, and `clip()` takes the same start and duration as a `ClipFilter`. The [format objects](#format-objects) section explains the `X264` settings. A `ClipFilter` with only a start time kept everything after it. The `clip()` method does the same without a duration or an end, so `clip(30)` drops the first 30 seconds.
 
 The raw forms of `addFilter()` map to the new `videoFilter()`, `audioFilter()`, and `filterComplex()` methods, which take trusted filter expressions. None of these methods existed in version 8:
 
@@ -703,15 +751,19 @@ $result = $export->filterComplex("[0:v][{$right}:v]hstack[v]")
         ->video('libx264')
         ->audio('aac')
         ->metadataFrom(0)
-        ->chaptersFrom(0))
+        ->chaptersFrom(0)
+        ->toDisk('local'))
     ->output('audio.wav', fn (ExportOutput $output) => $output
         ->map('0:a:0')
         ->audio('pcm_s16le')
-        ->withoutMetadata(chapters: true))
+        ->withoutMetadata(chapters: true)
+        ->toDisk('local'))
     ->save();
 ```
 
-Outputs no longer need a `Media` instance with its own disk. Every output publishes to the first input's disk unless you call `toDisk()`, including each output declared with `output()`. You should replace `withVisibility('public')` with the `visibility('public')` method, or pass the option to `toDisk('public', ['visibility' => 'public'])`.
+Outputs no longer need a `Media` instance with its own disk. Every output publishes to the first input's disk unless you call `toDisk()`. You should replace `withVisibility('public')` with the `visibility('public')` method, or pass the option to `toDisk('public', ['visibility' => 'public'])`.
+
+An export with `output()` callbacks accepts output settings only inside them, so you should call `toDisk()` and `visibility()` in each callback, as in the example above. An output setting on the export root, such as `toDisk()`, `visibility()`, `video()`, `audio()`, `map()`, a filter, `metadata()`, `clip()`, or `outputOptions()`, throws an `InvalidArgumentException` in such an export, whether you call it before or after `output()`. The root still accepts settings of the whole command, such as `addInput()`, `filterComplex()`, `globalOptions()`, and `onProgress()`.
 
 Without maps, ordinary exports select the first motion-video and audio streams. Existing subtitles and cover art require explicit maps and container-compatible codecs; the `coverArt()` attachment helper below owns its maps instead. General multiple-input outputs require explicit maps and a metadata and chapter policy. Stream tags and dispositions address the output order, not input indexes:
 
@@ -817,20 +869,34 @@ The other frame methods map to these calls:
 | `getFrameFromString('00:00:05.50')` | `frame(at: '00:00:05.50')` |
 | `getFrameFromTimecode(new TimeCode(0, 0, 8, 0))` | `frame(at: 8)` |
 | `accurate()` | none, since `frame()` always seeks accurately |
-| `exportFramesByAmount(5, 320, 180)` | `frames(count: 5)->resize(320, 180)` |
+| `exportFramesByAmount(5, 320, 180)` | `frames(count: 5)->resize(320, 180)`, or the `frame(at:)` loop below to keep the version 8 times |
 | The quality argument, such as `exportFramesByInterval(2, 640, 360, 5)` | `frames(every: 2)->resize(640, 360)->outputOptions(['-q:v', '5'])` |
 | `asTimelapseWithFramerate(4)` | `openSequence('sequence/frame_%04d.png', count: 24, framerate: 4)` on the disk selector |
 
-`frames(every:)` and `frames(count:)` take the last frame before the middle of each interval. For example, `frames(every: 2)` on a 30 fps video returns the frames at 0.967, 2.967, and 4.967 seconds, where version 8 returned the frames at 0, 2, and 4 seconds. Storyboard tiles are sampled the same way. To keep the version 8 times, you may loop over `frame(at:)`:
+`frames(every:)` and `frames(count:)` take the last frame before the middle of each interval. For example, `frames(every: 2)` on a 30 fps video returns the frames at 0.967, 2.967, and 4.967 seconds, where version 8 returned the frames at 0, 2, and 4 seconds. Version 8's `exportFramesByAmount($count)` took one frame every `(getDurationInSeconds() + 1) / $count` seconds, starting at 0, so `exportFramesByAmount(5)` on a 10-second video returned the frames at 0, 2.2, 4.4, 6.6, and 8.8 seconds. To keep the version 8 times, you may loop over `frame(at:)`:
 
 ```php
 // $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
+
+// exportFramesByInterval(2, 320) on a 10-second video:
 foreach (range(0, 8, 2) as $index => $seconds) {
     $media->frame(at: $seconds)
         ->resize(width: 320)
         ->save(sprintf('frames/%05d.jpg', $index + 1));
 }
+
+// exportFramesByAmount(5, 320, 180):
+$duration = $media->probe()->duration();
+$interval = (round($duration) + 1) / 5;
+
+for ($index = 0; $index < 5 && $index * $interval < $duration; $index++) {
+    $media->frame(at: $index * $interval)
+        ->resize(320, 180)
+        ->save(sprintf('thumbnails/%05d.jpg', $index + 1));
+}
 ```
+
+The loop stops at the end of the media, as version 8 did, so a count above the duration in seconds may write fewer frames. Storyboard tiles are sampled like `frames()`, and `storyboard()` has no option that keeps the version 8 times.
 
 Storyboard cues reference each sheet relative to the cue file, such as `../sheets/001.jpg` in the example above, where version 8 wrote paths relative to the disk root, such as `sheets/001.jpg`. The optional second argument of `vtt()` is a callback that receives each sheet's disk path and number and returns its URL, so `vtt('previews/lesson.vtt', fn (string $path, int $sheet) => $path)` keeps the version 8 paths.
 
@@ -878,6 +944,7 @@ $media->exportForHLS()
 
 // Version 9.x
 $result = $media->hls(segmentDuration: 6)
+    ->videoOptions(['-g', '48', '-sc_threshold', '0'])
     ->variant('360p', fn (HlsVariant $variant) => $variant
         ->resize(height: 360)
         ->video('libx264', bitrate: '800k'))
@@ -917,13 +984,30 @@ The other HLS exporter methods map to these calls:
 |---|---|
 | `setSegmentLength(10)` | `hls(segmentDuration: 10)`, whose default is 6 seconds instead of 10 |
 | `useSegmentFilenameGenerator()` | the `playlist` and `segments` arguments of each `variant()` call |
-| `setKeyFrameInterval(48)` | none, since version 9 forces a keyframe at the start of every segment; `videoOptions(['-g', '48', '-sc_threshold', '0'])` keeps the version 8 keyframe interval within segments |
+| `setKeyFrameInterval(48)`, whose value of 48 was also the default | none, since version 9 forces a keyframe at the start of every segment; `videoOptions(['-g', '48', '-sc_threshold', '0'])` on `hls()`, as in the example above, keeps the version 8 keyframe interval within the segments of every variant, and in a `variant()` callback it sets the interval of that variant |
 | `scale()`, `addFilter()`, and `addLegacyFilter()` in an `addFormat()` callback | `resize()`, `videoFilter()`, and the other filter methods of the `HlsVariant` |
 | `withEncryptionKey($key)` | `encrypt('secrets', $keyUrl, key: $key)` |
 | `withRotatingEncryptionKey($callback, 3)` | `encrypt('secrets', $keyUrl, rotateEvery: 3)` |
 | `HLSExporter::generateEncryptionKey()` | `random_bytes(16)`, or omit `key` to let `encrypt()` generate the keys |
 
-The `encrypt()` method stores every key on the given disk itself, in the `directory`, which defaults to `hls-keys`, under a generated name such as `3ba876a00fd6f8d26f842df7ef939e06.key`. The file name, such as `secret.key`, is no longer configurable, and no callback receives each new key, so you should list the keys from the result, as in the example above. The `$keyUrl` closure receives the key's disk path, the variant playlist's path, the variant name, and the rotation index, and returns the URI that the playlist references. Rotation is shared across variants, so every variant uses the same key for the same group of segments and an export creates fewer keys than version 8 did.
+The `encrypt()` method stores every key on the given disk itself, in the `directory`, which defaults to `hls-keys`, under a generated name such as `3ba876a00fd6f8d26f842df7ef939e06.key`, including a key that you pass as `key`. The package chooses the stored file name, and no callback receives each new key, so you should list the keys from the result, as in the example above. The `$keyUrl` closure receives the key's disk path, the variant playlist's path, the variant name, and the rotation index, and returns the URI that the playlist references. Rotation is shared across variants, so every variant uses the same key for the same group of segments and an export creates fewer keys than version 8 did.
+
+The playlists reference the URI the closure returns, which may be an HTTP(S) URL, a root-relative URI, or a relative URI such as `secret.key`, so you may keep the version 8 key URIs. For example, an application that stores its own copy of a fixed key as `secret.key` may keep serving that file through its key route:
+
+```php
+// $key holds the 16 bytes that your application stored as secrets:lesson/secret.key.
+$result = $media->hls()
+    ->variant('360p', fn (HlsVariant $variant) => $variant
+        ->resize(height: 360)
+        ->video('libx264', bitrate: '800k'))
+    ->encrypt('secrets', fn (string $path) => 'secret.key', key: $key, directory: 'lesson')
+    ->toDisk('streams')
+    ->save('lesson/master.m3u8');
+```
+
+The package still stores the key again in the `directory`, under a generated name, and lists that copy in the result.
+
+The protected [`Hls` routes](#hls-playlists-and-protected-playback) and a `keyUrlsUsing()` resolver replace every key URI when they serve a playlist, so there the URI only has to identify its key. Players that read the published playlists directly request each key at the URI as written, so an absolute `route()` URL then carries the host of the process that ran the export, which is the `APP_URL` of a queue worker. For a key route on the host that serves the playlists, you may return a root-relative URI instead, such as `route('lesson.key', ['key' => basename($path)], absolute: false)`.
 
 You should replace the legacy `setPlaylistType()` method with `playlistType()`, passing `vod`, `event`, or `live`. The default is VOD. EVENT writes its type tag, while live omits the type tag rather than passing an unsupported FFmpeg value. All modes still finish encoding and validation before publication and retain `ENDLIST` and every segment; this is not continuous live publication. Parallel queued composition remains VOD-only, so you should use an ordinary queued export for other playlist types.
 
@@ -1041,7 +1125,7 @@ $result = $media->export()
     ->save('lesson.mp4');
 ```
 
-The `remainingSeconds` property replaces `$remaining`, but it estimates the current pass only. The `speed` property replaces `$rate` and reports FFmpeg's encoding speed as a multiple of real time, so `2.5` means 2.5 seconds of media per second of encoding. The `elapsedSeconds` property is the encoded position in the media, not the time spent. All three may be `null`.
+The `percentage` property is a `?float` with a fraction, such as `24.10667`, where version 8 passed a whole number, so the example rounds the combined value down with `floor()`, as version 8 did. The `remainingSeconds` property replaces `$remaining`, but it estimates the current pass only. The `speed` property replaces `$rate` and reports FFmpeg's encoding speed as a multiple of real time, so `2.5` means 2.5 seconds of media per second of encoding. The `elapsedSeconds` property is the encoded position in the media, not the time spent. All three may be `null`.
 
 Completion follows validation, publication, and cleanup. You may throw `ExportCancelled` from a callback to stop the operation. Other callback exceptions propagate unchanged.
 
@@ -1088,7 +1172,9 @@ try {
 }
 ```
 
-The exception does not carry the command, so you should call `inspect()` before `save()` to log it. The `diagnostics` property replaces `getErrorOutput()`. For an export, it holds the last 64 KiB of FFmpeg's error output at the `warning` log level, with the same `[input:0]` and `[output:0]` placeholders that `inspect()` uses instead of local paths.
+Version 8's `EncodingException::getCommand()` returned the failed pass as one shell-quoted string. The exception does not carry the command, so you should call `inspect()` before `save()` to log it, quoting it as in [driver forwarding](#driver-forwarding-and-raw-options) to keep a string. The `diagnostics` property replaces `getErrorOutput()`. For an export, it holds the last 64 KiB of FFmpeg's error output at the `warning` log level, with the same `[input:0]` and `[output:0]` placeholders that `inspect()` uses instead of local paths.
+
+The first pass of a `twoPass()` export replaces each output with a private null output, which the diagnostics of that pass name `[analysis:0]`, `[analysis:1]`, and so on, as in `Error opening output file [analysis:0]`. The `inspect()` method shows only the final pass, so its plan never contains these placeholders. The `phase` is `encoding` in both passes.
 
 All artifacts validate before the first Storage write, but publication is not transactional. A later transfer failure can leave earlier outputs or replaced objects. Failures report successful writes without deleting them. Streams returned by `GeneratedFile::readStream()` belong to the caller and must be closed.
 

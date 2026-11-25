@@ -37,7 +37,7 @@ Each `GeneratedFile` has `disk`, `path`, `size`, `role`, and `owned` properties,
 
 ## Progress and Events
 
-The `onProgress` method receives a `Progress` instance. Its `percentage`, `speed`, and `remainingSeconds` properties are null outside the encoding phase, at the start of each pass, and whenever FFmpeg cannot tell. With `twoPass`, the percentage runs from 0 to 100 once per pass, so combine it with the `pass` and `totalPasses` properties for one overall value:
+The `onProgress` method receives a `Progress` instance. Its `percentage`, `speed`, and `remainingSeconds` properties are floats, such as a percentage of `27.09333`, and are null outside the encoding phase, at the start of each pass, and whenever FFmpeg cannot tell. With `twoPass`, the percentage runs from 0 to 100 and `remainingSeconds` restarts once per pass, so combine the percentage with the `pass` and `totalPasses` properties for one overall value:
 
 ```php
 use Illuminate\Support\Facades\Cache;
