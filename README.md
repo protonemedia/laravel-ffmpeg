@@ -708,6 +708,8 @@ $media->storyboard(every: 5, columns: 5, rows: 3, margin: 2, padding: 1)
     ->save('sheets/lesson-%03d.jpg');
 ```
 
+Each tile shows the frame nearest the middle of its interval, so the first tile of this storyboard shows the video at about 2.5 seconds. A video that ends before the middle of its last interval shows its final frame in the last tile.
+
 The `waveform` method renders a PNG, distinct from [waveform peaks data](#waveform-peaks-data). Its `colors` argument takes a name such as `'blue'` or an RGB or RGBA hex value prefixed with `#` or `0x`, or a list of them; a single string is never split into several colors:
 
 ```php
@@ -1035,7 +1037,7 @@ $result = $media->hls(segmentDuration: 6)
         ->resize(height: 720)
         ->video('libx264', bitrate: '2500k'),
         playlist: 'lists/720p/index.m3u8', segments: 'segments/720p/part-%03d.ts')
-    ->encrypt('secrets', fn (string $keyPath) => route('lesson.key', ['key' => basename($keyPath)]),
+    ->encrypt('secrets', static fn (string $keyPath) => route('lesson.key', ['key' => basename($keyPath)]),
         rotateEvery: 3, directory: 'lessons/42/keys')
     ->toDisk('streams')
     ->save('lessons/42/master.m3u8');
@@ -1332,6 +1334,17 @@ Hls::routes('/lessons/{lesson}/hls', name: 'lessons.hls', playback: 'lesson');
 ```
 
 The route uses the `web` and `auth` middleware by default and a controller action, so `route:cache` works; keep your own closures out of route actions. With Sanctum, pass `middleware: ['api', 'auth:sanctum']`. Bearer-URL playback with `middleware: ['web']` is acceptable only if URLs are issued behind an authorized endpoint: the URLs become bearer credentials with no global authentication, so `authorize` must enforce your policy on every request, including sessionless ones.
+
+Laravel redirects guests to the route named `login`, which a new application does not define, so a guest's playback request fails with a 500 error. You may define a `login` route, although players then receive a redirect to an HTML page, and `auth:sanctum` redirects guests the same way. To answer guests with a `401` response instead, you may customize Laravel's guest redirect in your application's `bootstrap/app.php` file:
+
+```php
+use Illuminate\Http\Request;
+
+// Inside the withMiddleware callback, which receives the $middleware configuration.
+$middleware->redirectGuestsTo(
+    fn (Request $request) => $request->routeIs('lessons.hls') ? null : route('login'),
+);
+```
 
 <a name="generating-playback-urls"></a>
 #### Generating Playback URLs

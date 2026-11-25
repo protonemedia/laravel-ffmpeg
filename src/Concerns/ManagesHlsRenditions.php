@@ -50,8 +50,7 @@ trait ManagesHlsRenditions
                 });
             }
 
-            if ($type === 'segments'
-                && (! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', $path) || str_contains(dirname($path), '%'))) {
+            if ($type === 'segments' && ! preg_match('/\A[^%]*%(?:0[1-9])?d[^%]*\z/', basename($path))) {
                 throw new InvalidArgumentException(
                     'The HLS segment filename must contain one %d or %01d through %09d placeholder.'
                 );

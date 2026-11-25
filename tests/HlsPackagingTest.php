@@ -101,6 +101,21 @@ class HlsPackagingTest extends TestCase
     }
 
     /**
+     * Get the start time of the first audio stream of the given file, read with the given input options.
+     */
+    protected function audioStartTime(string $path, array $options = []): float
+    {
+        $probe = Process::run([
+            config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', ...$options, '-select_streams', 'a:0',
+            '-show_entries', 'stream=start_time', '-of', 'json', $path,
+        ]);
+
+        $this->assertProcessSucceeded($probe);
+
+        return (float) json_decode($probe->output(), true)['streams'][0]['start_time'];
+    }
+
+    /**
      * Count the rising zero crossings in the given signed 16-bit little-endian samples.
      */
     protected function countRisingZeroCrossings(string $pcm): int
@@ -402,6 +417,56 @@ class HlsPackagingTest extends TestCase
             $this->assertProcessSucceeded($pcm);
             $this->assertEqualsWithDelta($frequency, $this->countRisingZeroCrossings($pcm->output()), 6);
         }
+    }
+
+    #[DataProvider('packagingProvider')]
+    public function test_audio_renditions_share_the_clock_of_muxed_audio(bool $fragmented): void
+    {
+        $export = $this->source()
+            ->hls(segmentDuration: 0.7)
+            ->variant('muxed', fn (HlsVariant $v) => $v->map('0:v:0')->map('0:a:0'))
+            ->variant('grouped', fn (HlsVariant $v) => $v->audioGroup('sound'))
+            ->audioRendition('sound', 'English', fn ($v) => $v->map('0:a:0'), default: true);
+
+        if ($fragmented) {
+            $export->fmp4();
+        }
+
+        $result = $export->save('clock/master.m3u8');
+
+        $disk = Storage::disk('hls-packaging');
+
+        // B-frame delay starts video further below zero than AAC priming starts audio, so
+        // an audio playlist shifted on its own would play ahead of the muxed audio.
+        $this->assertEqualsWithDelta(
+            $this->audioStartTime($disk->path($result->variant('muxed')->playlist()->path)),
+            $this->audioStartTime($disk->path($result->audioRendition('sound', 'English')->playlist()->path)),
+            0.001,
+        );
+    }
+
+    public function test_fragments_carry_their_timestamps_without_edit_lists(): void
+    {
+        $result = $this->source()
+            ->hls(segmentDuration: 0.7)
+            ->fmp4()
+            ->variant('sound', fn (HlsVariant $v) => $v->map('0:a:0'))
+            ->save('fragments/master.m3u8');
+
+        $disk = Storage::disk('hls-packaging');
+        $files = $result->variant('sound')->files();
+        $fragment = "{$this->root}/fragment.mp4";
+
+        file_put_contents($fragment, $disk->get($files->firstWhere('role', 'hls-init')->path)
+            .$disk->get($files->firstWhere('role', 'hls-segment')->path));
+
+        // Browsers ignore an empty edit, so a timeline offset written as one would leave
+        // their clock at zero while the subtitle timestamp maps follow the offset.
+        $this->assertEqualsWithDelta(
+            $this->audioStartTime($fragment),
+            $this->audioStartTime($fragment, ['-ignore_editlist', '1']),
+            0.001,
+        );
     }
 
     #[DataProvider('packagingProvider')]
