@@ -602,6 +602,19 @@ class HlsTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    public function test_video_variants_of_an_audio_only_source_fail_while_mapping(): void
+    {
+        $media = $this->source(video: false);
+
+        $this->assertThrows(
+            fn () => $media->hls(segmentDuration: 0.7)
+                ->variant('360p', fn (HlsVariant $variant) => $variant->resize(height: 360))
+                ->save('voice/master.m3u8'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+        );
+        $this->assertSame(['source.mkv'], Storage::disk('local')->allFiles());
+    }
+
     public function test_an_extra_unlabeled_graph_stream_is_rejected_before_hls_publication(): void
     {
         $media = $this->source(video: true, audio: false);

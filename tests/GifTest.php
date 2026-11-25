@@ -232,6 +232,20 @@ class GifTest extends TestCase
         );
     }
 
+    public function test_audio_only_sources_fail_while_mapping(): void
+    {
+        $binary = $this->useRealFFMpeg();
+        $source = $this->root.'/voice.m4a';
+
+        $this->assertProcessSucceeded(Process::run([$binary, '-v', 'error', '-f', 'lavfi', '-i', 'sine=duration=1',
+            '-c:a', 'aac', $source]));
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk()->open(new File($source))->gif()->toDisk('memory')->save('voice.gif'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+        );
+    }
+
     public function test_failed_preprocessing_keeps_the_existing_destination(): void
     {
         $source = $this->colorsFixture();

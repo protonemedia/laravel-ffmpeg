@@ -414,6 +414,8 @@ $media->export()
 
 Each probed `Stream` offers the `language`, `isForced`, `isDefault`, and `isCoverArt` methods, plus raw fields through `get`.
 
+Either default stream may be missing, so an audio-only source exports its audio. An export or HLS variant that configures its video, such as through `video`, `resize`, or `videoFilter`, requires a video stream instead and throws a `MediaException` with the `mapping` category for an audio-only source. Copying the video with `video('copy')` keeps whatever streams the source has.
+
 <a name="attaching-cover-art"></a>
 #### Attaching Cover Art
 

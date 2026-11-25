@@ -113,12 +113,18 @@ class PendingGif implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysi
     }
 
     /**
-     * Ensure the clip starts before the known source duration, and get the default duration.
+     * Ensure the source has video and the clip starts before its known duration, and get the default duration.
      *
      * @internal
      */
     public function duration(array $metadata, ?float $default): ?float
     {
+        // The palette graph reads the first video stream, which FFmpeg would only report
+        // missing during palette preparation, so we will fail the way frames do instead.
+        if (! $metadata[0]->hasVideo()) {
+            throw MediaException::probing('A required stream map matched no streams.', 'mapping');
+        }
+
         $clip = $this->export->outputConfiguration()['clip'];
         $duration = $metadata[0]->duration();
 

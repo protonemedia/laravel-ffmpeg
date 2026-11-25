@@ -681,6 +681,29 @@ class ExportTest extends TestCase
         $this->assertSame($image, Storage::disk('memory')->get('frame.png'));
     }
 
+    #[DataProvider('videoSettingsProvider')]
+    public function test_real_video_settings_require_a_video_stream(Closure $configure): void
+    {
+        $fixture = $this->fixture('voice.m4a', ['-f', 'lavfi', '-i', 'sine=duration=1', '-c:a', 'aac']);
+
+        Storage::disk('memory')->put('voice.m4a', file_get_contents($fixture));
+
+        $this->assertThrows(
+            fn () => $configure(FFMpeg::disk('memory')->open('voice.m4a')->export())->save('voice.mp4'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('voice.mp4'));
+    }
+
+    public static function videoSettingsProvider(): array
+    {
+        return [
+            'encoder' => [fn (PendingExport $export) => $export->video('libx264')],
+            'resize' => [fn (PendingExport $export) => $export->resize(width: 640)],
+            'filter' => [fn (PendingExport $export) => $export->videoFilter('hflip')],
+        ];
+    }
+
     #[DataProvider('invalidFrameProvider')]
     public function test_frames_require_a_valid_timestamp_and_an_image_destination(Closure $capture): void
     {

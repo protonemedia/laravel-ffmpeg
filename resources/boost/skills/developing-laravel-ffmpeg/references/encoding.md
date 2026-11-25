@@ -186,7 +186,7 @@ Without a closure, the mark appears at its original size in the bottom-right cor
 
 ## Tracks and Metadata
 
-An export selects the first video and audio stream. The `mapVideo`, `mapAudio`, and `map` methods replace that selection:
+An export selects the first video and audio stream, and either may be missing. An export that configures its video, such as through `video`, `resize`, or `videoFilter`, requires a video stream and fails with the `mapping` category for an audio-only source. The `mapVideo`, `mapAudio`, and `map` methods replace that selection:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
