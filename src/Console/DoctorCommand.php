@@ -34,7 +34,7 @@ class DoctorCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Check matching FFmpeg/FFprobe 9.0.x, compiled-in features, and temporary storage';
+    protected $description = 'Check matching FFmpeg/FFprobe 9.0 or later, compiled-in features, and temporary storage';
 
     /**
      * Execute the console command.

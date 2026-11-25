@@ -9,7 +9,7 @@ return [
     |
     | Here you may specify the full path to the FFmpeg executable. Otherwise,
     | it is resolved through the PATH, which may differ between your shell,
-    | the web server and queue workers. It must report a 9.0.x release.
+    | the web server and queue workers. It must report release 9.0 or later.
     |
     */
 
@@ -26,7 +26,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may specify the full path to the FFprobe executable. Both of
-    | the binaries must report the same 9.0.x release, so make sure this
+    | the binaries must report the same release, so make sure that this
     | executable belongs to the same build as the FFmpeg binary above.
     |
     */

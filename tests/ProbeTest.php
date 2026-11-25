@@ -537,7 +537,9 @@ class ProbeTest extends TestCase
         Storage::disk('memory')->put('video.mp4', 'media');
 
         $this->expectException(MediaException::class);
-        $this->expectExceptionMessage('FFprobe 9.0.x is required, but the configured binary reports version [5.1.9].');
+        $this->expectExceptionMessage(
+            'FFprobe 9.0 or later is required, but the configured binary reports version [5.1.9].',
+        );
 
         FFMpeg::disk('memory')
             ->open('video.mp4')

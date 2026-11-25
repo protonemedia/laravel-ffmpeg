@@ -54,7 +54,7 @@ Version 9 requires PHP 8.4 or later and Laravel 13.44.1 or later. You should upd
 composer require pbmedia/laravel-ffmpeg:9.x-dev
 ```
 
-You should also install matching FFmpeg and FFprobe 9.0.x binaries. The tested patch release is 9.0.2. Install the codecs, filters, fonts, and HTTPS support that your application needs.
+You should also install matching FFmpeg and FFprobe binaries of release 9.0 or later. CI tests release 9.0.2. Install the codecs, filters, fonts, and HTTPS support that your application needs.
 
 <a name="configuration"></a>
 ### Configuration

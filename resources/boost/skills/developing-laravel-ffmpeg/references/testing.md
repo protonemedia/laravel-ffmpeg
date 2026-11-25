@@ -30,7 +30,7 @@ class WebVideoProfileTest extends TestCase
 
 ## Faking FFmpeg
 
-To test code that saves an export without FFmpeg installed, fake Laravel's processes. The fake must answer the `-version` check with a 9.0.x version, answer FFprobe with JSON, and create the output file, because the package publishes the file the encoder wrote:
+To test code that saves an export without FFmpeg installed, fake Laravel's processes. The fake must answer the `-version` check with release 9.0 or later, answer FFprobe with JSON, and create the output file, because the package publishes the file the encoder wrote:
 
 ```php
 namespace Tests\Feature;
@@ -89,7 +89,7 @@ class EncodeVideoTest extends TestCase
 }
 ```
 
-A fake proves the application's flow, not the media. Add a test against a real FFmpeg 9.0.x build for codec and filter behavior.
+A fake proves the application's flow, not the media. Add a test against a real FFmpeg build of release 9.0 or later for codec and filter behavior.
 
 ## Faking Queued Exports
 
@@ -127,7 +127,7 @@ class QueueVideoTest extends TestCase
 
 ## Checking the FFmpeg Build
 
-The `ffmpeg:doctor` Artisan command checks that FFmpeg and FFprobe report the same 9.0.x version and that the temporary directory is writable. It exits with a nonzero code when a required encoder, muxer, filter, or protocol is missing, so you may run it in a deployment script:
+The `ffmpeg:doctor` Artisan command checks that FFmpeg and FFprobe report the same release, 9.0 or later, and that the temporary directory is writable. It exits with a nonzero code when a required encoder, muxer, filter, or protocol is missing, so you may run it in a deployment script:
 
 ```shell
 php artisan ffmpeg:doctor --encoder=libx264 --encoder=aac --muxer=hls

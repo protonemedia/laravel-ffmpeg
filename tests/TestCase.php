@@ -148,7 +148,7 @@ abstract class TestCase extends BaseTestCase
         // exact arguments work. Those tests are skipped unless FFMPEG_9_FFPROBE
         // holds the path of an FFprobe 9 binary that has FFmpeg beside it.
         if (! $ffprobe) {
-            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run the tests against real FFmpeg 9.0.x binaries.');
+            $this->markTestSkipped('Set FFMPEG_9_FFPROBE to run the tests against real FFmpeg 9.0 or later binaries.');
         }
 
         $ffmpeg = dirname($ffprobe).'/ffmpeg';

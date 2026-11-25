@@ -206,7 +206,7 @@ Check the source and profile versions before expensive work and again when apply
 
 The `inspect` method lets you assert profile options without storage access or processes, `Bus::fake()` lets you assert dispatch and job metadata rather than encoding success, and `Storage::fake()` covers input staging, publication, receipts, and cleanup assertions.
 
-For application-policy tests, you may use `Process::fake()` together with `Process::preventStrayProcesses()`, returning FFmpeg 9.0.x version output and valid FFprobe JSON. Because publication needs a real file, the fake encoder must create the staged destination file as well as return success. Do not fake the completion event in listener tests.
+For application-policy tests, you may use `Process::fake()` together with `Process::preventStrayProcesses()`, returning version output of FFmpeg 9.0 or later and valid FFprobe JSON. Because publication needs a real file, the fake encoder must create the staged destination file as well as return success. Do not fake the completion event in listener tests.
 
 You may run the complete fixture without FFmpeg binaries:
 

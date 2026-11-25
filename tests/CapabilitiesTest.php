@@ -23,10 +23,15 @@ class CapabilitiesTest extends TestCase
             ->registerCommand(new DoctorCommand);
     }
 
-    protected function fakeCapabilities(string $probeVersion = '9.0.2', ?string $brokenOption = null): void
-    {
+    protected function fakeCapabilities(
+        string $version = '9.0.2',
+        ?string $probeVersion = null,
+        ?string $brokenOption = null,
+    ): void {
+        $probeVersion ??= $version;
+
         Process::preventStrayProcesses();
-        Process::fake(function (PendingProcess $process) use ($probeVersion, $brokenOption) {
+        Process::fake(function (PendingProcess $process) use ($version, $probeVersion, $brokenOption) {
             $command = $process->command;
             $option = end($command);
 
@@ -36,7 +41,7 @@ class CapabilitiesTest extends TestCase
 
             if ($option === '-version') {
                 return Process::result(
-                    output: $command[0].' version '.($command[0] === 'ffprobe' ? $probeVersion : '9.0.2'),
+                    output: $command[0].' version '.($command[0] === 'ffprobe' ? $probeVersion : $version),
                 );
             }
 
@@ -162,13 +167,29 @@ class CapabilitiesTest extends TestCase
         ));
     }
 
+    #[TestWith(['9.0', '9.0'])]
+    #[TestWith(['n9.0', '9.0'])]
+    #[TestWith(['9.0.3', '9.0.3'])]
+    #[TestWith(['9.1.0', '9.1.0'])]
+    #[TestWith(['10.0', '10.0'])]
+    public function test_releases_from_9_0_onward_are_accepted(string $reported, string $release): void
+    {
+        $this->fakeCapabilities(version: $reported);
+
+        $this->assertSame(['ffmpeg' => $release, 'ffprobe' => $release], (new Capabilities)->toArray()['versions']);
+    }
+
     #[TestWith(['9.0.1', 'FFmpeg [9.0.2] and FFprobe [9.0.1] must have matching release versions.'])]
-    #[TestWith(['8.0.2', 'FFprobe 9.0.x is required, but the configured binary reports version [8.0.2].'])]
+    #[TestWith(['8.0.2', 'FFprobe 9.0 or later is required, but the configured binary reports version [8.0.2].'])]
     #[TestWith([
         "5.1.9-0+deb12u1 Copyright (c) 2007-2026\nconfiguration: --prefix=/private/build",
-        'FFprobe 9.0.x is required, but the configured binary reports version [5.1.9-0+deb12u1].',
+        'FFprobe 9.0 or later is required, but the configured binary reports version [5.1.9-0+deb12u1].',
     ])]
-    #[TestWith(['/private/build/ffprobe', 'FFprobe 9.0.x is required.'])]
+    #[TestWith(['/private/build/ffprobe', 'FFprobe 9.0 or later is required.'])]
+    #[TestWith([
+        'N-120345-g1a2b3c4d5e',
+        'FFprobe 9.0 or later is required, but the configured binary reports version [N-120345-g1a2b3c4d5e].',
+    ])]
     public function test_mismatched_and_wrong_major_versions_fail_sanitized(string $version, string $message): void
     {
         $this->fakeCapabilities(probeVersion: $version);

@@ -1,7 +1,7 @@
 {{-- Laravel FFMpeg package guidance. License: MIT. --}}
 # Laravel FFMpeg
 
-- `pbmedia/laravel-ffmpeg` v9 runs FFmpeg 9 through Laravel's Process, Storage, Http, and Queue features. Its API is new in v9, so code from v8 tutorials, issues, and forum answers does not run.
+- `pbmedia/laravel-ffmpeg` v9 runs FFmpeg 9.0 or later through Laravel's Process, Storage, Http, and Queue features. Its API is new in v9, so code from v8 tutorials, issues, and forum answers does not run.
 - Activate the `developing-laravel-ffmpeg` skill before writing or changing code that uses `ProtoneMedia\LaravelFFMpeg`, such as encoding, probing, frames, watermarks, audio mixing, HLS or DASH streaming, protected playback, or queued exports.
 - Replace each v8 call with its v9 equivalent:
     - `FFMpeg::fromDisk('uploads')` becomes `FFMpeg::disk('uploads')`.

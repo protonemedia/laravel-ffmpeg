@@ -65,7 +65,7 @@ You may run an export immediately or [dispatch it to a queue](#queue-conversions
 <a name="installation"></a>
 ### Installation
 
-Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.44.1 or later, and matching FFmpeg and FFprobe 9.0.x binaries; setup and CI use 9.0.2. You may install the development branch using Composer:
+Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.44.1 or later, and matching FFmpeg and FFprobe binaries of release 9.0 or later; setup and CI use 9.0.2. You may install the development branch using Composer:
 
 ```bash
 composer require pbmedia/laravel-ffmpeg:9.x-dev
@@ -106,7 +106,7 @@ command -v ffmpeg
 command -v ffprobe
 ```
 
-Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES`, or the `ffmpeg.binaries` and `ffprobe.binaries` options, to full executable paths. Both must report the same 9.0.x release, so test them as your web server or queue worker user:
+Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES`, or the `ffmpeg.binaries` and `ffprobe.binaries` options, to full executable paths. Both must report the same numbered release, 9.0 or later, so development snapshots that report a version such as `N-120345-g1a2b3c4d5e` are refused. Test them as your web server or queue worker user:
 
 ```bash
 sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffmpeg -version
@@ -1729,7 +1729,7 @@ FFMPEG_9_FFPROBE=/opt/ffmpeg-9.0.2/bin/ffprobe vendor/bin/phpunit --order-by ran
     --fail-on-deprecation --fail-on-phpunit-deprecation
 ```
 
-Real-media tests are skipped unless `FFMPEG_9_FFPROBE` points to FFprobe 9.0.x with a matching `ffmpeg` beside it, and font tests need `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`. CI runs PHP 8.4, 8.5, and 8.6 on Ubuntu 26.04 with lowest and stable dependencies.
+Real-media tests are skipped unless `FFMPEG_9_FFPROBE` points to FFprobe 9.0 or later with a matching `ffmpeg` beside it, and font tests need `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`. CI runs PHP 8.4, 8.5, and 8.6 on Ubuntu 26.04 with lowest and stable dependencies.
 
 <a name="community"></a>
 ## Community

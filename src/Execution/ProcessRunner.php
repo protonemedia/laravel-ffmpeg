@@ -29,6 +29,11 @@ class ProcessRunner
     protected const int MAX_DIAGNOSTIC_BYTES = 65536;
 
     /**
+     * The oldest FFmpeg and FFprobe release the package runs.
+     */
+    protected const string MINIMUM_RELEASE = '9.0';
+
+    /**
      * The high-resolution time the operation started, in nanoseconds.
      */
     protected readonly int $startedAt;
@@ -150,7 +155,7 @@ class ProcessRunner
     }
 
     /**
-     * Get the 9.0.x release of the given binary.
+     * Get the release of the given binary, which must be the minimum release or later.
      */
     public function version(string $binary, string $tool, string $directory, string $phase = 'probing'): string
     {
@@ -158,13 +163,31 @@ class ProcessRunner
 
         $this->ensureBinaryStarted($result, $tool);
 
-        if ($result->exitCode !== 0
-            || ! preg_match(
-                '/^'.preg_quote($tool, '/').' version (?:n)?(9\.0\.\d+)(?:\s|-|$)/',
-                $result->output,
-                $matches,
-            )) {
+        $release = $this->reportedRelease($tool, $result);
+
+        if ($release === null || version_compare($release, self::MINIMUM_RELEASE, '<')) {
             throw new MediaException($this->unsupportedVersionMessage($tool, $result), $phase, 'version');
+        }
+
+        return $release;
+    }
+
+    /**
+     * Get the numbered release that the version output of the given tool reports, if any.
+     */
+    protected function reportedRelease(string $tool, ProcessResult $result): ?string
+    {
+        if ($result->exitCode !== 0) {
+            return null;
+        }
+
+        // Builds from a release tag prefix the release with an "n" and distributions
+        // append their own revision, such as "9.0.2-1ubuntu1", so we will only keep
+        // the numbers FFmpeg assigned. Development snapshots report none at all.
+        $pattern = '/^'.preg_quote($tool, '/').' version n?(\d+\.\d+(?:\.\d+)?)(?:\s|-|$)/';
+
+        if (! preg_match($pattern, $result->output, $matches)) {
+            return null;
         }
 
         return $matches[1];
@@ -204,14 +227,14 @@ class ProcessRunner
     }
 
     /**
-     * Get the message for a binary that does not report a 9.0.x release.
+     * Get the message for a binary that does not report the minimum release or later.
      */
     protected function unsupportedVersionMessage(string $tool, ProcessResult $result): string
     {
-        $name = $this->toolName($tool);
+        $requirement = $this->toolName($tool).' '.self::MINIMUM_RELEASE.' or later is required';
 
         if ($result->exitCode !== 0) {
-            return "{$name} 9.0.x is required.";
+            return "{$requirement}.";
         }
 
         // The version output also lists the build configuration, which may contain
@@ -220,10 +243,10 @@ class ProcessRunner
         $pattern = '/^'.preg_quote($tool, '/').' version ([\w.+~-]{1,64})(?:\s|$)/';
 
         if (! preg_match($pattern, $result->output, $matches)) {
-            return "{$name} 9.0.x is required.";
+            return "{$requirement}.";
         }
 
-        return "{$name} 9.0.x is required, but the configured binary reports version [{$matches[1]}].";
+        return "{$requirement}, but the configured binary reports version [{$matches[1]}].";
     }
 
     /**
@@ -235,7 +258,7 @@ class ProcessRunner
     }
 
     /**
-     * Get the shared release of a matching FFmpeg and FFprobe 9.0.x pair.
+     * Get the shared release of a matching FFmpeg and FFprobe pair.
      */
     public function pairVersion(string $ffmpeg, string $ffprobe, string $directory): string
     {
