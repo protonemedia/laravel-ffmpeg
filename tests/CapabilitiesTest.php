@@ -142,6 +142,26 @@ class CapabilitiesTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    #[TestWith(['database', 90, true])]
+    #[TestWith(['database', 3631, false])]
+    #[TestWith(['sync', 90, false])]
+    public function test_doctor_warns_when_retry_after_does_not_exceed_the_job_timeout(
+        string $driver,
+        int $retryAfter,
+        bool $warns,
+    ): void {
+        $this->fakeCapabilities();
+        config(['queue.default' => 'media', 'queue.connections.media' => [
+            'driver' => $driver, 'retry_after' => $retryAfter,
+        ]]);
+
+        $this->assertSame(0, Artisan::call('ffmpeg:doctor'));
+        $this->assertSame($warns, str_contains(
+            preg_replace('/\s+/', ' ', Artisan::output()),
+            "The retry_after [{$retryAfter}] of the [media] connection must exceed the job timeout [3630].",
+        ));
+    }
+
     #[TestWith(['9.0.1', 'FFmpeg [9.0.2] and FFprobe [9.0.1] must have matching release versions.'])]
     #[TestWith(['8.0.2', 'FFprobe 9.0.x is required, but the configured binary reports version [8.0.2].'])]
     #[TestWith([

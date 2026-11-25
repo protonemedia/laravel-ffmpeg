@@ -101,7 +101,9 @@ $pending->save('videos/intro.mp4')
     ->afterCommit();
 ```
 
-Queued inputs and destinations must be named disks that every worker can read, so store uploads on a disk before queueing them. Callbacks such as `onProgress` must be static closures that capture only scalars or arrays. Set the queue connection's `retry_after` above the job timeout, because a retry restarts the conversion.
+Queued inputs and destinations must be named disks that every worker can read, so store uploads on a disk before queueing them. Callbacks such as `onProgress` must be static closures that capture only scalars or arrays.
+
+The job timeout is the export's timeout plus 30 seconds, which is 3630 seconds by default. Set the queue connection's `retry_after` above it, because Laravel's connections default to 90 seconds and then hand a running export to a second worker, which encodes it again or fails the job with a `MaxAttemptsExceededException`. The `ffmpeg:doctor` command warns about a `retry_after` that does not exceed the job timeout.
 
 The `QueuedExportCompleted` event carries the `exportId` and the published `files` as arrays, plus a `playback` inventory for HLS. Listeners receive every queued export, including duplicate deliveries, so update by the stored ID instead of throwing when no record matches. A listener exception fails the job after its files were published:
 

@@ -61,6 +61,26 @@ class PendingQueuedExport
     }
 
     /**
+     * Get the job timeout for an operation with the given time budget, or with the configured limits.
+     *
+     * @internal
+     */
+    public static function jobTimeout(?float $timeout = null): int
+    {
+        $configured = config('laravel-ffmpeg.queue.timeout');
+
+        if ($configured !== null) {
+            return (int) $configured;
+        }
+
+        $timeout ??= config('laravel-ffmpeg.timeout', 3600);
+
+        // The job outlives the operation's own deadline by a margin, so the operation
+        // reports its timeout and cleans up before the worker gives up on the job.
+        return $timeout === null ? 0 : (int) ceil($timeout) + 30;
+    }
+
+    /**
      * Configure the native Laravel job properties, middleware and chains before dispatch.
      */
     public function configureJob(callable $configure): static
@@ -151,8 +171,7 @@ class PendingQueuedExport
     {
         $job->onConnection($this->connection)->onQueue($this->queue)->delay($initial ? $this->delay : null);
 
-        $timeout = $this->timeout ?? config('laravel-ffmpeg.timeout', 3600);
-        $job->timeout = config('laravel-ffmpeg.queue.timeout') ?? ($timeout === null ? 0 : (int) ceil($timeout) + 30);
+        $job->timeout = static::jobTimeout($this->timeout);
         $job->tries = config('laravel-ffmpeg.queue.tries', 1);
         $job->backoff = config('laravel-ffmpeg.queue.backoff', 0);
 

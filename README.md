@@ -1493,7 +1493,7 @@ Inputs and destinations must use named disks that every worker can read, so stor
 The job timeout defaults to the operation's `timeout`, or the configured FFmpeg timeout, plus 30 seconds, and is zero when neither is set. The `queue` configuration holds defaults that the `queued` arguments override, and `configureJob` runs last. Deadlines start in the worker, not while the job waits.
 
 > [!WARNING]
-> Set the connection's `retry_after` or visibility timeout above the job timeout. Retries restart the conversion, and delivery is at-least-once, not exactly-once.
+> Set the connection's `retry_after` or visibility timeout above the job timeout, which is 3630 seconds by default, while Laravel's connections default `retry_after` to 90 seconds. Otherwise, a second worker starts the same export while the first one still runs. The `ffmpeg:doctor` command warns about a `retry_after` that does not exceed the job timeout. Retries restart the conversion, and delivery is at-least-once, not exactly-once.
 
 A worker that receives `SIGTERM`, `SIGINT`, or `SIGQUIT` stops FFmpeg, deletes the workspace, and publishes no further files. The attempt then throws a `MediaException` with the `interrupted` category, so Laravel retries it while `tries` remain and fails it otherwise. A job that reaches its timeout stops FFmpeg and deletes the workspace in the same way before Laravel fails it.
 
