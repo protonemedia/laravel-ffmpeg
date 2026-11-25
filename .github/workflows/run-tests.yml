@@ -86,7 +86,7 @@ jobs:
 
             - name: Install MediaMTX 1.21.3
               run: |
-                  curl -fsSL -o "$RUNNER_TEMP/mediamtx.tar.gz" \
+                  curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/mediamtx.tar.gz" \
                       https://github.com/bluenviron/mediamtx/releases/download/v1.21.3/mediamtx_v1.21.3_linux_amd64.tar.gz
                   echo "0a2ea7eba96023631efa1bea7804823a9145b043b6646a8a05798d4ac24ed635  $RUNNER_TEMP/mediamtx.tar.gz" | sha256sum --check
                   mkdir -p "$RUNNER_TEMP/mediamtx"
