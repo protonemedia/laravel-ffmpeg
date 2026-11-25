@@ -85,8 +85,10 @@ trait CompilesOutputArguments
             $options[] = CommandCompiler::timestamp($this->clip['start']);
         }
 
-        $options[] = '-t';
-        $options[] = CommandCompiler::timestamp($this->clip['duration']);
+        if ($this->clip['duration'] !== null) {
+            $options[] = '-t';
+            $options[] = CommandCompiler::timestamp($this->clip['duration']);
+        }
 
         return $options;
     }

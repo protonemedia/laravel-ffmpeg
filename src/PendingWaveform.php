@@ -131,8 +131,7 @@ class PendingWaveform implements Exportable, OwnsGraph, ShapesCommand, ShapesOut
         $clip = $this->export->clipSettings();
 
         if ($clip !== null) {
-            $audio .= ($audio === '' ? '' : ',').'atrim=start='.CommandCompiler::timestamp($clip['start'])
-                .':duration='.CommandCompiler::timestamp($clip['duration']).',asetpts=PTS-STARTPTS';
+            $audio .= ($audio === '' ? '' : ',').'atrim='.CommandCompiler::trimRange($clip).',asetpts=PTS-STARTPTS';
         }
 
         $index = array_search('-filter_complex', $command, true) + 1;

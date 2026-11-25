@@ -99,10 +99,9 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
     public function duration(array $metadata, ?float $default): ?float
     {
         $this->duration = $metadata[0]->duration();
-        $clip = $this->export->clipSettings();
 
-        if ($this->duration !== null && $clip !== null) {
-            $this->duration = max(0, min($clip['duration'], $this->duration - $clip['start']));
+        if ($this->duration !== null) {
+            $this->duration = $this->export->clippedDuration($this->duration);
         }
 
         if ($this->count !== null

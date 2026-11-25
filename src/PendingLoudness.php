@@ -134,10 +134,7 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
 
         // We trim before preprocessing and measurement, instead of seeking the output after loudnorm.
         $clip = $outputs[0]->clipSettings();
-        $filters = $clip === null ? [] : [
-            "atrim=start={$this->number($clip['start'])}:duration={$this->number($clip['duration'])}",
-            'asetpts=PTS-STARTPTS',
-        ];
+        $filters = $clip === null ? [] : [$this->trimFilter($clip), 'asetpts=PTS-STARTPTS'];
 
         if ($filter !== '') {
             $filters[] = $filter;
@@ -322,6 +319,20 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         return "loudnorm=I={$this->number($this->integrated)}:TP={$this->number($this->truePeak)}"
             .":LRA={$this->number($this->range)}:linear=".($this->linear ? 'true' : 'false')
             .":print_format=json:stats_file={$statistics}";
+    }
+
+    /**
+     * Get the audio trim filter of the given output clip.
+     */
+    protected function trimFilter(array $clip): string
+    {
+        $filter = "atrim=start={$this->number($clip['start'])}";
+
+        if ($clip['duration'] === null) {
+            return $filter;
+        }
+
+        return "{$filter}:duration={$this->number($clip['duration'])}";
     }
 
     /**

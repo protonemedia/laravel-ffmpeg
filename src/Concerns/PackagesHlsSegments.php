@@ -31,10 +31,7 @@ trait PackagesHlsSegments
      */
     protected function writeSubtitlePlaylist(int $index, ExportOutput $output, string $path): string
     {
-        $clip = $output->clipSettings();
-        $duration = $clip === null
-            ? $this->presentationDuration
-            : min($clip['duration'], $this->presentationDuration - $clip['start']);
+        $duration = $output->clippedDuration($this->presentationDuration);
 
         if ($duration <= 0) {
             throw MediaException::validation('An HLS subtitle rendition has no presentation duration.', 'artifact');

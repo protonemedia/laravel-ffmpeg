@@ -70,6 +70,22 @@ class CommandCompiler
     }
 
     /**
+     * Get the start and duration options of a trim filter for the given output clip.
+     *
+     * @param  array{start: float, duration: ?float, seek: string}  $clip
+     */
+    public static function trimRange(array $clip): string
+    {
+        $range = 'start='.self::timestamp($clip['start']);
+
+        if ($clip['duration'] === null) {
+            return $range;
+        }
+
+        return "{$range}:duration=".self::timestamp($clip['duration']);
+    }
+
+    /**
      * Format seconds as an FFmpeg duration with microsecond precision and no trailing zeros.
      */
     public static function timestamp(float $seconds): string

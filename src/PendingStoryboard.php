@@ -162,10 +162,9 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
     public function duration(array $metadata, ?float $default): float
     {
         $duration = $metadata[0]->duration();
-        $clip = $this->export->clipSettings();
 
-        if ($duration !== null && $clip !== null) {
-            $duration = max(0, min($clip['duration'], $duration - $clip['start']));
+        if ($duration !== null) {
+            $duration = $this->export->clippedDuration($duration);
         }
 
         if ($duration === null || $duration <= 0 || $duration > intdiv(PHP_INT_MAX, self::MICROSECONDS_PER_SECOND)) {

@@ -692,11 +692,7 @@ class PendingExport implements Exportable
             return null;
         }
 
-        $durations = array_map(function ($output) use ($duration) {
-            $clip = $output->clipSettings();
-
-            return $clip === null ? $duration : max(0, min($clip['duration'], $duration - $clip['start']));
-        }, $outputs);
+        $durations = array_map(fn ($output): float => $output->clippedDuration($duration), $outputs);
 
         return max($durations);
     }

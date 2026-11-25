@@ -137,7 +137,7 @@ trait ConfiguresOutput
     }
 
     /**
-     * Clip the output to the given start and either a duration or an end.
+     * Clip the output to the given start and a duration or an end, or to the end of the media.
      */
     public function clip(
         float|string $start,
@@ -155,8 +155,8 @@ trait ConfiguresOutput
             throw new InvalidArgumentException('The clip start must be finite and not negative.');
         }
 
-        if (($duration === null) === ($end === null)) {
-            throw new InvalidArgumentException('A clip requires either a duration or an end, not both.');
+        if ($duration !== null && $end !== null) {
+            throw new InvalidArgumentException('A clip accepts a duration or an end, not both.');
         }
 
         if ($duration !== null && (! is_finite($duration) || $duration <= 0)) {
@@ -171,7 +171,13 @@ trait ConfiguresOutput
             throw new InvalidArgumentException("The clip seek mode [{$seek}] must be accurate or keyframe.");
         }
 
-        $this->clip = ['start' => $start, 'duration' => $duration ?? $end - $start, 'seek' => $seek];
+        // Without a duration or an end, the clip keeps everything after its start, so we
+        // will store no duration and leave the end of the media to decide where it stops.
+        if ($end !== null) {
+            $duration = $end - $start;
+        }
+
+        $this->clip = ['start' => $start, 'duration' => $duration, 'seek' => $seek];
 
         return $this;
     }
@@ -250,10 +256,30 @@ trait ConfiguresOutput
 
     /**
      * Get the start, duration and seek mode of the output clip.
+     *
+     * @return array{start: float, duration: ?float, seek: string}|null
      */
     public function clipSettings(): ?array
     {
         return $this->clip;
+    }
+
+    /**
+     * Get what remains of the given media duration after the output clip.
+     */
+    public function clippedDuration(float $duration): float
+    {
+        if ($this->clip === null) {
+            return $duration;
+        }
+
+        $remaining = max(0.0, $duration - $this->clip['start']);
+
+        if ($this->clip['duration'] === null) {
+            return $remaining;
+        }
+
+        return min($this->clip['duration'], $remaining);
     }
 
     /**

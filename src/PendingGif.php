@@ -177,8 +177,7 @@ class PendingGif implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysi
         $clip = $settings['clip'];
 
         if ($clip !== null) {
-            $filters[] = 'trim=start='.CommandCompiler::timestamp($clip['start'])
-                .':duration='.CommandCompiler::timestamp($clip['duration']);
+            $filters[] = 'trim='.CommandCompiler::trimRange($clip);
             $filters[] = 'setpts=PTS-STARTPTS';
         }
 

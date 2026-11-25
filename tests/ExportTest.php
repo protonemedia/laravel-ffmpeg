@@ -594,6 +594,7 @@ class ExportTest extends TestCase
         int|float|string $start,
         int|string|null $duration,
         int|string|null $end,
+        ?string $message = null,
     ): void {
         Process::fake();
 
@@ -604,6 +605,7 @@ class ExportTest extends TestCase
                 ->clip($start, duration: $duration, end: $end)
                 ->inspect(),
             InvalidArgumentException::class,
+            $message,
         );
 
         Process::assertNothingRan();
@@ -616,6 +618,7 @@ class ExportTest extends TestCase
             'end at the start' => ['00:00:01', null, 1],
             'end before the start' => [2, null, '00:00:01'],
             'infinite start' => [INF, 1, null],
+            'both a duration and an end' => [1, 2, 3, 'A clip accepts a duration or an end, not both.'],
         ];
     }
 
@@ -2151,6 +2154,39 @@ class ExportTest extends TestCase
         $this->assertTrue(Process::run([
             $ffmpeg, '-v', 'error', '-xerror', '-i', $local->path('clips/trimmed.mp4'), '-f', 'null', '-',
         ])->successful());
+        $this->assertLectureIsUnchanged();
+    }
+
+    public function test_clips_without_a_duration_or_an_end_run_to_the_end_of_the_media(): void
+    {
+        $ffmpeg = $this->useRealFFMpeg();
+        $local = $this->fakeLocalDisk();
+        $media = $this->openLecture();
+
+        $export = $media->export()
+            ->video('libx264', crf: 25, preset: 'ultrafast')
+            ->audio('aac', bitrate: '64k')
+            ->clip('00:00:00.400');
+        $command = $export->inspect();
+
+        $this->assertSame('0.4', $command[array_search('-ss', $command, true) + 1]);
+        $this->assertNotContains('-t', $command);
+
+        $export->toDisk('local')->save('tail.mp4');
+
+        $this->assertEqualsWithDelta(2.0, FFMpeg::disk('local')->open('tail.mp4')->probe()->duration(), 0.12);
+        $this->assertTrue(Process::run([
+            $ffmpeg, '-v', 'error', '-xerror', '-i', $local->path('tail.mp4'), '-f', 'null', '-',
+        ])->successful());
+
+        // Count sampling needs the duration that remains after the start, which a clip
+        // without a duration or an end only learns once the media has been probed.
+        $frames = $media->frames(count: 4)
+            ->clip(1.4)
+            ->toDisk('local')
+            ->save('tail-%d.jpg');
+
+        $this->assertCount(4, $frames->files());
         $this->assertLectureIsUnchanged();
     }
 

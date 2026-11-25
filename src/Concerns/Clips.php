@@ -10,7 +10,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 trait Clips
 {
     /**
-     * Clip the output to the given start and either a duration or an end.
+     * Clip the output to the given start and a duration or an end, or to the end of the media.
      */
     public function clip(
         float|string $start,
