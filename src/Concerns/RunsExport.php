@@ -63,6 +63,18 @@ trait RunsExport
     }
 
     /**
+     * Interrupt the execution with the given signal, so it fails at its next check.
+     *
+     * Terminating also stops the running process and deletes the workspace before returning.
+     *
+     * @internal
+     */
+    public function interrupt(int $signal, bool $terminate = false): void
+    {
+        $this->export->interrupt($signal, $terminate);
+    }
+
+    /**
      * Register a callback that receives the progress of the execution.
      */
     public function onProgress(callable $callback): static

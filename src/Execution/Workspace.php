@@ -55,6 +55,8 @@ class Workspace
         if (! @mkdir($this->path, 0700)) {
             throw MediaException::staging('Cannot create the media workspace.', 'filesystem');
         }
+
+        $this->runner->useWorkspace($this);
     }
 
     /**
@@ -139,7 +141,11 @@ class Workspace
      */
     public function delete(): void
     {
-        if (! (new Filesystem)->deleteDirectory($this->path)) {
+        // A terminated operation deletes its workspace before it unwinds, so we will treat
+        // a directory that is already gone as removed and only fail when it remains.
+        (new Filesystem)->deleteDirectory($this->path);
+
+        if (is_dir($this->path)) {
             throw MediaException::cleanup('Cannot remove the media workspace.', 'filesystem');
         }
     }

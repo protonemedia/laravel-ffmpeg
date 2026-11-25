@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Queue;
 
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\Interruptible;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
@@ -14,15 +15,17 @@ use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\DashExportResult;
 use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\HlsExportResult;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
 use ProtoneMedia\LaravelFFMpeg\Result;
 use RuntimeException;
 
 /**
  * The queued job that runs an export, a parallel HLS part, or the merge of those parts.
  */
-class ExportJob implements ShouldBeEncrypted, ShouldQueue
+class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
 {
     use Batchable;
     use InteractsWithQueue;
@@ -55,6 +58,16 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
     public $failOnTimeout = true;
 
     /**
+     * The export the job is running.
+     */
+    protected ?Exportable $export = null;
+
+    /**
+     * The signal that interrupted the job.
+     */
+    protected ?int $interruptedBy = null;
+
+    /**
      * Create a new job instance.
      */
     public function __construct(
@@ -83,15 +96,7 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
             return;
         }
 
-        if ($this->plan instanceof ExportPlan) {
-            $export = $this->plan->restore();
-
-            $export->cancelWhen(fn () => $this->batch()?->cancelled() ?? false);
-
-            $result = $export->save($this->path);
-        } else {
-            $result = $this->mergeParts();
-        }
+        $result = $this->plan instanceof ExportPlan ? $this->runExport() : $this->mergeParts();
 
         // A part stores its playback inventory privately for the finalizer to merge. Only
         // the finalizer reports the completed export, so a part returns without an event.
@@ -103,6 +108,43 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
 
         if (config('laravel-ffmpeg.enable_events', true)) {
             $this->dispatchCompletedEvent($result);
+        }
+    }
+
+    /**
+     * Handle a signal received by the queue worker.
+     */
+    public function interrupted(int $signal): void
+    {
+        $this->interruptedBy ??= $signal;
+
+        // A worker that times out kills itself as soon as this method returns, so we will
+        // stop FFmpeg and delete the workspace right away. After any other signal the job
+        // keeps running, so the export fails at its next check and cleans up after itself.
+        $this->export?->interrupt($signal, terminate: $signal === SIGALRM);
+    }
+
+    /**
+     * Restore the planned export and run it.
+     */
+    protected function runExport(): Result
+    {
+        $export = $this->plan->restore();
+
+        $export->cancelWhen(fn () => $this->batch()?->cancelled() ?? false);
+
+        $this->export = $export;
+
+        // The worker may have been interrupted while the export was being restored, so we
+        // will pass the signal on. Any later signal reaches the export directly.
+        if ($this->interruptedBy !== null) {
+            $export->interrupt($this->interruptedBy);
+        }
+
+        try {
+            return $export->save($this->path);
+        } finally {
+            $this->export = null;
         }
     }
 
@@ -138,7 +180,22 @@ class ExportJob implements ShouldBeEncrypted, ShouldQueue
             throw new ExportCancelled('The HLS conversion batch did not complete successfully.');
         }
 
+        $this->ensureNotInterrupted();
+
         return new PendingHlsMerge($presentations)->toDisk($this->manifestDisk)->save($this->path);
+    }
+
+    /**
+     * Ensure the queue worker has not interrupted the job.
+     */
+    protected function ensureNotInterrupted(): void
+    {
+        if ($this->interruptedBy !== null) {
+            throw MediaException::publication(
+                "The media operation was interrupted by signal [{$this->interruptedBy}].",
+                'interrupted',
+            );
+        }
     }
 
     /**

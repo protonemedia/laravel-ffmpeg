@@ -115,7 +115,7 @@ sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
 
 The application may still fail after both commands succeed. You should then check permissions and write access to the temporary root and Storage destinations. After changing paths, rebuild the configuration cache and restart queue workers.
 
-Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause: a launch failure means the executable could not start, a version failure means an unsupported or mismatched pair, and an encoding failure means FFmpeg rejected the command or media. Categories name conditions, such as `metadata` for an unknown duration, `mapping` for a missing track, and `signal` for a process that another process or the operating system stopped, such as the out-of-memory killer.
+Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause: a launch failure means the executable could not start, a version failure means an unsupported or mismatched pair, and an encoding failure means FFmpeg rejected the command or media. Categories name conditions, such as `metadata` for an unknown duration, `mapping` for a missing track, `signal` for a process that another process or the operating system stopped, such as the out-of-memory killer, and `interrupted` for an export that a [queue worker stopped](#timeouts-and-retries) after a signal.
 
 > [!WARNING]
 > Raw commands and unredacted process exceptions may contain credentials, so never publish them in logs or error responses.
@@ -1495,7 +1495,19 @@ The job timeout defaults to the operation's `timeout`, or the configured FFmpeg 
 > [!WARNING]
 > Set the connection's `retry_after` or visibility timeout above the job timeout. Retries restart the conversion, and delivery is at-least-once, not exactly-once.
 
-A killed worker may leave a private workspace that retries do not reclaim, so prune stale workspaces without touching active jobs. For SQLite batch metadata with concurrent workers, enable WAL and a busy timeout and set `transaction_mode` to `'IMMEDIATE'`.
+A worker that receives `SIGTERM`, `SIGINT`, or `SIGQUIT` stops FFmpeg, deletes the workspace, and publishes no further files. The attempt then throws a `MediaException` with the `interrupted` category, so Laravel retries it while `tries` remain and fails it otherwise. A job that reaches its timeout stops FFmpeg and deletes the workspace in the same way before Laravel fails it.
+
+`SIGKILL` cannot be intercepted, so a killed worker leaves FFmpeg running and its private workspace behind, which retries do not reclaim. Prune stale workspaces without touching active jobs. Laravel's [Supervisor configuration](https://laravel.com/docs/queues#supervisor-configuration) sets `stopasgroup` and `killasgroup`, so both signals also reach FFmpeg. Its `stopwaitsecs` should cover the longest storage transfer of an export, since the worker stops between transfers and then cleans up:
+
+```ini
+[program:laravel-worker]
+command=php /var/www/html/artisan queue:work redis --queue=conversions
+stopasgroup=true
+killasgroup=true
+stopwaitsecs=60
+```
+
+For SQLite batch metadata with concurrent workers, enable WAL and a busy timeout and set `transaction_mode` to `'IMMEDIATE'`.
 
 <a name="job-chains-and-batches"></a>
 #### Job Chains and Batches

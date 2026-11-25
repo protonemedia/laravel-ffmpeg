@@ -90,6 +90,11 @@ class PendingExport implements Exportable
     protected ?Closure $cancellation = null;
 
     /**
+     * The signal that interrupted the execution.
+     */
+    protected ?int $interruptedBy = null;
+
+    /**
      * Indicates if output settings were configured on the export root.
      */
     protected bool $rootConfigured = false;
@@ -240,6 +245,20 @@ class PendingExport implements Exportable
         $this->cancellation = Closure::fromCallable($callback);
 
         return $this;
+    }
+
+    /**
+     * Interrupt the execution with the given signal, so it fails at its next check.
+     *
+     * Terminating also stops the running process and deletes the workspace before returning.
+     *
+     * @internal
+     */
+    public function interrupt(int $signal, bool $terminate = false): void
+    {
+        $this->interruptedBy ??= $signal;
+
+        $this->runner?->interrupt($signal, $terminate);
     }
 
     /**
@@ -511,6 +530,12 @@ class PendingExport implements Exportable
         try {
             $this->runner = new ProcessRunner($this->timeoutSeconds, $this->idleTimeoutSeconds);
 
+            // A queue worker may interrupt the export before this runner exists, so we will
+            // hand it the signal now. Any later signal reaches the runner directly.
+            if ($this->interruptedBy !== null) {
+                $this->runner->interrupt($this->interruptedBy);
+            }
+
             if (config('laravel-ffmpeg.enable_events', true)) {
                 Event::dispatch(new Events\ExportStarting($operationId, $destinations));
             }
@@ -669,6 +694,8 @@ class PendingExport implements Exportable
             progress: new ProgressParser(null, Progress::ANALYSIS, notify: $this->reportProgress),
         );
 
+        $this->ensureNotStoppedBySignal($process);
+
         if ($process->exitCode !== 0) {
             throw MediaException::analysis($failure, 'exit', $process->diagnostics);
         }
@@ -702,6 +729,8 @@ class PendingExport implements Exportable
                 progress: new ProgressParser($duration, $this->phase, $pass, $totalPasses, $this->reportProgress),
             );
 
+            $this->ensureNotStoppedBySignal($process);
+
             if ($process->exitCode !== 0) {
                 $category = Str::contains($process->diagnostics, [
                     'Streamcopy requested for output stream fed from a complex filtergraph',
@@ -722,6 +751,26 @@ class PendingExport implements Exportable
                 $this->ensurePassStatisticsExist($this->workspace, $outputs);
             }
         }
+    }
+
+    /**
+     * Ensure FFmpeg did not stop because it received a termination signal itself.
+     */
+    protected function ensureNotStoppedBySignal(ProcessResult $process): void
+    {
+        // FFmpeg exits with 255 after SIGINT or SIGTERM, such as when Supervisor stops the
+        // whole process group, and names the signal only below the warning level we use.
+        // Otherwise, only an EPERM error exits with 255, and FFmpeg reports that error.
+        if ($process->exitCode !== 255 || Str::contains($process->diagnostics, 'Operation not permitted')) {
+            return;
+        }
+
+        throw new MediaException(
+            'FFmpeg was interrupted by a signal.',
+            $this->phase,
+            'interrupted',
+            $process->diagnostics,
+        );
     }
 
     /**

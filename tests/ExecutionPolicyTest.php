@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\Events;
 use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
@@ -128,6 +129,24 @@ class ExecutionPolicyTest extends TestCase
             ->export()
             ->timeout(10)
             ->save('late.mp4');
+    }
+
+    #[TestWith(['', 'interrupted'])]
+    #[TestWith(['Guessed Channel Layout: stereo', 'interrupted'])]
+    #[TestWith(['Error opening output: Operation not permitted', 'exit'])]
+    public function test_ffmpeg_exiting_after_a_signal_reports_an_interruption(
+        string $diagnostics,
+        string $category,
+    ): void {
+        // FFmpeg exits with 255 after SIGTERM and names the signal only below the warning level.
+        $this->binaries('fwrite(STDERR, '.var_export($diagnostics, true).'); exit(255);');
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->save('stopped.mp4'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->diagnostics]
+                === ['encoding', $category, $diagnostics],
+        );
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     #[DataProvider('invalidDeadlineProvider')]

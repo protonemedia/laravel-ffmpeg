@@ -116,6 +116,20 @@ Event::listen(function (QueuedExportCompleted $event) {
 });
 ```
 
+## Stopping Workers
+
+A worker that receives `SIGTERM`, `SIGINT`, or `SIGQUIT` stops FFmpeg, deletes the workspace, and publishes no further files. The attempt throws a `MediaException` with the `interrupted` category, so Laravel retries it while `tries` remain and fails it otherwise. A job that reaches its timeout stops FFmpeg and deletes the workspace in the same way before Laravel fails it.
+
+`SIGKILL` cannot be intercepted, so FFmpeg keeps running and its workspace stays behind. Configure Supervisor with `stopasgroup=true` and `killasgroup=true`, as Laravel's queue documentation does, so both signals also reach FFmpeg. Give `stopwaitsecs` enough time for the worker to finish its current storage transfer and clean up:
+
+```ini
+[program:laravel-worker]
+command=php /var/www/html/artisan queue:work redis --queue=media
+stopasgroup=true
+killasgroup=true
+stopwaitsecs=60
+```
+
 ## Job Chains and Batches
 
 The `job` method builds the job without dispatching it, for use in `Bus::chain()` and `Bus::batch()`:
@@ -157,4 +171,4 @@ $result->files()
     ->each(fn (GeneratedFile $file) => $file->delete());
 ```
 
-Temporary workspaces are removed after every operation, including failures, so the package needs no cleanup command.
+Temporary workspaces are removed after every operation, including failures, interrupted workers, and timeouts. Only a worker killed with `SIGKILL` leaves its workspace behind.

@@ -80,7 +80,9 @@ trait PublishesArtifacts
      */
     protected function reportFailure(Throwable $throwable, string $operationId, array $destinations): Throwable
     {
-        if ($throwable instanceof MediaException && $throwable->category === 'timeout' && $this->published !== []) {
+        if ($throwable instanceof MediaException
+            && in_array($throwable->category, ['timeout', 'interrupted'], true)
+            && $this->published !== []) {
             $throwable = new MediaException($throwable->getMessage(), $throwable->phase, $throwable->category,
                 $throwable->diagnostics, published: $this->published);
         }
