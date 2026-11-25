@@ -2,7 +2,7 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](LICENSE.md)
-[![Tests](https://github.com/protonemedia/laravel-ffmpeg/actions/workflows/run-tests.yml/badge.svg?branch=9.x&event=push)](https://github.com/protonemedia/laravel-ffmpeg/actions/workflows/run-tests.yml?query=branch%3A9.x)
+[![Tests](https://github.com/protonemedia/laravel-ffmpeg/actions/workflows/run-tests.yml/badge.svg?branch=main&event=push)](https://github.com/protonemedia/laravel-ffmpeg/actions/workflows/run-tests.yml?query=branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/pbmedia/laravel-ffmpeg.svg?style=flat-square)](https://packagist.org/packages/pbmedia/laravel-ffmpeg)
 
 Laravel FFmpeg provides a fluent API for encoding video, processing audio, and publishing adaptive streams. It is built on Laravel's Process, Storage, Http, and Queue features, so it works with your existing disks and queue connections:
@@ -21,7 +21,7 @@ $result = FFMpeg::open('lessons/original.mp4')
 You may run an export immediately or [dispatch it to a queue](#queue-conversions), and each completed export lists its generated files, including playlists, segments, and keys.
 
 > [!IMPORTANT]
-> Version 9 is in development; these examples follow the `9.x` branch, not a published release. It replaces PHP-FFMpeg and removes its format and filter objects, so consult the [upgrade guide](UPGRADE.md) when upgrading.
+> Version 9 replaces PHP-FFMpeg and removes its format and filter objects, so consult the [upgrade guide](UPGRADE.md) when upgrading from version 8. The version 8 documentation lives on the [8.x branch](https://github.com/protonemedia/laravel-ffmpeg/tree/8.x).
 
 - [Getting Started](#getting-started)
     - [Installation](#installation)
@@ -65,10 +65,10 @@ You may run an export immediately or [dispatch it to a queue](#queue-conversions
 <a name="installation"></a>
 ### Installation
 
-Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.44.1 or later, and matching FFmpeg and FFprobe binaries of release 9.0 or later; setup and CI use 9.0.2. You may install the development branch using Composer:
+Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.44.1 or later, and matching FFmpeg and FFprobe binaries of release 9.0 or later; setup and CI use 9.0.2. You may install the package using Composer:
 
 ```bash
-composer require pbmedia/laravel-ffmpeg:9.x-dev
+composer require pbmedia/laravel-ffmpeg
 ```
 
 Laravel discovers the service provider and facade automatically. To edit watermark images, you should also install [Intervention Image](https://image.intervention.io), which powers [Laravel's image manipulation](https://laravel.com/docs/13.x/images):

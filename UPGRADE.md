@@ -5,9 +5,6 @@
 <a name="upgrade-9.0"></a>
 ## Upgrading To 9.0 From 8.x
 
-> [!WARNING]
-> This guide describes the `9.x` development branch, not a published release.
-
 Version 9 replaces PHP-FFMpeg with Laravel's Process, Storage, and Http components. The old builders, format objects, driver forwarding, and filter factories have been removed. This is a breaking upgrade, not a compatibility layer, so you should review each section below that applies to your application.
 
 #### High Impact Changes
@@ -48,11 +45,11 @@ Version 9 requires PHP 8.4 or later and Laravel 13.44.1 or later. You should upd
 
 - `php` to `^8.4`
 - `laravel/framework` to `^13.44.1`
-- `pbmedia/laravel-ffmpeg` to `9.x-dev`
+- `pbmedia/laravel-ffmpeg` to `^9.0`
 - `intervention/image` to `^4.2`, which replaces `spatie/image` for [watermark](#watermarks) image edits
 
 ```shell
-composer require pbmedia/laravel-ffmpeg:9.x-dev intervention/image:^4.2
+composer require pbmedia/laravel-ffmpeg:^9.0 intervention/image:^4.2
 ```
 
 Version 8 edited watermark images with `spatie/image`, which your application installed itself. You may remove it when only watermark edits used it:

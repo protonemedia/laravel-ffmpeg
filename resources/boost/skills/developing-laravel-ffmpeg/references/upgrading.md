@@ -7,7 +7,7 @@ Version 9 replaces PHP-FFMpeg with its own builders, so each v8 call below maps 
 Version 9 requires PHP ^8.4, `laravel/framework` ^13.44.1, and matching FFmpeg and FFprobe binaries of release 9.0 or later:
 
 ```bash
-composer require pbmedia/laravel-ffmpeg:9.x-dev
+composer require pbmedia/laravel-ffmpeg:^9.0
 ```
 
 Version 9 no longer depends on `php-ffmpeg/php-ffmpeg`, so Composer removes it. Delete every import from the `FFMpeg\` namespace, such as `FFMpeg\Format\Video\X264` and `FFMpeg\Coordinate\TimeCode`, and every import of a removed v8 class, such as `ProtoneMedia\LaravelFFMpeg\Filters\WatermarkFactory`, `Filters\TileFactory`, `Exporters\HLSExporter`, `Exporters\EncodingException`, and `Filesystem\Media`. The `ProtoneMedia\LaravelFFMpeg\Support\FFMpeg` facade keeps its name.
