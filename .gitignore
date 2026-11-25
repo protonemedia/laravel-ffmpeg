@@ -1,8 +1,12 @@
 build
 composer.lock
+phpstan.neon
 docs
+!docs/
+docs/*
+!docs/integrations.md
 vendor
 .phpunit.result.cache
-src/EncryptedHLSExporter.php
 .DS_Store
 ffmpeg-passes*
+.amp/portals/*
