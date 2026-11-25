@@ -1830,6 +1830,42 @@ class ExportTest extends TestCase
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
+    #[TestWith(['out.mp4'])]
+    #[TestWith(['nested/out.mp4'])]
+    public function test_unwritable_local_destinations_fail_before_encoding(string $path): void
+    {
+        $this->fakePipeline();
+        mkdir($this->root.'/read-only', 0555);
+        config(['filesystems.disks.read-only' => ['driver' => 'local', 'root' => $this->root.'/read-only']]);
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->toDisk('read-only')->save($path),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->destination]
+                === ['staging', 'permission', ['disk' => 'read-only', 'path' => $path]],
+        );
+
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_local_permission_failures_during_publication_report_the_permission_category(): void
+    {
+        mkdir($this->root.'/revoked', 0755);
+        config(['filesystems.disks.revoked' => ['driver' => 'local', 'root' => $this->root.'/revoked']]);
+        $this->fakePipeline(function (PendingProcess $process) {
+            file_put_contents(end($process->command), 'encoded media');
+            chmod($this->root.'/revoked', 0555);
+
+            return Process::result();
+        });
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->toDisk('revoked')->save('out.mp4'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category]
+                === ['publication', 'permission'],
+        );
+    }
+
     public function test_incomplete_publication_identifies_the_object_already_written(): void
     {
         $this->fakePipeline();

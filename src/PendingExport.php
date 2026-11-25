@@ -515,6 +515,10 @@ class PendingExport implements Exportable
 
             ($this->reportProgress)(new Progress($this->phase));
 
+            if (! $contents) {
+                $this->ensureLocalDestinationsAreWritable($outputs);
+            }
+
             $result = $this->media->withInput(
                 fn (string $input, Workspace $workspace): string|ExportResult => $this->exportInWorkspace(
                     $workspace,
