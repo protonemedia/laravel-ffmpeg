@@ -113,6 +113,8 @@ sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffmpeg -version
 sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
 ```
 
+You may skip this release check, such as to run a development snapshot, by setting `FFMPEG_VERIFY_VERSION` or the `verify_version` option to `false`. The package only supports the releases the check accepts, and an executable that cannot start still fails with the `launch` category.
+
 The application may still fail after both commands succeed. You should then check permissions and write access to the temporary root and Storage destinations. After changing paths, rebuild the configuration cache and restart queue workers.
 
 Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause. Categories name conditions, such as `launch` for an executable that cannot be found, run, or load its shared libraries, `version` for an unsupported or mismatched pair, `input` for media that FFprobe or FFmpeg cannot read, `encoder` for an encoder the FFmpeg build lacks, `dimensions` for odd frame sizes, `duration` for a frame time or clip start past the end of the media, `permission` for a local destination the process may not write, `metadata` for an unknown duration, `mapping` for a missing track, `signal` for a process that another process or the operating system stopped, such as the out-of-memory killer, and `interrupted` for an export that a [queue worker stopped](#timeouts-and-retries) after a signal. Other process failures have the `exit` category.

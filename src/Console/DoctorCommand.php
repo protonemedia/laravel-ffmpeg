@@ -121,6 +121,10 @@ class DoctorCommand extends Command
         // we make that limit explicit instead of letting the report imply otherwise.
         $this->components->warn('Compiled-in support only. GPU/device usability is NOT tested.');
 
+        if (! config('laravel-ffmpeg.verify_version', true)) {
+            $this->components->warn('Version check disabled. FFmpeg and FFprobe releases are NOT verified.');
+        }
+
         $this->displayRetryAfterWarning();
 
         if ($missing !== []) {

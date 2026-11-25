@@ -37,6 +37,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Version Check
+    |--------------------------------------------------------------------------
+    |
+    | Before using the binaries, the package verifies that both report the
+    | same release, 9.0 or later. Setting this option to false skips that
+    | check, so older builds and development snapshots will run, but the
+    | package only supports the releases that this check would accept.
+    |
+    */
+
+    'verify_version' => env('FFMPEG_VERIFY_VERSION', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Process Timeout
     |--------------------------------------------------------------------------
     |

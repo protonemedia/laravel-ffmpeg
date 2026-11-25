@@ -73,7 +73,7 @@ trait StagesInputs
     {
         $runner = $workspace->runner;
 
-        $runner->pairVersion(
+        $runner->pairVersions(
             config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg'),
             config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe'),
             $workspace->path,

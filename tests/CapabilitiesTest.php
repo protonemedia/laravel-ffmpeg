@@ -204,11 +204,30 @@ class CapabilitiesTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    #[TestWith(['8.0.2', 'N-120345-g1a2b3c4d5e', ['ffmpeg' => '8.0.2', 'ffprobe' => 'N-120345-g1a2b3c4d5e']])]
+    #[TestWith(['9.0.2-1ubuntu1', '/private/build/ffprobe', ['ffmpeg' => '9.0.2', 'ffprobe' => 'unknown']])]
+    public function test_the_version_check_may_be_disabled(string $version, string $probeVersion, array $versions): void
+    {
+        config(['laravel-ffmpeg.verify_version' => false]);
+
+        $this->fakeCapabilities(version: $version, probeVersion: $probeVersion);
+
+        $this->assertSame($versions, (new Capabilities)->versions());
+        $this->assertSame(0, Artisan::call('ffmpeg:doctor'));
+        $this->assertStringContainsString('Version check disabled', Artisan::output());
+    }
+
     #[TestWith(['missing', 'The configured FFmpeg binary cannot be found.'])]
+    #[TestWith(['missing', 'The configured FFmpeg binary cannot be found.', false])]
     #[TestWith(['not-executable', 'The configured FFmpeg binary is not executable.'])]
     #[TestWith(['without-library', 'The configured FFmpeg binary cannot load the shared library [libavdevice.so.62].'])]
-    public function test_binaries_that_cannot_start_report_the_launch_category(string $binary, string $message): void
-    {
+    public function test_binaries_that_cannot_start_report_the_launch_category(
+        string $binary,
+        string $message,
+        bool $verifyVersion = true,
+    ): void {
+        config(['laravel-ffmpeg.verify_version' => $verifyVersion]);
+
         file_put_contents("{$this->root}/not-executable", "#!/bin/sh\n");
         chmod("{$this->root}/not-executable", 0600);
 

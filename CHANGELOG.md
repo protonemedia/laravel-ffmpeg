@@ -6,6 +6,7 @@ All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
 * Replace PHP-FFMpeg with Laravel's Process, Storage, and Http components, and remove format objects, driver forwarding, and filter factories
 * Require PHP 8.4, Laravel 13.44.1, and FFmpeg and FFprobe 9.0 or later
+* Add the `verify_version` option to skip the FFmpeg and FFprobe release check
 * Add dedicated builders for HLS, DASH, frames, storyboards, waveforms, GIFs, speed changes, concatenation, and audio mixing
 * Add protected HLS playback through signed `Support\Hls` routes
 * Add native queued exports, including parallel HLS batches

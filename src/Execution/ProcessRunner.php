@@ -155,7 +155,7 @@ class ProcessRunner
     }
 
     /**
-     * Get the release of the given binary, which must be the minimum release or later.
+     * Get the release of the given binary, which must be the minimum release or later unless the check is disabled.
      */
     public function version(string $binary, string $tool, string $directory, string $phase = 'probing'): string
     {
@@ -164,6 +164,13 @@ class ProcessRunner
         $this->ensureBinaryStarted($result, $tool);
 
         $release = $this->reportedRelease($tool, $result);
+
+        // An application may disable the check to run an older build or a development
+        // snapshot. We still report whatever version the binary prints, since doctor
+        // displays it, but no longer refuse a binary because of the version alone.
+        if (! config('laravel-ffmpeg.verify_version', true)) {
+            return $release ?? $this->reportedVersion($tool, $result) ?? 'unknown';
+        }
 
         if ($release === null || version_compare($release, self::MINIMUM_RELEASE, '<')) {
             throw new MediaException($this->unsupportedVersionMessage($tool, $result), $phase, 'version');
@@ -233,20 +240,34 @@ class ProcessRunner
     {
         $requirement = $this->toolName($tool).' '.self::MINIMUM_RELEASE.' or later is required';
 
-        if ($result->exitCode !== 0) {
+        $version = $this->reportedVersion($tool, $result);
+
+        if ($version === null) {
             return "{$requirement}.";
+        }
+
+        return "{$requirement}, but the configured binary reports version [{$version}].";
+    }
+
+    /**
+     * Get the version that the version output of the given tool reports, if it looks like one.
+     */
+    protected function reportedVersion(string $tool, ProcessResult $result): ?string
+    {
+        if ($result->exitCode !== 0) {
+            return null;
         }
 
         // The version output also lists the build configuration, which may contain
-        // paths, so we only quote a release that looks like a version number and
-        // leave the remaining output out of the message entirely.
+        // paths, so we only keep a version that looks like a version number and
+        // leave the remaining output out of the messages and reports entirely.
         $pattern = '/^'.preg_quote($tool, '/').' version ([\w.+~-]{1,64})(?:\s|$)/';
 
         if (! preg_match($pattern, $result->output, $matches)) {
-            return "{$requirement}.";
+            return null;
         }
 
-        return "{$requirement}, but the configured binary reports version [{$matches[1]}].";
+        return $matches[1];
     }
 
     /**
@@ -258,21 +279,23 @@ class ProcessRunner
     }
 
     /**
-     * Get the shared release of a matching FFmpeg and FFprobe pair.
+     * Get the releases of the FFmpeg and FFprobe pair, which must match unless the check is disabled.
+     *
+     * @return array{ffmpeg: string, ffprobe: string}
      */
-    public function pairVersion(string $ffmpeg, string $ffprobe, string $directory): string
+    public function pairVersions(string $ffmpeg, string $ffprobe, string $directory): array
     {
         $version = $this->version($ffmpeg, 'ffmpeg', $directory);
         $probeVersion = $this->version($ffprobe, 'ffprobe', $directory);
 
-        if ($probeVersion !== $version) {
+        if (config('laravel-ffmpeg.verify_version', true) && $probeVersion !== $version) {
             throw MediaException::probing(
                 "FFmpeg [{$version}] and FFprobe [{$probeVersion}] must have matching release versions.",
                 'version',
             );
         }
 
-        return $version;
+        return ['ffmpeg' => $version, 'ffprobe' => $probeVersion];
     }
 
     /**

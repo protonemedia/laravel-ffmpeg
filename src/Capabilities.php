@@ -32,8 +32,7 @@ class Capabilities implements Arrayable, JsonSerializable
         try {
             $ffmpeg = config('laravel-ffmpeg.ffmpeg.binaries', 'ffmpeg');
             $ffprobe = config('laravel-ffmpeg.ffprobe.binaries', 'ffprobe');
-            $version = $workspace->runner->pairVersion($ffmpeg, $ffprobe, $workspace->path);
-            $data = ['versions' => ['ffmpeg' => $version, 'ffprobe' => $version]];
+            $data = ['versions' => $workspace->runner->pairVersions($ffmpeg, $ffprobe, $workspace->path)];
 
             foreach (['encoders', 'muxers', 'filters', 'bsfs', 'hwaccels'] as $kind) {
                 $output = $this->capture($workspace, $ffmpeg, "-{$kind}");
