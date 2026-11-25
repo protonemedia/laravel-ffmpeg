@@ -44,10 +44,10 @@ Version 9 replaces PHP-FFMpeg with Laravel's Process, Storage, and Http componen
 
 **Likelihood Of Impact: High**
 
-Version 9 requires PHP 8.4 or later and Laravel 13.20 or later. You should update the following dependencies in your application's `composer.json` file:
+Version 9 requires PHP 8.4 or later and Laravel 13.44.1 or later. You should update the following dependencies in your application's `composer.json` file:
 
 - `php` to `^8.4`
-- `laravel/framework` to `^13.20`
+- `laravel/framework` to `^13.44.1`
 - `pbmedia/laravel-ffmpeg` to `9.x-dev`
 
 ```shell
@@ -946,6 +946,6 @@ You should store uploads on durable named disks before dispatch. Workers need ma
 
 Hard worker kills cannot run PHP cleanup, so you should configure safe retention for stale private workspaces as well as published artifacts. A recovered retry does not clean an interrupted attempt's workspace.
 
-For independent HLS groups, `queued(parallel: true)` uses a Laravel batch and a final publication job. Shared rendition groups remain together. The versioned final master and borrowed-source ownership follow `mergeHls()`. You should persist the event's actual playback inventory rather than constructing a filename. Keep part artifacts and batch records until finalization finishes. Use a chain rather than nesting a parallel workflow inside another batch. See the [queue examples](README.md#queue-conversions) for retry, result, and retention details.
+For independent HLS groups, `queued(parallel: true)` uses a Laravel batch and a final publication job. Shared rendition groups remain together. The versioned final master follows `mergeHls()`, but the export owns the files of its parts. You should persist the event's actual playback inventory rather than constructing a filename. Keep part artifacts and batch records until finalization finishes. Use a chain rather than nesting a parallel workflow inside another batch. See the [queue examples](README.md#queue-conversions) for retry, result, and retention details.
 
 See the [README](README.md) for executable API examples.

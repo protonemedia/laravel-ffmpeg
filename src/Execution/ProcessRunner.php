@@ -66,6 +66,21 @@ class ProcessRunner
     protected ?Closure $tick = null;
 
     /**
+     * The process that is running.
+     */
+    protected ?InvokedProcess $process = null;
+
+    /**
+     * The workspace of the operation, deleted when the operation is terminated.
+     */
+    protected ?Workspace $workspace = null;
+
+    /**
+     * The signal that interrupted the operation.
+     */
+    protected ?int $interruptedBy = null;
+
+    /**
      * Create a new process runner instance.
      */
     public function __construct(
@@ -82,14 +97,55 @@ class ProcessRunner
     }
 
     /**
-     * Ensure the operation has not exceeded its time budget.
+     * Ensure the operation has not been interrupted or exceeded its time budget.
      *
      * The budget is shared by staging, probing, analysis and encoding.
      */
     public function check(string $phase): void
     {
+        if ($this->interruptedBy !== null) {
+            throw new MediaException(
+                "The media operation was interrupted by signal [{$this->interruptedBy}].",
+                $phase,
+                'interrupted',
+            );
+        }
+
         if ($this->timeout !== null && (hrtime(true) - $this->startedAt) / 1e9 >= $this->timeout) {
             throw new MediaException('The media operation timed out.', $phase, 'timeout');
+        }
+    }
+
+    /**
+     * Set the workspace that is deleted when the operation is terminated.
+     */
+    public function useWorkspace(Workspace $workspace): void
+    {
+        $this->workspace = $workspace;
+    }
+
+    /**
+     * Interrupt the operation with the given signal, so it fails at its next check.
+     *
+     * Terminating also stops the running process and deletes the workspace before returning.
+     */
+    public function interrupt(int $signal, bool $terminate = false): void
+    {
+        $this->interruptedBy ??= $signal;
+
+        if (! $terminate) {
+            return;
+        }
+
+        // A queue worker that times out kills itself as soon as the job returns from
+        // its signal handler, so the operation never unwinds. We will stop the child
+        // and delete the workspace here, which its own cleanup may safely repeat.
+        try {
+            if ($this->process instanceof InvokedProcess) {
+                $this->stopProcess($this->process, null);
+            }
+        } finally {
+            $this->workspace?->delete();
         }
     }
 
@@ -177,6 +233,7 @@ class ProcessRunner
             $this->check($phase);
 
             $process = $this->startProcess($command, $directory, $outputLimit, $progress);
+            $this->process = $process;
 
             $this->supervise($process, $phase);
 
@@ -257,6 +314,7 @@ class ProcessRunner
     {
         $this->capture = null;
         $this->applicationFailure = null;
+        $this->process = null;
         $this->processStartedAt = null;
         $this->processTimeout = null;
         $this->progress = null;

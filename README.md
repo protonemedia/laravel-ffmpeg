@@ -65,7 +65,7 @@ You may run an export immediately or [dispatch it to a queue](#queue-conversions
 <a name="installation"></a>
 ### Installation
 
-Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.20 or later, and matching FFmpeg and FFprobe 9.0.x binaries; setup and CI use 9.0.2. You may install the development branch using Composer:
+Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.44.1 or later, and matching FFmpeg and FFprobe 9.0.x binaries; setup and CI use 9.0.2. You may install the development branch using Composer:
 
 ```bash
 composer require pbmedia/laravel-ffmpeg:9.x-dev
@@ -115,7 +115,7 @@ sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
 
 The application may still fail after both commands succeed. You should then check permissions and write access to the temporary root and Storage destinations. After changing paths, rebuild the configuration cache and restart queue workers.
 
-Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause: a launch failure means the executable could not start, a version failure means an unsupported or mismatched pair, and an encoding failure means FFmpeg rejected the command or media. Categories name conditions, such as `input` for media that FFprobe or FFmpeg cannot read, `encoder` for an encoder the FFmpeg build lacks, `dimensions` for odd frame sizes, `duration` for a frame time or clip start past the end of the media, `permission` for a local destination the process may not write, `metadata` for an unknown duration, `mapping` for a missing track, and `signal` for a process that another process or the operating system stopped, such as the out-of-memory killer. Other process failures have the `exit` category.
+Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause: a launch failure means the executable could not start, a version failure means an unsupported or mismatched pair, and an encoding failure means FFmpeg rejected the command or media. Categories name conditions, such as `input` for media that FFprobe or FFmpeg cannot read, `encoder` for an encoder the FFmpeg build lacks, `dimensions` for odd frame sizes, `duration` for a frame time or clip start past the end of the media, `permission` for a local destination the process may not write, `metadata` for an unknown duration, `mapping` for a missing track, `signal` for a process that another process or the operating system stopped, such as the out-of-memory killer, and `interrupted` for an export that a [queue worker stopped](#timeouts-and-retries) after a signal. Other process failures have the `exit` category.
 
 > [!WARNING]
 > Raw commands and unredacted process exceptions may contain credentials, so never publish them in logs or error responses.
@@ -1571,9 +1571,21 @@ Inputs and destinations must use named disks that every worker can read, so stor
 The job timeout defaults to the operation's `timeout`, or the configured FFmpeg timeout, plus 30 seconds, and is zero when neither is set. The `queue` configuration holds defaults that the `queued` arguments override, and `configureJob` runs last. Deadlines start in the worker, not while the job waits.
 
 > [!WARNING]
-> Set the connection's `retry_after` or visibility timeout above the job timeout. Retries restart the conversion, and delivery is at-least-once, not exactly-once.
+> Set the connection's `retry_after` or visibility timeout above the job timeout, which is 3630 seconds by default, while Laravel's connections default `retry_after` to 90 seconds. Otherwise, a second worker starts the same export while the first one still runs. The `ffmpeg:doctor` command warns about a `retry_after` that does not exceed the job timeout. Retries restart the conversion, and delivery is at-least-once, not exactly-once.
 
-A killed worker may leave a private workspace that retries do not reclaim, so prune stale workspaces without touching active jobs. For SQLite batch metadata with concurrent workers, enable WAL and a busy timeout and set `transaction_mode` to `'IMMEDIATE'`.
+A worker that receives `SIGTERM`, `SIGINT`, or `SIGQUIT` stops FFmpeg, deletes the workspace, and publishes no further files. The attempt then throws a `MediaException` with the `interrupted` category, so Laravel retries it while `tries` remain and fails it otherwise. A job that reaches its timeout stops FFmpeg and deletes the workspace in the same way before Laravel fails it.
+
+`SIGKILL` cannot be intercepted, so a killed worker leaves FFmpeg running and its private workspace behind, which retries do not reclaim. Prune stale workspaces without touching active jobs. Laravel's [Supervisor configuration](https://laravel.com/docs/queues#supervisor-configuration) sets `stopasgroup` and `killasgroup`, so both signals also reach FFmpeg. Its `stopwaitsecs` should cover the longest storage transfer of an export, since the worker stops between transfers and then cleans up:
+
+```ini
+[program:laravel-worker]
+command=php /var/www/html/artisan queue:work redis --queue=conversions
+stopasgroup=true
+killasgroup=true
+stopwaitsecs=60
+```
+
+For SQLite batch metadata with concurrent workers, enable WAL and a busy timeout and set `transaction_mode` to `'IMMEDIATE'`.
 
 <a name="job-chains-and-batches"></a>
 #### Job Chains and Batches
@@ -1597,7 +1609,7 @@ Bus::chain([$job, new \App\Jobs\NotifyLessonReady($lessonId)])
     ->dispatch();
 ```
 
-Batch cancellation skips pending work and stops running encoders at the next progress check, but cannot roll back published files.
+Batch cancellation skips pending work and stops running encoders at the next progress check without failing their jobs, as Laravel does for skipped jobs, but cannot roll back published files.
 
 <a name="run-independent-hls-conversions-in-parallel"></a>
 #### Running HLS Conversions in Parallel
@@ -1621,7 +1633,28 @@ FFMpeg::disk('uploads')
     ->save('lessons/master.m3u8');
 ```
 
-Each independent variant group runs as a job in a Laravel batch, which requires the batch repository, while variants that share audio or subtitle groups stay together. Parts are published as live media under `laravel-ffmpeg/queued/{exportId}/parts/`, then a finalizer publishes a versioned master such as `lessons/master.<version>.m3u8`, so read its path from the completion event. A failed part blocks the master and downstream jobs, while completed parts remain until you clean them up.
+Each independent variant group runs as a job in a Laravel batch, which requires the batch repository, while variants that share audio or subtitle groups stay together. Parts are published as live media under `laravel-ffmpeg/queued/{exportId}/parts/`, then a finalizer publishes a versioned master such as `lessons/master.<version>.m3u8`, so read its path from the completion event. The export owns the files of its parts, including their keys, so deleting every owned file in the completion event removes the whole export. The finalizer removes the private masters and inventories of the parts itself.
+
+A failed part blocks the master and downstream jobs, while completed parts remain until you clean them up. Once every part has run, or once the finalizer fails, the package dispatches an `ExportFailed` event whose `operationId` is the export ID and whose `published` property lists every file that the completed parts published, including their keys and private inventories:
+
+```php
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
+use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
+
+Event::listen(ExportFailed::class, function (ExportFailed $event) {
+    // Other failed exports report their own operation ID, so only stored export IDs match.
+    $conversion = \App\Models\Conversion::firstWhere('export_id', $event->operationId);
+
+    if ($conversion === null) {
+        return;
+    }
+
+    foreach ($event->published as $file) {
+        Storage::disk($file['disk'])->delete($file['path']);
+    }
+});
+```
 
 Parallel exports do not support custom playlist callbacks, complex graphs, or unreferenced alternate groups. Compose them with `Bus::chain()` rather than inside another batch, and keep batch records until finalization finishes.
 
@@ -1643,7 +1676,7 @@ Event::listen(QueuedExportCompleted::class, function ($event) {
 });
 ```
 
-Listeners must tolerate duplicate delivery. Parallel parts are borrowed by the final master, like `mergeHls` sources, so keep their inventories for cleanup. See the [application integration recipes](docs/integrations.md) for versioned profiles, durable inventories, and media-library integration.
+Listeners must tolerate duplicate delivery and should keep the inventories for cleanup. The final master of a parallel export owns the files of its parts, while a `mergeHls` composition borrows its sources. See the [application integration recipes](docs/integrations.md) for versioned profiles, durable inventories, and media-library integration.
 
 <a name="deployment-and-development"></a>
 ## Deployment and Development

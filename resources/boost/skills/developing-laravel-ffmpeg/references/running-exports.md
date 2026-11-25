@@ -101,7 +101,9 @@ $pending->save('videos/intro.mp4')
     ->afterCommit();
 ```
 
-Queued inputs and destinations must be named disks that every worker can read, so store uploads on a disk before queueing them. Callbacks such as `onProgress` must be static closures that capture only scalars or arrays. Set the queue connection's `retry_after` above the job timeout, because a retry restarts the conversion.
+Queued inputs and destinations must be named disks that every worker can read, so store uploads on a disk before queueing them. Callbacks such as `onProgress` must be static closures that capture only scalars or arrays.
+
+The job timeout is the export's timeout plus 30 seconds, which is 3630 seconds by default. Set the queue connection's `retry_after` above it, because Laravel's connections default to 90 seconds and then hand a running export to a second worker, which encodes it again or fails the job with a `MaxAttemptsExceededException`. The `ffmpeg:doctor` command warns about a `retry_after` that does not exceed the job timeout.
 
 The `QueuedExportCompleted` event carries the `exportId` and the published `files` as arrays, plus a `playback` inventory for HLS. Listeners receive every queued export, including duplicate deliveries, so update by the stored ID instead of throwing when no record matches. A listener exception fails the job after its files were published:
 
@@ -114,6 +116,20 @@ Event::listen(function (QueuedExportCompleted $event) {
     Video::where('export_id', $event->exportId)
         ->update(['files' => $event->files, 'status' => 'ready']);
 });
+```
+
+## Stopping Workers
+
+A worker that receives `SIGTERM`, `SIGINT`, or `SIGQUIT` stops FFmpeg, deletes the workspace, and publishes no further files. The attempt throws a `MediaException` with the `interrupted` category, so Laravel retries it while `tries` remain and fails it otherwise. A job that reaches its timeout stops FFmpeg and deletes the workspace in the same way before Laravel fails it.
+
+`SIGKILL` cannot be intercepted, so FFmpeg keeps running and its workspace stays behind. Configure Supervisor with `stopasgroup=true` and `killasgroup=true`, as Laravel's queue documentation does, so both signals also reach FFmpeg. Give `stopwaitsecs` enough time for the worker to finish its current storage transfer and clean up:
+
+```ini
+[program:laravel-worker]
+command=php /var/www/html/artisan queue:work redis --queue=media
+stopasgroup=true
+killasgroup=true
+stopwaitsecs=60
 ```
 
 ## Job Chains and Batches
@@ -142,7 +158,27 @@ Bus::chain([$job, new NotifyVideoReady($video->id)])
     ->dispatch();
 ```
 
-An HLS export queued with `queued(parallel: true)` encodes independent variants on separate workers in a Laravel batch, so it needs the batch table. The finalizer publishes a versioned master playlist, so read its path from the `QueuedExportCompleted` event instead of the path you passed to `save`.
+An HLS export queued with `queued(parallel: true)` encodes independent variants on separate workers in a Laravel batch, so it needs the batch table. The finalizer publishes a versioned master playlist, so read its path from the `QueuedExportCompleted` event instead of the path you passed to `save`. The export owns the files of its parts, including their keys, so deleting the owned files of that event removes the whole export.
+
+A failed part cancels the batch, so no master is published. Once every part has run, the package dispatches an `ExportFailed` event whose `operationId` is the export ID and whose `published` property lists every file the completed parts published, so you may delete them:
+
+```php
+use App\Models\Video;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
+use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
+
+Event::listen(function (ExportFailed $event) {
+    // Other failed exports report their own operation ID, so only stored export IDs match.
+    if (! Video::where('export_id', $event->operationId)->exists()) {
+        return;
+    }
+
+    foreach ($event->published as $file) {
+        Storage::disk($file['disk'])->delete($file['path']);
+    }
+});
+```
 
 ## Deleting Outputs
 
@@ -157,4 +193,6 @@ $result->files()
     ->each(fn (GeneratedFile $file) => $file->delete());
 ```
 
-Temporary workspaces are removed after every operation, including failures, so the package needs no cleanup command.
+The `files` of a `QueuedExportCompleted` event carry the same `owned` flag, so you may delete each owned file of a queued export with `Storage::disk($file['disk'])->delete($file['path'])`.
+
+Temporary workspaces are removed after every operation, including failures, interrupted workers, and timeouts. Only a worker killed with `SIGKILL` leaves its workspace behind.

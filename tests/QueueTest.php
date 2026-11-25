@@ -6,6 +6,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Worker;
 use Illuminate\Queue\WorkerOptions;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -15,11 +16,14 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Orchestra\Testbench\Attributes\RequiresEnv;
 use PHPUnit\Framework\Attributes\TestWith;
+use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
 use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
+use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 use ProtoneMedia\LaravelFFMpeg\Watermark;
+use ReflectionMethod;
 use RuntimeException;
 
 #[RequiresEnv('FFMPEG_9_FFPROBE')]
@@ -28,6 +32,8 @@ class QueueTest extends TestCase
     protected array $completed = [];
 
     protected array $errors = [];
+
+    protected array $failures = [];
 
     protected function setUp(): void
     {
@@ -70,6 +76,9 @@ class QueueTest extends TestCase
         });
         Event::listen(JobExceptionOccurred::class, function ($event) {
             $this->errors[] = $event->exception;
+        });
+        Event::listen(ExportFailed::class, function ($event) {
+            $this->failures[$event->operationId] = $event;
         });
         $disk = Storage::disk('queued');
         $disk->makeDirectory('');
@@ -263,6 +272,60 @@ class QueueTest extends TestCase
         $this->assertNotNull(DB::table('job_batches')->sole()->cancelled_at);
     }
 
+    public function test_a_failed_parallel_export_reports_the_files_of_its_completed_parts(): void
+    {
+        $queued = $this->source()
+            ->hls(segmentDuration: 0.5)
+            ->video(bitrate: '100k', preset: 'ultrafast')
+            ->variant('small', fn ($v) => $v->resize(width: 48))
+            ->variant('broken', fn ($v) => $v->video('not_an_encoder'))
+            ->encrypt('queued', static fn ($key) => 'https://keys.invalid/'.$key)
+            ->queued(connection: 'database', queue: 'media', parallel: true);
+        $queued->save('failed/master.m3u8');
+        $this->work();
+        $this->work();
+        $this->work();
+
+        $this->assertCount(1, $this->errors);
+        $this->assertSame('encoding', $this->failures[$queued->id]->phase);
+        $this->assertContains('hls-keys', array_map(
+            fn (array $file): string => dirname($file['path']),
+            $this->failures[$queued->id]->published,
+        ));
+
+        foreach ($this->failures[$queued->id]->published as $file) {
+            Storage::disk($file['disk'])->delete($file['path']);
+        }
+
+        $this->assertSame(['source.mp4'], Storage::disk('queued')->allFiles());
+    }
+
+    public function test_deleting_the_owned_files_of_a_parallel_export_removes_everything_it_created(): void
+    {
+        $this->source()
+            ->hls(segmentDuration: 0.5)
+            ->video(bitrate: '100k', preset: 'ultrafast')
+            ->variant('small', fn ($v) => $v->resize(width: 48))
+            ->variant('large', fn ($v) => $v->resize(width: 96))
+            ->encrypt('queued', static fn ($key) => 'https://keys.invalid/'.$key)
+            ->queued(connection: 'database', queue: 'media', parallel: true)
+            ->save('owned/master.m3u8');
+        $this->work();
+        $this->work();
+        $this->work();
+        $this->work();
+
+        $this->assertSame([], $this->errors);
+        $this->assertCount(1, $this->completed);
+
+        foreach ($this->completed[0]->files as $file) {
+            $this->assertTrue($file['owned'], $file['path']);
+            Storage::disk($file['disk'])->delete($file['path']);
+        }
+
+        $this->assertSame(['source.mp4'], Storage::disk('queued')->allFiles());
+    }
+
     public function test_native_batches_run_queued_conversions(): void
     {
         $bitmap = imagecreatetruecolor(8, 8);
@@ -346,8 +409,52 @@ class QueueTest extends TestCase
 
         $this->assertFalse(Storage::disk('queued')->exists('cancelled.mp4'));
         $this->assertFalse(Storage::disk('queued')->exists('progress-after-cancellation'));
+        $this->assertSame([], $this->errors);
+        $this->assertSame(0, DB::table('job_batches')->sole()->failed_jobs);
+        $this->assertSame(0, DB::table('jobs')->count());
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    #[TestWith([SIGTERM, true])]
+    #[TestWith([SIGALRM, false])]
+    public function test_interrupted_workers_stop_ffmpeg_and_fail_the_attempt(int $signal, bool $runsAfterSignal): void
+    {
+        $pidFile = $this->root.'/pid';
+        $state = $this->root.'/state';
+        config(['laravel-ffmpeg.ffmpeg.binaries' => $this->fakeBinary($this->root.'/ffmpeg', sprintf(<<<'PHP'
+            if (in_array("-version", $argv, true)) { echo "ffmpeg version 9.0.2"; exit; }
+            file_put_contents(%s, getmypid());
+            echo "out_time_us=100000\nprogress=continue\n";
+            flush();
+            sleep(10);
+            PHP, var_export($pidFile, true)))]);
+
+        // The worker notifies the job from its signal handler while the export runs. After
+        // a timeout, the worker kills itself as soon as the job returns from that handler.
+        $this->source()->export()->onProgress(static function (Progress $progress) use ($signal, $pidFile, $state) {
+            if ($progress->elapsedSeconds === null || is_file($state)) {
+                return;
+            }
+
+            (new ReflectionMethod(Worker::class, 'notifyJobOfSignal'))->invoke(app('queue.worker'), $signal);
+
+            file_put_contents($state, json_encode([
+                'running' => posix_kill((int) file_get_contents($pidFile), 0),
+                'workspaces' => count(glob(config('laravel-ffmpeg.temporary_files_root').'/*')),
+            ]));
+        })->queued(connection: 'database', queue: 'media')->save('interrupted.mp4');
+        $this->work();
+
+        $this->assertSame(
+            ['running' => $runsAfterSignal, 'workspaces' => $runsAfterSignal ? 1 : 0],
+            json_decode(file_get_contents($state), true),
+        );
         $this->assertCount(1, $this->errors);
-        $this->assertInstanceOf(ExportCancelled::class, $this->errors[0]);
+        $this->assertSame('interrupted', $this->errors[0]->category);
+        $this->assertSame("The media operation was interrupted by signal [{$signal}].", $this->errors[0]->getMessage());
+        $this->assertFalse(posix_kill((int) file_get_contents($pidFile), 0));
+        $this->assertFalse(Storage::disk('queued')->exists('interrupted.mp4'));
+        $this->assertSame(0, DB::table('jobs')->count());
         $this->assertWorkspacesAreCleanedUp();
     }
 
@@ -379,6 +486,12 @@ class QueueTest extends TestCase
         $this->assertCount(1, $this->errors);
         $this->assertInstanceOf(ExportCancelled::class, $this->errors[0]);
         $this->assertWorkspacesAreCleanedUp();
+
+        foreach ($this->failures[$queued->id]->published as $file) {
+            Storage::disk($file['disk'])->delete($file['path']);
+        }
+
+        $this->assertSame(['source.mp4'], Storage::disk('queued')->allFiles());
     }
 
     public function test_parallel_hls_keeps_shared_renditions_together_and_serializes_encryption_callbacks(): void

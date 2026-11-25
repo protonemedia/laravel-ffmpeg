@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Capabilities;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
+use ProtoneMedia\LaravelFFMpeg\PendingQueuedExport;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 /**
@@ -120,8 +121,36 @@ class DoctorCommand extends Command
         // we make that limit explicit instead of letting the report imply otherwise.
         $this->components->warn('Compiled-in support only. GPU/device usability is NOT tested.');
 
+        $this->displayRetryAfterWarning();
+
         if ($missing !== []) {
             $this->components->error('Required compiled-in media capabilities are missing. Use --json for the list.');
         }
+    }
+
+    /**
+     * Warn when the queue connection may hand a running export to a second worker.
+     */
+    protected function displayRetryAfterWarning(): void
+    {
+        $connection = config('laravel-ffmpeg.queue.connection') ?? config('queue.default');
+        $driver = config("queue.connections.{$connection}.driver");
+        $retryAfter = config("queue.connections.{$connection}.retry_after");
+        $timeout = PendingQueuedExport::jobTimeout();
+
+        // The sync and null drivers never reserve jobs, and drivers such as SQS configure
+        // their visibility timeout outside of Laravel. An application may not queue any
+        // exports at all, so a short retry_after is a warning instead of a failure.
+        if (in_array($driver, ['sync', 'null'], true) || $retryAfter === null) {
+            return;
+        }
+
+        if ($timeout === 0 || $retryAfter > $timeout) {
+            return;
+        }
+
+        $this->components->warn(
+            "The retry_after [{$retryAfter}] of the [{$connection}] connection must exceed the job timeout [{$timeout}]."
+        );
     }
 }
