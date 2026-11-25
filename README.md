@@ -1531,7 +1531,7 @@ Bus::chain([$job, new \App\Jobs\NotifyLessonReady($lessonId)])
     ->dispatch();
 ```
 
-Batch cancellation skips pending work and stops running encoders at the next progress check, but cannot roll back published files.
+Batch cancellation skips pending work and stops running encoders at the next progress check without failing their jobs, as Laravel does for skipped jobs, but cannot roll back published files.
 
 <a name="run-independent-hls-conversions-in-parallel"></a>
 #### Running HLS Conversions in Parallel

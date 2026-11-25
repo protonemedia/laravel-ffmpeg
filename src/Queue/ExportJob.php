@@ -98,6 +98,14 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
 
         $result = $this->plan instanceof ExportPlan ? $this->runExport() : $this->mergeParts();
 
+        // A cancelled batch stops the parts that are still encoding. Laravel skips the jobs
+        // of a cancelled batch instead of failing them, so such a part returns the same way.
+        if (! $result instanceof Result) {
+            $this->chained = [];
+
+            return;
+        }
+
         // A part stores its playback inventory privately for the finalizer to merge. Only
         // the finalizer reports the completed export, so a part returns without an event.
         if ($this->manifestPath !== null) {
@@ -125,9 +133,9 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
     }
 
     /**
-     * Restore the planned export and run it.
+     * Restore the planned export and run it, or get null when its batch was cancelled.
      */
-    protected function runExport(): Result
+    protected function runExport(): ?Result
     {
         $export = $this->plan->restore();
 
@@ -143,6 +151,12 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
 
         try {
             return $export->save($this->path);
+        } catch (ExportCancelled $exportCancelled) {
+            if (! $this->batch()?->cancelled()) {
+                throw $exportCancelled;
+            }
+
+            return null;
         } finally {
             $this->export = null;
         }

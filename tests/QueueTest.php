@@ -349,8 +349,9 @@ class QueueTest extends TestCase
 
         $this->assertFalse(Storage::disk('queued')->exists('cancelled.mp4'));
         $this->assertFalse(Storage::disk('queued')->exists('progress-after-cancellation'));
-        $this->assertCount(1, $this->errors);
-        $this->assertInstanceOf(ExportCancelled::class, $this->errors[0]);
+        $this->assertSame([], $this->errors);
+        $this->assertSame(0, DB::table('job_batches')->sole()->failed_jobs);
+        $this->assertSame(0, DB::table('jobs')->count());
         $this->assertWorkspacesAreCleanedUp();
     }
 
