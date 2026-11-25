@@ -207,6 +207,26 @@ $media->export()
     ->save('lesson-10-bit.mp4');
 ```
 
+<a name="hdr-and-sdr-video"></a>
+#### HDR and SDR Video
+
+An export keeps the PQ (`smpte2084`) or HLG (`arib-std-b67`) color tags of an HDR source, along with its HDR10 mastering display and content light level metadata, even after converting the pixel format. The `color` method only relabels the video: it changes the tags, and a transfer other than PQ or HLG also drops the HDR10 metadata, but the pixel values stay HDR.
+
+Converting HDR to SDR requires a tonemapping filter, such as `zscale` together with `tonemap`, or `libplacebo`. You may check for them using the `capabilities` method, then pass the chain to the `videoFilter` method and signal the SDR result with `color`:
+
+```php
+$capabilities = FFMpeg::capabilities();
+
+if ($capabilities->has('filters', 'zscale') && $capabilities->has('filters', 'tonemap')) {
+    $media->export()
+        ->videoFilter('zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,'
+            .'tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p')
+        ->color('bt709', 'bt709', 'bt709')
+        ->video('libx264')
+        ->save('lesson-sdr.mp4');
+}
+```
+
 <a name="two-pass-encoding-and-clipping"></a>
 #### Two-Pass Encoding and Clipping
 
@@ -492,7 +512,7 @@ $media->export()
 
 A missing output track fails before encoding, and only the callbacks' scalar settings are kept, not the closures. Audio tracks may set the codec, bitrate, sample rate, channels, sample format, channel layout, compression level, and filters, which run after shared filters.
 
-The `videoOptions` and `audioOptions` methods accept curated pairs, such as numeric x264 and x265 parameters, SVT-AV1's `lp` level of parallelism, selected VPx, AV1, and NVENC settings, color signaling, and `['-strict', 'experimental']` for experimental audio encoders such as FFmpeg's native `vorbis`; unknown parameters and file-producing options are rejected. The `color` method only sets metadata, so use a color-conversion filter to change pixel values. A transfer other than PQ (`smpte2084`) or HLG (`arib-std-b67`) also drops the HDR10 mastering display and content light level metadata. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
+The `videoOptions` and `audioOptions` methods accept curated pairs, such as numeric x264 and x265 parameters, SVT-AV1's `lp` level of parallelism, selected VPx, AV1, and NVENC settings, color signaling, and `['-strict', 'experimental']` for experimental audio encoders such as FFmpeg's native `vorbis`; unknown parameters and file-producing options are rejected. The `color` method only sets metadata, so use a color-conversion filter to change pixel values, as [HDR and SDR Video](#hdr-and-sdr-video) shows. A transfer other than PQ (`smpte2084`) or HLG (`arib-std-b67`) also drops the HDR10 mastering display and content light level metadata. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
 
 The `outputOptions` method also accepts single-file muxer settings and argument-free bitstream filters, such as `['-bsf:v', 'h264_mp4toannexb']`, but not sidecar paths. The `globalOptions` method accepts named hardware device declarations, where a derived device must reference an earlier one:
 

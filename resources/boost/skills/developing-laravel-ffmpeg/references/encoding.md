@@ -88,6 +88,27 @@ FFMpeg::disk('uploads')
     ->save('videos/intro-10-bit.mp4');
 ```
 
+## HDR and SDR Video
+
+An export keeps the PQ or HLG color tags of an HDR source and its HDR10 mastering display and content light level metadata. The `color` method only relabels the video: a transfer other than `smpte2084` or `arib-std-b67` also drops the HDR10 metadata, but the pixel values stay HDR. Converting to SDR requires a tonemapping filter, such as `zscale` with `tonemap`, or `libplacebo`, so check for them with `FFMpeg::capabilities()` first:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+
+$capabilities = FFMpeg::capabilities();
+
+if ($capabilities->has('filters', 'zscale') && $capabilities->has('filters', 'tonemap')) {
+    FFMpeg::disk('uploads')
+        ->open('videos/intro-hdr.mov')
+        ->export()
+        ->videoFilter('zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,'
+            .'tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p')
+        ->color('bt709', 'bt709', 'bt709')
+        ->video('libx264')
+        ->save('videos/intro-sdr.mp4');
+}
+```
+
 ## Clipping and Two-Pass Encoding
 
 The `clip` method cuts accurately by transcoding. Passing `seek: 'keyframe'` allows stream copy, but the clip may start early. Two-pass encoding requires a video bitrate:
