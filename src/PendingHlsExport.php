@@ -126,7 +126,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
 
         $this->export = new PendingExport($media, $disk, $this, 'hls-playlist');
 
-        $this->export->video('libx264')->audio('aac');
+        $this->export->defaultVideoEncoder('libx264')->audio('aac');
     }
 
     /**

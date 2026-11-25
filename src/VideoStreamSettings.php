@@ -11,6 +11,17 @@ use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 class VideoStreamSettings
 {
     /**
+     * The filters that drop the HDR10 mastering display and content light level metadata.
+     */
+    protected const DELETE_HDR_SIDE_DATA = 'sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,'
+        .'sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL';
+
+    /**
+     * The transfer characteristics of HDR video, PQ and HLG.
+     */
+    protected const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'];
+
+    /**
      * The encoding overrides of the track.
      */
     protected array $settings = [];
@@ -100,7 +111,7 @@ class VideoStreamSettings
     /**
      * Signal the color characteristics of the track.
      *
-     * This does not transform pixel values.
+     * This does not transform pixel values, but an SDR transfer drops the HDR10 metadata.
      */
     public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): static
     {
@@ -119,7 +130,7 @@ class VideoStreamSettings
     }
 
     /**
-     * Compile the filter that tags frames with the given color characteristics.
+     * Compile the filters that tag frames with the given color characteristics.
      *
      * The values must pass color option validation first.
      *
@@ -138,7 +149,16 @@ class VideoStreamSettings
             'tv' => 'limited', 'pc' => 'full', 'unspecified' => 'unknown', default => $range
         };
 
-        return "setparams=color_primaries={$primaries}:color_trc={$transfer}:colorspace={$space}:range={$range}";
+        $filter = "setparams=color_primaries={$primaries}:color_trc={$transfer}:colorspace={$space}:range={$range}";
+
+        // The mastering display and content light level metadata of HDR10 only describe PQ
+        // and HLG video, so we will drop them for any other transfer, rather than let the
+        // encoder signal SDR tags and HDR10 metadata on the same stream.
+        if (in_array($transfer, self::HDR_TRANSFERS, true)) {
+            return $filter;
+        }
+
+        return "{$filter},".self::DELETE_HDR_SIDE_DATA;
     }
 
     /**

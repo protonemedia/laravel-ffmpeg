@@ -105,7 +105,7 @@ class VolumeDetectTest extends TestCase
     }
 
     #[DataProvider('failedAnalysisProvider')]
-    public function test_failed_analyses_are_inspectable(Closure $analyze): void
+    public function test_failed_analyses_are_inspectable(Closure $analyze, string $category): void
     {
         $this->silenceFixture();
         Storage::disk('local')->put('broken.wav', 'not audio');
@@ -119,7 +119,7 @@ class VolumeDetectTest extends TestCase
         $this->assertSame('analysis', $failure->phase);
         $this->assertThrows(
             fn () => $failure->throw(),
-            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['analysis', 'exit']
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['analysis', $category]
                 && $exception->diagnostics === $failure->errorOutput()
                 && $exception->getPrevious() === null,
         );
@@ -130,9 +130,12 @@ class VolumeDetectTest extends TestCase
     public static function failedAnalysisProvider(): array
     {
         return [
-            'missing track' => [fn () => FFMpeg::disk('local')->open('silence.wav')->analyze(audio: 1)],
-            'unknown filter' => [fn () => FFMpeg::disk('local')->open('silence.wav')->analyze('not_an_audio_filter')],
-            'broken source' => [fn () => FFMpeg::disk('local')->open('broken.wav')->analyze()],
+            'missing track' => [fn () => FFMpeg::disk('local')->open('silence.wav')->analyze(audio: 1), 'exit'],
+            'unknown filter' => [
+                fn () => FFMpeg::disk('local')->open('silence.wav')->analyze('not_an_audio_filter'),
+                'exit',
+            ],
+            'broken source' => [fn () => FFMpeg::disk('local')->open('broken.wav')->analyze(), 'input'],
         ];
     }
 

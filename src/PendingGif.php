@@ -8,9 +8,11 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\Execution\Workspace;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Pipeline\MeasuresDuration;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\OwnsGraph;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\RunsAnalysis;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\ShapesOutputs;
@@ -19,7 +21,7 @@ use ProtoneMedia\LaravelFFMpeg\Support\ImageOutput;
 /**
  * An animated GIF encoded with a palette generated from the clip it shows.
  */
-class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
+class PendingGif implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysis, ShapesOutputs
 {
     use Concerns\Clips;
     use Concerns\GlobalOptions;
@@ -71,7 +73,9 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
 
         $this->export = new PendingExport($media, $disk, $this);
 
-        $this->export->resize($width)->frameRate($frameRate);
+        // A GIF may have any width, while resize() requires the even dimensions most video
+        // encoders need, so we will add the same aspect-preserving scale filter ourselves.
+        $this->export->videoFilter("scale=w={$width}:h=-2:reset_sar=1")->frameRate($frameRate);
     }
 
     /**
@@ -106,6 +110,37 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
         $settings['outputOptions'] = ['-f', 'gif', '-loop', (string) $this->loopCount];
 
         return [new ExportOutput($path ?? 'inspection.gif', $settings['disk'])->configure($settings)];
+    }
+
+    /**
+     * Ensure the source has video and the clip starts before its known duration, and get the default duration.
+     *
+     * @internal
+     */
+    public function duration(array $metadata, ?float $default): ?float
+    {
+        // The palette graph reads the first video stream, which FFmpeg would only report
+        // missing during palette preparation, so we will fail the way frames do instead.
+        if (! $metadata[0]->hasVideo()) {
+            throw MediaException::probing('A required stream map matched no streams.', 'mapping');
+        }
+
+        $clip = $this->export->outputConfiguration()['clip'];
+        $duration = $metadata[0]->duration();
+
+        // An empty clip would only fail later in palette preparation without naming the
+        // cause, so we will reject a start at or beyond a known duration right away.
+        if ($clip !== null && $duration !== null && $clip['start'] >= $duration) {
+            $start = CommandCompiler::timestamp($clip['start']);
+            $end = CommandCompiler::timestamp($duration);
+
+            throw MediaException::probing(
+                "The GIF clip start [{$start}s] must be before the media duration [{$end}s].",
+                'duration',
+            );
+        }
+
+        return $default;
     }
 
     /**

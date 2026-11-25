@@ -183,6 +183,53 @@ class EncodingOptionsTest extends TestCase
         ];
     }
 
+    #[DataProvider('pixelFormatProvider')]
+    public function test_libx264_defaults_to_the_yuv420p_pixel_format(Closure $configure, array $expected): void
+    {
+        $arguments = $this->arguments($configure($this->destination()));
+        $pixelFormats = [];
+
+        foreach ($arguments as $index => $token) {
+            if (str_starts_with($token, '-pix_fmt')) {
+                $pixelFormats[$token] = $arguments[$index + 1];
+            }
+        }
+
+        $this->assertSame($expected, $pixelFormats);
+    }
+
+    public static function pixelFormatProvider(): array
+    {
+        return [
+            'libx264' => [
+                fn (ExportOutput $output) => $output->video('libx264'),
+                ['-pix_fmt:v' => 'yuv420p'],
+            ],
+            'chosen pixel format' => [
+                fn (ExportOutput $output) => $output->video('libx264')->videoOptions(['-pix_fmt', 'yuv420p10le']),
+                ['-pix_fmt:v' => 'yuv420p10le'],
+            ],
+            'output option' => [
+                fn (ExportOutput $output) => $output->video('libx264')->outputOptions(['-pix_fmt', 'yuv444p']),
+                ['-pix_fmt' => 'yuv444p'],
+            ],
+            'other encoder' => [
+                fn (ExportOutput $output) => $output->video('libx265'),
+                [],
+            ],
+            'track switching to libx264' => [
+                fn (ExportOutput $output) => $output->video('libx265')
+                    ->videoStream(1, fn (VideoStreamSettings $video) => $video->codec('libx264')),
+                ['-pix_fmt:v:1' => 'yuv420p'],
+            ],
+            'track choosing a pixel format' => [
+                fn (ExportOutput $output) => $output->video('libx264')
+                    ->videoStream(1, fn (VideoStreamSettings $video) => $video->options(['-pix_fmt', 'yuv444p'])),
+                ['-pix_fmt:v' => 'yuv420p', '-pix_fmt:v:1' => 'yuv444p'],
+            ],
+        ];
+    }
+
     public function test_allows_bitstream_remux_of_copied_video(): void
     {
         $this->assertContains('h264_mp4toannexb', $this->arguments($this->destination()->video('copy')->audio('copy')
@@ -285,6 +332,58 @@ class EncodingOptionsTest extends TestCase
         $this->assertSame(hash('sha256', $original), hash('sha256', $audible));
         $this->assertNotSame(hash('sha256', $other), hash('sha256', $audible));
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_real_libx264_encodes_a_444_source_in_the_high_profile(): void
+    {
+        $this->realFixture();
+        $this->runTool(['-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=1', '-c:v', 'libx264', '-pix_fmt', 'yuv444p',
+            '-threads', '1', $this->path('screen.mkv')]);
+
+        $this->media('screen.mkv')
+            ->export()
+            ->video('libx264', bitrate: '200k')
+            ->twoPass()
+            ->save('screen.mp4');
+        $video = $this->media('screen.mp4')
+            ->probe()
+            ->video();
+
+        $this->assertSame('yuv420p', $video->get('pix_fmt'));
+        $this->assertSame('High', $video->get('profile'));
+    }
+
+    public function test_real_sdr_color_drops_the_hdr10_metadata(): void
+    {
+        $this->realFixture();
+        $this->runTool(['-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=0.3', '-c:v', 'libx265', '-pix_fmt', 'yuv420p10le',
+            '-x265-params', 'log-level=0:hdr10=1:master-display=G(13250,34500)B(7500,3000)R(34000,16000)'
+                .'WP(15635,16450)L(10000000,1):max-cll=1000,400',
+            '-color_primaries', 'bt2020', '-color_trc', 'smpte2084', '-colorspace', 'bt2020nc', $this->path('hdr.mp4')]);
+
+        $this->media('hdr.mp4')
+            ->export()
+            ->video('libx264')
+            ->color('bt709', 'bt709', 'bt709')
+            ->save('sdr.mp4');
+
+        $this->assertContains('Mastering display metadata', $this->frameSideData('hdr.mp4'));
+        $this->assertNotContains('Mastering display metadata', $this->frameSideData('sdr.mp4'));
+        $this->assertNotContains('Content light level metadata', $this->frameSideData('sdr.mp4'));
+    }
+
+    /**
+     * Get the side data types of the first video frame of the given file.
+     */
+    protected function frameSideData(string $name): array
+    {
+        $result = Process::run([config('laravel-ffmpeg.ffprobe.binaries'), '-v', 'error', '-select_streams', 'v:0',
+            '-read_intervals', '%+#1', '-show_frames', '-show_entries', 'frame=side_data_list', '-of', 'json',
+            $this->path($name)]);
+
+        $this->assertProcessSucceeded($result);
+
+        return array_column(json_decode($result->output(), true)['frames'][0]['side_data_list'] ?? [], 'side_data_type');
     }
 
     public function test_real_x265_private_settings(): void

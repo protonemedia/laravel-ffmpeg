@@ -110,7 +110,7 @@ class ExportTest extends TestCase
             '-filter_threads', '2', '-protocol_whitelist', 'file', '-probesize', '2000000', '-i', '[input:0]',
             '-ss', '12.5', '-t', '8', '-map', '0:a:0', '-map', '0:V:0:?', '-map', '-0:a:1:?',
             '-map_metadata', '0', '-map_chapters', '-1', '-c:v', 'libx264', '-crf:v', '21', '-preset:v', 'slow',
-            '-filter:v', 'crop=120:80:4:2,hflip', '-c:a', 'aac', '-b:a', '96k',
+            '-pix_fmt:v', 'yuv420p', '-filter:v', 'crop=120:80:4:2,hflip', '-c:a', 'aac', '-b:a', '96k',
             '-metadata', 'title=A "quoted" title; $HOME', '-metadata:s:0', 'title=First output stream',
             '-metadata:s:a:0', 'language=eng', '-disposition:a:0', 'default+forced', '-fps_mode:v', 'passthrough',
             '-threads', '1',
@@ -176,6 +176,8 @@ class ExportTest extends TestCase
             'resize without dimensions' => [fn (PendingExport $export) => $export->resize()],
             'zero width' => [fn (PendingExport $export) => $export->resize(width: 0)],
             'negative height' => [fn (PendingExport $export) => $export->resize(height: -2)],
+            'odd resize width' => [fn (PendingExport $export) => $export->resize(width: 853)],
+            'odd resize height' => [fn (PendingExport $export) => $export->resize(width: 854, height: 479)],
             'zero contain width' => [fn (PendingExport $export) => $export->contain(0, 80)],
             'odd cover width' => [fn (PendingExport $export) => $export->cover(81, 80)],
             'filter syntax in the background' => [
@@ -647,6 +649,59 @@ class ExportTest extends TestCase
 
         $this->assertFalse(Storage::disk('memory')->exists('invalid.png'));
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_frames_at_the_duration_fail_before_encoding(): void
+    {
+        $this->fakePipeline();
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->frame(at: 10)->save('end.jpg'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->getMessage()]
+                === ['probing', 'duration', 'The frame time [10s] must be before the media duration [10s].'],
+        );
+
+        Process::assertDidntRun(fn (PendingProcess $process) => in_array('-frames:v', $process->command, true));
+    }
+
+    public function test_frames_of_media_without_a_known_duration_are_encoded(): void
+    {
+        $image = file_get_contents(__DIR__.'/src/logo.png');
+        $this->fakePipeline(function (PendingProcess $process) use ($image) {
+            file_put_contents(end($process->command), $image);
+
+            return Process::result();
+        }, '{"format":{},"streams":[{"index":0,"codec_type":"video"}],"chapters":[]}');
+
+        FFMpeg::disk('memory')
+            ->open('source.mp4')
+            ->frame(at: 99)
+            ->save('frame.png');
+
+        $this->assertSame($image, Storage::disk('memory')->get('frame.png'));
+    }
+
+    #[DataProvider('videoSettingsProvider')]
+    public function test_real_video_settings_require_a_video_stream(Closure $configure): void
+    {
+        $fixture = $this->fixture('voice.m4a', ['-f', 'lavfi', '-i', 'sine=duration=1', '-c:a', 'aac']);
+
+        Storage::disk('memory')->put('voice.m4a', file_get_contents($fixture));
+
+        $this->assertThrows(
+            fn () => $configure(FFMpeg::disk('memory')->open('voice.m4a')->export())->save('voice.mp4'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['probing', 'mapping'],
+        );
+        $this->assertFalse(Storage::disk('memory')->exists('voice.mp4'));
+    }
+
+    public static function videoSettingsProvider(): array
+    {
+        return [
+            'encoder' => [fn (PendingExport $export) => $export->video('libx264')],
+            'resize' => [fn (PendingExport $export) => $export->resize(width: 640)],
+            'filter' => [fn (PendingExport $export) => $export->videoFilter('hflip')],
+        ];
     }
 
     #[DataProvider('invalidFrameProvider')]
@@ -1655,6 +1710,69 @@ class ExportTest extends TestCase
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
+    #[TestWith([''])]
+    #[TestWith(['not media'])]
+    public function test_real_unreadable_inputs_report_the_input_category_while_probing(string $contents): void
+    {
+        $this->useRealFFMpeg();
+        Storage::disk('memory')->put('unreadable.mp4', $contents);
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('unreadable.mp4')->export()->save('unreadable-copy.mp4'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->getMessage()]
+                === ['probing', 'input', 'The input media cannot be read.'],
+        );
+    }
+
+    public function test_real_truncated_media_reports_the_input_category_while_encoding(): void
+    {
+        $faststart = file_get_contents($this->fixture('faststart.mp4', [
+            '-f', 'lavfi', '-i', 'testsrc2=size=160x90:rate=10:duration=2',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-movflags', '+faststart',
+        ]));
+
+        Storage::disk('memory')->put('truncated.mp4', substr($faststart, 0, intdiv(strlen($faststart), 2)));
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')
+                ->open('truncated.mp4')
+                ->export()
+                ->video('libx264', preset: 'ultrafast')
+                ->save('truncated-copy.mp4'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['encoding', 'input'],
+        );
+    }
+
+    public function test_real_unknown_encoders_report_the_encoder_category(): void
+    {
+        $media = $this->openLecture();
+
+        $this->assertThrows(
+            fn () => $media->export()->withoutVideo()->audio('libmissing')->save('missing.m4a'),
+            fn (MediaException $exception) => [$exception->category, $exception->getMessage()]
+                === ['encoder', 'The FFmpeg build has no [libmissing] encoder.'],
+        );
+    }
+
+    public function test_real_odd_source_dimensions_report_the_dimensions_category(): void
+    {
+        $fixture = $this->fixture('odd.mkv', [
+            '-f', 'lavfi', '-i', 'testsrc=size=95x63:rate=10:duration=1', '-c:v', 'ffv1',
+        ]);
+
+        Storage::disk('memory')->put('odd.mkv', file_get_contents($fixture));
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')
+                ->open('odd.mkv')
+                ->export()
+                ->video('libx264', preset: 'ultrafast')
+                ->save('odd.mp4'),
+            fn (MediaException $exception) => [$exception->category, $exception->getMessage()]
+                === ['dimensions', 'The output dimensions [95x63] must be even for libx264.'],
+        );
+    }
+
     #[DataProvider('privateDestinationProvider')]
     public function test_destination_options_merge_and_the_last_explicit_visibility_wins(Closure $configure): void
     {
@@ -1710,6 +1828,42 @@ class ExportTest extends TestCase
 
         $this->assertWorkspacesAreCleanedUp();
         Event::assertNotDispatched(Events\ExportCompleted::class);
+    }
+
+    #[TestWith(['out.mp4'])]
+    #[TestWith(['nested/out.mp4'])]
+    public function test_unwritable_local_destinations_fail_before_encoding(string $path): void
+    {
+        $this->fakePipeline();
+        mkdir($this->root.'/read-only', 0555);
+        config(['filesystems.disks.read-only' => ['driver' => 'local', 'root' => $this->root.'/read-only']]);
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->toDisk('read-only')->save($path),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->destination]
+                === ['staging', 'permission', ['disk' => 'read-only', 'path' => $path]],
+        );
+
+        Process::assertNothingRan();
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_local_permission_failures_during_publication_report_the_permission_category(): void
+    {
+        mkdir($this->root.'/revoked', 0755);
+        config(['filesystems.disks.revoked' => ['driver' => 'local', 'root' => $this->root.'/revoked']]);
+        $this->fakePipeline(function (PendingProcess $process) {
+            file_put_contents(end($process->command), 'encoded media');
+            chmod($this->root.'/revoked', 0555);
+
+            return Process::result();
+        });
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('source.mp4')->export()->toDisk('revoked')->save('out.mp4'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category]
+                === ['publication', 'permission'],
+        );
     }
 
     public function test_incomplete_publication_identifies_the_object_already_written(): void

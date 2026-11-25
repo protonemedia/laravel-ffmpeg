@@ -24,12 +24,13 @@ trait ConfiguresOutputFilters
         FilterGraph::validateExpression($expression);
 
         $this->videoFilters[] = $expression;
+        $this->requiresVideo = true;
 
         return $this;
     }
 
     /**
-     * Resize the video to the given width, height, or both.
+     * Resize the video to the given even width, height, or both.
      *
      * One dimension preserves the display aspect ratio, while two dimensions stretch the video.
      */
@@ -47,7 +48,14 @@ trait ConfiguresOutputFilters
             );
         }
 
+        if (($width ?? 2) % 2 !== 0 || ($height ?? 2) % 2 !== 0) {
+            throw new InvalidArgumentException(
+                'The dimensions ['.($width ?? 'auto').'x'.($height ?? 'auto').'] must be even.',
+            );
+        }
+
         $this->videoFilters[] = 'scale=w='.($width ?? -2).':h='.($height ?? -2).':reset_sar=1';
+        $this->requiresVideo = true;
 
         return $this;
     }
@@ -86,6 +94,7 @@ trait ConfiguresOutputFilters
         $this->videoFilters[] = "scale=w={$width}:h={$height}"
             .':force_original_aspect_ratio='.($background === null ? 'increase' : 'decrease')
             .":force_divisible_by=2:reset_sar=1,{$canvas}";
+        $this->requiresVideo = true;
 
         return $this;
     }
@@ -170,6 +179,7 @@ trait ConfiguresOutputFilters
         $this->assertOutputMutable();
 
         $this->videoFilters[] = ResourceFilter::drawText($text, $font, $size, $x, $y, $color);
+        $this->requiresVideo = true;
 
         return $this;
     }
@@ -182,6 +192,7 @@ trait ConfiguresOutputFilters
         $this->assertOutputMutable();
 
         $this->videoFilters[] = ResourceFilter::burnSubtitles($subtitles);
+        $this->requiresVideo = true;
 
         return $this;
     }
@@ -194,6 +205,7 @@ trait ConfiguresOutputFilters
         $this->assertOutputMutable();
 
         $this->videoFilters[] = ResourceFilter::lut3d($look);
+        $this->requiresVideo = true;
 
         return $this;
     }
@@ -367,8 +379,10 @@ trait ConfiguresOutputFilters
             .':st='.rtrim(rtrim(sprintf('%.17F', $start), '0'), '.')
             .':d='.rtrim(rtrim(sprintf('%.17F', $duration), '0'), '.');
 
+        // Fades apply to both tracks by default, so a video fade alone does not require a
+        // video stream, and an audio-only source still fades its audio without failing.
         if ($video) {
-            $this->videoFilter("fade={$timing}");
+            $this->videoFilters[] = "fade={$timing}";
         }
 
         if ($audio) {

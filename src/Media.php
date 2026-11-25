@@ -574,7 +574,7 @@ class Media
         ], $workspace->path, $redactions);
 
         if ($result->exitCode !== 0) {
-            throw MediaException::probing("FFprobe failed (exit {$result->exitCode}).", 'exit', $result->diagnostics);
+            throw $result->toException("FFprobe failed (exit {$result->exitCode}).");
         }
 
         try {

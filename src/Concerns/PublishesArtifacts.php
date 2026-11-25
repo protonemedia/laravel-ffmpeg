@@ -3,6 +3,8 @@
 namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
 use Closure;
+use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Filesystem\LocalFilesystemAdapter;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Events;
@@ -33,10 +35,10 @@ trait PublishesArtifacts
 
             $output = $artifact['target'] ?? $outputs[$artifact['output']];
             $destination = $artifact['destination'];
+            $disk = $output->filesystem();
             $stream = null;
 
             try {
-                $disk = $output->filesystem();
                 $disk = is_string($disk) ? Storage::disk($disk) : $disk;
                 $stream = fopen($artifact['path'], 'rb');
 
@@ -53,7 +55,7 @@ trait PublishesArtifacts
                 throw new MediaException(
                     'Cannot publish the media output.',
                     $this->phase,
-                    'transfer',
+                    $this->isUnwritableLocalPath($disk, $destination['path']) ? 'permission' : 'transfer',
                     published: $this->published,
                     destination: $destination,
                 );
@@ -73,6 +75,47 @@ trait PublishesArtifacts
         }
 
         return $files;
+    }
+
+    /**
+     * Ensure every local destination of the given outputs is writable before encoding starts.
+     *
+     * Remote disks are left to publication, since checking them would mean writing an object.
+     */
+    protected function ensureLocalDestinationsAreWritable(array $outputs): void
+    {
+        foreach ($outputs as $output) {
+            $disk = $output->filesystem();
+            $destination = $output->destination();
+
+            if ($this->isUnwritableLocalPath(is_string($disk) ? Storage::disk($disk) : $disk, $destination['path'])) {
+                throw MediaException::staging(
+                    'The local destination is not writable.',
+                    'permission',
+                    destination: $destination,
+                );
+            }
+        }
+    }
+
+    /**
+     * Determine if the given path of a local disk cannot be written, judged by its nearest existing path.
+     */
+    protected function isUnwritableLocalPath(string|Filesystem $disk, string $path): bool
+    {
+        if (! $disk instanceof LocalFilesystemAdapter) {
+            return false;
+        }
+
+        $target = $disk->path($path);
+
+        // The disk creates missing directories while it writes, so the nearest path that
+        // already exists, the file itself or one of its ancestors, decides if it may.
+        while (! file_exists($target) && dirname($target) !== $target) {
+            $target = dirname($target);
+        }
+
+        return ! is_writable($target);
     }
 
     /**

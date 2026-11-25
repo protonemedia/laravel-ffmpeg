@@ -265,7 +265,7 @@ class InputHelpersTest extends TestCase
             $export->toDisk('input-helpers')->save($output);
         }, function (MediaException $exception) {
             $this->assertSame('encoding', $exception->phase);
-            $this->assertSame('exit', $exception->category);
+            $this->assertSame('encoder', $exception->category);
             $this->assertStringContainsString("Unknown encoder 'h264_nvenc'", $exception->diagnostics);
             $this->assertStringNotContainsString($this->root, $exception->diagnostics);
 

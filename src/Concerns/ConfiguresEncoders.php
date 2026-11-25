@@ -32,6 +32,7 @@ trait ConfiguresEncoders
         $configure($settings);
 
         $this->videoStreams[$track] = $settings->settings();
+        $this->requiresVideo = true;
 
         return $this;
     }
@@ -67,6 +68,7 @@ trait ConfiguresEncoders
         $this->assertOutputMutable();
 
         $this->video = array_replace($this->video, (new VideoStreamSettings)->options($tokens)->settings());
+        $this->requiresVideo = true;
 
         return $this;
     }
@@ -86,7 +88,7 @@ trait ConfiguresEncoders
     /**
      * Signal the color characteristics of the output video.
      *
-     * This does not transform pixel values.
+     * This does not transform pixel values, but an SDR transfer drops the HDR10 metadata.
      */
     public function color(string $primaries, string $transfer, string $space, string $range = 'tv'): static
     {
@@ -124,6 +126,22 @@ trait ConfiguresEncoders
         $this->video = array_replace($this->video, collect([
             'codec' => $codec, 'bitrate' => $bitrate, 'crf' => $crf, 'preset' => $preset,
         ])->whereNotNull()->all());
+        $this->requiresVideo = true;
+
+        return $this;
+    }
+
+    /**
+     * Set the video encoder an operation uses by default, which does not require a video stream.
+     *
+     * @internal
+     */
+    public function defaultVideoEncoder(string $codec): static
+    {
+        $this->assertOutputMutable();
+        $this->codec($codec);
+
+        $this->video['codec'] = $codec;
 
         return $this;
     }
