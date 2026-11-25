@@ -12,5 +12,9 @@ class ExportProgress
     /**
      * Create a new event instance.
      */
-    public function __construct(public readonly string $operationId, public readonly Progress $progress, public readonly array $outputs) {}
+    public function __construct(
+        public readonly string $operationId,
+        public readonly Progress $progress,
+        public readonly array $outputs,
+    ) {}
 }

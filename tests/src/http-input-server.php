@@ -4,7 +4,13 @@
 $context = stream_context_create(isset($argv[3]) ? ['ssl' => [
     'local_cert' => $argv[3], 'local_pk' => $argv[4],
 ]] : []);
-$server = stream_socket_server('tcp://127.0.0.1:0', $errno, $error, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
+$server = stream_socket_server(
+    'tcp://127.0.0.1:0',
+    $errno,
+    $error,
+    STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
+    $context,
+);
 
 if ($server === false) {
     exit(1);
@@ -51,7 +57,8 @@ while (true) {
         '/first' => 'Bearer first-secret', '/second' => 'Bearer second-secret', default => null
     };
 
-    if (($expected !== null && ($headers['authorization'] ?? null) !== $expected) || ($path === '/private' && $source === null)) {
+    if (($expected !== null && ($headers['authorization'] ?? null) !== $expected)
+        || ($path === '/private' && $source === null)) {
         fwrite($client, "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
     } elseif ($path === '/redirect') {
         fwrite($client, "HTTP/1.1 302 Found\r\nLocation: /stolen\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
@@ -72,7 +79,8 @@ while (true) {
         }
 
         $length = $end - $start + 1;
-        fwrite($client, "HTTP/1.1 $status\r\nContent-Length: $length\r\nAccept-Ranges: bytes\r\n{$range}Connection: close\r\n\r\n");
+        fwrite($client, "HTTP/1.1 $status\r\nContent-Length: $length\r\nAccept-Ranges: bytes\r\n"
+            ."{$range}Connection: close\r\n\r\n");
         $input = fopen($argv[1], 'rb');
         fseek($input, $start);
         @stream_copy_to_stream($input, $client, $length);

@@ -655,7 +655,8 @@ class PendingLiveHls
                 $number++;
                 $duration = null;
             } elseif (! preg_match(
-                '/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+|#EXT-X-MEDIA-SEQUENCE:[0-9]+|#EXT-X-ENDLIST)\z/',
+                '/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+'
+                    .'|#EXT-X-MEDIA-SEQUENCE:[0-9]+|#EXT-X-ENDLIST)\z/',
                 $line,
             )) {
                 throw MediaException::publication('Unexpected live playlist directive.', 'artifact');

@@ -53,7 +53,8 @@ class Capabilities implements Arrayable, JsonSerializable
             $data['temporary_root'] = ['writable' => true];
             $data['hardware'] = [
                 'device_usability_tested' => false,
-                'note' => 'Compiled-in support only; device, driver, permissions and runtime availability are not tested.',
+                'note' => 'Compiled-in support only; '
+                    .'device, driver, permissions and runtime availability are not tested.',
             ];
             $this->data = $data;
         } finally {

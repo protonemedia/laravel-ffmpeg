@@ -52,14 +52,17 @@ while (! feof($client)) {
 
     if (str_starts_with($request, 'DESCRIBE')) {
         $sdp = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=Snapshot fixture\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
-            ."m=video 0 RTP/AVP 96\r\na=rtpmap:96 H264/90000\r\na=fmtp:96 packetization-mode=1;sprop-parameter-sets=$sps,$pps\r\na=control:trackID=0\r\n";
-        fwrite($client, "RTSP/1.0 200 OK\r\n".$headers."Content-Type: application/sdp\r\nContent-Length: ".strlen($sdp)."\r\n\r\n".$sdp);
+            ."m=video 0 RTP/AVP 96\r\na=rtpmap:96 H264/90000\r\n"
+            ."a=fmtp:96 packetization-mode=1;sprop-parameter-sets=$sps,$pps\r\na=control:trackID=0\r\n";
+        fwrite($client, "RTSP/1.0 200 OK\r\n".$headers
+            ."Content-Type: application/sdp\r\nContent-Length: ".strlen($sdp)."\r\n\r\n".$sdp);
     } elseif (str_starts_with($request, 'SETUP')) {
         if (preg_match('/client_port=(\d+)-(\d+)/', $request, $ports)) {
             $udp = stream_socket_server('udp://127.0.0.1:0', flags: STREAM_SERVER_BIND);
             $serverPort = (int) substr(strrchr(stream_socket_get_name($udp, false), ':'), 1);
             $destination = '127.0.0.1:'.$ports[1];
-            $transport = 'RTP/AVP;unicast;client_port='.$ports[1].'-'.$ports[2].';server_port='.$serverPort.'-'.($serverPort + 1);
+            $transport = 'RTP/AVP;unicast;client_port='.$ports[1].'-'.$ports[2]
+                .';server_port='.$serverPort.'-'.($serverPort + 1);
         } else {
             $transport = 'RTP/AVP/TCP;unicast;interleaved=0-1';
         }

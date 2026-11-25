@@ -291,8 +291,12 @@ class ProcessRunner
     /**
      * Reset the capture and supervision state for a process started at the given time.
      */
-    protected function beginTracking(int|float $started, ?float $timeout, ?ProgressParser $progress, ?callable $tick): void
-    {
+    protected function beginTracking(
+        int|float $started,
+        ?float $timeout,
+        ?ProgressParser $progress,
+        ?callable $tick,
+    ): void {
         $this->capture = [
             'output' => '',
             'diagnostics' => '',

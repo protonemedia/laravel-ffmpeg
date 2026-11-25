@@ -113,7 +113,11 @@ class BlankLineBetweenCallAndAssignmentFixer implements WhitespacesAwareFixerInt
     {
         $start = $semicolon;
 
-        for ($index = $tokens->getPrevMeaningfulToken($semicolon); $index !== null; $index = $tokens->getPrevMeaningfulToken($index)) {
+        for (
+            $index = $tokens->getPrevMeaningfulToken($semicolon);
+            $index !== null;
+            $index = $tokens->getPrevMeaningfulToken($index)
+        ) {
             $token = $tokens[$index];
 
             if ($token->equalsAny([';', [T_OPEN_TAG], [T_CLOSE_TAG]])) {
@@ -238,7 +242,8 @@ class BlankLineBetweenCallAndAssignmentFixer implements WhitespacesAwareFixerInt
         // Statements on the same line are left alone. Otherwise the blank line goes on the
         // first line break, so a comment above the second statement stays attached to it.
         if ($lineBreak !== null) {
-            $tokens[$lineBreak] = new Token([T_WHITESPACE, $this->whitespaces->getLineEnding().$tokens[$lineBreak]->getContent()]);
+            $lineEnding = $this->whitespaces->getLineEnding();
+            $tokens[$lineBreak] = new Token([T_WHITESPACE, $lineEnding.$tokens[$lineBreak]->getContent()]);
         }
     }
 }

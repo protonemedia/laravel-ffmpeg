@@ -61,7 +61,8 @@ class ExportPlan
             || $value instanceof Filesystem
             || $value instanceof File) {
             throw new InvalidArgumentException(
-                'Queued exports require durable named disks, not filesystem objects, uploads, local File inputs, or open streams.'
+                'Queued exports require durable named disks, '
+                    .'not filesystem objects, uploads, local File inputs, or open streams.'
             );
         }
 
@@ -122,7 +123,8 @@ class ExportPlan
             return ['type' => 'closure', 'value' => serialize(new SerializableClosure($value))];
         } catch (Throwable) {
             throw new InvalidArgumentException(
-                'Queue callbacks must be serializable. Use static closures capturing scalar identifiers instead of request or service objects.'
+                'Queue callbacks must be serializable. '
+                    .'Use static closures capturing scalar identifiers instead of request or service objects.'
             );
         }
     }

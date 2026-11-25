@@ -357,7 +357,8 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     {
         if ($this->playlistType !== 'vod') {
             throw new InvalidArgumentException(
-                'Parallel HLS composition requires VOD playlists; use a single queued export for event or live playlists.'
+                'Parallel HLS composition requires VOD playlists; '
+                    .'use a single queued export for event or live playlists.'
             );
         }
 

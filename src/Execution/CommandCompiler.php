@@ -239,7 +239,8 @@ class CommandCompiler
             'quality' => is_numeric($value) && is_finite((float) $value) && (float) $value >= 0 && (float) $value <= 63,
             'device-name' => (bool) preg_match('/\A[a-zA-Z][a-zA-Z0-9_]*\z/', $value),
             'hardware-init' => (bool) preg_match(
-                '/\A(?:cuda|vaapi|qsv|vulkan|videotoolbox|d3d11va)=[a-zA-Z][a-zA-Z0-9_]*(?::(?:[0-9]+|\/dev\/dri\/renderD[0-9]+)|@[a-zA-Z][a-zA-Z0-9_]*)?\z/',
+                '/\A(?:cuda|vaapi|qsv|vulkan|videotoolbox|d3d11va)=[a-zA-Z][a-zA-Z0-9_]*'
+                    .'(?::(?:[0-9]+|\/dev\/dri\/renderD[0-9]+)|@[a-zA-Z][a-zA-Z0-9_]*)?\z/',
                 $value,
             ),
             'x264', 'x265', 'svtav1' => self::encoderParameters($value, $type),

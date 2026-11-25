@@ -126,7 +126,8 @@ class HlsEncryption
 
         if (! $this->isValidKeyUrl($url)) {
             throw MediaException::validation(
-                'HLS key URLs require an HTTP(S) URL or a relative URI without quotes, backslashes, whitespace, or fragments.',
+                'HLS key URLs require an HTTP(S) URL or a relative URI '
+                    .'without quotes, backslashes, whitespace, or fragments.',
                 'artifact',
             );
         }

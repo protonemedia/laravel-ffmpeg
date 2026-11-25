@@ -182,7 +182,8 @@ trait ManagesHlsRenditions
     {
         if ($name === '' || ! preg_match('//u', $name) || preg_match('/["\\\\\x00-\x1F\x7F-\x9F]/u', $name)) {
             throw new InvalidArgumentException(
-                'The HLS rendition name must be non-empty UTF-8 text without quotes, backslashes, or control characters.'
+                'The HLS rendition name must be non-empty UTF-8 text '
+                    .'without quotes, backslashes, or control characters.'
             );
         }
     }

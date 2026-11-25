@@ -150,7 +150,8 @@ class DoctorCommand extends Command
         }
 
         $this->components->warn(
-            "The retry_after [{$retryAfter}] of the [{$connection}] connection must exceed the job timeout [{$timeout}]."
+            "The retry_after [{$retryAfter}] of the [{$connection}] connection "
+                ."must exceed the job timeout [{$timeout}]."
         );
     }
 }

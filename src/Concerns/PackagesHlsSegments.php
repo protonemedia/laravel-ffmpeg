@@ -170,7 +170,8 @@ trait PackagesHlsSegments
                 $media = $this->rewriteInitialization($lineIndex, $media);
             } elseif (str_starts_with($line, '#')) {
                 if (! preg_match(
-                    '/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+|#EXT-X-MEDIA-SEQUENCE:0|#EXT-X-PLAYLIST-TYPE:(?:VOD|EVENT)|#EXT-X-ENDLIST)\z/',
+                    '/\A(?:#EXTM3U|#EXT-X-VERSION:[0-9]+|#EXT-X-TARGETDURATION:[0-9]+|#EXT-X-MEDIA-SEQUENCE:0'
+                        .'|#EXT-X-PLAYLIST-TYPE:(?:VOD|EVENT)|#EXT-X-ENDLIST)\z/',
                     $line,
                 )) {
                     throw MediaException::validation('Unexpected HLS playlist directive.', 'artifact');
@@ -589,7 +590,8 @@ trait PackagesHlsSegments
                 && (! preg_match('/\A#EXT-X-(?:START|SESSION-DATA|DATERANGE|PROGRAM-DATE-TIME):/', $line)
                     || preg_match('/\bURI\s*=/i', $line)))) {
                 throw MediaException::validation(
-                    'Playlist hooks may only add comments and non-resource START, SESSION-DATA, DATERANGE, or PROGRAM-DATE-TIME tags.',
+                    'Playlist hooks may only add comments and '
+                        .'non-resource START, SESSION-DATA, DATERANGE, or PROGRAM-DATE-TIME tags.',
                     'artifact',
                 );
             }

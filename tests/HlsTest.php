@@ -353,7 +353,8 @@ class HlsTest extends TestCase
 
         $this->assertProcessSucceeded(Process::run([
             $binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=1',
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv444p', '-threads', '1', $disk->path('screen.mkv'),
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv444p', '-threads', '1',
+            $disk->path('screen.mkv'),
         ]));
 
         FFMpeg::disk('local')

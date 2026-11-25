@@ -308,7 +308,8 @@ trait StagesInputs
 
                 if (count($matches) !== 1) {
                     throw new InvalidArgumentException(
-                        'A probed stream must match exactly one input. Add its media or specify input explicitly for repeated media.',
+                        'A probed stream must match exactly one input. '
+                            .'Add its media or specify input explicitly for repeated media.',
                     );
                 }
 

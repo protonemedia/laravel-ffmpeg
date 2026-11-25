@@ -56,7 +56,8 @@ class HlsBatchJob extends ChainedBatch implements ShouldBeEncrypted
     public function withBatchId(string $batchId)
     {
         throw new InvalidArgumentException(
-            'Parallel HLS already creates a batch. Compose this workflow with Bus::chain(), not inside another Bus::batch().'
+            'Parallel HLS already creates a batch. '
+                .'Compose this workflow with Bus::chain(), not inside another Bus::batch().'
         );
     }
 

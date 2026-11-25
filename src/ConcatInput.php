@@ -110,7 +110,8 @@ class ConcatInput implements InputSource
 
             if ($layout !== null && $layout !== $streams) {
                 throw MediaException::probing(
-                    "Concat input [{$index}] stream layout or codec parameters differ from the first input; use an explicit normalization graph.",
+                    "Concat input [{$index}] stream layout or codec parameters differ from the first input; "
+                        .'use an explicit normalization graph.',
                     'concat',
                 );
             }

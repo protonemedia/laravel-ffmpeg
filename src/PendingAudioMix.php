@@ -195,7 +195,8 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
     {
         // We will fill timestamp gaps and convert both tracks to a common format before
         // mixing them. Padding keeps a short track from shortening the presentation.
-        $format = 'aresample='.self::SAMPLE_RATE.':async=1:first_pts=0,aformat=sample_rates='.self::SAMPLE_RATE.':channel_layouts=stereo';
+        $rate = self::SAMPLE_RATE;
+        $format = "aresample={$rate}:async=1:first_pts=0,aformat=sample_rates={$rate}:channel_layouts=stereo";
 
         // Nothing beyond the primary presentation is audible, so we bound the delay buffer
         // to that presentation, even for very large finite offsets.

@@ -10,5 +10,9 @@ class QueuedExportCompleted
     /**
      * Create a new event instance.
      */
-    public function __construct(public readonly string $exportId, public readonly array $files, public readonly ?array $playback = null) {}
+    public function __construct(
+        public readonly string $exportId,
+        public readonly array $files,
+        public readonly ?array $playback = null,
+    ) {}
 }
