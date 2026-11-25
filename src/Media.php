@@ -271,16 +271,27 @@ class Media
      */
     public function defaultOutputDisk(): string|Filesystem
     {
-        // A concat descriptor is created on its first input's output disk, so its own
-        // disk is already the right default for its outputs.
-        if (is_string($this->source)
-            || $this->source instanceof SequenceInput
-            || $this->source instanceof PreparedImageInput
-            || $this->source instanceof ConcatInput) {
+        if ($this->outputsDefaultToOwnDisk()) {
             return $this->disk;
         }
 
         return config('filesystems.default');
+    }
+
+    /**
+     * Determine if the media's outputs default to its own disk instead of the default disk.
+     */
+    protected function outputsDefaultToOwnDisk(): bool
+    {
+        if (is_string($this->source)) {
+            return true;
+        }
+
+        // A concat descriptor is created on its first input's output disk, so its own
+        // disk is already the right default for its outputs.
+        return $this->source instanceof SequenceInput
+            || $this->source instanceof PreparedImageInput
+            || $this->source instanceof ConcatInput;
     }
 
     /**
@@ -675,11 +686,7 @@ class Media
 
             $bytes = stream_copy_to_stream($input, $output);
 
-            if ($bytes === false
-                || $bytes !== $expectedBytes
-                || fread($input, 1) !== ''
-                || ! fflush($output)
-                || fstat($output)['size'] !== $bytes) {
+            if (! $this->isCompleteTransfer($input, $output, $bytes, $expectedBytes)) {
                 throw MediaException::staging('The media input transfer did not complete.', 'transfer');
             }
         } finally {
@@ -691,6 +698,21 @@ class Media
                 fclose($output);
             }
         }
+    }
+
+    /**
+     * Determine if the copy read the whole input and the output holds exactly the expected bytes.
+     *
+     * @param  resource  $input
+     * @param  resource  $output
+     */
+    protected function isCompleteTransfer($input, $output, int|false $bytes, mixed $expectedBytes): bool
+    {
+        return $bytes !== false
+            && $bytes === $expectedBytes
+            && fread($input, 1) === ''
+            && fflush($output)
+            && fstat($output)['size'] === $bytes;
     }
 
     /**

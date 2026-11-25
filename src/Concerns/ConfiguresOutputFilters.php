@@ -244,22 +244,37 @@ trait ConfiguresOutputFilters
             throw new InvalidArgumentException('Frame rate requires a finite positive number or positive rational.');
         }
 
-        $parts = explode('/', (string) $rate);
-
-        if (count($parts) > 2
-            || array_any($parts, function ($part): bool {
-                if (! preg_match('/\A(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\z/', $part)) {
-                    return true;
-                }
-
-                return ! is_finite((float) $part) || (float) $part <= 0;
-            })
-            || ! is_finite((float) $parts[0] / (float) ($parts[1] ?? 1))
-            || (float) $parts[0] / (float) ($parts[1] ?? 1) <= 0) {
+        if (! $this->isPositiveRate((string) $rate)) {
             throw new InvalidArgumentException('Frame rate requires a finite positive number or positive rational.');
         }
 
         return $this->videoFilter("fps=fps={$rate}");
+    }
+
+    /**
+     * Determine if the given rate is a finite positive number or a ratio of two of them.
+     */
+    protected function isPositiveRate(string $rate): bool
+    {
+        $parts = explode('/', $rate);
+
+        if (count($parts) > 2) {
+            return false;
+        }
+
+        foreach ($parts as $part) {
+            if (! preg_match('/\A(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\z/', $part)) {
+                return false;
+            }
+
+            if (! is_finite((float) $part) || (float) $part <= 0) {
+                return false;
+            }
+        }
+
+        $value = (float) $parts[0] / (float) ($parts[1] ?? 1);
+
+        return is_finite($value) && $value > 0;
     }
 
     /**

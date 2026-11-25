@@ -82,8 +82,13 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         protected readonly int $margin,
         protected readonly int $padding,
     ) {
-        if (! is_finite($every) || $every < 0.001 || $every > intdiv(PHP_INT_MAX, self::MICROSECONDS_PER_SECOND)
-            || abs($every * 1000 - round($every * 1000)) > 0.000001) {
+        if (! is_finite($every) || $every < 0.001 || $every > intdiv(PHP_INT_MAX, self::MICROSECONDS_PER_SECOND)) {
+            throw new InvalidArgumentException(
+                'The storyboard interval must be a positive whole number of milliseconds.'
+            );
+        }
+
+        if (abs($every * 1000 - round($every * 1000)) > 0.000001) {
             throw new InvalidArgumentException(
                 'The storyboard interval must be a positive whole number of milliseconds.'
             );
@@ -298,16 +303,27 @@ class PendingStoryboard implements Exportable, MeasuresDuration, PackagesArtifac
         $width -= 2 * $this->margin + ($this->columns - 1) * $this->padding;
         $height -= 2 * $this->margin + ($this->rows - 1) * $this->padding;
 
-        if ($width <= 0 || $height <= 0 || $width % $this->columns !== 0 || $height % $this->rows !== 0
-            || ($expected !== null
-                && $expected !== [intdiv($width, $this->columns), intdiv($height, $this->rows)])) {
+        $size = [intdiv($width, $this->columns), intdiv($height, $this->rows)];
+
+        if (! $this->fillsGrid($width, $height) || ($expected !== null && $expected !== $size)) {
             throw MediaException::validation(
                 'The storyboard sheets have inconsistent grid dimensions.',
                 'artifact',
             );
         }
 
-        return [intdiv($width, $this->columns), intdiv($height, $this->rows)];
+        return $size;
+    }
+
+    /**
+     * Determine if the given thumbnail area divides evenly into the grid's columns and rows.
+     */
+    protected function fillsGrid(int $width, int $height): bool
+    {
+        return $width > 0
+            && $height > 0
+            && $width % $this->columns === 0
+            && $height % $this->rows === 0;
     }
 
     /**

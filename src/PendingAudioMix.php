@@ -267,8 +267,7 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
 
         $audio = $source->audio();
 
-        if ($source->hasVideo() && $audio !== null
-            && (! is_numeric($audio->get('start_time')) || (float) $audio->get('start_time') < 0)) {
+        if ($source->hasVideo() && $audio !== null && $this->hasNegativeOrigin($audio)) {
             throw MediaException::probing(
                 'Original audio requires a known nonnegative timestamp origin relative to video.',
                 'metadata',
@@ -284,6 +283,16 @@ class PendingAudioMix implements Exportable, MeasuresDuration, OwnsGraph, RunsAn
         }
 
         return $this->export->outputConfiguration()['audioFilters'] === [] ? $duration : null;
+    }
+
+    /**
+     * Determine if the given stream has a negative or unknown start time.
+     */
+    protected function hasNegativeOrigin(Stream $stream): bool
+    {
+        $start = $stream->get('start_time');
+
+        return ! is_numeric($start) || (float) $start < 0;
     }
 
     /**

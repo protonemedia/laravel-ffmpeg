@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Queue;
 
+use Illuminate\Bus\Batch;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\Interruptible;
@@ -229,7 +230,7 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
 
         $batch = Bus::findBatch($batchId);
 
-        if ($batch === null || $batch->cancelled() || $batch->pendingJobs !== 0 || $batch->failedJobs !== 0) {
+        if (! $this->batchSucceeded($batch)) {
             throw new ExportCancelled('The HLS conversion batch did not complete successfully.');
         }
 
@@ -238,6 +239,17 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
         // The parts belong to this export alone, so the merged inventory owns their files,
         // unlike a mergeHls() composition, which borrows the files of other exports.
         return new PendingHlsMerge($presentations, owned: true)->toDisk($this->manifestDisk)->save($this->path);
+    }
+
+    /**
+     * Determine if the given batch finished without cancelled, pending, or failed jobs.
+     */
+    protected function batchSucceeded(?Batch $batch): bool
+    {
+        return $batch instanceof Batch
+            && ! $batch->cancelled()
+            && $batch->pendingJobs === 0
+            && $batch->failedJobs === 0;
     }
 
     /**

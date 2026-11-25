@@ -140,7 +140,11 @@ class RtspCamera implements InputSource
             '-update', '1', $path,
         ], $workspace->path, $this->redactions(), phase: 'staging', timeout: $this->timeout);
 
-        if ($result->failed() || ! is_file($path) || @getimagesize($path) === false || ! chmod($path, 0600)) {
+        if ($result->failed() || ! is_file($path) || @getimagesize($path) === false) {
+            throw MediaException::staging('Cannot capture the RTSP snapshot.', 'capture', $result->errorOutput());
+        }
+
+        if (! chmod($path, 0600)) {
             throw MediaException::staging('Cannot capture the RTSP snapshot.', 'capture', $result->errorOutput());
         }
 

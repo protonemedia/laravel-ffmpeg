@@ -161,20 +161,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
 
         $settings = $this->export->outputConfiguration();
 
-        // Maps can select a shorter track, and raw filters or options can alter the timing.
-        if ($settings['maps'] !== []
-            || $settings['omitVideo']
-            || $settings['omitAudio']
-            || $settings['videoFilters'] !== []
-            || $settings['audioFilters'] !== []
-            || $settings['outputOptions'] !== []) {
-            return null;
-        }
-
-        if ($item->videoStreams()->count() > 1 || $item->audioStreams()->count() > 1
-            || $item->streams()->contains(
-                fn ($stream): bool => ! in_array($stream->type(), ['audio', 'video'], true) || $stream->isCoverArt(),
-            )) {
+        if ($this->hasTimingOverrides($settings) || ! $this->hasSimpleStreamLayout($item)) {
             return null;
         }
 
@@ -182,6 +169,36 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         $adjusted = $duration === null ? null : $duration / $this->factor;
 
         return $adjusted !== null && is_finite($adjusted) ? $adjusted : null;
+    }
+
+    /**
+     * Determine if the given output settings select, drop, filter, or add options that may change the timing.
+     */
+    protected function hasTimingOverrides(array $settings): bool
+    {
+        if ($settings['omitVideo'] || $settings['omitAudio']) {
+            return true;
+        }
+
+        // Maps can select a shorter track, and raw filters or options can alter the timing.
+        return $settings['maps'] !== []
+            || $settings['videoFilters'] !== []
+            || $settings['audioFilters'] !== []
+            || $settings['outputOptions'] !== [];
+    }
+
+    /**
+     * Determine if the given item holds at most one video and one audio stream, and nothing else.
+     */
+    protected function hasSimpleStreamLayout(Metadata $item): bool
+    {
+        if ($item->videoStreams()->count() > 1 || $item->audioStreams()->count() > 1) {
+            return false;
+        }
+
+        return ! $item->streams()->contains(
+            fn ($stream): bool => ! in_array($stream->type(), ['audio', 'video'], true) || $stream->isCoverArt(),
+        );
     }
 
     /**

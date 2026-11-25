@@ -220,8 +220,7 @@ class UrlInput implements InputSource
 
             $size = fstat($output)['size'];
 
-            if ($response->status() !== 200 || $size === 0
-                || ($length !== '' && (! ctype_digit($length) || $size !== (int) $length))) {
+            if (! $this->isCompleteDownload($response->status(), $size, $length)) {
                 throw MediaException::staging('The HTTP media download did not complete.', 'transfer');
             }
 
@@ -241,5 +240,17 @@ class UrlInput implements InputSource
         } finally {
             fclose($output);
         }
+    }
+
+    /**
+     * Determine if a response with the given status wrote a non-empty body of its declared length.
+     */
+    protected function isCompleteDownload(int $status, int $size, string $length): bool
+    {
+        if ($status !== 200 || $size === 0) {
+            return false;
+        }
+
+        return $length === '' || (ctype_digit($length) && $size === (int) $length);
     }
 }

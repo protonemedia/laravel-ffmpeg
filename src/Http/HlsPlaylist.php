@@ -270,8 +270,7 @@ class HlsPlaylist implements Responsable
                     ($this->discover)($target, $uri);
                 }
 
-                if ($this->renderingAll && $kind === 'playlist' && $target !== null
-                    && ! isset($this->queued[$target])) {
+                if ($this->shouldQueue($kind, $target)) {
                     if (count($this->queued) >= 1024) {
                         throw MediaException::response(
                             'An HLS response cannot read more than 1024 local playlists.',
@@ -303,6 +302,17 @@ class HlsPlaylist implements Responsable
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Determine if the given reference is a local playlist that a full render has not queued yet.
+     */
+    protected function shouldQueue(string $kind, ?string $target): bool
+    {
+        return $this->renderingAll
+            && $kind === 'playlist'
+            && $target !== null
+            && ! isset($this->queued[$target]);
     }
 
     /**

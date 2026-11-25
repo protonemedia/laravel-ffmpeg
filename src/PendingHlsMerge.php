@@ -280,9 +280,7 @@ class PendingHlsMerge
      */
     protected function completedPlaylistDurations(HlsPresentation $presentation, array $file, array $metadata): array
     {
-        if (($metadata['version'] ?? null) !== 9 || ! is_numeric($metadata['duration'] ?? null)
-            || ! is_finite((float) $metadata['duration']) || $metadata['duration'] <= 0
-            || ! in_array($metadata['segmentType'] ?? null, ['mpegts', 'fmp4'], true)) {
+        if (! $this->hasClockProvenance($metadata)) {
             throw new InvalidArgumentException('Composition requires retained v9 VOD clock provenance.');
         }
 
@@ -297,6 +295,20 @@ class PendingHlsMerge
         }
 
         return $durations[1];
+    }
+
+    /**
+     * Determine if the given playlist metadata retains the v9 clock provenance that composition relies on.
+     */
+    protected function hasClockProvenance(array $metadata): bool
+    {
+        $duration = $metadata['duration'] ?? null;
+
+        return ($metadata['version'] ?? null) === 9
+            && is_numeric($duration)
+            && is_finite((float) $duration)
+            && $duration > 0
+            && in_array($metadata['segmentType'] ?? null, ['mpegts', 'fmp4'], true);
     }
 
     /**

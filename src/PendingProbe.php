@@ -108,7 +108,11 @@ class PendingProbe
                 throw new InvalidArgumentException("The probe section [{$section}] is not supported.");
             }
 
-            if (! is_array($fields) || ! array_is_list($fields) || $fields === [] || count($fields) > 64) {
+            if (! is_array($fields) || ! array_is_list($fields)) {
+                throw new InvalidArgumentException("The probe section [{$section}] must list 1 to 64 field names.");
+            }
+
+            if ($fields === [] || count($fields) > 64) {
                 throw new InvalidArgumentException("The probe section [{$section}] must list 1 to 64 field names.");
             }
 
@@ -356,15 +360,22 @@ class PendingProbe
         }
 
         foreach (['streams', 'packets', 'frames', 'chapters'] as $section) {
-            if (array_key_exists($section, $data)
-                && (! is_array($data[$section])
-                    || ! array_is_list($data[$section])
-                    || array_any($data[$section], fn ($row): bool => ! is_array($row)))) {
+            if (array_key_exists($section, $data) && ! $this->isListOfObjects($data[$section])) {
                 throw MediaException::probing('FFprobe query returned invalid sections.', 'metadata');
             }
         }
 
         return $data;
+    }
+
+    /**
+     * Determine if the given section value is a list of JSON objects.
+     */
+    protected function isListOfObjects(mixed $rows): bool
+    {
+        return is_array($rows)
+            && array_is_list($rows)
+            && ! array_any($rows, fn ($row): bool => ! is_array($row));
     }
 
     /**

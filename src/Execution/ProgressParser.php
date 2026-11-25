@@ -109,9 +109,11 @@ class ProgressParser
     {
         $now = hrtime(true);
 
-        if ($this->notify === null
-            || ! $this->pending instanceof Progress
-            || (! $final && $now - $this->notifiedAt < 100000000)) {
+        if ($this->notify === null || ! $this->pending instanceof Progress) {
+            return;
+        }
+
+        if (! $final && $now - $this->notifiedAt < 100000000) {
             return;
         }
 

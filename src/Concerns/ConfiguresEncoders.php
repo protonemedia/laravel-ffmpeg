@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\AudioStreamSettings;
+use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
 use ProtoneMedia\LaravelFFMpeg\VideoStreamSettings;
 
 /**
@@ -177,10 +178,7 @@ trait ConfiguresEncoders
      */
     protected function bitrate(mixed $bitrate): void
     {
-        if ($bitrate !== null && (! is_int($bitrate) || $bitrate <= 0)
-            && (! is_string($bitrate)
-                || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate)
-                || (float) $bitrate <= 0)) {
+        if ($bitrate !== null && ! CommandCompiler::isBitrate($bitrate)) {
             throw new InvalidArgumentException(
                 'Bitrates require a positive integer in bits per second or an explicit unit string, such as 2500k.',
             );

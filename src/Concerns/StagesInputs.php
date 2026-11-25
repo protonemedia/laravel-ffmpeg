@@ -186,14 +186,21 @@ trait StagesInputs
     {
         $origin = $item->get('format.start_time');
 
-        if ((! $audioOnlyOffset || $item->hasVideo())
-            && (! is_numeric($origin) || ! is_finite((float) $origin) || abs((float) $origin) > 0.000001)) {
+        if ((! $audioOnlyOffset || $item->hasVideo()) && ! static::isZeroOrigin($origin)) {
             throw MediaException::probing("{$operation} requires a zero presentation origin.", 'metadata');
         }
 
         if (static::hasVideoStreamOffset($item)) {
             throw MediaException::probing("{$operation} requires zero origins on every video stream.", 'metadata');
         }
+    }
+
+    /**
+     * Determine if the given probed start time is a finite zero.
+     */
+    protected static function isZeroOrigin(mixed $origin): bool
+    {
+        return is_numeric($origin) && is_finite((float) $origin) && abs((float) $origin) <= 0.000001;
     }
 
     /**

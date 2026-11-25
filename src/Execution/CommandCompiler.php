@@ -2,6 +2,7 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -74,6 +75,20 @@ class CommandCompiler
     public static function timestamp(float $seconds): string
     {
         return rtrim(rtrim(number_format($seconds, 6, '.', ''), '0'), '.');
+    }
+
+    /**
+     * Determine if the given value is a positive bitrate in bits per second or with an explicit unit.
+     */
+    public static function isBitrate(mixed $bitrate): bool
+    {
+        if (is_int($bitrate)) {
+            return $bitrate > 0;
+        }
+
+        return is_string($bitrate)
+            && preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate)
+            && (float) $bitrate > 0;
     }
 
     /**
@@ -191,10 +206,7 @@ class CommandCompiler
      */
     protected static function ensureSingleLineValue(string $name, mixed $value): void
     {
-        if (! is_string($value)
-            || str_contains($value, "\0")
-            || str_contains($value, "\n")
-            || str_contains($value, "\r")) {
+        if (! is_string($value) || Str::contains($value, ["\0", "\n", "\r"])) {
             throw new InvalidArgumentException("The FFmpeg option [{$name}] value must be a single-line string.");
         }
     }
@@ -211,9 +223,14 @@ class CommandCompiler
         $fileOnly = ['avoid_negative_ts', 'muxdelay', 'muxpreload', 'flush_packets', 'video_track_timescale',
             'frag_duration', 'min_frag_duration', 'cluster_time_limit', 'cluster_size_limit', 'write_crc32'];
 
-        if ($stream !== null && (in_array($name, $fileOnly, true)
-            || (in_array($name, $videoOnly, true) && $stream !== 'v')
-            || (in_array($name, $audioOnly, true) && $stream !== 'a'))) {
+        $accepted = match (true) {
+            in_array($name, $fileOnly, true) => false,
+            in_array($name, $videoOnly, true) => $stream === 'v',
+            in_array($name, $audioOnly, true) => $stream === 'a',
+            default => true,
+        };
+
+        if ($stream !== null && ! $accepted) {
             throw new InvalidArgumentException(
                 "The FFmpeg option [{$name}] does not accept the [{$stream}] stream specifier."
             );

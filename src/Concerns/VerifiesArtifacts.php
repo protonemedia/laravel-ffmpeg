@@ -49,14 +49,8 @@ trait VerifiesArtifacts
             $role = $artifact['role'] ?? $this->outputRole;
             $size = $this->validateArtifact($outputPath, $role);
             $settings = $outputs[$index]->outputConfiguration();
-            $configuredTracks = $settings['videoStreams'] !== [] || $settings['audioStreams'] !== [];
 
-            if (($artifact['probe'] ?? false)
-                || (in_array($role, ['media', 'image'], true)
-                    && ($configuredTracks
-                        || count($outputs) > 1
-                        || count($this->inputs) > 1
-                        || $this->filterGraph() !== null))) {
+            if ($this->shouldVerifyStreams($artifact, $role, $settings, count($outputs))) {
                 $this->ensureArtifactStreamsMatch(
                     $workspace,
                     $artifact['probePath'] ?? $outputPath,
@@ -69,6 +63,26 @@ trait VerifiesArtifacts
         }
 
         return $sizes;
+    }
+
+    /**
+     * Determine if the streams of the given artifact must be probed and matched against the output.
+     */
+    protected function shouldVerifyStreams(array $artifact, string $role, array $settings, int $outputs): bool
+    {
+        if ($artifact['probe'] ?? false) {
+            return true;
+        }
+
+        if (! in_array($role, ['media', 'image'], true)) {
+            return false;
+        }
+
+        return $settings['videoStreams'] !== []
+            || $settings['audioStreams'] !== []
+            || $outputs > 1
+            || count($this->inputs) > 1
+            || $this->filterGraph() !== null;
     }
 
     /**

@@ -445,10 +445,18 @@ class ProcessRunner
             $idleDeadline = $idleDeadline === null ? $this->idleTimeout : min($idleDeadline, $this->idleTimeout);
         }
 
-        if (($totalDeadline !== null && ($now - $this->processStartedAt) / 1e9 >= $totalDeadline)
-            || ($idleDeadline !== null && ($now - $this->capture['lastOutput']) / 1e9 >= $idleDeadline)) {
+        if ($this->deadlineHasPassed($totalDeadline, $this->processStartedAt, $now)
+            || $this->deadlineHasPassed($idleDeadline, $this->capture['lastOutput'], $now)) {
             throw new MediaException('The media process timed out.', $phase, 'timeout');
         }
+    }
+
+    /**
+     * Determine if the given deadline in seconds, if any, has passed since the given high-resolution time.
+     */
+    protected function deadlineHasPassed(mixed $deadline, int|float $since, int|float $now): bool
+    {
+        return $deadline !== null && ($now - $since) / 1e9 >= $deadline;
     }
 
     /**

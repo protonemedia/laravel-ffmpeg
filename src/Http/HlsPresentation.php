@@ -39,9 +39,7 @@ class HlsPresentation
                 throw new InvalidArgumentException('Each HLS playback inventory file requires a named disk.');
             }
 
-            if (! is_string($file['path'] ?? null) || $file['path'] === ''
-                || preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $file['path'])
-                || $canonical !== $file['path']) {
+            if (! $this->isCanonicalRelativePath($file['path'] ?? null, $canonical)) {
                 throw new InvalidArgumentException(
                     'Each HLS playback inventory path must be canonical and disk-relative.'
                 );
@@ -86,6 +84,23 @@ class HlsPresentation
                 previous: $throwable,
             );
         }
+    }
+
+    /**
+     * Determine if the given inventory path is non-empty, disk-relative, and already canonical.
+     */
+    protected function isCanonicalRelativePath(mixed $path, ?string $canonical): bool
+    {
+        if (! is_string($path) || $path === '') {
+            return false;
+        }
+
+        // A leading slash or backslash, a scheme, or a drive letter would let the path leave its disk.
+        if (preg_match('/\A(?:[\\\\\/]|[a-z][a-z0-9+.-]*:)/i', $path)) {
+            return false;
+        }
+
+        return $canonical === $path;
     }
 
     /**
@@ -174,8 +189,7 @@ class HlsPresentation
 
         foreach (['playlist', 'media', 'key'] as $kind) {
             $playlist->{$kind.'UrlsUsing'}(function ($target, $source, $uri) use ($file, $kind, $url, $excluded) {
-                if ($this->selected && $file['role'] === 'hls-master' && $kind === 'playlist'
-                    && ($target === null || ! isset($this->files[self::id($file['disk'], $target)]))) {
+                if ($this->isDeselected($file, $kind, $target)) {
                     return $excluded;
                 }
 
@@ -201,6 +215,18 @@ class HlsPresentation
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Determine if the variant selection removes the given playlist reference from a master playlist.
+     */
+    protected function isDeselected(array $file, string $kind, ?string $target): bool
+    {
+        if (! $this->selected || $file['role'] !== 'hls-master' || $kind !== 'playlist') {
+            return false;
+        }
+
+        return $target === null || ! isset($this->files[self::id($file['disk'], $target)]);
     }
 
     /**

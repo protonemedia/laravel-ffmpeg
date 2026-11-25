@@ -185,12 +185,18 @@ class Stream
     {
         $rate = explode('/', (string) $this->get('avg_frame_rate', ''));
 
-        if (count($rate) > 2 || ! is_numeric($rate[0]) || ! is_numeric($rate[1] ?? 1)
-            || ($rate[1] ?? 1) <= 0) {
+        if (count($rate) > 2) {
             return null;
         }
 
-        $value = (float) $rate[0] / (float) ($rate[1] ?? 1);
+        $numerator = $rate[0];
+        $denominator = $rate[1] ?? 1;
+
+        if (! is_numeric($numerator) || ! is_numeric($denominator) || $denominator <= 0) {
+            return null;
+        }
+
+        $value = (float) $numerator / (float) $denominator;
 
         return is_finite($value) && $value > 0 ? $value : null;
     }

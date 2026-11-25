@@ -501,7 +501,10 @@ trait PackagesHlsSegments
     {
         $bytes = @file_get_contents($path, length: Media::MAX_MANIFEST_BYTES + 1);
 
-        if ($bytes === false || trim($bytes) === '' || strlen($bytes) > Media::MAX_MANIFEST_BYTES || str_contains($bytes, "\0")) {
+        if ($bytes === false
+            || trim($bytes) === ''
+            || strlen($bytes) > Media::MAX_MANIFEST_BYTES
+            || str_contains($bytes, "\0")) {
             throw MediaException::validation(
                 'Cannot read the generated HLS playlist within its 16 MiB limit.',
                 'artifact',

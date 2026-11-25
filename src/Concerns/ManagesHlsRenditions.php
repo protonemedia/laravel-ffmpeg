@@ -348,15 +348,30 @@ trait ManagesHlsRenditions
             }
 
             foreach ($variant->groups() as $type => $group) {
-                foreach ($this->renditions as $id => $rendition) {
-                    if ($group !== null && $rendition['type'] === $type && $rendition['group'] === $group
-                        && $outputs[array_search($name, array_keys($this->variants), true)]->clipSettings()
-                            !== $outputs[array_search($id, array_keys($this->variants), true)]->clipSettings()) {
-                        throw new InvalidArgumentException(
-                            'Variants and their reusable renditions require the same clip.'
-                        );
-                    }
+                if ($group !== null) {
+                    $this->ensureGroupClipsMatch($outputs, $name, $type, $group);
                 }
+            }
+        }
+    }
+
+    /**
+     * Ensure the renditions of the given group share the clip of the given variant.
+     *
+     * @param  list<ExportOutput>  $outputs
+     */
+    protected function ensureGroupClipsMatch(array $outputs, int|string $name, string $type, string $group): void
+    {
+        foreach ($this->renditions as $id => $rendition) {
+            if ($rendition['type'] !== $type || $rendition['group'] !== $group) {
+                continue;
+            }
+
+            if ($outputs[array_search($name, array_keys($this->variants), true)]->clipSettings()
+                !== $outputs[array_search($id, array_keys($this->variants), true)]->clipSettings()) {
+                throw new InvalidArgumentException(
+                    'Variants and their reusable renditions require the same clip.'
+                );
             }
         }
     }

@@ -45,10 +45,7 @@ class VideoStreamSettings
      */
     public function bitrate(int|string $bitrate): static
     {
-        if ((! is_int($bitrate) || $bitrate <= 0)
-            && (! is_string($bitrate)
-                || ! preg_match('/^[0-9]+(?:\.[0-9]+)?[kKmMgG]$/D', $bitrate)
-                || (float) $bitrate <= 0)) {
+        if (! CommandCompiler::isBitrate($bitrate)) {
             throw new InvalidArgumentException('Bitrates require positive bits per second or an explicit unit string.');
         }
 
