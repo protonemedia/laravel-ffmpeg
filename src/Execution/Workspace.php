@@ -52,7 +52,7 @@ class Workspace
         $root = config('laravel-ffmpeg.temporary_files_root') ?: sys_get_temp_dir();
         $this->path = rtrim($root, '/\\').DIRECTORY_SEPARATOR.'laravel-ffmpeg-'.bin2hex(random_bytes(16));
 
-        if (! @mkdir($this->path, 0700)) {
+        if (! (new Filesystem)->makeDirectory($this->path, 0700, force: true)) {
             throw MediaException::staging('Cannot create the media workspace.', 'filesystem');
         }
 

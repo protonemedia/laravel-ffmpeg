@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg;
 
 use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Filesystem\Filesystem as LocalFilesystem;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
@@ -462,7 +463,8 @@ class PendingLiveHls
             $this->interruptIfNecessary();
             $this->attempts++;
             $start = $this->next;
-            @unlink("{$workspace->path}/live.m3u8");
+
+            (new LocalFilesystem)->delete("{$workspace->path}/live.m3u8");
 
             // We will suppress diagnostics that mention the source entirely. Reconnect failures
             // may echo decoded credentials or URL fragments that a simple string replacement misses.
@@ -767,7 +769,7 @@ class PendingLiveHls
     protected function pruneLocalSegments(Workspace $workspace, string $prefix): void
     {
         foreach (glob("{$workspace->path}/{$prefix}*") ?: [] as $file) {
-            if (! @unlink($file)) {
+            if (! (new LocalFilesystem)->delete($file)) {
                 throw MediaException::cleanup('Cannot prune local live segments.', 'filesystem');
             }
         }

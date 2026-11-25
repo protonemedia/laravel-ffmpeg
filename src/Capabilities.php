@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg;
 
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Filesystem\Filesystem;
 use InvalidArgumentException;
 use JsonSerializable;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -46,7 +47,7 @@ class Capabilities implements Arrayable, JsonSerializable
             // We verify an actual write instead of predicting one from the permission bits.
             $file = "{$workspace->path}/write-check";
 
-            if (@file_put_contents($file, 'ok') !== 2 || ! @unlink($file)) {
+            if (@file_put_contents($file, 'ok') !== 2 || ! (new Filesystem)->delete($file)) {
                 throw MediaException::staging('The temporary media root is not writable.', 'filesystem');
             }
 
