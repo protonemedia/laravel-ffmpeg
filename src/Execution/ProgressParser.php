@@ -34,6 +34,11 @@ class ProgressParser
     protected int $notifiedAt = 0;
 
     /**
+     * The furthest output time reported so far, in seconds.
+     */
+    protected float $furthest = 0.0;
+
+    /**
      * The callback that receives each snapshot.
      */
     protected readonly ?Closure $notify;
@@ -85,7 +90,12 @@ class ProgressParser
         } elseif ($key === 'progress') {
             $time = $this->record['out_time_us'] ?? null;
             $speed = rtrim($this->record['speed'] ?? '', 'x');
-            $seconds = is_numeric($time) && is_finite((float) $time) ? max(0, (float) $time / 1000000) : null;
+
+            // FFmpeg may report an earlier output time than before while it is under load,
+            // so we will keep the furthest time of this pass and never move progress back.
+            $seconds = is_numeric($time) && is_finite((float) $time)
+                ? $this->furthest = max($this->furthest, (float) $time / 1000000)
+                : null;
             $speed = is_numeric($speed) && is_finite((float) $speed) && $speed > 0 ? (float) $speed : null;
             $known = $this->duration !== null && $this->duration > 0 && $seconds !== null;
 

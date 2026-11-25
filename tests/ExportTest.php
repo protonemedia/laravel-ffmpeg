@@ -1190,6 +1190,39 @@ class ExportTest extends TestCase
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
+    public function test_progress_never_moves_back_within_a_pass_and_restarts_on_the_next_pass(): void
+    {
+        // A loaded FFmpeg may report an earlier output time just before a pass ends.
+        $this->fakePipeline(function (PendingProcess $process) {
+            if ($process->command[array_search('-pass:v', $process->command, true) + 1] === '1') {
+                file_put_contents($process->path.'/pass-0-0.log', 'private statistics');
+
+                return Process::result(output: <<<'PROGRESS'
+                    out_time_us=8000000
+                    progress=continue
+                    out_time_us=6000000
+                    progress=continue
+
+                    PROGRESS);
+            }
+
+            file_put_contents(end($process->command), 'encoded media');
+
+            return Process::result(output: "out_time_us=3000000\nprogress=continue\n");
+        });
+        $percentages = [];
+
+        $this->twoPassExport()
+            ->onProgress(function (Progress $progress) use (&$percentages) {
+                if ($progress->percentage !== null) {
+                    $percentages[] = [$progress->pass, $progress->percentage];
+                }
+            })
+            ->save('progress.mp4');
+
+        $this->assertSame([[1, 80.0], [2, 30.0]], $percentages);
+    }
+
     /**
      * Fake a two-pass encode in which the given step fails.
      */
