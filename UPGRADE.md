@@ -946,6 +946,6 @@ You should store uploads on durable named disks before dispatch. Workers need ma
 
 Hard worker kills cannot run PHP cleanup, so you should configure safe retention for stale private workspaces as well as published artifacts. A recovered retry does not clean an interrupted attempt's workspace.
 
-For independent HLS groups, `queued(parallel: true)` uses a Laravel batch and a final publication job. Shared rendition groups remain together. The versioned final master and borrowed-source ownership follow `mergeHls()`. You should persist the event's actual playback inventory rather than constructing a filename. Keep part artifacts and batch records until finalization finishes. Use a chain rather than nesting a parallel workflow inside another batch. See the [queue examples](README.md#queue-conversions) for retry, result, and retention details.
+For independent HLS groups, `queued(parallel: true)` uses a Laravel batch and a final publication job. Shared rendition groups remain together. The versioned final master follows `mergeHls()`, but the export owns the files of its parts. You should persist the event's actual playback inventory rather than constructing a filename. Keep part artifacts and batch records until finalization finishes. Use a chain rather than nesting a parallel workflow inside another batch. See the [queue examples](README.md#queue-conversions) for retry, result, and retention details.
 
 See the [README](README.md) for executable API examples.

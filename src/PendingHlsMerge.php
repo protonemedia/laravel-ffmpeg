@@ -107,8 +107,11 @@ class PendingHlsMerge
 
     /**
      * Create a new pending HLS merge instance.
+     *
+     * @param  bool  $owned  @internal Indicates if the composition owns the files of its presentations, as
+     *                       the finalizer of a parallel export does with the parts it created.
      */
-    public function __construct(protected readonly array $presentations)
+    public function __construct(protected readonly array $presentations, protected readonly bool $owned = false)
     {
         if (count($presentations) < 2) {
             throw new InvalidArgumentException('HLS composition requires at least two completed presentations.');
@@ -503,7 +506,7 @@ class PendingHlsMerge
                 $file['path'],
                 $this->sizes[HlsPresentation::id($file['disk'], $file['path'])],
                 $file['role'],
-                $file === $master,
+                $this->owned || $file === $master,
             ))
             ->all();
 

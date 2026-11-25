@@ -1555,7 +1555,9 @@ FFMpeg::disk('uploads')
     ->save('lessons/master.m3u8');
 ```
 
-Each independent variant group runs as a job in a Laravel batch, which requires the batch repository, while variants that share audio or subtitle groups stay together. Parts are published as live media under `laravel-ffmpeg/queued/{exportId}/parts/`, then a finalizer publishes a versioned master such as `lessons/master.<version>.m3u8`, so read its path from the completion event. A failed part blocks the master and downstream jobs, while completed parts remain until you clean them up.
+Each independent variant group runs as a job in a Laravel batch, which requires the batch repository, while variants that share audio or subtitle groups stay together. Parts are published as live media under `laravel-ffmpeg/queued/{exportId}/parts/`, then a finalizer publishes a versioned master such as `lessons/master.<version>.m3u8`, so read its path from the completion event. The export owns the files of its parts, including their keys, so deleting every owned file in the completion event removes the whole export. The finalizer removes the private masters and inventories of the parts itself.
+
+A failed part blocks the master and downstream jobs, while completed parts remain until you clean them up.
 
 Parallel exports do not support custom playlist callbacks, complex graphs, or unreferenced alternate groups. Compose them with `Bus::chain()` rather than inside another batch, and keep batch records until finalization finishes.
 
@@ -1577,7 +1579,7 @@ Event::listen(QueuedExportCompleted::class, function ($event) {
 });
 ```
 
-Listeners must tolerate duplicate delivery. Parallel parts are borrowed by the final master, like `mergeHls` sources, so keep their inventories for cleanup. See the [application integration recipes](docs/integrations.md) for versioned profiles, durable inventories, and media-library integration.
+Listeners must tolerate duplicate delivery and should keep the inventories for cleanup. The final master of a parallel export owns the files of its parts, while a `mergeHls` composition borrows its sources. See the [application integration recipes](docs/integrations.md) for versioned profiles, durable inventories, and media-library integration.
 
 <a name="deployment-and-development"></a>
 ## Deployment and Development

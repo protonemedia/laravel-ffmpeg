@@ -156,7 +156,7 @@ Bus::chain([$job, new NotifyVideoReady($video->id)])
     ->dispatch();
 ```
 
-An HLS export queued with `queued(parallel: true)` encodes independent variants on separate workers in a Laravel batch, so it needs the batch table. The finalizer publishes a versioned master playlist, so read its path from the `QueuedExportCompleted` event instead of the path you passed to `save`.
+An HLS export queued with `queued(parallel: true)` encodes independent variants on separate workers in a Laravel batch, so it needs the batch table. The finalizer publishes a versioned master playlist, so read its path from the `QueuedExportCompleted` event instead of the path you passed to `save`. The export owns the files of its parts, including their keys, so deleting the owned files of that event removes the whole export.
 
 ## Deleting Outputs
 
@@ -170,5 +170,7 @@ $result->files()
     ->where('owned', true)
     ->each(fn (GeneratedFile $file) => $file->delete());
 ```
+
+The `files` of a `QueuedExportCompleted` event carry the same `owned` flag, so you may delete each owned file of a queued export with `Storage::disk($file['disk'])->delete($file['path'])`.
 
 Temporary workspaces are removed after every operation, including failures, interrupted workers, and timeouts. Only a worker killed with `SIGKILL` leaves its workspace behind.

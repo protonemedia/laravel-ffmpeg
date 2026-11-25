@@ -266,6 +266,32 @@ class QueueTest extends TestCase
         $this->assertNotNull(DB::table('job_batches')->sole()->cancelled_at);
     }
 
+    public function test_deleting_the_owned_files_of_a_parallel_export_removes_everything_it_created(): void
+    {
+        $this->source()
+            ->hls(segmentDuration: 0.5)
+            ->video(bitrate: '100k', preset: 'ultrafast')
+            ->variant('small', fn ($v) => $v->resize(width: 48))
+            ->variant('large', fn ($v) => $v->resize(width: 96))
+            ->encrypt('queued', static fn ($key) => 'https://keys.invalid/'.$key)
+            ->queued(connection: 'database', queue: 'media', parallel: true)
+            ->save('owned/master.m3u8');
+        $this->work();
+        $this->work();
+        $this->work();
+        $this->work();
+
+        $this->assertSame([], $this->errors);
+        $this->assertCount(1, $this->completed);
+
+        foreach ($this->completed[0]->files as $file) {
+            $this->assertTrue($file['owned'], $file['path']);
+            Storage::disk($file['disk'])->delete($file['path']);
+        }
+
+        $this->assertSame(['source.mp4'], Storage::disk('queued')->allFiles());
+    }
+
     public function test_native_batches_run_queued_conversions(): void
     {
         $bitmap = imagecreatetruecolor(8, 8);

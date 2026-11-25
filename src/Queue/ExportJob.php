@@ -17,6 +17,7 @@ use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\HlsExportResult;
+use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
 use ProtoneMedia\LaravelFFMpeg\Result;
@@ -117,6 +118,13 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
         if (config('laravel-ffmpeg.enable_events', true)) {
             $this->dispatchCompletedEvent($result);
         }
+
+        // The merged master no longer needs the private masters and inventories of the
+        // parts. We remove them last, so a finalizer that fails before this point still
+        // finds them on its next attempt, and a failed removal never fails the export.
+        if ($this->parts !== []) {
+            rescue(fn () => $this->deletePartInventories());
+        }
     }
 
     /**
@@ -174,18 +182,14 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
         $batchId = null;
 
         foreach ($this->parts as $part) {
-            $manifest = json_decode(
-                Storage::disk($this->manifestDisk)->get($part),
-                true,
-                flags: JSON_THROW_ON_ERROR,
-            );
-            $batchId ??= $manifest['batchId'];
+            $inventory = $this->inventory($part);
+            $batchId ??= $inventory['batchId'];
 
-            if ($manifest['batchId'] !== $batchId) {
+            if ($inventory['batchId'] !== $batchId) {
                 throw new RuntimeException('Queued HLS inventories must belong to the same batch.');
             }
 
-            $presentations[] = $manifest['playback'];
+            $presentations[] = $inventory['playback'];
         }
 
         $batch = Bus::findBatch($batchId);
@@ -196,7 +200,9 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
 
         $this->ensureNotInterrupted();
 
-        return new PendingHlsMerge($presentations)->toDisk($this->manifestDisk)->save($this->path);
+        // The parts belong to this export alone, so the merged inventory owns their files,
+        // unlike a mergeHls() composition, which borrows the files of other exports.
+        return new PendingHlsMerge($presentations, owned: true)->toDisk($this->manifestDisk)->save($this->path);
     }
 
     /**
@@ -213,6 +219,14 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
     }
 
     /**
+     * Get the inventory that the given completed part retained.
+     */
+    protected function inventory(string $part): array
+    {
+        return json_decode(Storage::disk($this->manifestDisk)->get($part), true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    /**
      * Store the playback inventory of a completed part for the finalizer.
      */
     protected function retainInventory(Result $result): void
@@ -222,6 +236,19 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
                 'batchId' => $this->batchId, 'playback' => $result->playback()->toArray(),
             ], JSON_THROW_ON_ERROR), ['visibility' => 'private'])) {
             throw new RuntimeException('Cannot retain the completed queued HLS inventory.');
+        }
+    }
+
+    /**
+     * Delete the private master playlists and inventories of the merged parts.
+     */
+    protected function deletePartInventories(): void
+    {
+        foreach ($this->parts as $part) {
+            $master = HlsPresentation::fromArray($this->inventory($part)['playback'])->file();
+
+            Storage::disk($master['disk'])->delete($master['path']);
+            Storage::disk($this->manifestDisk)->delete($part);
         }
     }
 
