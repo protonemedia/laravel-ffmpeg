@@ -157,4 +157,20 @@ trait ConfiguresOutputMetadata
 
         return $this;
     }
+
+    /**
+     * Get the input the chapters are copied from, defaulting to the first input of an unclipped output.
+     *
+     * @internal
+     */
+    public function chapterSourceOrDefault(): int
+    {
+        if ($this->chapterSource !== null) {
+            return $this->chapterSource;
+        }
+
+        // A clip changes the timeline that the source's chapters describe, so we will only
+        // copy them by default when the output keeps the whole timeline of its source.
+        return $this->clip === null ? 0 : -1;
+    }
 }

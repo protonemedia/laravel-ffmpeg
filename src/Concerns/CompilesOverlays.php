@@ -168,7 +168,7 @@ trait CompilesOverlays
         }
 
         $settings['metadataSource'] ??= 0;
-        $settings['chapterSource'] ??= $settings['clip'] === null ? 0 : -1;
+        $settings['chapterSource'] = $output->chapterSourceOrDefault();
 
         return new ExportOutput($output->destination()['path'], $output->filesystem())->configure($settings);
     }

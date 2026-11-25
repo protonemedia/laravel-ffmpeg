@@ -112,7 +112,7 @@ trait CompilesOutputArguments
         $options[] = '-map_metadata';
         $options[] = (string) ($this->metadataSource ?? 0);
         $options[] = '-map_chapters';
-        $options[] = (string) ($this->chapterSource ?? ($this->clip === null ? 0 : -1));
+        $options[] = (string) $this->chapterSourceOrDefault();
 
         return $options;
     }

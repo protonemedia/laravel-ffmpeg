@@ -114,7 +114,7 @@ class PendingGif implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysi
         $settings['maps'] = ['[gif_out]'];
         $settings['video'] = ['codec' => 'gif'];
         $settings['videoFilters'] = [];
-        $settings['chapterSource'] ??= $settings['clip'] === null ? 0 : -1;
+        $settings['chapterSource'] = $this->export->chapterSourceOrDefault();
 
         // The graph trims the clip before palette generation, so the palette only sees the
         // frames the GIF shows. The output itself must not trim again afterwards.
