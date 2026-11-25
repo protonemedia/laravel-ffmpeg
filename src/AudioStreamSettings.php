@@ -103,14 +103,14 @@ class AudioStreamSettings
     {
         CommandCompiler::options($tokens, 'output');
 
-        for ($i = 0; $i < count($tokens); $i += 2) {
-            $name = substr($tokens[$i], 1);
+        for ($index = 0; $index < count($tokens); $index += 2) {
+            $name = substr($tokens[$index], 1);
 
             if (! in_array($name, ['ar', 'ac', 'sample_fmt', 'channel_layout', 'compression_level', 'strict'], true)) {
                 throw new InvalidArgumentException('Unsupported audio stream setting.');
             }
 
-            $this->settings[$name] = $tokens[$i + 1];
+            $this->settings[$name] = $tokens[$index + 1];
         }
 
         return $this;

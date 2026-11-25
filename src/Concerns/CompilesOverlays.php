@@ -183,17 +183,17 @@ trait CompilesOverlays
         $filter = 'null';
         $processed = [];
 
-        for ($i = 0; $i < count($options); $i++) {
+        for ($position = 0; $position < count($options); $position++) {
             // The per-track chain of the one mapped video stream already includes the
             // output filters and comes after them, so the last chain we see wins.
-            if ($options[$i] === '-filter:v' || $options[$i] === '-filter:v:0') {
-                $filter = $options[++$i];
-            } elseif ($options[$i] === '-map' && str_starts_with($options[$i + 1], '0:V:0')) {
+            if ($options[$position] === '-filter:v' || $options[$position] === '-filter:v:0') {
+                $filter = $options[++$position];
+            } elseif ($options[$position] === '-map' && str_starts_with($options[$position + 1], '0:V:0')) {
                 $processed[] = '-map';
                 $processed[] = "[watermark_out{$index}]";
-                $i++;
+                $position++;
             } else {
-                $processed[] = $options[$i];
+                $processed[] = $options[$position];
             }
         }
 
@@ -209,7 +209,7 @@ trait CompilesOverlays
     {
         $branches = ["[0:V:0]{$filter}[watermark_base{$index}_0]"];
 
-        foreach ($this->watermarks as $n => $mark) {
+        foreach ($this->watermarks as $position => $mark) {
             [
                 'input' => $input,
                 'horizontal' => [$left, $x],
@@ -220,7 +220,7 @@ trait CompilesOverlays
                 'loop' => $loop
             ] = $mark;
             $imageFilters = $this->watermarkScale($width, $height);
-            $label = "watermark_image{$index}_{$n}";
+            $label = "watermark_image{$index}_{$position}";
             $branches[] = "[{$input}:v:0]{$imageFilters}format=rgba,colorchannelmixer=aa={$opacity}[{$label}]";
             $horizontal = match ($left) {
                 'right' => "main_w-overlay_w-{$x}", 'center' => '(main_w-overlay_w)/2', default => (string) $x,
@@ -228,11 +228,13 @@ trait CompilesOverlays
             $vertical = match ($top) {
                 'bottom' => "main_h-overlay_h-{$y}", 'center' => '(main_h-overlay_h)/2', default => (string) $y,
             };
-            $out = $n === count($this->watermarks) - 1 ? "watermark_out{$index}" : "watermark_base{$index}_".($n + 1);
+            $out = $position === count($this->watermarks) - 1
+                ? "watermark_out{$index}"
+                : "watermark_base{$index}_".($position + 1);
             // A looping mark never ends, so we will let the main video bound it. Without
             // a loop, every stream keeps its own length.
             $shortest = $loop ? 1 : 0;
-            $branches[] = "[watermark_base{$index}_{$n}][{$label}]overlay=x={$horizontal}:y={$vertical}"
+            $branches[] = "[watermark_base{$index}_{$position}][{$label}]overlay=x={$horizontal}:y={$vertical}"
                 .":eof_action=repeat:repeatlast=1:shortest={$shortest}[{$out}]";
         }
 

@@ -183,8 +183,8 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
         $filter = '';
         $result = [];
 
-        for ($i = 0; $i < count($command); $i++) {
-            $token = $command[$i];
+        for ($index = 0; $index < count($command); $index++) {
+            $token = $command[$index];
 
             if (preg_match('/^-(?:ar|ac)(?::|$)/', $token)) {
                 throw new InvalidArgumentException(
@@ -193,13 +193,13 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             }
 
             if ($token === '-filter:a') {
-                $filter = $command[++$i];
+                $filter = $command[++$index];
 
                 continue;
             }
 
             if (in_array($token, ['-ss', '-t'], true)) {
-                $i++;
+                $index++;
 
                 continue;
             }
@@ -295,17 +295,17 @@ class PendingLoudness implements Exportable, RunsAnalysis, ShapesCommand, Valida
             '-i', $prepared,
         ];
 
-        for ($i = $inputEnd; $i < count($command); $i++) {
-            $token = $command[$i];
+        for ($index = $inputEnd; $index < count($command); $index++) {
+            $token = $command[$index];
 
             if ($token === '-map') {
                 $final[] = '-map';
                 $final[] = '0:a:0';
-                $i++;
+                $index++;
             } elseif ($token === '-filter:a') {
                 $final[] = '-filter:a';
                 $final[] = $normalizer;
-                $i++;
+                $index++;
             } else {
                 $final[] = $token;
             }

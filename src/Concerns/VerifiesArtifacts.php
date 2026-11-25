@@ -115,7 +115,7 @@ trait VerifiesArtifacts
         if (count($actual) !== count($expected)
             || array_any(
                 array_keys($actual),
-                fn (int $i): bool => $expected[$i] !== null && $actual[$i] !== $expected[$i],
+                fn (int $index): bool => $expected[$index] !== null && $actual[$index] !== $expected[$index],
             )) {
             throw new MediaException('Encoded streams do not match the explicit output maps.', $this->phase, 'mapping');
         }

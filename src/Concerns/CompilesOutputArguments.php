@@ -327,8 +327,8 @@ trait CompilesOutputArguments
             'sample_fmt', 'channel_layout', 'strict',
         ];
 
-        for ($i = 0; $i < count($this->outputOptions); $i += 2) {
-            $parts = explode(':', substr($this->outputOptions[$i], 1));
+        for ($index = 0; $index < count($this->outputOptions); $index += 2) {
+            $parts = explode(':', substr($this->outputOptions[$index], 1));
 
             if (! in_array($parts[0], $encoderOptions, true)) {
                 continue;

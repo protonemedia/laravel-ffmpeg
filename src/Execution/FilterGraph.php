@@ -58,12 +58,18 @@ class FilterGraph
         $escaped = false;
         $compiled = '';
 
-        for ($i = 0; $i < strlen($filter); $i++) {
-            $character = $filter[$i];
+        for ($offset = 0; $offset < strlen($filter); $offset++) {
+            $character = $filter[$offset];
 
-            if (! $escaped && substr($filter, $i, 2) === '{{') {
-                [$placeholder, $resource] = self::resolvePlaceholder($filter, $i, $name[1] ?? '', $quoted, $resources);
-                $i += strlen($placeholder) - 1;
+            if (! $escaped && substr($filter, $offset, 2) === '{{') {
+                [$placeholder, $resource] = self::resolvePlaceholder(
+                    $filter,
+                    $offset,
+                    $name[1] ?? '',
+                    $quoted,
+                    $resources,
+                );
+                $offset += strlen($placeholder) - 1;
 
                 $used[$resource] = true;
                 $compiled .= $resources[$resource]['path'];
@@ -292,8 +298,8 @@ class FilterGraph
         $quoted = false;
         $escaped = false;
 
-        for ($i = 0; $i < strlen($expression); $i++) {
-            $character = $expression[$i];
+        for ($offset = 0; $offset < strlen($expression); $offset++) {
+            $character = $expression[$offset];
 
             if ($escaped) {
                 $escaped = false;
@@ -302,8 +308,8 @@ class FilterGraph
             } elseif ($character === "'") {
                 $quoted = ! $quoted;
             } elseif (! $quoted && str_contains($separators, $character)) {
-                $parts[] = [substr($expression, $start, $i - $start), $character];
-                $start = $i + 1;
+                $parts[] = [substr($expression, $start, $offset - $start), $character];
+                $start = $offset + 1;
             }
         }
 

@@ -326,10 +326,10 @@ trait ConfiguresOutput
                 $tokens = $shared[$key];
                 $shared[$key] = [];
 
-                for ($i = 0; $i < count($tokens); $i += 2) {
-                    if ($tokens[$i] === '-streamid' || ! in_array($tokens[$i], $overrides, true)) {
-                        $shared[$key][] = $tokens[$i];
-                        $shared[$key][] = $tokens[$i + 1];
+                for ($index = 0; $index < count($tokens); $index += 2) {
+                    if ($tokens[$index] === '-streamid' || ! in_array($tokens[$index], $overrides, true)) {
+                        $shared[$key][] = $tokens[$index];
+                        $shared[$key][] = $tokens[$index + 1];
                     }
                 }
 

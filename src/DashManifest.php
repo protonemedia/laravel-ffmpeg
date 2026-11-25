@@ -188,7 +188,7 @@ class DashManifest
                 self::fail();
             }
 
-            for ($i = 0; $i <= $repeat; $i++) {
+            for ($index = 0; $index <= $repeat; $index++) {
                 $durations[] = $duration / $scale;
                 $time += $duration;
 

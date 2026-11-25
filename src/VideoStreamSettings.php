@@ -89,8 +89,8 @@ class VideoStreamSettings
     {
         CommandCompiler::options($tokens, 'output');
 
-        for ($i = 0; $i < count($tokens); $i += 2) {
-            $name = substr($tokens[$i], 1);
+        for ($index = 0; $index < count($tokens); $index += 2) {
+            $name = substr($tokens[$index], 1);
 
             if (! in_array($name, ['preset', 'tune', 'profile', 'level', 'pix_fmt', 'maxrate', 'minrate', 'bufsize',
                 'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'x264-params', 'x265-params', 'svtav1-params',
@@ -99,7 +99,7 @@ class VideoStreamSettings
                 throw new InvalidArgumentException('Unsupported video stream setting.');
             }
 
-            $this->settings[$name] = $tokens[$i + 1];
+            $this->settings[$name] = $tokens[$index + 1];
         }
 
         return $this;

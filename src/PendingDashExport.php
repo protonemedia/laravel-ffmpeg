@@ -430,7 +430,8 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
     public function command(array $default, array $outputs, array $paths, ?array $outputPaths): array
     {
         $result = [];
-        $targets = $outputPaths ?? array_map(fn (int|string $i): string => "[output:{$i}]", array_keys($outputs));
+        $targets = $outputPaths
+            ?? array_map(fn (int|string $index): string => "[output:{$index}]", array_keys($outputs));
 
         foreach ($default as $token) {
             $index = array_search($token, $targets, true);
@@ -738,8 +739,8 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             DashManifest::fail();
         }
 
-        foreach ($durations as $i => $duration) {
-            if (abs($duration - $clock[$i]) > 0.000001) {
+        foreach ($durations as $index => $duration) {
+            if (abs($duration - $clock[$index]) > 0.000001) {
                 DashManifest::fail();
             }
         }
@@ -843,9 +844,9 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
         $lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-TARGETDURATION:'.max(1, (int) ceil(max($durations))),
             '#EXT-X-MEDIA-SEQUENCE:1', '#EXT-X-PLAYLIST-TYPE:VOD', '#EXT-X-MAP:URI="init.mp4"'];
 
-        foreach ($durations as $i => $duration) {
+        foreach ($durations as $position => $duration) {
             $lines[] = '#EXTINF:'.sprintf('%.9f', $duration).',';
-            $lines[] = sprintf('segment-%08d.m4s', $i + 1);
+            $lines[] = sprintf('segment-%08d.m4s', $position + 1);
         }
 
         $lines[] = '#EXT-X-ENDLIST';

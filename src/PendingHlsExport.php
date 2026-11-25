@@ -511,7 +511,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
         foreach ($default as $token) {
             $index = array_search(
                 $token,
-                $outputPaths ?? array_map(fn (int|string $i): string => "[output:{$i}]", array_keys($outputs)),
+                $outputPaths ?? array_map(fn (int|string $index): string => "[output:{$index}]", array_keys($outputs)),
                 true,
             );
 

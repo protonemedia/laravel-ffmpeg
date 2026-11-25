@@ -499,10 +499,10 @@ class Media
         // A still image's loop and frame rate describe the generated video, not the image.
         $options = $this->source instanceof StillInput ? [] : $this->transportOptions();
 
-        for ($i = 0; $i < count($this->options); $i += 2) {
-            if (in_array($this->options[$i], ['-probesize', '-analyzeduration'], true)) {
-                $options[] = $this->options[$i];
-                $options[] = $this->options[$i + 1];
+        for ($index = 0; $index < count($this->options); $index += 2) {
+            if (in_array($this->options[$index], ['-probesize', '-analyzeduration'], true)) {
+                $options[] = $this->options[$index];
+                $options[] = $this->options[$index + 1];
             }
         }
 

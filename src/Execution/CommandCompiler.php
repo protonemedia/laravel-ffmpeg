@@ -107,9 +107,9 @@ class CommandCompiler
         $seen = [];
         $devices = [];
 
-        for ($i = 0; $i < count($tokens); $i += 2) {
-            $flag = $tokens[$i];
-            $value = $tokens[$i + 1];
+        for ($index = 0; $index < count($tokens); $index += 2) {
+            $flag = $tokens[$index];
+            $value = $tokens[$index + 1];
 
             [$name, $stream] = self::parseFlag($flag, $allowed, $scope);
 

@@ -480,7 +480,7 @@ class PendingExport implements Exportable
     {
         return $this->command(
             $this->configuredOutputs(),
-            collect($this->inputs)->keys()->map(fn (int|string $i): string => "[input:{$i}]")->all(),
+            collect($this->inputs)->keys()->map(fn (int|string $index): string => "[input:{$index}]")->all(),
         );
     }
 
@@ -612,7 +612,7 @@ class PendingExport implements Exportable
 
         $this->command(
             $outputs,
-            collect($this->inputs)->keys()->map(fn (int|string $i): string => "[input:{$i}]")->all(),
+            collect($this->inputs)->keys()->map(fn (int|string $index): string => "[input:{$index}]")->all(),
         );
         $this->validateDestinations($outputs);
 
