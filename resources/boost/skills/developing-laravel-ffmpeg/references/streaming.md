@@ -42,7 +42,7 @@ FFMpeg::disk('uploads')
     ->variant('720p', fn (HlsVariant $variant) => $variant
         ->resize(height: 720)
         ->video('libx264', bitrate: '2500k'))
-    ->encrypt('secrets', fn (string $keyPath) => route('lessons.key', ['key' => basename($keyPath)]),
+    ->encrypt('secrets', static fn (string $keyPath) => route('lessons.key', ['key' => basename($keyPath)]),
         rotateEvery: 3)
     ->toDisk('streams')
     ->save('lessons/42/master.m3u8');

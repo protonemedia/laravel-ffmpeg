@@ -970,7 +970,7 @@ $result = $media->hls(segmentDuration: 6)
         ->resize(height: 720)
         ->video('libx264', bitrate: '2500k'),
         playlist: 'lists/720p/index.m3u8', segments: 'segments/720p/part-%03d.ts')
-    ->encrypt('secrets', fn (string $keyPath) => route('lesson.key', ['key' => basename($keyPath)]),
+    ->encrypt('secrets', static fn (string $keyPath) => route('lesson.key', ['key' => basename($keyPath)]),
         rotateEvery: 3, directory: 'lessons/42/keys')
     ->toDisk('streams')
     ->save('lessons/42/master.m3u8');
