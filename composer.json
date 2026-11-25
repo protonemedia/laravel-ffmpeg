@@ -22,7 +22,7 @@
     "require": {
         "php": "^8.4",
         "ext-dom": "*",
-        "laravel/framework": "^13.20",
+        "laravel/framework": "^13.44.1",
         "laravel/serializable-closure": "^2.0"
     },
     "require-dev": {

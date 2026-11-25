@@ -65,7 +65,7 @@ You may run an export immediately or [dispatch it to a queue](#queue-conversions
 <a name="installation"></a>
 ### Installation
 
-Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.20 or later, and matching FFmpeg and FFprobe 9.0.x binaries; setup and CI use 9.0.2. You may install the development branch using Composer:
+Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.44.1 or later, and matching FFmpeg and FFprobe 9.0.x binaries; setup and CI use 9.0.2. You may install the development branch using Composer:
 
 ```bash
 composer require pbmedia/laravel-ffmpeg:9.x-dev

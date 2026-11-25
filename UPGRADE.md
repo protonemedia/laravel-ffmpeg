@@ -44,10 +44,10 @@ Version 9 replaces PHP-FFMpeg with Laravel's Process, Storage, and Http componen
 
 **Likelihood Of Impact: High**
 
-Version 9 requires PHP 8.4 or later and Laravel 13.20 or later. You should update the following dependencies in your application's `composer.json` file:
+Version 9 requires PHP 8.4 or later and Laravel 13.44.1 or later. You should update the following dependencies in your application's `composer.json` file:
 
 - `php` to `^8.4`
-- `laravel/framework` to `^13.20`
+- `laravel/framework` to `^13.44.1`
 - `pbmedia/laravel-ffmpeg` to `9.x-dev`
 
 ```shell
