@@ -146,18 +146,7 @@ class OutputTracksTest extends TestCase
     public function test_mp3_cover_art_preserves_decoded_audio(string $extension): void
     {
         $this->fixture();
-        // The minimal FFmpeg 9 acceptance build has an MP3 decoder but no encoder.
-        // Use the system encoder only to generate input; all library work uses 9.
-        $fixture = Process::run(
-            [
-                'ffmpeg', '-v', 'error', '-y', '-i', $this->path('source.mp4'), '-vn', '-c:a', 'libmp3lame',
-                $this->path('audio.mp3'),
-            ],
-        );
-
-        if (! $fixture->successful()) {
-            $this->markTestSkipped('A system FFmpeg with libmp3lame is needed to generate the MP3 fixture.');
-        }
+        $this->ffmpeg(['-i', $this->path('source.mp4'), '-vn', '-c:a', 'libmp3lame', $this->path('audio.mp3')]);
 
         $name = 'album-'.$extension.'.mp3';
         $this->media('audio.mp3')

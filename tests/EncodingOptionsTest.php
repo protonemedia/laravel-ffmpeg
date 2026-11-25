@@ -405,6 +405,42 @@ class EncodingOptionsTest extends TestCase
         $this->assertSame('hevc', $this->media('hevc.mp4')->probe()->streams()[0]->get('codec_name'));
     }
 
+    public static function webAndAudioFormats(): array
+    {
+        return [
+            'VP8 and Vorbis in WebM' => [
+                fn ($export) => $export->video('libvpx', bitrate: '300k')->audio('libvorbis', bitrate: '64k'),
+                'vp8.webm', ['vp8', 'vorbis'], 1,
+            ],
+            'two-pass VP9 and Opus in WebM' => [
+                fn ($export) => $export->video('libvpx-vp9', bitrate: '200k')
+                    ->audio('libopus', bitrate: '48k')
+                    ->videoOptions(['-row-mt', '1', '-deadline', 'good', '-cpu-used', '4'])
+                    ->twoPass(),
+                'vp9.webm', ['vp9', 'opus'], 2,
+            ],
+            'MP3 audio' => [
+                fn ($export) => $export->mapAudio()->audio('libmp3lame', bitrate: '128k'),
+                'audio.mp3', ['mp3'], 1,
+            ],
+        ];
+    }
+
+    #[DataProvider('webAndAudioFormats')]
+    public function test_real_webm_and_mp3_exports(Closure $configure, string $path, array $codecs, int $passes): void
+    {
+        $this->realFixture();
+
+        $result = $configure($this->media('source.mkv')->export())->save($path);
+        $streams = $this->media($path)
+            ->probe()
+            ->streams();
+
+        $this->assertSame($codecs, $streams->map(fn ($stream) => $stream->get('codec_name'))->all());
+        $this->assertCount($passes, $result->processes());
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
     public function test_real_experimental_audio_encoder(): void
     {
         $this->realFixture();
