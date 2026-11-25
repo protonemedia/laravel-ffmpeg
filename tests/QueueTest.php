@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Orchestra\Testbench\Attributes\RequiresEnv;
 use PHPUnit\Framework\Attributes\TestWith;
+use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
 use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
@@ -31,6 +32,8 @@ class QueueTest extends TestCase
     protected array $completed = [];
 
     protected array $errors = [];
+
+    protected array $failures = [];
 
     protected function setUp(): void
     {
@@ -73,6 +76,9 @@ class QueueTest extends TestCase
         });
         Event::listen(JobExceptionOccurred::class, function ($event) {
             $this->errors[] = $event->exception;
+        });
+        Event::listen(ExportFailed::class, function ($event) {
+            $this->failures[$event->operationId] = $event;
         });
         $disk = Storage::disk('queued');
         $disk->makeDirectory('');
@@ -266,6 +272,34 @@ class QueueTest extends TestCase
         $this->assertNotNull(DB::table('job_batches')->sole()->cancelled_at);
     }
 
+    public function test_a_failed_parallel_export_reports_the_files_of_its_completed_parts(): void
+    {
+        $queued = $this->source()
+            ->hls(segmentDuration: 0.5)
+            ->video(bitrate: '100k', preset: 'ultrafast')
+            ->variant('small', fn ($v) => $v->resize(width: 48))
+            ->variant('broken', fn ($v) => $v->video('not_an_encoder'))
+            ->encrypt('queued', static fn ($key) => 'https://keys.invalid/'.$key)
+            ->queued(connection: 'database', queue: 'media', parallel: true);
+        $queued->save('failed/master.m3u8');
+        $this->work();
+        $this->work();
+        $this->work();
+
+        $this->assertCount(1, $this->errors);
+        $this->assertSame('encoding', $this->failures[$queued->id]->phase);
+        $this->assertContains('hls-keys', array_map(
+            fn (array $file): string => dirname($file['path']),
+            $this->failures[$queued->id]->published,
+        ));
+
+        foreach ($this->failures[$queued->id]->published as $file) {
+            Storage::disk($file['disk'])->delete($file['path']);
+        }
+
+        $this->assertSame(['source.mp4'], Storage::disk('queued')->allFiles());
+    }
+
     public function test_deleting_the_owned_files_of_a_parallel_export_removes_everything_it_created(): void
     {
         $this->source()
@@ -452,6 +486,12 @@ class QueueTest extends TestCase
         $this->assertCount(1, $this->errors);
         $this->assertInstanceOf(ExportCancelled::class, $this->errors[0]);
         $this->assertWorkspacesAreCleanedUp();
+
+        foreach ($this->failures[$queued->id]->published as $file) {
+            Storage::disk($file['disk'])->delete($file['path']);
+        }
+
+        $this->assertSame(['source.mp4'], Storage::disk('queued')->allFiles());
     }
 
     public function test_parallel_hls_keeps_shared_renditions_together_and_serializes_encryption_callbacks(): void

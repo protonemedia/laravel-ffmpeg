@@ -158,6 +158,26 @@ Bus::chain([$job, new NotifyVideoReady($video->id)])
 
 An HLS export queued with `queued(parallel: true)` encodes independent variants on separate workers in a Laravel batch, so it needs the batch table. The finalizer publishes a versioned master playlist, so read its path from the `QueuedExportCompleted` event instead of the path you passed to `save`. The export owns the files of its parts, including their keys, so deleting the owned files of that event removes the whole export.
 
+A failed part cancels the batch, so no master is published. Once every part has run, the package dispatches an `ExportFailed` event whose `operationId` is the export ID and whose `published` property lists every file the completed parts published, so you may delete them:
+
+```php
+use App\Models\Video;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
+use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
+
+Event::listen(function (ExportFailed $event) {
+    // Other failed exports report their own operation ID, so only stored export IDs match.
+    if (! Video::where('export_id', $event->operationId)->exists()) {
+        return;
+    }
+
+    foreach ($event->published as $file) {
+        Storage::disk($file['disk'])->delete($file['path']);
+    }
+});
+```
+
 ## Deleting Outputs
 
 Delete outputs through the root result's inventory. The `delete` method removes exactly that path and returns `false` without touching storage for a file the export does not own, such as a segment it shares with another presentation:

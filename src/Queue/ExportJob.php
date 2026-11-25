@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\DashExportResult;
+use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
 use ProtoneMedia\LaravelFFMpeg\Events\QueuedExportCompleted;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\ExportCancelled;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -20,8 +21,10 @@ use ProtoneMedia\LaravelFFMpeg\HlsExportResult;
 use ProtoneMedia\LaravelFFMpeg\Http\HlsPresentation;
 use ProtoneMedia\LaravelFFMpeg\PendingHlsMerge;
 use ProtoneMedia\LaravelFFMpeg\Pipeline\Exportable;
+use ProtoneMedia\LaravelFFMpeg\Progress;
 use ProtoneMedia\LaravelFFMpeg\Result;
 use RuntimeException;
+use Throwable;
 
 /**
  * The queued job that runs an export, a parallel HLS part, or the merge of those parts.
@@ -141,6 +144,38 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
     }
 
     /**
+     * Handle a job failure.
+     */
+    public function failed(?Throwable $exception = null): void
+    {
+        // A failed part cancels the batch, which reports the completed parts once every
+        // part has run. The finalizer only runs after every part completed, so when it
+        // fails, it reports those parts itself.
+        if ($this->parts !== []) {
+            $this->dispatchFailedEvent(Progress::PUBLICATION);
+        }
+    }
+
+    /**
+     * Dispatch the event that reports the files the completed parts of a failed parallel export published.
+     *
+     * @internal
+     */
+    public function dispatchFailedEvent(string $phase): void
+    {
+        if (! config('laravel-ffmpeg.enable_events', true)) {
+            return;
+        }
+
+        Event::dispatch(new ExportFailed(
+            $this->exportId,
+            $phase,
+            [['disk' => $this->manifestDisk, 'path' => $this->path]],
+            $this->publishedParts(),
+        ));
+    }
+
+    /**
      * Restore the planned export and run it, or get null when its batch was cancelled.
      */
     protected function runExport(): ?Result
@@ -250,6 +285,26 @@ class ExportJob implements Interruptible, ShouldBeEncrypted, ShouldQueue
             Storage::disk($master['disk'])->delete($master['path']);
             Storage::disk($this->manifestDisk)->delete($part);
         }
+    }
+
+    /**
+     * Get the disk and path of every file the completed parts published, including their inventories.
+     *
+     * @return list<array{disk: string, path: string}>
+     */
+    protected function publishedParts(): array
+    {
+        $disk = Storage::disk($this->manifestDisk);
+
+        return collect($this->parts)
+            ->filter(fn (string $part): bool => $disk->exists($part))
+            ->flatMap(fn (string $part): array => [
+                ...$this->inventory($part)['playback']['files'],
+                ['disk' => $this->manifestDisk, 'path' => $part],
+            ])
+            ->map(fn (array $file): array => ['disk' => $file['disk'], 'path' => $file['path']])
+            ->values()
+            ->all();
     }
 
     /**

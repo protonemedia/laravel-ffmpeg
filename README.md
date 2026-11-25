@@ -1557,7 +1557,26 @@ FFMpeg::disk('uploads')
 
 Each independent variant group runs as a job in a Laravel batch, which requires the batch repository, while variants that share audio or subtitle groups stay together. Parts are published as live media under `laravel-ffmpeg/queued/{exportId}/parts/`, then a finalizer publishes a versioned master such as `lessons/master.<version>.m3u8`, so read its path from the completion event. The export owns the files of its parts, including their keys, so deleting every owned file in the completion event removes the whole export. The finalizer removes the private masters and inventories of the parts itself.
 
-A failed part blocks the master and downstream jobs, while completed parts remain until you clean them up.
+A failed part blocks the master and downstream jobs, while completed parts remain until you clean them up. Once every part has run, or once the finalizer fails, the package dispatches an `ExportFailed` event whose `operationId` is the export ID and whose `published` property lists every file that the completed parts published, including their keys and private inventories:
+
+```php
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
+use ProtoneMedia\LaravelFFMpeg\Events\ExportFailed;
+
+Event::listen(ExportFailed::class, function (ExportFailed $event) {
+    // Other failed exports report their own operation ID, so only stored export IDs match.
+    $conversion = \App\Models\Conversion::firstWhere('export_id', $event->operationId);
+
+    if ($conversion === null) {
+        return;
+    }
+
+    foreach ($event->published as $file) {
+        Storage::disk($file['disk'])->delete($file['path']);
+    }
+});
+```
 
 Parallel exports do not support custom playlist callbacks, complex graphs, or unreferenced alternate groups. Compose them with `Bus::chain()` rather than inside another batch, and keep batch records until finalization finishes.
 

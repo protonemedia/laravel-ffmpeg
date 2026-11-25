@@ -2,10 +2,12 @@
 
 namespace ProtoneMedia\LaravelFFMpeg\Queue;
 
+use Illuminate\Bus\Batch;
 use Illuminate\Bus\ChainedBatch;
 use Illuminate\Bus\PendingBatch;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use InvalidArgumentException;
+use ProtoneMedia\LaravelFFMpeg\Progress;
 
 /**
  * The batch of parallel HLS parts, chained to the job that merges them.
@@ -64,6 +66,17 @@ class HlsBatchJob extends ChainedBatch implements ShouldBeEncrypted
     protected function attachRemainderOfChainToEndOfBatch(PendingBatch $batch)
     {
         $this->prependToChain($this->finalizer);
+
+        // A cancelled batch never runs the finalizer, so once every part has run we will
+        // report the files of the parts that did complete, letting the application delete
+        // them without knowing where the parts are stored.
+        $finalizer = $this->finalizer;
+
+        $batch->finally(static function (Batch $batch) use ($finalizer): void {
+            if ($batch->cancelled()) {
+                $finalizer->dispatchFailedEvent(Progress::ENCODING);
+            }
+        });
 
         return parent::attachRemainderOfChainToEndOfBatch($batch);
     }
