@@ -152,11 +152,7 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
 
         // We conservatively validate every source audio track, including unselected tracks,
         // rather than guessing how arbitrary stream selectors resolve.
-        if ($item->audioStreams()->contains(function ($stream): bool {
-            $start = $stream->get('start_time');
-
-            return ! is_numeric($start) || ! is_finite((float) $start) || (float) $start < 0;
-        })) {
+        if ($this->hasNegativeAudioOrigin($item)) {
             throw MediaException::probing(
                 'Speed requires nonnegative audio origins on all source tracks.',
                 'metadata',
@@ -186,6 +182,18 @@ class PendingSpeed implements Exportable, MeasuresDuration, ShapesOutputs, Valid
         $adjusted = $duration === null ? null : $duration / $this->factor;
 
         return $adjusted !== null && is_finite($adjusted) ? $adjusted : null;
+    }
+
+    /**
+     * Determine if any audio track of the given item has a negative or unknown start time.
+     */
+    protected function hasNegativeAudioOrigin(Metadata $item): bool
+    {
+        return $item->audioStreams()->contains(function ($stream): bool {
+            $start = $stream->get('start_time');
+
+            return ! is_numeric($start) || ! is_finite((float) $start) || (float) $start < 0;
+        });
     }
 
     /**

@@ -103,13 +103,15 @@ trait ConfiguresStreamMaps
             throw new InvalidArgumentException("The language tag [{$language}] is invalid.");
         }
 
-        $selector = $language === null ? (string) ($track ?? 0) : "m:language:{$language}";
-
         if ($stream instanceof Stream) {
             return $this->mapProbedStream($stream, 'audio', $input, $optional);
         }
 
-        return $this->map(($input ?? 0).':a:'.$selector.($optional ? '?' : ''));
+        if ($language !== null) {
+            return $this->map(($input ?? 0).":a:m:language:{$language}".($optional ? '?' : ''));
+        }
+
+        return $this->map(($input ?? 0).':a:'.($track ?? 0).($optional ? '?' : ''));
     }
 
     /**

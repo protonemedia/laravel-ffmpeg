@@ -86,16 +86,7 @@ trait ConfiguresOutputMetadata
             $flags = $flags === '0' ? [] : explode('+', $flags);
         }
 
-        if (! array_is_list($flags) || array_any($flags, function ($flag): bool {
-            $supported = [
-                'default', 'dub', 'original', 'comment', 'lyrics', 'karaoke', 'forced',
-                'hearing_impaired', 'visual_impaired', 'clean_effects', 'attached_pic',
-                'timed_thumbnails', 'non_diegetic', 'captions', 'descriptions', 'metadata',
-                'dependent', 'still_image', 'multilayer',
-            ];
-
-            return ! is_string($flag) || ! in_array($flag, $supported, true);
-        })) {
+        if (! array_is_list($flags) || $this->hasUnsupportedDisposition($flags)) {
             throw new InvalidArgumentException(
                 'Dispositions require supported flag names, or an empty list to clear them.',
             );
@@ -104,6 +95,21 @@ trait ConfiguresOutputMetadata
         $this->dispositions[] = [$stream, $flags === [] ? '0' : implode('+', array_unique($flags))];
 
         return $this;
+    }
+
+    /**
+     * Determine if any of the given disposition flags is not a name FFmpeg supports.
+     */
+    protected function hasUnsupportedDisposition(array $flags): bool
+    {
+        $supported = [
+            'default', 'dub', 'original', 'comment', 'lyrics', 'karaoke', 'forced',
+            'hearing_impaired', 'visual_impaired', 'clean_effects', 'attached_pic',
+            'timed_thumbnails', 'non_diegetic', 'captions', 'descriptions', 'metadata',
+            'dependent', 'still_image', 'multilayer',
+        ];
+
+        return array_any($flags, fn ($flag): bool => ! is_string($flag) || ! in_array($flag, $supported, true));
     }
 
     /**

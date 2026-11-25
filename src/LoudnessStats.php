@@ -32,6 +32,11 @@ class LoudnessStats
     public static function fromJson(string $json, string $phase = 'validation'): self
     {
         $data = json_decode($json, true);
+
+        if (! is_array($data)) {
+            throw new MediaException('Invalid loudness statistics.', $phase, 'analysis');
+        }
+
         $values = [];
 
         foreach ([
@@ -39,7 +44,7 @@ class LoudnessStats
             'output_i', 'output_tp', 'output_lra', 'output_thresh',
             'target_offset',
         ] as $key) {
-            $value = is_array($data) ? ($data[$key] ?? null) : null;
+            $value = $data[$key] ?? null;
 
             if (is_string($value) && in_array(strtolower($value), ['-inf', 'inf', '+inf', 'nan'], true)) {
                 $values[] = null;

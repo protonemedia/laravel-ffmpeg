@@ -47,7 +47,12 @@ class Metadata
     public function tag(string $key): ?string
     {
         $tags = $this->get('format.tags');
-        $value = is_array($tags) ? ($tags[$key] ?? null) : null;
+
+        if (! is_array($tags)) {
+            return null;
+        }
+
+        $value = $tags[$key] ?? null;
 
         return is_string($value) ? $value : null;
     }

@@ -191,13 +191,21 @@ trait StagesInputs
             throw MediaException::probing("{$operation} requires a zero presentation origin.", 'metadata');
         }
 
-        if ($item->videoStreams()->contains(function (Stream $stream): bool {
+        if (static::hasVideoStreamOffset($item)) {
+            throw MediaException::probing("{$operation} requires zero origins on every video stream.", 'metadata');
+        }
+    }
+
+    /**
+     * Determine if any video stream of the given item lacks a zero start time.
+     */
+    protected static function hasVideoStreamOffset(Metadata $item): bool
+    {
+        return $item->videoStreams()->contains(function (Stream $stream): bool {
             $start = $stream->get('start_time');
 
             return ! is_numeric($start) || abs((float) $start) > 0.000001;
-        })) {
-            throw MediaException::probing("{$operation} requires zero origins on every video stream.", 'metadata');
-        }
+        });
     }
 
     /**

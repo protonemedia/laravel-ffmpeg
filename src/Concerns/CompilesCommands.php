@@ -375,8 +375,10 @@ trait CompilesCommands
                 $result[] = '-f';
                 $result[] = 'null';
                 $result[] = $target;
+            } elseif (($command[$index - 1] ?? null) === '-pass:v') {
+                $result[] = '1';
             } else {
-                $result[] = ($command[$index - 1] ?? null) === '-pass:v' ? '1' : $token;
+                $result[] = $token;
             }
         }
 

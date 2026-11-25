@@ -219,9 +219,7 @@ trait CompilesOverlays
                 'opacity' => $opacity,
                 'loop' => $loop
             ] = $mark;
-            $imageFilters = $width === null && $height === null
-                ? ''
-                : 'scale=w='.($width ?? -1).':h='.($height ?? -1).',';
+            $imageFilters = $this->watermarkScale($width, $height);
             $label = "watermark_image{$index}_{$n}";
             $branches[] = "[{$input}:v:0]{$imageFilters}format=rgba,colorchannelmixer=aa={$opacity}[{$label}]";
             $horizontal = match ($left) {
@@ -239,6 +237,21 @@ trait CompilesOverlays
         }
 
         return $branches;
+    }
+
+    /**
+     * Get the scale filter of a watermark with the given size, where a missing side keeps the aspect ratio.
+     */
+    protected function watermarkScale(?int $width, ?int $height): string
+    {
+        if ($width === null && $height === null) {
+            return '';
+        }
+
+        $width ??= -1;
+        $height ??= -1;
+
+        return "scale=w={$width}:h={$height},";
     }
 
     /**

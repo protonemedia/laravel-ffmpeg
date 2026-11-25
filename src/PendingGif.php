@@ -69,13 +69,25 @@ class PendingGif implements Exportable, MeasuresDuration, OwnsGraph, RunsAnalysi
             throw new InvalidArgumentException("The GIF loop count [{$loops}] must be between 1 and 65535.");
         }
 
-        $this->loopCount = $loop ? $loops ?? 0 : -1;
+        $this->loopCount = $this->muxerLoopCount($loop, $loops);
 
         $this->export = new PendingExport($media, $disk, $this);
 
         // A GIF may have any width, while resize() requires the even dimensions most video
         // encoders need, so we will add the same aspect-preserving scale filter ourselves.
         $this->export->videoFilter("scale=w={$width}:h=-2:reset_sar=1")->frameRate($frameRate);
+    }
+
+    /**
+     * Get the muxer loop count, where -1 plays the GIF once and 0 loops it forever.
+     */
+    protected function muxerLoopCount(bool $loop, ?int $loops): int
+    {
+        if (! $loop) {
+            return -1;
+        }
+
+        return $loops ?? 0;
     }
 
     /**

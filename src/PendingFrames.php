@@ -130,8 +130,8 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
             $this->duration === null => "{$this->count}/[duration]",
             default => "{$this->count}/".CommandCompiler::timestamp($this->duration),
         };
-        $start = $this->export->inputSeekOptions() === [] ? ($this->export->clipSettings()['start'] ?? 0) : 0;
-        $filter = "fps=fps={$rate}:start_time=".CommandCompiler::timestamp($start).':round=near:eof_action=pass';
+        $start = CommandCompiler::timestamp($this->frameStart());
+        $filter = "fps=fps={$rate}:start_time={$start}:round=near:eof_action=pass";
 
         if ($this->count !== null) {
             $filter .= ",tpad=stop_mode=clone:stop={$this->count}";
@@ -155,6 +155,19 @@ class PendingFrames implements Exportable, MeasuresDuration, PackagesArtifacts, 
         array_splice($default, -1, 0, $options);
 
         return $default;
+    }
+
+    /**
+     * Get the time in seconds that the sampled frame timestamps start from.
+     */
+    protected function frameStart(): float
+    {
+        // A keyframe seek moves the input itself, so its timestamps already start at zero.
+        if ($this->export->inputSeekOptions() !== []) {
+            return 0;
+        }
+
+        return $this->export->clipSettings()['start'] ?? 0;
     }
 
     /**

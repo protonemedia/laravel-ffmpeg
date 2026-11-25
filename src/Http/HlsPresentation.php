@@ -33,17 +33,7 @@ class HlsPresentation
         protected readonly array $provenance = [],
     ) {
         foreach ($files as $file) {
-            try {
-                $canonical = is_string($file['path'] ?? null)
-                    ? (new WhitespacePathNormalizer)->normalizePath($file['path'])
-                    : null;
-            } catch (Throwable $exception) {
-                throw new InvalidArgumentException(
-                    'HLS playback requires canonical inventory paths.',
-                    $exception->getCode(),
-                    previous: $exception,
-                );
-            }
+            $canonical = $this->canonicalPath($file['path'] ?? null);
 
             if (! is_string($file['disk'] ?? null) || $file['disk'] === '') {
                 throw new InvalidArgumentException('Each HLS playback inventory file requires a named disk.');
@@ -75,6 +65,26 @@ class HlsPresentation
         if (! isset($this->files[$playlist])
             || ! in_array($this->files[$playlist]['role'], ['hls-master', 'hls-playlist'], true)) {
             throw new InvalidArgumentException('HLS playback requires an inventory-owned entry playlist.');
+        }
+    }
+
+    /**
+     * Get the canonical form of the given inventory path, or null when it is not a string.
+     */
+    protected function canonicalPath(mixed $path): ?string
+    {
+        if (! is_string($path)) {
+            return null;
+        }
+
+        try {
+            return (new WhitespacePathNormalizer)->normalizePath($path);
+        } catch (Throwable $throwable) {
+            throw new InvalidArgumentException(
+                'HLS playback requires canonical inventory paths.',
+                $throwable->getCode(),
+                previous: $throwable,
+            );
         }
     }
 
@@ -210,13 +220,7 @@ class HlsPresentation
      */
     public function reference(array $source, ?string $target, string $uri, string $kind): string
     {
-        $key = $kind === 'key' ? ($this->keys[$source['path']][$uri] ?? null) : null;
-        $id = match (true) {
-            $key !== null => self::id($key['disk'], $key['path']),
-            $target !== null => self::id($source['disk'], $target),
-            default => null,
-        };
-        $file = $id === null ? null : ($this->files[$id] ?? null);
+        $id = $this->referencedId($source, $target, $uri, $kind);
         $roles = match ($kind) {
             'playlist' => ['hls-master', 'hls-playlist'],
             'key' => ['hls-key'],
@@ -224,11 +228,31 @@ class HlsPresentation
             default => ['hls-segment', 'hls-init', 'dash-segment', 'dash-init'],
         };
 
-        if ($file === null || ! in_array($file['role'], $roles, true)) {
+        if ($id === null || ! in_array($this->files[$id]['role'] ?? null, $roles, true)) {
             throw new HlsResourceNotFoundException("The HLS reference is not an owned {$kind} resource.");
         }
 
         return $id;
+    }
+
+    /**
+     * Get the resource ID that a playlist reference names, whether or not the inventory owns it.
+     */
+    protected function referencedId(array $source, ?string $target, string $uri, string $kind): ?string
+    {
+        // Key URIs come from the application's key URL callback and may point anywhere, so we
+        // will resolve them through the recorded key references instead of the playlist path.
+        if ($kind === 'key' && isset($this->keys[$source['path']][$uri])) {
+            $key = $this->keys[$source['path']][$uri];
+
+            return self::id($key['disk'], $key['path']);
+        }
+
+        if ($target === null) {
+            return null;
+        }
+
+        return self::id($source['disk'], $target);
     }
 
     /**

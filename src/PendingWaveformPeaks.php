@@ -213,11 +213,6 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
             $index = array_search('-map', $command, true);
         }
 
-        // We preserve the decoded track's rate and channel layout even when the caller's
-        // preprocessing changes the format, because the JSON timing describes these PCM
-        // frames. Using -ac alone would remix any layout that is not FFmpeg's default.
-        $channels = $this->mixMono ? 1 : ($this->inputChannels ?: 1);
-
         if ($this->mixMono && $this->inputChannels > 0) {
             $pan = 'pan=mono|c0='.collect(range(0, $this->inputChannels - 1))
                 ->map(fn ($i): string => sprintf('%.17g', 1 / $this->inputChannels)."*c{$i}")
@@ -231,14 +226,31 @@ class PendingWaveformPeaks implements Exportable, MeasuresDuration, PackagesArti
             }
         }
 
+        // We preserve the decoded track's rate and channel layout even when the caller's
+        // preprocessing changes the format, because the JSON timing describes these PCM
+        // frames. Using -ac alone would remix any layout that is not FFmpeg's default.
         array_splice($command, -1, 0, ['-map', "0:a:{$this->track}", '-vn', '-sn', '-dn', '-c:a', 'pcm_s16le',
             '-ar', (string) ($this->rate ?: 48000),
-            ...($this->mixMono || $this->inputLayout === null
-                ? ['-ac', (string) $channels]
-                : ['-ch_layout', $this->inputLayout]),
+            ...$this->channelOptions(),
             '-f', 's16le']);
 
         return $command;
+    }
+
+    /**
+     * Get the options that mix the PCM to mono or keep the decoded track's channel layout.
+     */
+    protected function channelOptions(): array
+    {
+        if ($this->mixMono) {
+            return ['-ac', '1'];
+        }
+
+        if ($this->inputLayout === null) {
+            return ['-ac', (string) ($this->inputChannels ?: 1)];
+        }
+
+        return ['-ch_layout', $this->inputLayout];
     }
 
     /**
