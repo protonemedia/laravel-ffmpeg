@@ -183,7 +183,7 @@ class HlsTest extends TestCase
         $disk = Mockery::mock(Filesystem::class);
         $disk->shouldReceive('put')
             ->andReturnUsing(function ($path, $stream, $options) use ($storage, &$writes) {
-                $this->assertEquals(['visibility' => 'private', 'CacheControl' => 'max-age=60'], $options);
+                $this->assertSame(['CacheControl' => 'max-age=60', 'visibility' => 'private'], $options);
 
                 $writes[] = $path;
 
@@ -994,7 +994,7 @@ class HlsTest extends TestCase
 
         $result = $export->save('catalog/master.m3u8');
 
-        $this->assertEquals(
+        $this->assertSame(
             ['lists/low/index.m3u8' => 'low', 'lists/high/index.m3u8' => 'high', 'catalog/master.m3u8' => null],
             $seen,
         );

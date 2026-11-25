@@ -134,7 +134,7 @@ class DashTest extends TestCase
         $this->assertSame('nested/é #?/manifest.mpd', $result->manifest()->path);
         $this->assertSame('nested/é #?/master.m3u8', $result->hlsPlaylist()->path);
         $this->assertSame($result->manifest()->path, end($writes));
-        $this->assertEquals([['visibility' => 'private', 'CacheControl' => 'max-age=60']], array_values($writeOptions));
+        $this->assertSame([['CacheControl' => 'max-age=60', 'visibility' => 'private']], array_values($writeOptions));
         $this->assertSame(1, $result->processes()->count());
         $this->assertSame([
             'dash-init' => 4,
