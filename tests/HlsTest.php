@@ -319,6 +319,25 @@ class HlsTest extends TestCase
         $this->assertEqualsWithDelta(0.7, $durations['small'][0], 0.05);
     }
 
+    public function test_real_variants_of_a_444_source_advertise_the_high_profile(): void
+    {
+        $binary = $this->useRealFFMpeg();
+        $disk = $this->fakeLocalDisk();
+
+        $this->assertProcessSucceeded(Process::run([
+            $binary, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x96:rate=20:duration=1',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv444p', '-threads', '1', $disk->path('screen.mkv'),
+        ]));
+
+        FFMpeg::disk('local')
+            ->open('screen.mkv')
+            ->hls(segmentDuration: 1)
+            ->variant('small', fn (HlsVariant $variant) => $variant->resize(width: 80))
+            ->save('screen/master.m3u8');
+
+        $this->assertMatchesRegularExpression('/CODECS="avc1\.64[0-9a-f]{4}"/i', $disk->get('screen/master.m3u8'));
+    }
+
     protected function typedExport(Media $media, string $type, bool $fragmented): PendingHlsExport
     {
         $export = $media->hls(segmentDuration: 0.7)

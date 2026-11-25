@@ -183,6 +183,53 @@ class EncodingOptionsTest extends TestCase
         ];
     }
 
+    #[DataProvider('pixelFormatProvider')]
+    public function test_libx264_defaults_to_the_yuv420p_pixel_format(Closure $configure, array $expected): void
+    {
+        $arguments = $this->arguments($configure($this->destination()));
+        $pixelFormats = [];
+
+        foreach ($arguments as $index => $token) {
+            if (str_starts_with($token, '-pix_fmt')) {
+                $pixelFormats[$token] = $arguments[$index + 1];
+            }
+        }
+
+        $this->assertSame($expected, $pixelFormats);
+    }
+
+    public static function pixelFormatProvider(): array
+    {
+        return [
+            'libx264' => [
+                fn (ExportOutput $output) => $output->video('libx264'),
+                ['-pix_fmt:v' => 'yuv420p'],
+            ],
+            'chosen pixel format' => [
+                fn (ExportOutput $output) => $output->video('libx264')->videoOptions(['-pix_fmt', 'yuv420p10le']),
+                ['-pix_fmt:v' => 'yuv420p10le'],
+            ],
+            'output option' => [
+                fn (ExportOutput $output) => $output->video('libx264')->outputOptions(['-pix_fmt', 'yuv444p']),
+                ['-pix_fmt' => 'yuv444p'],
+            ],
+            'other encoder' => [
+                fn (ExportOutput $output) => $output->video('libx265'),
+                [],
+            ],
+            'track switching to libx264' => [
+                fn (ExportOutput $output) => $output->video('libx265')
+                    ->videoStream(1, fn (VideoStreamSettings $video) => $video->codec('libx264')),
+                ['-pix_fmt:v:1' => 'yuv420p'],
+            ],
+            'track choosing a pixel format' => [
+                fn (ExportOutput $output) => $output->video('libx264')
+                    ->videoStream(1, fn (VideoStreamSettings $video) => $video->options(['-pix_fmt', 'yuv444p'])),
+                ['-pix_fmt:v' => 'yuv420p', '-pix_fmt:v:1' => 'yuv444p'],
+            ],
+        ];
+    }
+
     public function test_allows_bitstream_remux_of_copied_video(): void
     {
         $this->assertContains('h264_mp4toannexb', $this->arguments($this->destination()->video('copy')->audio('copy')
@@ -285,6 +332,25 @@ class EncodingOptionsTest extends TestCase
         $this->assertSame(hash('sha256', $original), hash('sha256', $audible));
         $this->assertNotSame(hash('sha256', $other), hash('sha256', $audible));
         $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_real_libx264_encodes_a_444_source_in_the_high_profile(): void
+    {
+        $this->realFixture();
+        $this->runTool(['-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=10:d=1', '-c:v', 'libx264', '-pix_fmt', 'yuv444p',
+            '-threads', '1', $this->path('screen.mkv')]);
+
+        $this->media('screen.mkv')
+            ->export()
+            ->video('libx264', bitrate: '200k')
+            ->twoPass()
+            ->save('screen.mp4');
+        $video = $this->media('screen.mp4')
+            ->probe()
+            ->video();
+
+        $this->assertSame('yuv420p', $video->get('pix_fmt'));
+        $this->assertSame('High', $video->get('profile'));
     }
 
     public function test_real_x265_private_settings(): void

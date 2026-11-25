@@ -110,7 +110,7 @@ class ExportTest extends TestCase
             '-filter_threads', '2', '-protocol_whitelist', 'file', '-probesize', '2000000', '-i', '[input:0]',
             '-ss', '12.5', '-t', '8', '-map', '0:a:0', '-map', '0:V:0:?', '-map', '-0:a:1:?',
             '-map_metadata', '0', '-map_chapters', '-1', '-c:v', 'libx264', '-crf:v', '21', '-preset:v', 'slow',
-            '-filter:v', 'crop=120:80:4:2,hflip', '-c:a', 'aac', '-b:a', '96k',
+            '-pix_fmt:v', 'yuv420p', '-filter:v', 'crop=120:80:4:2,hflip', '-c:a', 'aac', '-b:a', '96k',
             '-metadata', 'title=A "quoted" title; $HOME', '-metadata:s:0', 'title=First output stream',
             '-metadata:s:a:0', 'language=eng', '-disposition:a:0', 'default+forced', '-fps_mode:v', 'passthrough',
             '-threads', '1',

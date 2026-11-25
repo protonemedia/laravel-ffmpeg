@@ -193,6 +193,20 @@ $media->export()
 
 The `crf` argument sets constant quality, while the `bitrate` argument accepts positive integer bits per second, such as `2500000`, or a unit string, such as `'2500k'`, but not floats or unitless strings. The two may not be combined.
 
+<a name="pixel-formats"></a>
+#### Pixel Formats
+
+Every video track encoded with `libx264`, including HLS variants and two-pass outputs, uses the 8-bit 4:2:0 `yuv420p` pixel format of the High profile, which browsers and Apple devices play. A 10-bit, 4:2:2, or 4:4:4 source, such as a phone's HEVC recording or a ProRes master, is converted to it. Other encoders keep the source's pixel format.
+
+You may choose another pixel format using the `videoOptions` method, such as `yuv420p10le` for the High 10 profile:
+
+```php
+$media->export()
+    ->video('libx264')
+    ->videoOptions(['-pix_fmt', 'yuv420p10le'])
+    ->save('lesson-10-bit.mp4');
+```
+
 <a name="two-pass-encoding-and-clipping"></a>
 #### Two-Pass Encoding and Clipping
 

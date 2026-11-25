@@ -73,6 +73,21 @@ FFMpeg::disk('uploads')
     ->save('videos/intro.mkv');
 ```
 
+## Pixel Formats
+
+Every video track encoded with `libx264` uses the 8-bit 4:2:0 `yuv420p` pixel format of the High profile, so 10-bit, 4:2:2, and 4:4:4 sources still play in browsers. Other encoders keep the source's pixel format. To keep a 10-bit source as the High 10 profile, pass another pixel format to the `videoOptions` method:
+
+```php
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+
+FFMpeg::disk('uploads')
+    ->open('videos/intro.mov')
+    ->export()
+    ->video('libx264')
+    ->videoOptions(['-pix_fmt', 'yuv420p10le'])
+    ->save('videos/intro-10-bit.mp4');
+```
+
 ## Clipping and Two-Pass Encoding
 
 The `clip` method cuts accurately by transcoding. Passing `seek: 'keyframe'` allows stream copy, but the clip may start early. Two-pass encoding requires a video bitrate:
