@@ -1655,6 +1655,69 @@ class ExportTest extends TestCase
         Event::assertNotDispatched(Events\ExportCompleted::class);
     }
 
+    #[TestWith([''])]
+    #[TestWith(['not media'])]
+    public function test_real_unreadable_inputs_report_the_input_category_while_probing(string $contents): void
+    {
+        $this->useRealFFMpeg();
+        Storage::disk('memory')->put('unreadable.mp4', $contents);
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')->open('unreadable.mp4')->export()->save('unreadable-copy.mp4'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category, $exception->getMessage()]
+                === ['probing', 'input', 'The input media cannot be read.'],
+        );
+    }
+
+    public function test_real_truncated_media_reports_the_input_category_while_encoding(): void
+    {
+        $faststart = file_get_contents($this->fixture('faststart.mp4', [
+            '-f', 'lavfi', '-i', 'testsrc2=size=160x90:rate=10:duration=2',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-movflags', '+faststart',
+        ]));
+
+        Storage::disk('memory')->put('truncated.mp4', substr($faststart, 0, intdiv(strlen($faststart), 2)));
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')
+                ->open('truncated.mp4')
+                ->export()
+                ->video('libx264', preset: 'ultrafast')
+                ->save('truncated-copy.mp4'),
+            fn (MediaException $exception) => [$exception->phase, $exception->category] === ['encoding', 'input'],
+        );
+    }
+
+    public function test_real_unknown_encoders_report_the_encoder_category(): void
+    {
+        $media = $this->openLecture();
+
+        $this->assertThrows(
+            fn () => $media->export()->withoutVideo()->audio('libmissing')->save('missing.m4a'),
+            fn (MediaException $exception) => [$exception->category, $exception->getMessage()]
+                === ['encoder', 'The FFmpeg build has no [libmissing] encoder.'],
+        );
+    }
+
+    public function test_real_odd_source_dimensions_report_the_dimensions_category(): void
+    {
+        $fixture = $this->fixture('odd.mkv', [
+            '-f', 'lavfi', '-i', 'testsrc=size=95x63:rate=10:duration=1', '-c:v', 'ffv1',
+        ]);
+
+        Storage::disk('memory')->put('odd.mkv', file_get_contents($fixture));
+
+        $this->assertThrows(
+            fn () => FFMpeg::disk('memory')
+                ->open('odd.mkv')
+                ->export()
+                ->video('libx264', preset: 'ultrafast')
+                ->save('odd.mp4'),
+            fn (MediaException $exception) => [$exception->category, $exception->getMessage()]
+                === ['dimensions', 'The output dimensions [95x63] must be even for libx264.'],
+        );
+    }
+
     #[DataProvider('privateDestinationProvider')]
     public function test_destination_options_merge_and_the_last_explicit_visibility_wins(Closure $configure): void
     {

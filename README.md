@@ -115,7 +115,7 @@ sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffprobe -version
 
 The application may still fail after both commands succeed. You should then check permissions and write access to the temporary root and Storage destinations. After changing paths, rebuild the configuration cache and restart queue workers.
 
-Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause: a launch failure means the executable could not start, a version failure means an unsupported or mismatched pair, and an encoding failure means FFmpeg rejected the command or media. Categories name conditions, such as `metadata` for an unknown duration, `mapping` for a missing track, and `signal` for a process that another process or the operating system stopped, such as the out-of-memory killer.
+Failures throw a `MediaException` whose `phase`, `category`, and bounded `diagnostics` explain the cause: a launch failure means the executable could not start, a version failure means an unsupported or mismatched pair, and an encoding failure means FFmpeg rejected the command or media. Categories name conditions, such as `input` for media that FFprobe or FFmpeg cannot read, `encoder` for an encoder the FFmpeg build lacks, `dimensions` for odd frame sizes, `metadata` for an unknown duration, `mapping` for a missing track, and `signal` for a process that another process or the operating system stopped, such as the out-of-memory killer. Other process failures have the `exit` category.
 
 > [!WARNING]
 > Raw commands and unredacted process exceptions may contain credentials, so never publish them in logs or error responses.
