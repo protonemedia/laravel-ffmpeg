@@ -204,6 +204,21 @@ $result = $media->export()
 
 Without the `toDisk` method, outputs publish to the first input's disk, or to your `filesystems.default` disk for uploads, local files, and URLs. To change only the visibility of the published files, you may call the `visibility` method, such as `->visibility('public')`.
 
+Other formats work the same way, such as VP9 and Opus in WebM, or MP3 audio. An export maps the first video stream unless you choose its streams, and an `.mp3` file would embed that video's first frame as cover art, so you should call the `mapAudio` method for audio-only exports:
+
+```php
+$media->export()
+    ->video('libvpx-vp9', crf: 31)
+    ->audio('libopus', bitrate: '128k')
+    ->videoOptions(['-row-mt', '1'])
+    ->save('lesson.webm');
+
+$media->export()
+    ->mapAudio()
+    ->audio('libmp3lame', bitrate: '192k')
+    ->save('lesson.mp3');
+```
+
 <a name="copying-streams"></a>
 #### Copying Streams
 

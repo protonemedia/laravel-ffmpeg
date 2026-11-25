@@ -51,7 +51,7 @@ FFMpeg::disk('uploads')
 - `new Aac` used the `libfdk_aac` encoder. Call `mapAudio()->audio('aac', bitrate: '128k')` for FFmpeg's own encoder, or pass `libfdk_aac` when the build includes it.
 - `new Vorbis` becomes `mapAudio()->audio('vorbis')->audioOptions(['-strict', 'experimental', '-ac', '2'])`, or `audio('libvorbis')` when the build includes it.
 
-An export selects the first video stream as well as the first audio stream, so an audio-only output, such as an `.m4a` file, keeps the video unless you call `mapAudio`:
+An export selects the first video stream as well as the first audio stream, so an audio-only output, such as an `.m4a` or `.mp3` file, keeps the video unless you call `mapAudio`:
 
 ```php
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;

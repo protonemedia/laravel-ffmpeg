@@ -268,7 +268,7 @@ PHP-FFMpeg also added its own x264 tuning options, such as `-refs 6` and `-subq 
 | `setAudioKiloBitrate(192)` | `audio('aac', bitrate: '192k')` |
 | `setAudioChannels(1)` | `audioOptions(['-ac', '1'])` |
 
-PHP-FFMpeg's audio formats wrote only the audio stream. Version 9 maps the first video and audio streams by default, whatever the extension, so an `.m4a` export keeps the source's video and a `.wav` export fails. You should call `mapAudio()` or `withoutVideo()` for every audio-only export:
+PHP-FFMpeg's audio formats wrote only the audio stream. Version 9 maps the first video and audio streams by default, whatever the extension, so an `.m4a` export keeps the source's video, an `.mp3` export embeds the first frame as cover art, and a `.wav` export fails. You should call `mapAudio()` or `withoutVideo()` for every audio-only export:
 
 ```php
 // $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
@@ -294,7 +294,7 @@ Bitrates accept positive integers in bits per second, such as `2500000`, or unit
 
 PHP-FFMpeg's `Vorbis` format used FFmpeg's native `vorbis` encoder, which is experimental and only encodes stereo. You should call `audio('vorbis')` with `audioOptions(['-strict', 'experimental', '-ac', '2'])`, or use `libvorbis` if your FFmpeg build includes it.
 
-The package passes any encoder name to FFmpeg, and FFmpeg's WebM muxer accepts VP8, VP9, or AV1 video with Vorbis or Opus audio. Many FFmpeg builds lack `libvpx` and `libvorbis`, which `php artisan ffmpeg:doctor --encoder=libvpx --encoder=libvorbis` reports. Without them, you may encode AV1 with `libsvtav1` and use the native `vorbis` encoder for a `.webm` export:
+The package passes each encoder name to FFmpeg unchanged, so your build must include the encoders you name, such as `libvpx`, `libvorbis`, and `libmp3lame`, which `php artisan ffmpeg:doctor --encoder=libvpx --encoder=libvorbis --encoder=libmp3lame` checks. FFmpeg's WebM muxer accepts VP8, VP9, or AV1 video with Vorbis or Opus audio, so a build without `libvpx` and `libvorbis` may encode AV1 with `libsvtav1` and use the native `vorbis` encoder for a `.webm` export:
 
 ```php
 // $media is a Media instance from FFMpeg::open() or FFMpeg::disk()->open().
