@@ -29,7 +29,7 @@ trait ConfiguresOutputFilters
     }
 
     /**
-     * Resize the video to the given width, height, or both.
+     * Resize the video to the given even width, height, or both.
      *
      * One dimension preserves the display aspect ratio, while two dimensions stretch the video.
      */
@@ -44,6 +44,12 @@ trait ConfiguresOutputFilters
         if (($width ?? 1) <= 0 || ($height ?? 1) <= 0) {
             throw new InvalidArgumentException(
                 'The dimensions ['.($width ?? 'auto').'x'.($height ?? 'auto').'] must be positive.',
+            );
+        }
+
+        if (($width ?? 2) % 2 !== 0 || ($height ?? 2) % 2 !== 0) {
+            throw new InvalidArgumentException(
+                'The dimensions ['.($width ?? 'auto').'x'.($height ?? 'auto').'] must be even.',
             );
         }
 

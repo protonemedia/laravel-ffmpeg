@@ -152,6 +152,8 @@ $media->export()
     ->save('videos/treated.mp4');
 ```
 
+The `resize`, `crop`, `pad`, `contain`, and `cover` methods take even dimensions, as most video encoders require. A source with odd dimensions needs an even `resize` or `crop` before `libx264` encodes it, or the export fails with the `dimensions` category.
+
 The builder also offers `pad`, `deinterlace`, `frameRate`, `flipHorizontally`, `flipVertically`, `delayAudio`, `audioFilter`, `drawText`, `burnSubtitles`, and `lut3d`. Fades affect video and audio unless you pass `video: false` or `audio: false`. Pass only trusted expressions to `videoFilter` and `audioFilter`.
 
 ## Watermarks

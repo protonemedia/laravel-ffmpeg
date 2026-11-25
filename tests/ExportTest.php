@@ -176,6 +176,8 @@ class ExportTest extends TestCase
             'resize without dimensions' => [fn (PendingExport $export) => $export->resize()],
             'zero width' => [fn (PendingExport $export) => $export->resize(width: 0)],
             'negative height' => [fn (PendingExport $export) => $export->resize(height: -2)],
+            'odd resize width' => [fn (PendingExport $export) => $export->resize(width: 853)],
+            'odd resize height' => [fn (PendingExport $export) => $export->resize(width: 854, height: 479)],
             'zero contain width' => [fn (PendingExport $export) => $export->contain(0, 80)],
             'odd cover width' => [fn (PendingExport $export) => $export->cover(81, 80)],
             'filter syntax in the background' => [

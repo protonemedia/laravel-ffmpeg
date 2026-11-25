@@ -540,7 +540,16 @@ $media->export()
     ->save('covered.mp4');
 ```
 
-Passing one dimension to `resize` preserves the display aspect ratio, while two dimensions stretch the video. Crop and pad take positive even dimensions and center the video unless you pass offsets, and `rotate` accepts clockwise quarter turns or their negative equivalents, applied after the input's autorotation. FFmpeg validates geometry that depends on the source.
+Passing one dimension to `resize` preserves the display aspect ratio, while two dimensions stretch the video. Resize, crop, and pad take positive even dimensions, crop and pad center the video unless you pass offsets, and `rotate` accepts clockwise quarter turns or their negative equivalents, applied after the input's autorotation. FFmpeg validates geometry that depends on the source.
+
+Most video encoders, including `libx264`, require even frame dimensions. A source with odd dimensions, such as 1081x607, therefore needs an even `resize` or `crop`, or the export fails with the `dimensions` category:
+
+```php
+$media->export()
+    ->resize(width: 1080)
+    ->video('libx264')
+    ->save('even.mp4');
+```
 
 Raw probe dimensions are the encoded size, but sizing follows the autorotated display, so a portrait video stays portrait:
 

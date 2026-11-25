@@ -71,7 +71,9 @@ class PendingGif implements Exportable, OwnsGraph, RunsAnalysis, ShapesOutputs
 
         $this->export = new PendingExport($media, $disk, $this);
 
-        $this->export->resize($width)->frameRate($frameRate);
+        // A GIF may have any width, while resize() requires the even dimensions most video
+        // encoders need, so we will add the same aspect-preserving scale filter ourselves.
+        $this->export->videoFilter("scale=w={$width}:h=-2:reset_sar=1")->frameRate($frameRate);
     }
 
     /**

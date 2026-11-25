@@ -49,6 +49,19 @@ class GifTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    public function test_gif_widths_may_be_odd(): void
+    {
+        $command = FFMpeg::disk('missing')
+            ->open('missing.mp4')
+            ->gif(width: 81)
+            ->inspect();
+
+        $this->assertStringContainsString(
+            'scale=w=81:h=-2:reset_sar=1',
+            $command[array_search('-filter_complex', $command) + 1],
+        );
+    }
+
     #[DataProvider('invalidSettingsProvider')]
     public function test_invalid_settings_fail_without_io(Closure $configure): void
     {
