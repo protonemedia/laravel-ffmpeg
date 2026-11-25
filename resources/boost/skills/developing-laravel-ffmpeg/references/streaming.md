@@ -180,7 +180,7 @@ $result = FFMpeg::disk('uploads')
 $manifestPath = $result->manifest()->path;
 ```
 
-DASH supports finite, unencrypted H.264 and AAC. With `sharedHls`, the `playback` method returns an inventory for the protected playback routes.
+DASH supports finite, unencrypted H.264 or VP9 video with AAC audio. A representation encodes VP9 with `video('libvpx-vp9', bitrate: '1500k')`, and the representations of one adaptation set must share an encoder, so put H.264 and VP9 in separate sets. With `sharedHls`, the `playback` method returns an inventory for the protected playback routes.
 
 ## Continuous HLS
 

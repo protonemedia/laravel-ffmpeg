@@ -311,6 +311,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
 
         $prefix = dirname($destination) === '.' ? '' : dirname($destination).'/';
         $outputs = [];
+        $encoders = [];
         $clip = null;
 
         foreach ($this->representations as $name => $representation) {
@@ -318,6 +319,17 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             $type = $this->type($name);
 
             $this->ensureRepresentationIsEncodable($name, $type, $settings);
+
+            // Players switch between the representations of one set without reinitializing
+            // their decoder, so a set cannot mix H.264 and VP9.
+            $set = $this->adaptationSetOf($name);
+            $encoders[$set] ??= $settings[$type]['codec'];
+
+            if ($encoders[$set] !== $settings[$type]['codec']) {
+                throw new InvalidArgumentException(
+                    "The representations of the DASH adaptation set [{$set}] must use one encoder."
+                );
+            }
 
             if ($outputs !== [] && $settings['clip'] !== $clip) {
                 throw new InvalidArgumentException('DASH representations require identical clips.');
@@ -375,11 +387,11 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
             );
         }
 
-        $codec = $type === 'video' ? 'libx264' : 'aac';
+        $codecs = $type === 'video' ? ['libx264', 'libvpx-vp9'] : ['aac'];
 
-        if (($settings[$type]['codec'] ?? null) !== $codec) {
+        if (! in_array($settings[$type]['codec'] ?? null, $codecs, true)) {
             throw new InvalidArgumentException(
-                "The DASH representation [{$name}] must encode {$type} with [{$codec}]."
+                "The DASH representation [{$name}] must encode {$type} with [".implode('] or [', $codecs).'].'
             );
         }
 
@@ -440,14 +452,23 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
                 if ($this->type(array_keys($this->representations)[$index]) === 'video') {
                     $result[] = '-force_key_frames:v';
                     $result[] = 'expr:gte(t,n_forced*'.CommandCompiler::timestamp($this->segmentDuration).')';
-                    $result[] = '-flags:v';
-                    $result[] = '+cgop';
-                    $result[] = '-sc_threshold:v';
-                    $result[] = '0';
+
+                    // The closed GOP flag and scene cut threshold are x264 settings that libvpx
+                    // does not use, so FFmpeg would warn about them for VP9 representations.
+                    if ($outputs[$index]->outputConfiguration()['video']['codec'] === 'libx264') {
+                        $result[] = '-flags:v';
+                        $result[] = '+cgop';
+                        $result[] = '-sc_threshold:v';
+                        $result[] = '0';
+                    }
                 }
 
+                // FFmpeg writes VP9 to WebM segments by default, while the init.mp4 and .m4s
+                // names and the shared HLS playlists require fragmented MP4.
                 $result[] = '-f';
                 $result[] = 'dash';
+                $result[] = '-dash_segment_type';
+                $result[] = 'mp4';
                 $result[] = '-seg_duration';
                 $result[] = CommandCompiler::timestamp($this->segmentDuration);
                 $result[] = '-use_template';

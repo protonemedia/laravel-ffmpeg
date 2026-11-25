@@ -388,6 +388,41 @@ class DashTest extends TestCase
         $this->assertCount(2, $result->files()->where('role', 'dash-segment'));
     }
 
+    public function test_vp9_representations_align_and_play_next_to_h264(): void
+    {
+        $result = (new PendingDashExport($this->source(), 'local', 0.7))
+            ->adaptationSet('h264', 'video')
+            ->adaptationSet('vp9', 'video')
+            ->adaptationSet('sound', 'audio')
+            ->representation('avc', 'h264', fn (DashRepresentation $r) => $r->map('0:v:0')->video(bitrate: '200k'))
+            ->representation('low', 'vp9', fn (DashRepresentation $r) => $r->map('0:v:0')
+                ->resize(width: 80)
+                ->video('libvpx-vp9', bitrate: '120k'))
+            ->representation('high', 'vp9', fn (DashRepresentation $r) => $r->map('0:v:0')
+                ->video('libvpx-vp9', bitrate: '300k'))
+            ->representation('audio', 'sound', fn (DashRepresentation $r) => $r->map('0:a:0')->audio(bitrate: '48k'))
+            ->sharedHls()
+            ->save('vp9/manifest.mpd');
+        $disk = Storage::disk('local');
+        $xml = new DOMDocument;
+        $xml->loadXML($disk->get($result->manifest()->path));
+        $codecs = $timelines = [];
+
+        foreach ($xml->getElementsByTagName('Representation') as $representation) {
+            $name = $representation->getAttribute('id');
+            $codecs[$name] = strtok($representation->getAttribute('codecs'), '.');
+            $timelines[$name] = $xml->saveXML($representation->getElementsByTagName('SegmentTimeline')->item(0));
+        }
+
+        $this->assertSame(['avc' => 'avc1', 'low' => 'vp09', 'high' => 'vp09', 'audio' => 'mp4a'], $codecs);
+        $this->assertSame($timelines['low'], $timelines['high']);
+        $this->assertSame(3, preg_match_all('/CODECS="(?:avc1|vp09)\.[^"]+,mp4a\.40\.2"/', $disk->get(
+            $result->hlsPlaylist()->path,
+        )));
+        $this->decode($disk->path($result->manifest()->path), ['-map', '0:v:1', '-map', '0:v:2', '-map', '0:a:0']);
+        $this->decode($disk->path($result->hlsPlaylist()->path), ['-map', '0']);
+    }
+
     public function test_corrupt_encoder_inventory_fails_validation_before_any_publication(): void
     {
         $source = $this->source();
@@ -419,7 +454,10 @@ class DashTest extends TestCase
 
     public static function invalidConfigurations(): array
     {
-        return [['muxer'], ['copy'], ['clip'], ['path'], ['missing-set'], ['video-gop'], ['video-params']];
+        return [
+            ['muxer'], ['copy'], ['encoder'], ['mixed-encoders'], ['clip'], ['path'], ['missing-set'], ['video-gop'],
+            ['video-params'],
+        ];
     }
 
     #[DataProvider('invalidConfigurations')]
@@ -433,6 +471,12 @@ class DashTest extends TestCase
         match ($case) {
             'muxer' => $export->outputOptions(['-f', 'mp4'])->inspect(),
             'copy' => $export->video('copy')->inspect(),
+            'encoder' => $export->video('libx265')->inspect(),
+            'mixed-encoders' => $export->representation(
+                'vp9',
+                'picture',
+                fn ($r) => $r->map('0:v:0')->video('libvpx-vp9', bitrate: '200k'),
+            )->inspect(),
             'clip' => $export->representation(
                 'different',
                 'picture',
