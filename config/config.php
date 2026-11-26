@@ -59,7 +59,7 @@ return [
     |
     */
 
-    'restrict_options' => env('FFMPEG_RESTRICT_OPTIONS', true),
+    'restrict_options' => true,
 
     /*
     |--------------------------------------------------------------------------

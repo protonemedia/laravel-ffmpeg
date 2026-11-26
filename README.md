@@ -1754,12 +1754,12 @@ The configuration is published as `config/laravel-ffmpeg.php`. The `inspect` met
 <a name="option-restrictions"></a>
 #### Option Restrictions
 
-The `inputOptions` argument and the `outputOptions` and `globalOptions` methods only accept the options the package allows, and the exception names the option it rejects. You may lift this allow list by setting `FFMPEG_RESTRICT_OPTIONS` or the `restrict_options` option to `false`:
+The `inputOptions` argument and the `outputOptions` and `globalOptions` methods only accept the options the package allows, and the exception names the option it rejects. You may lift this allow list by setting the `restrict_options` option to `false`:
 
 ```php
 return [
     // ...
-    'restrict_options' => env('FFMPEG_RESTRICT_OPTIONS', true),
+    'restrict_options' => false,
 ];
 ```
 
