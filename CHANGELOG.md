@@ -2,6 +2,10 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 9.0.2 - 2026-11-26
+
+* Delete each plaintext HLS segment once it is encrypted, so encrypted exports no longer need twice the segment space in the workspace
+
 ## 9.0.1 - 2026-11-25
 
 * Fix `coverArt()` and `watermark()` rejecting JPEG images larger than 2 KB
