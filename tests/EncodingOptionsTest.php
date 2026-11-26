@@ -81,6 +81,18 @@ class EncodingOptionsTest extends TestCase
         $this->assertSame($arguments, $this->arguments($this->destination()->configure($inherited)));
     }
 
+    public function test_variants_inherit_flags_and_replace_overridden_options(): void
+    {
+        $shared = $this->destination()
+            ->outputOptions(['-movflags', '+faststart', '-shortest', '-fpsmax:v', '60']);
+        $variant = (new HlsVariant)->outputOptions(['-fpsmax:v', '30']);
+
+        $this->assertSame(
+            ['-movflags', '+faststart', '-shortest', '-fpsmax:v', '30'],
+            $variant->inherit($shared->outputConfiguration())['outputOptions'],
+        );
+    }
+
     public function test_accepts_curated_options(): void
     {
         $tokens = ['-cpu-used:v:1', '6', '-deadline:v', 'realtime', '-row-mt:v', '1', '-rc:v', 'vbr',
@@ -92,8 +104,8 @@ class EncodingOptionsTest extends TestCase
 
         $this->assertSame($tokens, CommandCompiler::options($tokens, 'output'));
 
-        $flags = ['-movflags', '+faststart', '-disposition:a:0', 'default+forced', '-preset', 'ultra-fast',
-            '-strict:a', 'experimental'];
+        $flags = ['-movflags', '+faststart', '-shortest', '-disposition:a:0', 'default+forced', '-preset', 'ultra-fast',
+            '-strict:a', 'experimental', '-fpsmax:v', '30000/1001'];
 
         $this->assertSame($flags, CommandCompiler::options($flags, 'output'));
         $this->assertSame(
@@ -128,6 +140,11 @@ class EncodingOptionsTest extends TestCase
             'strict on video' => ['output', ['-strict:v', 'experimental']],
             'strict below experimental' => ['output', ['-strict:a', 'unofficial']],
             'muxer option on a stream' => ['output', ['-frag_duration:v', '1000']],
+            'value after a flag' => ['output', ['-shortest', '1']],
+            'flag on a stream' => ['output', ['-shortest:a']],
+            'flag on input' => ['input', ['-shortest']],
+            'frame rate cap on audio' => ['output', ['-fpsmax:a', '60']],
+            'missing value' => ['output', ['-shortest', '-preset']],
             'unknown color transfer' => ['output', ['-color_trc', 'unknown']],
             'file value' => ['output', ['-sample_fmt', 'file:/tmp/file']],
             'segment list sidecar' => ['output', ['-segment_list', 'sidecar']],
@@ -169,6 +186,9 @@ class EncodingOptionsTest extends TestCase
             ],
             'sample format on copied audio' => [
                 fn (ExportOutput $output) => $output->audio('copy')->outputOptions(['-sample_fmt:a:0', 's16']),
+            ],
+            'channels after a flag on copied audio' => [
+                fn (ExportOutput $output) => $output->audio('copy')->outputOptions(['-shortest', '-ac', '1']),
             ],
             'encoder options on copied video' => [
                 fn (ExportOutput $output) => $output->video('copy')->outputOptions(['-x264-params:v', 'keyint=10']),
@@ -456,6 +476,43 @@ class EncodingOptionsTest extends TestCase
             ->save('vorbis.ogg');
 
         $this->assertSame('vorbis', $this->media('vorbis.ogg')->probe()->streams()[0]->get('codec_name'));
+    }
+
+    public function test_real_frame_rate_cap_shortest_and_audio_quality(): void
+    {
+        $this->realFixture();
+        $this->runTool(['-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=120:d=3', '-c:v', 'libx264', '-threads', '1',
+            $this->path('fast.mp4')]);
+
+        // FFmpeg refuses -fpsmax next to the passthrough frame rate mode an export uses by default.
+        $this->media('fast.mp4')
+            ->export()
+            ->video('libx264')
+            ->outputOptions(['-fpsmax', '60'])
+            ->save('capped.mp4');
+
+        // The video runs for three seconds, so only -shortest stops the export with the one-second audio.
+        $export = $this->media('fast.mp4')->export();
+        $audio = $export->addInput($this->media('source.mkv'));
+
+        $export->map('0:v:0')
+            ->map("{$audio}:a:0")
+            ->withoutMetadata(chapters: true)
+            ->video('libx264')
+            ->audio('aac')
+            ->outputOptions(['-shortest'])
+            ->save('shortest.mp4');
+
+        $this->media('source.mkv')
+            ->export()
+            ->audio('libmp3lame')
+            ->audioOptions(['-q', '9'])
+            ->save('quality.mp3');
+
+        $this->assertSame('60/1', $this->media('capped.mp4')->probe()->video()->get('avg_frame_rate'));
+        $this->assertEqualsWithDelta(1.0, $this->media('shortest.mp4')->probe()->duration(), 0.1);
+        $this->assertLessThan(100000, (int) $this->media('quality.mp3')->probe()->get('format.bit_rate'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_real_bitstream_remux_keeps_the_decoded_frames(): void

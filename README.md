@@ -554,7 +554,7 @@ $media->export()
     ->save('selected.mp4');
 ```
 
-A missing output track fails before encoding, and only the callbacks' scalar settings are kept, not the closures. Audio tracks may set the codec, bitrate, sample rate, channels, sample format, channel layout, compression level, and filters, which run after shared filters.
+A missing output track fails before encoding, and only the callbacks' scalar settings are kept, not the closures. Audio tracks may set the codec, bitrate, quality, sample rate, channels, sample format, channel layout, compression level, and filters, which run after shared filters.
 
 The `aac` encoder keeps the source's channel layout, so a 5.1 source stays 5.1. To encode stereo for web playback, you may pass `-ac` to the `audioOptions` method, or call the `channels` method on an individual audio track:
 
@@ -572,9 +572,9 @@ $media->export()
     ->save('stereo-track.mp4');
 ```
 
-The `videoOptions` and `audioOptions` methods accept curated pairs, such as numeric x264 and x265 parameters, SVT-AV1's `lp` level of parallelism, selected VPx, AV1, and NVENC settings, color signaling, and `['-strict', 'experimental']` for experimental audio encoders such as FFmpeg's native `vorbis`; unknown parameters and file-producing options are rejected. The `color` method only sets metadata, so use a color-conversion filter to change pixel values, as [HDR and SDR Video](#hdr-and-sdr-video) shows. A transfer other than PQ (`smpte2084`) or HLG (`arib-std-b67`) also drops the HDR10 mastering display and content light level metadata. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
+The `videoOptions` and `audioOptions` methods accept curated pairs, such as numeric x264 and x265 parameters, SVT-AV1's `lp` level of parallelism, selected VPx, AV1, and NVENC settings, color signaling, variable bitrate quality, such as `['-q', '4']` for `libmp3lame`, and `['-strict', 'experimental']` for experimental audio encoders such as FFmpeg's native `vorbis`; unknown parameters and file-producing options are rejected. The `color` method only sets metadata, so use a color-conversion filter to change pixel values, as [HDR and SDR Video](#hdr-and-sdr-video) shows. A transfer other than PQ (`smpte2084`) or HLG (`arib-std-b67`) also drops the HDR10 mastering display and content light level metadata. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
 
-The `outputOptions` method also accepts single-file muxer settings and argument-free bitstream filters, such as `['-bsf:v', 'h264_mp4toannexb']`, but not sidecar paths. The `globalOptions` method accepts named hardware device declarations, where a derived device must reference an earlier one:
+The `outputOptions` method also accepts single-file muxer settings and argument-free bitstream filters, such as `['-bsf:v', 'h264_mp4toannexb']`, but not sidecar paths. It accepts `-fpsmax` to cap a video's frame rate without raising a lower one, and the `-shortest` flag, the only option without a value, to end the output with its shortest stream, such as added audio that is shorter than the video. A stream that a filter graph generates, such as a `color` source, may run past that end by the frames the encoder buffers, so you should give it a duration instead. The `globalOptions` method accepts named hardware device declarations, where a derived device must reference an earlier one:
 
 ```php
 $export = $media->export()

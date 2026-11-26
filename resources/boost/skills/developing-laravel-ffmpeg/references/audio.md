@@ -24,7 +24,7 @@ $media->export()
     ->save('videos/stereo-track.mp4');
 ```
 
-The `audioOptions` method accepts only the `-ar`, `-ac`, `-sample_fmt`, `-channel_layout`, `-compression_level`, and `-strict` options, each with a string value. An experimental encoder, such as FFmpeg's own `vorbis`, needs `['-strict', 'experimental']`, since the `-2` value that FFmpeg suggests is rejected.
+The `audioOptions` method accepts only the `-ar`, `-ac`, `-q`, `-sample_fmt`, `-channel_layout`, `-compression_level`, and `-strict` options, each with a string value and without a stream specifier, such as `['-q', '4']` for variable bitrate `libmp3lame`. An experimental encoder, such as FFmpeg's own `vorbis`, needs `['-strict', 'experimental']`, since the `-2` value that FFmpeg suggests is rejected.
 
 ## Background Music
 

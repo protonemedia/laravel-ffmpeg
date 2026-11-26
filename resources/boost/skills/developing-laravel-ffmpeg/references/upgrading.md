@@ -66,7 +66,7 @@ FFMpeg::disk('uploads')
 
 ## Raw Options
 
-Raw arguments, such as `addFilter(['-movflags', '+faststart'])`, become `outputOptions`, `videoOptions`, `audioOptions`, or `globalOptions`. Each takes option and value pairs as strings, and only the options the package allows:
+Raw arguments, such as `addFilter(['-movflags', '+faststart'])`, become `outputOptions`, `videoOptions`, `audioOptions`, or `globalOptions`. Each takes option and value pairs as strings, apart from the `-shortest` flag of `outputOptions`, and only the options the package allows:
 
 - `['-strict', '-2']` is rejected, while `['-strict', 'experimental']` works.
 - `['-q:v', 5]` is rejected, while `['-q:v', '5']` works.

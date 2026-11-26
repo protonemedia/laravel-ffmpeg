@@ -2,6 +2,10 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 9.0.6 - 2026-11-26
+
+* Allow `-fpsmax` and the `-shortest` flag in `outputOptions()`, and `-q` in `audioOptions()` and individual audio tracks
+
 ## 9.0.5 - 2026-11-26
 
 * Let `still()` accept odd-sized images, so a `resize()` or `crop()` may make them even before encoding

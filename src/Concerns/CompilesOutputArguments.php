@@ -265,7 +265,7 @@ trait CompilesOutputArguments
             && ($this->video['codec'] ?? null) !== 'copy'
             && ! array_any(
                 $this->outputOptions,
-                fn ($token): int|false => preg_match('/^-(?:r|fps_mode)(?::|$)/', $token),
+                fn ($token): int|false => preg_match('/^-(?:r|fpsmax|fps_mode)(?::|$)/', $token),
             )) {
             $options[] = '-fps_mode:v';
             $options[] = 'passthrough';
@@ -323,14 +323,14 @@ trait CompilesOutputArguments
     {
         $encoderOptions = [
             'preset', 'tune', 'profile', 'level', 'pix_fmt', 'maxrate', 'minrate', 'bufsize',
-            'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'ar', 'ac', 'q', 'r', 'x264-params', 'x265-params',
-            'svtav1-params', 'cpu-used', 'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq', 'temporal-aq',
-            'aq-strength', 'color_primaries', 'color_trc', 'colorspace', 'color_range', 'compression_level',
-            'sample_fmt', 'channel_layout', 'strict',
+            'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'ar', 'ac', 'q', 'r', 'fpsmax', 'x264-params',
+            'x265-params', 'svtav1-params', 'cpu-used', 'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq',
+            'temporal-aq', 'aq-strength', 'color_primaries', 'color_trc', 'colorspace', 'color_range',
+            'compression_level', 'sample_fmt', 'channel_layout', 'strict',
         ];
 
-        for ($index = 0; $index < count($this->outputOptions); $index += 2) {
-            $parts = explode(':', substr($this->outputOptions[$index], 1));
+        foreach (CommandCompiler::pairs($this->outputOptions) as [$flag]) {
+            $parts = explode(':', substr($flag, 1));
 
             if (! in_array($parts[0], $encoderOptions, true)) {
                 continue;

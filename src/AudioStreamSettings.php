@@ -106,7 +106,7 @@ class AudioStreamSettings
         for ($index = 0; $index < count($tokens); $index += 2) {
             $name = substr($tokens[$index], 1);
 
-            if (! in_array($name, ['ar', 'ac', 'sample_fmt', 'channel_layout', 'compression_level', 'strict'], true)) {
+            if (! in_array($name, ['ar', 'ac', 'q', 'sample_fmt', 'channel_layout', 'compression_level', 'strict'], true)) {
                 throw new InvalidArgumentException('Unsupported audio stream setting.');
             }
 

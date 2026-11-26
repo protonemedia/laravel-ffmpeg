@@ -110,33 +110,43 @@ class CommandCompiler
     /**
      * Validate a flat list of option and value tokens of the given scope.
      *
-     * Every option takes exactly one value, so callers cannot change an option's arity.
+     * Flags such as -shortest take no value and every other option takes exactly one,
+     * so callers cannot change an option's arity.
      */
     public static function options(array $tokens, string $scope): array
     {
         $allowed = self::allowedOptions($scope);
 
-        if (! array_is_list($tokens) || count($tokens) % 2 !== 0) {
+        if (! array_is_list($tokens)) {
             throw new InvalidArgumentException('Options must be a list of supported option/value pairs.');
         }
 
         $seen = [];
         $devices = [];
 
-        for ($index = 0; $index < count($tokens); $index += 2) {
+        for ($index = 0; $index < count($tokens); $index++) {
             $flag = $tokens[$index];
-            $value = $tokens[$index + 1];
+            $value = null;
 
             [$name, $stream] = self::parseFlag($flag, $allowed, $scope);
 
-            self::ensureSingleLineValue($name, $value);
+            if ($allowed[$name] !== 'flag') {
+                if (! array_key_exists(++$index, $tokens)) {
+                    throw new InvalidArgumentException('Options must be a list of supported option/value pairs.');
+                }
+
+                $value = $tokens[$index];
+
+                self::ensureSingleLineValue($name, $value);
+            }
+
             self::ensureStreamSpecifierIsSupported($name, $stream);
 
             if (isset($seen[$flag]) && ! in_array($name, ['streamid', 'init_hw_device'], true)) {
                 throw new InvalidArgumentException("The FFmpeg option [{$name}] must not be repeated.");
             }
 
-            if (! self::validValue($allowed[$name], $value, $stream)) {
+            if ($value !== null && ! self::validValue($allowed[$name], $value, $stream)) {
                 throw new InvalidArgumentException("The FFmpeg option [{$name}] has an invalid value.");
             }
 
@@ -155,7 +165,26 @@ class CommandCompiler
     }
 
     /**
-     * Get the supported options of the given scope and the rule for each value.
+     * Split validated output option tokens into each option and its value, which is null for a flag.
+     *
+     * @return list<array{0: string, 1: string|null}>
+     */
+    public static function pairs(array $tokens): array
+    {
+        $flags = array_keys(self::allowedOptions('output'), 'flag', true);
+        $pairs = [];
+
+        for ($index = 0; $index < count($tokens); $index++) {
+            $pairs[] = in_array(substr($tokens[$index], 1), $flags, true)
+                ? [$tokens[$index], null]
+                : [$tokens[$index], $tokens[++$index]];
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * Get the supported options of the given scope and the rule for each value, where flags take none.
      */
     protected static function allowedOptions(string $scope): array
     {
@@ -175,7 +204,7 @@ class CommandCompiler
                 'g' => 'positive', 'keyint_min' => 'positive', 'sc_threshold' => 'unsigned', 'bf' => 'unsigned',
                 'refs' => 'positive', 'ar' => 'positive', 'ac' => 'positive', 'movflags' => 'word',
                 'fps_mode' => 'fps', 'threads' => 'positive', 'disposition' => 'word', 'streamid' => 'streamid',
-                'tag' => 'word', 'q' => 'unsigned', 'r' => 'rate',
+                'tag' => 'word', 'q' => 'unsigned', 'r' => 'rate', 'fpsmax' => 'rate', 'shortest' => 'flag',
                 'c' => 'subtitle-codec',
                 'x264-params' => 'x264', 'x265-params' => 'x265', 'svtav1-params' => 'svtav1',
                 'cpu-used' => 'unsigned', 'deadline' => 'deadline', 'row-mt' => 'boolean',
@@ -234,10 +263,10 @@ class CommandCompiler
     {
         $videoOnly = ['x264-params', 'x265-params', 'svtav1-params', 'cpu-used', 'deadline', 'row-mt', 'rc', 'cq',
             'rc-lookahead', 'spatial-aq', 'temporal-aq', 'aq-strength', 'color_primaries', 'color_trc', 'colorspace',
-            'color_range'];
+            'color_range', 'fpsmax'];
         $audioOnly = ['compression_level', 'sample_fmt', 'channel_layout', 'strict'];
         $fileOnly = ['avoid_negative_ts', 'muxdelay', 'muxpreload', 'flush_packets', 'video_track_timescale',
-            'frag_duration', 'min_frag_duration', 'cluster_time_limit', 'cluster_size_limit', 'write_crc32'];
+            'frag_duration', 'min_frag_duration', 'cluster_time_limit', 'cluster_size_limit', 'write_crc32', 'shortest'];
 
         $accepted = match (true) {
             in_array($name, $fileOnly, true) => false,
