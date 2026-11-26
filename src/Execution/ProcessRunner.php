@@ -201,11 +201,11 @@ class ProcessRunner
     }
 
     /**
-     * Ensure the shell started the binary, since it exits with 126 or 127 when it cannot.
+     * Ensure the binary started and reported its version, which a working binary does with exit code 0.
      */
     protected function ensureBinaryStarted(ProcessResult $result, string $tool): void
     {
-        if (! in_array($result->exitCode, [126, 127], true)) {
+        if ($result->exitCode === 0) {
             return;
         }
 
@@ -213,7 +213,7 @@ class ProcessRunner
     }
 
     /**
-     * Get the message for a binary that the shell could not start.
+     * Get the message for a binary that could not start or report its version.
      */
     protected function launchFailureMessage(string $tool, ProcessResult $result): string
     {
@@ -224,13 +224,18 @@ class ProcessRunner
         }
 
         // The dynamic linker also exits with 127 when the binary exists but cannot load one
-        // of its shared libraries. Its error names the library, which holds no path, so we
-        // will quote that name while the binary's own path stays out of the message.
-        if (preg_match('/error while loading shared libraries: ([\w.+-]{1,128}):/', $result->diagnostics, $matches)) {
+        // of its shared libraries, while macOS dyld aborts it. Both errors name the library,
+        // so we will quote its filename while every directory stays out of the message.
+        if (preg_match('/error while loading shared libraries: ([\w.+-]{1,128}):/', $result->diagnostics, $matches)
+            || preg_match('~Library not loaded: (?:\S*/)?([\w.+-]{1,128})(?:\s|$)~', $result->diagnostics, $matches)) {
             return "The configured {$name} binary cannot load the shared library [{$matches[1]}].";
         }
 
-        return "The configured {$name} binary cannot be found.";
+        if ($result->exitCode === 127) {
+            return "The configured {$name} binary cannot be found.";
+        }
+
+        return "The configured {$name} binary exited with code [{$result->exitCode}] before reporting its version.";
     }
 
     /**
