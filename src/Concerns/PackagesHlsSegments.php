@@ -3,6 +3,7 @@
 namespace ProtoneMedia\LaravelFFMpeg\Concerns;
 
 use Closure;
+use Illuminate\Filesystem\Filesystem;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\HlsEncryption;
 use ProtoneMedia\LaravelFFMpeg\ExportOutput;
@@ -63,12 +64,17 @@ trait PackagesHlsSegments
         $name = array_keys($this->variants)[$index];
         $lines = $this->playlistLines($path);
         $target = $this->ensurePlaylistIsComplete($lines);
+
+        $extension = $this->segmentExtension($this->isSubtitle($index));
+
+        // The segments are listed before the rewrite, which deletes their plaintext once encrypted.
+        $written = glob(dirname($path)."/segment-{$index}-*.{$extension}") ?: [];
         $media = $this->rewriteMediaLines(
             ['index' => $index, 'output' => $output, 'path' => $path, 'lines' => $lines],
             $encryption,
         );
 
-        $this->ensureSegmentInventoryIsComplete($index, $path, $media);
+        $this->ensureSegmentInventoryIsComplete($index, $path, $media, $written);
 
         $destination = $output->destination()['path'];
         $attributes = $this->streamAttributes($index, $path, $media['video']);
@@ -282,6 +288,12 @@ trait PackagesHlsSegments
             [$media['streamType'], $media['start'], $media['video']] = $this->probeFirstSegment($probePath);
         }
 
+        // Validation probes only the first segment, so we will delete the plaintext of the others
+        // once encrypted, keeping the workspace at about one copy of the segments instead of two.
+        if ($encrypted !== null && $media['count'] > 1) {
+            (new Filesystem)->delete($local);
+        }
+
         $media['segments'][] = [
             'path' => $encrypted['path'] ?? $local,
             'probePath' => $probePath,
@@ -373,12 +385,10 @@ trait PackagesHlsSegments
      * Ensure the playlist references every segment and initialization file the encoder wrote.
      *
      * @param  array<string, mixed>  $media
+     * @param  list<string>  $actual
      */
-    protected function ensureSegmentInventoryIsComplete(int $index, string $path, array $media): void
+    protected function ensureSegmentInventoryIsComplete(int $index, string $path, array $media, array $actual): void
     {
-        $extension = $this->segmentExtension($this->isSubtitle($index));
-        $actual = glob(dirname($path)."/segment-{$index}-*.{$extension}") ?: [];
-
         sort($actual);
 
         $initializations = collect(glob(dirname($path).'/init-*.mp4') ?: [])

@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -1153,6 +1154,7 @@ class HlsTest extends TestCase
             ->where('role', 'hls-segment')
             ->mapWithKeys(fn ($file) => [$file->path => $disk->get($file->path)])
             ->all();
+        $workspace = [];
         $export->encrypt(
             'secrets',
             fn ($path) => $secrets->path($path),
@@ -1160,8 +1162,18 @@ class HlsTest extends TestCase
             rotateEvery: $rotateEvery,
             directory: 'lesson/keys',
         )
-            ->playlistUsing(fn ($text) => str_replace("#EXTM3U\n", "#EXTM3U\n# Encrypted lesson\n", $text));
+            ->playlistUsing(fn ($text) => str_replace("#EXTM3U\n", "#EXTM3U\n# Encrypted lesson\n", $text))
+            ->onProgress(function (Progress $progress) use (&$workspace) {
+                $workspace[$progress->phase] ??= collect(File::allFiles($this->root.'/workspaces', true))
+                    ->sum(fn ($file) => $file->getSize());
+            });
         $result = $export->save('master.m3u8');
+
+        // Encryption replaces the plaintext of all but the first segment of each variant instead of adding a copy.
+        $this->assertLessThan(
+            array_sum(array_map(strlen(...), $original)) / 2,
+            $workspace[Progress::PUBLICATION] - $workspace[Progress::VALIDATION],
+        );
 
         $this->assertSame($plain->file()->path, $result->file()->path);
         $this->assertSame('hls-segment', $result->file()->role);
