@@ -106,7 +106,7 @@ FFMpeg::disk('assets')
     ->save('videos/title.mp4');
 ```
 
-The image needs even dimensions.
+Most encoders, including `libx264`, need even dimensions, so `resize` or `crop` an odd-sized image, or the export fails with the `dimensions` category.
 
 ## Camera Snapshots
 
