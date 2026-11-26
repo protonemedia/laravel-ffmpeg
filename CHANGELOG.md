@@ -5,6 +5,7 @@ All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 ## 9.0.6 - 2026-11-26
 
 * Allow `-fpsmax` and the `-shortest` flag in `outputOptions()`, and `-q` in `audioOptions()` and individual audio tracks
+* Add the `restrict_options` config option, which passes raw input, output, and global options outside the allow list to FFmpeg, and name the rejected option in the exception
 
 ## 9.0.5 - 2026-11-26
 

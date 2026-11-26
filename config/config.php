@@ -50,6 +50,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Option Restrictions
+    |--------------------------------------------------------------------------
+    |
+    | Raw input, output, and global options must be on the allow list of the
+    | package. Setting this option to false passes the others to FFmpeg as
+    | is, except for those the package sets itself, such as -i and -map.
+    |
+    */
+
+    'restrict_options' => env('FFMPEG_RESTRICT_OPTIONS', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Process Timeout
     |--------------------------------------------------------------------------
     |

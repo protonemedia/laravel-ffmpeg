@@ -125,6 +125,10 @@ class DoctorCommand extends Command
             $this->components->warn('Version check disabled. FFmpeg and FFprobe releases are NOT verified.');
         }
 
+        if (! config('laravel-ffmpeg.restrict_options', true)) {
+            $this->components->warn('Option allow list disabled. Raw FFmpeg options are NOT restricted.');
+        }
+
         $this->displayRetryAfterWarning();
 
         if ($missing !== []) {

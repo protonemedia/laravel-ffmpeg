@@ -12,6 +12,11 @@ use ProtoneMedia\LaravelFFMpeg\Execution\FilterGraph;
 class AudioStreamSettings
 {
     /**
+     * The encoder options a track accepts.
+     */
+    protected const OPTIONS = ['-ar', '-ac', '-q', '-sample_fmt', '-channel_layout', '-compression_level', '-strict'];
+
+    /**
      * The encoding overrides of the track.
      */
     protected array $settings = [];
@@ -101,16 +106,19 @@ class AudioStreamSettings
      */
     public function options(array $tokens): static
     {
+        // The options a track accepts stay curated when output options are not, so
+        // we will check them before the compiler, whose error would otherwise
+        // suggest lifting a restriction that does not cover these options.
+        for ($index = 0; $index < count($tokens); $index += 2) {
+            if (! in_array($tokens[$index] ?? null, self::OPTIONS, true)) {
+                throw new InvalidArgumentException('Unsupported audio stream setting.');
+            }
+        }
+
         CommandCompiler::options($tokens, 'output');
 
         for ($index = 0; $index < count($tokens); $index += 2) {
-            $name = substr($tokens[$index], 1);
-
-            if (! in_array($name, ['ar', 'ac', 'q', 'sample_fmt', 'channel_layout', 'compression_level', 'strict'], true)) {
-                throw new InvalidArgumentException('Unsupported audio stream setting.');
-            }
-
-            $this->settings[$name] = $tokens[$index + 1];
+            $this->settings[substr($tokens[$index], 1)] = $tokens[$index + 1];
         }
 
         return $this;

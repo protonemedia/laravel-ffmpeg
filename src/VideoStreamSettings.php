@@ -22,6 +22,16 @@ class VideoStreamSettings
     protected const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'];
 
     /**
+     * The encoder options a track accepts.
+     */
+    protected const OPTIONS = [
+        '-preset', '-tune', '-profile', '-level', '-pix_fmt', '-maxrate', '-minrate', '-bufsize', '-g', '-keyint_min',
+        '-sc_threshold', '-bf', '-refs', '-x264-params', '-x265-params', '-svtav1-params', '-cpu-used', '-deadline',
+        '-row-mt', '-rc', '-cq', '-rc-lookahead', '-spatial-aq', '-temporal-aq', '-aq-strength', '-color_primaries',
+        '-color_trc', '-colorspace', '-color_range',
+    ];
+
+    /**
      * The encoding overrides of the track.
      */
     protected array $settings = [];
@@ -87,19 +97,19 @@ class VideoStreamSettings
      */
     public function options(array $tokens): static
     {
+        // The options a track accepts stay curated when output options are not, so
+        // we will check them before the compiler, whose error would otherwise
+        // suggest lifting a restriction that does not cover these options.
+        for ($index = 0; $index < count($tokens); $index += 2) {
+            if (! in_array($tokens[$index] ?? null, self::OPTIONS, true)) {
+                throw new InvalidArgumentException('Unsupported video stream setting.');
+            }
+        }
+
         CommandCompiler::options($tokens, 'output');
 
         for ($index = 0; $index < count($tokens); $index += 2) {
-            $name = substr($tokens[$index], 1);
-
-            if (! in_array($name, ['preset', 'tune', 'profile', 'level', 'pix_fmt', 'maxrate', 'minrate', 'bufsize',
-                'g', 'keyint_min', 'sc_threshold', 'bf', 'refs', 'x264-params', 'x265-params', 'svtav1-params',
-                'cpu-used', 'deadline', 'row-mt', 'rc', 'cq', 'rc-lookahead', 'spatial-aq', 'temporal-aq',
-                'aq-strength', 'color_primaries', 'color_trc', 'colorspace', 'color_range'], true)) {
-                throw new InvalidArgumentException('Unsupported video stream setting.');
-            }
-
-            $this->settings[$name] = $tokens[$index + 1];
+            $this->settings[substr($tokens[$index], 1)] = $tokens[$index + 1];
         }
 
         return $this;

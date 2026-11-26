@@ -13,6 +13,26 @@ use InvalidArgumentException;
 class CommandCompiler
 {
     /**
+     * The FFmpeg options that take no value, each of which a "no" prefix may negate.
+     */
+    protected const OPTIONS_WITHOUT_VALUE = [
+        'accurate_seek', 'an', 'auto_conversion_filters', 'autorotate', 'autoscale', 'benchmark', 'benchmark_all',
+        'bitexact', 'copy_unknown', 'copyinkf', 'copyts', 'debug_ts', 'display_hflip', 'display_vflip', 'dn', 'dump',
+        'find_stream_info', 'fix_sub_duration', 'fix_sub_duration_heartbeat', 'force_fps', 'hex', 'hide_banner',
+        'hwaccels', 'ignore_unknown', 'n', 'print_graphs', 're', 'recast_media', 'report', 'shortest', 'sn',
+        'start_at_zero', 'stats', 'stdin', 'vn', 'vstats', 'xerror', 'y',
+    ];
+
+    /**
+     * The FFmpeg options the package sets itself, which callers may never pass.
+     */
+    protected const RESERVED_OPTIONS = [
+        'i', 'y', 'n', 'progress', 'stats', 'stdin', 'loglevel', 'v', 'hide_banner', 'xerror', 'protocol_whitelist',
+        'map', 'map_metadata', 'map_chapters', 'filter', 'filter_complex', 'filter_script', 'filter_complex_script',
+        'lavfi', 'vf', 'af',
+    ];
+
+    /**
      * Compile the FFmpeg command for already resolved, operation-owned inputs and outputs.
      */
     public static function compile(string $binary, array $inputs, array $outputs, array $globalOptions = []): array
@@ -121,6 +141,10 @@ class CommandCompiler
             throw new InvalidArgumentException('Options must be a list of supported option/value pairs.');
         }
 
+        if (! config('laravel-ffmpeg.restrict_options', true)) {
+            return self::unrestrictedOptions($tokens, $scope);
+        }
+
         $seen = [];
         $devices = [];
 
@@ -128,16 +152,13 @@ class CommandCompiler
             $flag = $tokens[$index];
             $value = null;
 
-            [$name, $stream] = self::parseFlag($flag, $allowed, $scope);
+            [$name, $stream] = self::parseFlag($flag, $scope);
 
-            if ($allowed[$name] !== 'flag') {
-                if (! array_key_exists(++$index, $tokens)) {
-                    throw new InvalidArgumentException('Options must be a list of supported option/value pairs.');
-                }
+            self::ensureOptionIsAllowed($name, $stream, $allowed, $scope);
 
-                $value = $tokens[$index];
-
-                self::ensureSingleLineValue($name, $value);
+            if (self::takesValue($name)) {
+                $value = self::valueAfter($tokens, $index, $name);
+                $index++;
             }
 
             self::ensureStreamSpecifierIsSupported($name, $stream);
@@ -165,22 +186,85 @@ class CommandCompiler
     }
 
     /**
-     * Split validated output option tokens into each option and its value, which is null for a flag.
+     * Split validated option tokens into each option and its value, which is null for a flag.
      *
      * @return list<array{0: string, 1: string|null}>
      */
     public static function pairs(array $tokens): array
     {
-        $flags = array_keys(self::allowedOptions('output'), 'flag', true);
         $pairs = [];
 
         for ($index = 0; $index < count($tokens); $index++) {
-            $pairs[] = in_array(substr($tokens[$index], 1), $flags, true)
-                ? [$tokens[$index], null]
-                : [$tokens[$index], $tokens[++$index]];
+            $flag = $tokens[$index];
+
+            if (! self::takesValue(Str::before(substr($flag, 1), ':'))) {
+                $pairs[] = [$flag, null];
+
+                continue;
+            }
+
+            $index++;
+
+            $pairs[] = [$flag, $tokens[$index]];
         }
 
         return $pairs;
+    }
+
+    /**
+     * Validate only the shape of the given tokens, leaving each option and its value to FFmpeg.
+     */
+    protected static function unrestrictedOptions(array $tokens, string $scope): array
+    {
+        for ($index = 0; $index < count($tokens); $index++) {
+            [$name] = self::parseFlag($tokens[$index], $scope);
+
+            if (! self::takesValue($name)) {
+                continue;
+            }
+
+            $value = self::valueAfter($tokens, $index, $name);
+            $index++;
+
+            // A value that starts with a hyphen is most likely the next option, after a
+            // flag that is newer than this package or misspelled, so we will not let
+            // FFmpeg read it as a value. Negative numbers are still valid values.
+            if (preg_match('/\A-(?![0-9.])/', $value)) {
+                throw new InvalidArgumentException("The FFmpeg option [{$name}] requires a value.");
+            }
+        }
+
+        return $tokens;
+    }
+
+    /**
+     * Determine if the given FFmpeg option takes a value.
+     */
+    protected static function takesValue(string $name): bool
+    {
+        return ! self::isListed($name, self::OPTIONS_WITHOUT_VALUE);
+    }
+
+    /**
+     * Determine if the given option, or the flag its "no" prefix negates, is in the given list.
+     */
+    protected static function isListed(string $name, array $options): bool
+    {
+        return in_array($name, $options, true) || in_array(Str::chopStart($name, 'no'), $options, true);
+    }
+
+    /**
+     * Get the value that follows the option at the given index.
+     */
+    protected static function valueAfter(array $tokens, int $index, string $name): string
+    {
+        if (! array_key_exists($index + 1, $tokens)) {
+            throw new InvalidArgumentException('Options must be a list of supported option/value pairs.');
+        }
+
+        self::ensureSingleLineValue($name, $tokens[$index + 1]);
+
+        return $tokens[$index + 1];
     }
 
     /**
@@ -224,26 +308,40 @@ class CommandCompiler
     }
 
     /**
-     * Parse the given flag into a supported option name and optional stream type.
+     * Parse the given flag into an option name and optional stream type.
      *
      * @return array{string, string|null}
      */
-    protected static function parseFlag(mixed $flag, array $allowed, string $scope): array
+    protected static function parseFlag(mixed $flag, string $scope): array
     {
-        if (! is_string($flag) || ! preg_match('/^-([a-z0-9_-]+)(?::([vasdt])(?::([0-9]+))?)?$/D', $flag, $match)
-            || ! isset($allowed[$match[1]])) {
+        if (! is_string($flag) || ! preg_match('/^-([a-z0-9_-]+)(?::([vasdt])(?::([0-9]+))?)?$/D', $flag, $match)) {
             throw new InvalidArgumentException("The FFmpeg option is not supported in the {$scope} scope.");
         }
 
-        $name = $match[1];
+        if (self::isListed($match[1], self::RESERVED_OPTIONS)) {
+            throw new InvalidArgumentException("The FFmpeg option [{$match[1]}] is set by Laravel FFMpeg itself.");
+        }
 
-        if ($scope !== 'output' && isset($match[2])) {
+        return [$match[1], $match[2] ?? null];
+    }
+
+    /**
+     * Ensure the allow list of the given scope supports the option.
+     */
+    protected static function ensureOptionIsAllowed(string $name, ?string $stream, array $allowed, string $scope): void
+    {
+        if (! isset($allowed[$name])) {
+            throw new InvalidArgumentException(
+                "The FFmpeg option [{$name}] is not supported in the {$scope} scope. "
+                .'Set [laravel-ffmpeg.restrict_options] to false to allow it.'
+            );
+        }
+
+        if ($scope !== 'output' && $stream !== null) {
             throw new InvalidArgumentException(
                 "The FFmpeg option [{$name}] does not accept a stream specifier in the {$scope} scope."
             );
         }
-
-        return [$name, $match[2] ?? null];
     }
 
     /**

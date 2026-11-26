@@ -574,7 +574,7 @@ $media->export()
 
 The `videoOptions` and `audioOptions` methods accept curated pairs, such as numeric x264 and x265 parameters, SVT-AV1's `lp` level of parallelism, selected VPx, AV1, and NVENC settings, color signaling, variable bitrate quality, such as `['-q', '4']` for `libmp3lame`, and `['-strict', 'experimental']` for experimental audio encoders such as FFmpeg's native `vorbis`; unknown parameters and file-producing options are rejected. The `color` method only sets metadata, so use a color-conversion filter to change pixel values, as [HDR and SDR Video](#hdr-and-sdr-video) shows. A transfer other than PQ (`smpte2084`) or HLG (`arib-std-b67`) also drops the HDR10 mastering display and content light level metadata. The GIF, loudness, audio-mix, concat, and DASH builders have no per-track methods, and DASH representations reject per-track overrides.
 
-The `outputOptions` method also accepts single-file muxer settings and argument-free bitstream filters, such as `['-bsf:v', 'h264_mp4toannexb']`, but not sidecar paths. It accepts `-fpsmax` to cap a video's frame rate without raising a lower one, and the `-shortest` flag, the only option without a value, to end the output with its shortest stream, such as added audio that is shorter than the video. A stream that a filter graph generates, such as a `color` source, may run past that end by the frames the encoder buffers, so you should give it a duration instead. The `globalOptions` method accepts named hardware device declarations, where a derived device must reference an earlier one:
+The `outputOptions` method also accepts single-file muxer settings and argument-free bitstream filters, such as `['-bsf:v', 'h264_mp4toannexb']`, but not sidecar paths. It accepts `-fpsmax` to cap a video's frame rate without raising a lower one, and the `-shortest` flag, the only option without a value, to end the output with its shortest stream, such as added audio that is shorter than the video. A stream that a filter graph generates, such as a `color` source, may run past that end by the frames the encoder buffers, so you should give it a duration instead. You may pass options outside the allow list by disabling the [option restrictions](#option-restrictions). The `globalOptions` method accepts named hardware device declarations, where a derived device must reference an earlier one:
 
 ```php
 $export = $media->export()
@@ -1750,6 +1750,23 @@ The configuration is published as `config/laravel-ffmpeg.php`. The `inspect` met
 
 > [!WARNING]
 > Output validation is not a sandbox. Isolate untrusted inputs at the operating-system level with resource limits.
+
+<a name="option-restrictions"></a>
+#### Option Restrictions
+
+The `inputOptions` argument and the `outputOptions` and `globalOptions` methods only accept the options the package allows, and the exception names the option it rejects. You may lift this allow list by setting `FFMPEG_RESTRICT_OPTIONS` or the `restrict_options` option to `false`:
+
+```php
+return [
+    // ...
+    'restrict_options' => env('FFMPEG_RESTRICT_OPTIONS', true),
+];
+```
+
+The package then passes every other option and its value to FFmpeg as is. The options it sets itself, such as `-i`, `-map`, `-progress`, and the filter options, stay reserved, and the `videoOptions` and `audioOptions` methods and the per-track methods still accept only their curated options, although without checking their values.
+
+> [!WARNING]
+> Without the allow list, options such as `-passlogfile` and `-vstats_file` may write to any path the worker can reach, so only pass options that your own code decides.
 
 <a name="credential-redaction"></a>
 #### Credential Redaction
