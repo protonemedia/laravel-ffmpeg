@@ -2,6 +2,10 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 9.0.7 - 2026-11-26
+
+* Pass filter graphs longer than 16 KB to FFmpeg through a workspace file, so long chains such as thousands of `drawbox` filters no longer exceed the operating system's argument limit
+
 ## 9.0.6 - 2026-11-26
 
 * Allow `-fpsmax` and the `-shortest` flag in `outputOptions()`, and `-q` in `audioOptions()` and individual audio tracks

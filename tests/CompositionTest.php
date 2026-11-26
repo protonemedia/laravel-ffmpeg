@@ -1766,6 +1766,63 @@ class CompositionTest extends TestCase
         return $frame->output();
     }
 
+    #[TestWith(['videoFilter'])]
+    #[TestWith(['filterComplex'])]
+    public function test_real_filter_graphs_above_the_argument_size_limit_are_applied(string $method): void
+    {
+        $ffmpeg = $this->useRealFFMpeg();
+        $local = $this->fakeLocalDisk();
+
+        $generation = Process::run([
+            $ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'color=black:size=160x120:rate=10:duration=0.2',
+            '-c:v', 'ffv1', $local->path('black.mkv'),
+        ]);
+
+        $this->assertProcessSucceeded($generation);
+
+        $boxes = array_map(
+            fn (int $box): string => sprintf('drawbox=x=%d:y=%d:w=1:h=1:color=white:t=fill', $box % 160, intdiv($box, 160)),
+            range(0, 3199),
+        );
+        $chain = implode(',', $boxes);
+
+        // Linux refuses to start a process with a single argument above 128 KiB.
+        $this->assertGreaterThan(131072, strlen($chain));
+
+        $export = FFMpeg::disk('local')
+            ->open('black.mkv')
+            ->export();
+
+        if ($method === 'filterComplex') {
+            $export->filterComplex("[0:v]{$chain}[boxes]")
+                ->map('[boxes]');
+        } else {
+            foreach ($boxes as $box) {
+                $export->videoFilter($box);
+            }
+        }
+
+        $export->video('ffv1')
+            ->toDisk('local')
+            ->save('boxes.mkv');
+
+        // Compare against a direct render that reads the unchanged chain from a file.
+        file_put_contents($this->root.'/boxes.txt', $chain);
+
+        $reference = Process::run([
+            $ffmpeg, '-v', 'error', '-i', $local->path('black.mkv'), '-/vf', $this->root.'/boxes.txt',
+            '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', '-',
+        ]);
+
+        $this->assertProcessSucceeded($reference);
+
+        $actual = $this->firstGrayFrame($ffmpeg, $local->path('boxes.mkv'));
+
+        $this->assertSame($reference->output(), $actual);
+        $this->assertCount(3200, array_filter(unpack('C*', $actual), fn ($pixel) => $pixel > 200));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
     public function test_real_fonts_and_literal_text_render_without_filter_or_percent_expansion(): void
     {
         $ffmpeg = $this->useRealFFMpeg();

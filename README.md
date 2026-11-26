@@ -679,6 +679,8 @@ $media->export()
     ->save('filtered.mp4');
 ```
 
+Filter graphs longer than 16 KB, such as thousands of `drawbox` filters, reach FFmpeg through a file in the workspace, since the operating system limits the length of a single argument. The `inspect` method still returns the graph itself.
+
 The `drawText` and `burnSubtitles` methods stage their files privately instead of interpolating paths into filter strings, so text is drawn literally:
 
 ```php
