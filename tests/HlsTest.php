@@ -452,6 +452,43 @@ class HlsTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    public function test_subtitle_renditions_accept_an_external_subtitle_file(): void
+    {
+        $media = $this->source();
+        $disk = Storage::disk('local');
+        $disk->put('captions.srt', <<<'SRT'
+            1
+            00:00:00,200 --> 00:00:01,100
+            External captions
+
+            SRT);
+
+        $export = $media->hls(segmentDuration: 1);
+        $captions = $export->addInput(FFMpeg::disk('local')->open('captions.srt'));
+
+        // FFprobe reports no duration for an SRT file, so the presentation takes the
+        // duration of the source instead of failing or ending with the last cue.
+        $result = $export
+            ->variant('main', fn (HlsVariant $variant) => $variant->video('libx264', preset: 'ultrafast')
+                ->map('0:v:0')->map('0:a:0')->subtitleGroup('text'))
+            ->subtitleRendition('text', 'Captions', fn (HlsVariant $variant) => $variant->map("{$captions}:s:0"))
+            ->metadataFrom(0)
+            ->chaptersFrom(0)
+            ->save('external/master.m3u8');
+
+        $subtitles = $result->subtitleRendition('text', 'Captions')->files();
+
+        $this->assertStringContainsString(
+            'External captions',
+            $disk->get($subtitles->firstWhere('role', 'hls-segment')->path),
+        );
+        $this->assertStringContainsString(
+            sprintf('#EXTINF:%.6f,', $media->probe()->duration()),
+            $disk->get($subtitles->firstWhere('role', 'hls-playlist')->path),
+        );
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
     #[TestWith([''])]
     #[TestWith(['other'])]
     #[TestWith([' vod '])]
