@@ -2,6 +2,10 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 9.0.4 - 2026-11-26
+
+* Report FFmpeg and FFprobe binaries that fail their version check, such as a macOS build missing a library, as `launch` failures instead of unsupported versions
+
 ## 9.0.3 - 2026-11-26
 
 * Allow external subtitle files, such as SRT files added with `addInput()`, in HLS subtitle renditions
