@@ -221,6 +221,9 @@ class CapabilitiesTest extends TestCase
     #[TestWith(['missing', 'The configured FFmpeg binary cannot be found.', false])]
     #[TestWith(['not-executable', 'The configured FFmpeg binary is not executable.'])]
     #[TestWith(['without-library', 'The configured FFmpeg binary cannot load the shared library [libavdevice.so.62].'])]
+    #[TestWith(['without-dylib', 'The configured FFmpeg binary cannot load the shared library [libx264.164.dylib].'])]
+    #[TestWith(['without-dylib', 'The configured FFmpeg binary cannot load the shared library [libx264.164.dylib].', false])]
+    #[TestWith(['failing', 'The configured FFmpeg binary exited with code [1] before reporting its version.'])]
     public function test_binaries_that_cannot_start_report_the_launch_category(
         string $binary,
         string $message,
@@ -236,6 +239,15 @@ class CapabilitiesTest extends TestCase
                 ."cannot open shared object file: No such file or directory\n");
             exit(127);
             PHP);
+
+        // On macOS, dyld aborts a binary that cannot load a library instead of exiting with 127.
+        $this->fakeBinary("{$this->root}/without-dylib", <<<'PHP'
+            fwrite(STDERR, "dyld[96534]: Library not loaded: /opt/homebrew/opt/x264/lib/libx264.164.dylib\n"
+                ."  Referenced from: /private/build/ffmpeg\n");
+            exit(134);
+            PHP);
+
+        $this->fakeBinary("{$this->root}/failing", 'exit(1);');
 
         config(['laravel-ffmpeg.ffmpeg.binaries' => "{$this->root}/{$binary}"]);
 
