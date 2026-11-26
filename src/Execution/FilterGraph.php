@@ -32,6 +32,18 @@ class FilterGraph
     }
 
     /**
+     * Append chains to the given graph, separating them unless the graph already ends with a separator.
+     *
+     * FFmpeg accepts one trailing semicolon but rejects the empty chain of a double one.
+     */
+    public static function append(string $graph, string $expression): string
+    {
+        $chains = self::split($graph, ';');
+
+        return trim($chains[array_key_last($chains)][0]) === '' ? $graph.$expression : "{$graph};{$expression}";
+    }
+
+    /**
      * Replace whole, unquoted named resource values with generated relative filenames.
      */
     public static function resources(string $expression, array $resources, array &$used): string

@@ -1679,7 +1679,8 @@ class CompositionTest extends TestCase
         $export = FFMpeg::disk('memory')->open('nested/red 日本語.mkv')->export();
         $export->addInput(FFMpeg::disk('local')->open('blue.mkv'));
 
-        foreach (['[0:v]scale=32:24[left]', '[1:v]scale=16:24[right]', '[left][right]hstack[stacked]'] as $chain) {
+        // FFmpeg rejects the empty chain of a double semicolon, so a trailing one adds no separator.
+        foreach (['[0:v]scale=32:24[left];', '[1:v]scale=16:24[right]', '[left][right]hstack[stacked]'] as $chain) {
             $export->filterComplex($chain);
         }
 

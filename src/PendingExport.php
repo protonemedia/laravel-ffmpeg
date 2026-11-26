@@ -371,7 +371,7 @@ class PendingExport implements Exportable
         $this->assertMutable();
         FilterGraph::validateExpression($expression);
 
-        $this->graph = $this->graph === null ? $expression : "{$this->graph};{$expression}";
+        $this->graph = $this->graph === null ? $expression : FilterGraph::append($this->graph, $expression);
 
         return $this;
     }
