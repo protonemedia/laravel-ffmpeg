@@ -1671,6 +1671,30 @@ class CompositionTest extends TestCase
         $this->assertWorkspacesAreCleanedUp();
     }
 
+    public function test_repeated_filter_complex_calls_build_one_graph(): void
+    {
+        $this->useRealFFMpeg();
+        $this->stageGraphSources();
+
+        $export = FFMpeg::disk('memory')->open('nested/red 日本語.mkv')->export();
+        $export->addInput(FFMpeg::disk('local')->open('blue.mkv'));
+
+        foreach (['[0:v]scale=32:24[left]', '[1:v]scale=16:24[right]', '[left][right]hstack[stacked]'] as $chain) {
+            $export->filterComplex($chain);
+        }
+
+        $export->map('[stacked]')
+            ->video('ffv1')
+            ->withoutMetadata(chapters: true)
+            ->toDisk('local')
+            ->save('stacked.mkv');
+
+        $stacked = FFMpeg::disk('local')->open('stacked.mkv')->probe();
+
+        $this->assertSame([48, 24], [$stacked->video()->width(), $stacked->video()->height()]);
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
     public function test_real_stream_metadata_and_dispositions_are_scoped_to_each_output(): void
     {
         $this->useRealFFMpeg();
