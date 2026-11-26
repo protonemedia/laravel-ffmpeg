@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\TestWith;
 use ProtoneMedia\LaravelFFMpeg\AudioStreamSettings;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
 use ProtoneMedia\LaravelFFMpeg\Execution\CommandCompiler;
@@ -81,6 +82,18 @@ class EncodingOptionsTest extends TestCase
         $this->assertSame($arguments, $this->arguments($this->destination()->configure($inherited)));
     }
 
+    public function test_variants_inherit_flags_and_replace_overridden_options(): void
+    {
+        $shared = $this->destination()
+            ->outputOptions(['-movflags', '+faststart', '-shortest', '-fpsmax:v', '60']);
+        $variant = (new HlsVariant)->outputOptions(['-fpsmax:v', '30']);
+
+        $this->assertSame(
+            ['-movflags', '+faststart', '-shortest', '-fpsmax:v', '30'],
+            $variant->inherit($shared->outputConfiguration())['outputOptions'],
+        );
+    }
+
     public function test_accepts_curated_options(): void
     {
         $tokens = ['-cpu-used:v:1', '6', '-deadline:v', 'realtime', '-row-mt:v', '1', '-rc:v', 'vbr',
@@ -92,8 +105,8 @@ class EncodingOptionsTest extends TestCase
 
         $this->assertSame($tokens, CommandCompiler::options($tokens, 'output'));
 
-        $flags = ['-movflags', '+faststart', '-disposition:a:0', 'default+forced', '-preset', 'ultra-fast',
-            '-strict:a', 'experimental'];
+        $flags = ['-movflags', '+faststart', '-shortest', '-disposition:a:0', 'default+forced', '-preset', 'ultra-fast',
+            '-strict:a', 'experimental', '-fpsmax:v', '30000/1001'];
 
         $this->assertSame($flags, CommandCompiler::options($flags, 'output'));
         $this->assertSame(
@@ -128,6 +141,11 @@ class EncodingOptionsTest extends TestCase
             'strict on video' => ['output', ['-strict:v', 'experimental']],
             'strict below experimental' => ['output', ['-strict:a', 'unofficial']],
             'muxer option on a stream' => ['output', ['-frag_duration:v', '1000']],
+            'value after a flag' => ['output', ['-shortest', '1']],
+            'flag on a stream' => ['output', ['-shortest:a']],
+            'flag on input' => ['input', ['-shortest']],
+            'frame rate cap on audio' => ['output', ['-fpsmax:a', '60']],
+            'missing value' => ['output', ['-shortest', '-preset']],
             'unknown color transfer' => ['output', ['-color_trc', 'unknown']],
             'file value' => ['output', ['-sample_fmt', 'file:/tmp/file']],
             'segment list sidecar' => ['output', ['-segment_list', 'sidecar']],
@@ -143,6 +161,80 @@ class EncodingOptionsTest extends TestCase
             'option as output format' => ['input', ['-hwaccel_output_format', '-t']],
             'option as preset' => ['output', ['-preset', '-ss']],
             'option as disposition' => ['output', ['-disposition:a:0', '-filter_complex']],
+        ];
+    }
+
+    public function test_unknown_options_point_to_the_restriction_setting(): void
+    {
+        $this->expectExceptionMessage(
+            'The FFmpeg option [shortest_buf_duration] is not supported in the output scope. '
+            .'Set [laravel-ffmpeg.restrict_options] to false to allow it.'
+        );
+
+        $this->destination()->outputOptions(['-shortest_buf_duration', '0.1']);
+    }
+
+    #[TestWith([true])]
+    #[TestWith([false])]
+    public function test_options_the_package_sets_are_reserved(bool $restricted): void
+    {
+        config(['laravel-ffmpeg.restrict_options' => $restricted]);
+
+        $this->expectExceptionMessage('The FFmpeg option [nostats] is set by Laravel FFMpeg itself.');
+
+        $this->destination()->outputOptions(['-nostats']);
+    }
+
+    #[TestWith([true])]
+    #[TestWith([false])]
+    public function test_track_settings_stay_curated_without_option_restrictions(bool $restricted): void
+    {
+        config(['laravel-ffmpeg.restrict_options' => $restricted]);
+
+        $this->expectExceptionMessage('Unsupported audio stream setting.');
+
+        (new AudioStreamSettings)->options(['-b', '96k']);
+    }
+
+    public function test_unrestricted_options_pass_any_option_with_its_arity(): void
+    {
+        config(['laravel-ffmpeg.restrict_options' => false]);
+
+        $shared = $this->destination()
+            ->outputOptions(['-f', 'gif', '-copyts', '-shortest_buf_duration', '0.1', '-output_ts_offset', '-1.5']);
+        $variant = (new HlsVariant)->outputOptions(['-shortest_buf_duration', '0.2']);
+
+        $this->assertSame(
+            ['-f', 'gif', '-copyts', '-output_ts_offset', '-1.5', '-shortest_buf_duration', '0.2'],
+            $variant->inherit($shared->outputConfiguration())['outputOptions'],
+        );
+        $this->assertSame(
+            ['-noautorotate', '-c:v', 'h264'],
+            CommandCompiler::options(['-noautorotate', '-c:v', 'h264'], 'input'),
+        );
+    }
+
+    #[DataProvider('unrestrictedOptionProvider')]
+    public function test_unrestricted_options_keep_their_shape(array $options, string $message): void
+    {
+        config(['laravel-ffmpeg.restrict_options' => false]);
+
+        $this->expectExceptionMessage($message);
+
+        CommandCompiler::options($options, 'output');
+    }
+
+    public static function unrestrictedOptionProvider(): array
+    {
+        return [
+            'input' => [['-i', '/etc/passwd'], 'The FFmpeg option [i] is set by Laravel FFMpeg itself.'],
+            'progress' => [['-progress', 'pipe:2'], 'The FFmpeg option [progress] is set by Laravel FFMpeg itself.'],
+            'stream map' => [['-map', '0:a'], 'The FFmpeg option [map] is set by Laravel FFMpeg itself.'],
+            'filter graph' => [['-vf', 'hflip'], 'The FFmpeg option [vf] is set by Laravel FFMpeg itself.'],
+            'missing value' => [['-copyts', '-aspect'], 'Options must be a list of supported option/value pairs.'],
+            'flag the package does not know' => [['-newflag', '-copyts'], 'The FFmpeg option [newflag] requires a value.'],
+            'multi-line value' => [['-aspect', "4:3\n-i"], 'The FFmpeg option [aspect] value must be a single-line string.'],
+            'value without an option' => [['copyts'], 'The FFmpeg option is not supported in the output scope.'],
         ];
     }
 
@@ -169,6 +261,9 @@ class EncodingOptionsTest extends TestCase
             ],
             'sample format on copied audio' => [
                 fn (ExportOutput $output) => $output->audio('copy')->outputOptions(['-sample_fmt:a:0', 's16']),
+            ],
+            'channels after a flag on copied audio' => [
+                fn (ExportOutput $output) => $output->audio('copy')->outputOptions(['-shortest', '-ac', '1']),
             ],
             'encoder options on copied video' => [
                 fn (ExportOutput $output) => $output->video('copy')->outputOptions(['-x264-params:v', 'keyint=10']),
@@ -456,6 +551,60 @@ class EncodingOptionsTest extends TestCase
             ->save('vorbis.ogg');
 
         $this->assertSame('vorbis', $this->media('vorbis.ogg')->probe()->streams()[0]->get('codec_name'));
+    }
+
+    public function test_real_frame_rate_cap_shortest_and_audio_quality(): void
+    {
+        $this->realFixture();
+        $this->runTool(['-f', 'lavfi', '-i', 'testsrc2=s=96x64:r=120:d=3', '-c:v', 'libx264', '-threads', '1',
+            $this->path('fast.mp4')]);
+
+        // FFmpeg refuses -fpsmax next to the passthrough frame rate mode an export uses by default.
+        $this->media('fast.mp4')
+            ->export()
+            ->video('libx264')
+            ->outputOptions(['-fpsmax', '60'])
+            ->save('capped.mp4');
+
+        // The video runs for three seconds, so only -shortest stops the export with the one-second audio.
+        $export = $this->media('fast.mp4')->export();
+        $audio = $export->addInput($this->media('source.mkv'));
+
+        $export->map('0:v:0')
+            ->map("{$audio}:a:0")
+            ->withoutMetadata(chapters: true)
+            ->video('libx264')
+            ->audio('aac')
+            ->outputOptions(['-shortest'])
+            ->save('shortest.mp4');
+
+        $this->media('source.mkv')
+            ->export()
+            ->audio('libmp3lame')
+            ->audioOptions(['-q', '9'])
+            ->save('quality.mp3');
+
+        $this->assertSame('60/1', $this->media('capped.mp4')->probe()->video()->get('avg_frame_rate'));
+        $this->assertEqualsWithDelta(1.0, $this->media('shortest.mp4')->probe()->duration(), 0.1);
+        $this->assertLessThan(100000, (int) $this->media('quality.mp3')->probe()->get('format.bit_rate'));
+        $this->assertWorkspacesAreCleanedUp();
+    }
+
+    public function test_real_unrestricted_options(): void
+    {
+        $this->realFixture();
+
+        config(['laravel-ffmpeg.restrict_options' => false]);
+
+        FFMpeg::disk('encoding-options')
+            ->open('source.mkv', inputOptions: ['-noautorotate', '-probesize', '65536'])
+            ->export()
+            ->video('libx264')
+            ->outputOptions(['-aspect', '4:3', '-bitexact'])
+            ->save('aspect.mp4');
+
+        $this->assertSame('4:3', $this->media('aspect.mp4')->probe()->video()->get('display_aspect_ratio'));
+        $this->assertWorkspacesAreCleanedUp();
     }
 
     public function test_real_bitstream_remux_keeps_the_decoded_frames(): void

@@ -414,7 +414,7 @@ class PendingDashExport implements Exportable, MeasuresDuration, PackagesArtifac
 
         foreach ($settings['outputOptions'] as $token) {
             if ($token === '-f'
-                || preg_match('/\A-(?:c|r|g|keyint_min|sc_threshold|x264-params|x265-params)(?::|\z)/', $token)) {
+                || preg_match('/\A-(?:c|r|fpsmax|g|keyint_min|sc_threshold|x264-params|x265-params)(?::|\z)/', $token)) {
                 throw new InvalidArgumentException(
                     'DASH owns its muxer, stream codecs, frame rate, and segment alignment.'
                 );

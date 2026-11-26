@@ -361,15 +361,14 @@ trait ConfiguresOutput
             } elseif (in_array($key, ['videoFilters', 'audioFilters', 'streamMetadata', 'dispositions'], true)) {
                 $shared[$key] = [...$shared[$key], ...$value];
             } elseif ($key === 'outputOptions') {
-                $overrides = collect($value)->nth(2)->all();
+                $overrides = array_column(CommandCompiler::pairs($value), 0);
 
                 $tokens = $shared[$key];
                 $shared[$key] = [];
 
-                for ($index = 0; $index < count($tokens); $index += 2) {
-                    if ($tokens[$index] === '-streamid' || ! in_array($tokens[$index], $overrides, true)) {
-                        $shared[$key][] = $tokens[$index];
-                        $shared[$key][] = $tokens[$index + 1];
+                foreach (CommandCompiler::pairs($tokens) as [$flag, $argument]) {
+                    if ($flag === '-streamid' || ! in_array($flag, $overrides, true)) {
+                        array_push($shared[$key], ...($argument === null ? [$flag] : [$flag, $argument]));
                     }
                 }
 
