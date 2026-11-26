@@ -65,7 +65,7 @@ You may run an export immediately or [dispatch it to a queue](#queue-conversions
 <a name="installation"></a>
 ### Installation
 
-Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.44.1 or later, and matching FFmpeg and FFprobe binaries of release 9.0 or later; setup and CI use 9.0.2. You may install the package using Composer:
+Laravel FFmpeg requires PHP 8.4 or later, Laravel 13.44.1 or later, and matching FFmpeg and FFprobe binaries of release 9.0 or later; setup and CI use 9.0.2. Applications on Laravel 9 to 12 may use [version 8](https://github.com/protonemedia/laravel-ffmpeg/tree/8.x) instead. You may install the package using Composer:
 
 ```bash
 composer require pbmedia/laravel-ffmpeg
@@ -108,7 +108,7 @@ command -v ffmpeg
 command -v ffprobe
 ```
 
-Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES`, or the `ffmpeg.binaries` and `ffprobe.binaries` options, to full executable paths. Both must report the same numbered release, 9.0 or later, so development snapshots that report a version such as `N-120345-g1a2b3c4d5e` are refused. Test them as your web server or queue worker user:
+Set `FFMPEG_BINARIES` and `FFPROBE_BINARIES`, or the `ffmpeg.binaries` and `ffprobe.binaries` options, to full executable paths, including the file name, such as `/usr/bin/ffmpeg` rather than `/usr/bin`. An application in a Docker container needs the paths inside the container, not on the host. Both must report the same numbered release, 9.0 or later, so development snapshots that report a version such as `N-120345-g1a2b3c4d5e` are refused. Test them as your web server or queue worker user:
 
 ```bash
 sudo -u www-data /opt/ffmpeg-9.0.2/bin/ffmpeg -version
@@ -230,10 +230,21 @@ $media->export()
     ->save('lesson.mkv');
 ```
 
+To offer an HLS presentation as a download, you may copy an unencrypted variant playlist into a single MP4:
+
+```php
+FFMpeg::disk('streams')
+    ->open('lessons/42/720p/index.m3u8')
+    ->export()
+    ->video('copy')
+    ->audio('copy')
+    ->save('downloads/lesson-42.mp4');
+```
+
 <a name="configuring-video-quality"></a>
 #### Configuring Video Quality
 
-The `crf` argument sets constant quality, while the `bitrate` argument accepts positive integer bits per second, such as `2500000`, or a unit string, such as `'2500k'`, but not floats or unitless strings. The two may not be combined.
+The `crf` argument sets constant quality, while the `bitrate` argument accepts positive integer bits per second, such as `2500000`, or a unit string, such as `'2500k'`, but not floats or unitless strings. The two may not be combined. The `preset` argument trades encoding speed for compression, so a faster preset, such as `veryfast`, finishes sooner but produces a larger file.
 
 <a name="pixel-formats"></a>
 #### Pixel Formats
@@ -446,7 +457,7 @@ A query reads the first 10 seconds by default; seeking is approximate, and packe
 <a name="tracks-and-metadata"></a>
 ### Selecting Tracks and Metadata
 
-By default, an export selects the first motion-video and audio stream. An audio-only destination, whose extension is `aac`, `aif`, `aiff`, `caf`, `flac`, `m4a`, `m4b`, `mka`, `mp3`, `oga`, `ogg`, `opus`, or `wav`, selects only the first audio stream, which must exist. The `mapVideo`, `mapAudio`, and `map` methods replace that selection; subtitles and cover art must be mapped explicitly with container-compatible codecs. Stream tags and dispositions address output order:
+By default, an export selects the first motion-video and audio stream. An audio-only destination, whose extension is `aac`, `aif`, `aiff`, `caf`, `flac`, `m4a`, `m4b`, `mka`, `mp3`, `oga`, `ogg`, `opus`, or `wav`, selects only the first audio stream, which must exist. The `mapVideo`, `mapAudio`, and `map` methods replace that selection; subtitles and cover art must be mapped explicitly with container-compatible codecs, such as `mov_text` for SRT subtitles in MP4. Stream tags and dispositions address output order:
 
 ```php
 $media->export()
@@ -479,6 +490,25 @@ $media->export()
 Each probed `Stream` offers the `language`, `isForced`, `isDefault`, and `isCoverArt` methods, plus raw fields through `get`.
 
 Either default stream may be missing, so an audio-only source exports its audio. An export or HLS variant that configures its video, such as through `video`, `resize`, or `videoFilter`, requires a video stream instead and throws a `MediaException` with the `mapping` category for an audio-only source. An audio-only destination ignores video settings, and watermarks and `twoPass` reject it. Copying the video with `video('copy')` keeps whatever streams the source has.
+
+To turn audio into a video, you may generate the frames in a [custom filter graph](#custom-filter-graphs), such as a black background that lasts as long as the audio:
+
+```php
+$podcast = FFMpeg::disk('uploads')
+    ->open('episode.mp3');
+
+$duration = $podcast->probe()->duration();
+
+$podcast->export()
+    ->filterComplex("color=c=black:s=1280x720:r=25:d={$duration}[video]")
+    ->map('[video]')
+    ->map('0:a:0')
+    ->video('libx264')
+    ->audio('aac')
+    ->save('episode.mp4');
+```
+
+A `[0:a]showwaves=s=1280x720:mode=line,format=yuv420p[video]` graph draws the waveform instead.
 
 <a name="attaching-cover-art"></a>
 #### Attaching Cover Art
@@ -1095,6 +1125,8 @@ $result->files()
     ->where('role', 'hls-key');
 ```
 
+Variants may also copy the source's streams with `video('copy')` and `audio('copy')`, but a copied stream is only cut at its keyframes, so a source with a keyframe every 10 seconds gives 10-second segments whatever the `segmentDuration`.
+
 > [!NOTE]
 > The `RESOLUTION` and `CODECS` attributes of each variant come from FFmpeg, which only measures a variant's bandwidth from segments longer than half a second. With a segment duration of 0.5 seconds or less, the master playlist lists the variants without these attributes, whatever the codec, so you should keep the duration above that. Apple's HLS authoring guidelines recommend 6 seconds.
 
@@ -1605,7 +1637,7 @@ Passing `null` removes an override. The configured per-process `timeout` and `id
 <a name="queue-conversions"></a>
 ### Queueing Conversions
 
-To run an export on a queue worker, call the `queued` method after configuring it. The `save` method then returns Laravel's `PendingDispatch`, and the `configureJob` method lets you adjust the job:
+Encoding may take minutes and a large amount of memory, so you should not run it during a web request. To run an export on a queue worker, call the `queued` method after configuring it. The `save` method then returns Laravel's `PendingDispatch`, and the `configureJob` method lets you adjust the job:
 
 ```php
 $pending = FFMpeg::disk('uploads')
