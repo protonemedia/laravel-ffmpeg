@@ -83,6 +83,35 @@ class InputHelpersTest extends TestCase
         $this->assertFalse(Storage::disk('input-helpers')->exists('bad.mp4'));
     }
 
+    public function test_odd_sized_still_images_encode_once_resized(): void
+    {
+        $this->useRealFFMpeg();
+        imagepng(imagecreatetruecolor(81, 47), $this->root.'/odd.png');
+        $image = FFMpeg::open(new File($this->root.'/odd.png'));
+
+        $this->assertThrows(function () use ($image) {
+            $image->still(1)
+                ->toDisk('input-helpers')
+                ->save('odd.mp4');
+        }, function (MediaException $exception) {
+            $this->assertSame('dimensions', $exception->category);
+
+            return true;
+        });
+        $this->assertFalse(Storage::disk('input-helpers')->exists('odd.mp4'));
+
+        $image->still(1)
+            ->resize(width: 40)
+            ->toDisk('input-helpers')
+            ->save('resized.mp4');
+        $video = FFMpeg::disk('input-helpers')
+            ->open('resized.mp4')
+            ->probe()
+            ->video();
+
+        $this->assertSame([40, 24], [$video->width(), $video->height()]);
+    }
+
     public static function invalidStillProvider(): array
     {
         return [

@@ -774,7 +774,7 @@ FFMpeg::disk('images')
     ->save('title.mp4');
 ```
 
-It encodes H.264 with `yuv420p` by default and offers the export builder's video codec, geometry, filter, metadata, and publication methods, but no audio, clipping, or extra-input methods, since it creates no audio track. The image may come from any disk or a downloaded URL and needs even dimensions of at least two pixels and no input options. The frame rate is an integer from 1 to 240, and frame rounding can affect the duration.
+It encodes H.264 with `yuv420p` by default and offers the export builder's video codec, geometry, filter, metadata, and publication methods, but no audio, clipping, or extra-input methods, since it creates no audio track. The image may come from any disk or a downloaded URL and takes no input options. Most encoders, including `libx264`, need even dimensions, so you should `resize` or `crop` an odd-sized image, or the export fails with the `dimensions` category. The frame rate is an integer from 1 to 240, and frame rounding can affect the duration.
 
 <a name="change-playback-speed-and-make-gifs"></a>
 ### Changing Playback Speed and Making GIFs

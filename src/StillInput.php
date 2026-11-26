@@ -77,7 +77,7 @@ class StillInput implements InputSource
     }
 
     /**
-     * Stage the image and ensure it is a PNG or JPEG with even dimensions.
+     * Stage the image and ensure it is a PNG or JPEG.
      */
     public function stage(Workspace $workspace, string $name, bool $resource): string
     {
@@ -92,13 +92,8 @@ class StillInput implements InputSource
             throw MediaException::staging('The still video image must be a PNG or JPEG image.', 'image');
         }
 
-        if ($size[0] < 2 || $size[1] < 2 || $size[0] % 2 || $size[1] % 2) {
-            throw MediaException::staging(
-                "The still video image dimensions [{$size[0]}x{$size[1]}] must be positive and even.",
-                'image',
-            );
-        }
-
+        // Odd dimensions are left to the encoder, since a resize or crop on the export may
+        // still make them even, and FFmpeg's failure is reported as a dimensions error.
         return $path;
     }
 }
