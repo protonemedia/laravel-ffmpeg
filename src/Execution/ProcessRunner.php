@@ -4,6 +4,7 @@ namespace ProtoneMedia\LaravelFFMpeg\Execution;
 
 use Closure;
 use Illuminate\Contracts\Process\InvokedProcess;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;
 use InvalidArgumentException;
 use ProtoneMedia\LaravelFFMpeg\Exceptions\MediaException;
@@ -32,6 +33,11 @@ class ProcessRunner
      * The oldest FFmpeg and FFprobe release the package runs.
      */
     protected const string MINIMUM_RELEASE = '9.0';
+
+    /**
+     * The length in bytes above which FFmpeg reads a filter graph from a file.
+     */
+    protected const int MAX_INLINE_FILTER_BYTES = 16384;
 
     /**
      * The high-resolution time the operation started, in nanoseconds.
@@ -320,6 +326,7 @@ class ProcessRunner
         $started = hrtime(true);
         $process = null;
         $failure = null;
+        $command = $this->moveLongFilterGraphsToFiles($command, $directory);
 
         $this->beginTracking($started, $timeout, $progress, $tick);
 
@@ -417,6 +424,40 @@ class ProcessRunner
         $this->processTimeout = null;
         $this->progress = null;
         $this->tick = null;
+    }
+
+    /**
+     * Move each long filter graph into a file in the given directory, which FFmpeg reads with its -/ syntax.
+     */
+    protected function moveLongFilterGraphsToFiles(array $command, string $directory): array
+    {
+        // Linux refuses to start a process with an argument above 128 KiB, such as a graph
+        // with thousands of drawbox filters, so we will write each long graph to a file
+        // in the working directory and let FFmpeg read it through the -/ option prefix.
+        foreach ($command as $index => $value) {
+            $option = $command[$index - 1] ?? '';
+
+            if (strlen($value) <= self::MAX_INLINE_FILTER_BYTES || ! $this->isFilterOption($option)) {
+                continue;
+            }
+
+            $file = 'filter-'.sha1($value).'.txt';
+
+            (new Filesystem)->put("{$directory}/{$file}", $value);
+
+            $command[$index - 1] = '-/'.substr($option, 1);
+            $command[$index] = $file;
+        }
+
+        return $command;
+    }
+
+    /**
+     * Determine if the given argument is an FFmpeg option that takes a filter graph.
+     */
+    protected function isFilterOption(string $argument): bool
+    {
+        return (bool) preg_match('/\A-(?:filter|filter_complex|vf|af|lavfi)(?::|\z)/', $argument);
     }
 
     /**
