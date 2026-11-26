@@ -23,6 +23,7 @@ You may run an export immediately or [dispatch it to a queue](#queue-conversions
 > [!IMPORTANT]
 > Version 9 replaces PHP-FFMpeg and removes its format and filter objects, so consult the [upgrade guide](UPGRADE.md) when upgrading from version 8. The version 8 documentation lives on the [8.x branch](https://github.com/protonemedia/laravel-ffmpeg/tree/8.x).
 
+- [Support Us](#sponsor-us)
 - [Getting Started](#getting-started)
     - [Installation](#installation)
 - [Working With Media](#working-with-media)
@@ -54,10 +55,23 @@ You may run an export immediately or [dispatch it to a queue](#queue-conversions
     - [Configuration and Security](#configuration-and-security)
     - [Testing and Development](#testing-and-development)
 - [Community](#community)
-    - [Sponsor Us](#sponsor-us)
     - [Contributing and Security](#contributing-and-security)
     - [Credits](#credits)
     - [License](#license)
+
+<a name="sponsor-us"></a>
+## Support Us
+
+[<img src="https://inertiaui.com/visit-card.jpg" alt="Inertia UI: The parts every serious Inertia app needs, already built." />](https://inertiaui.com/?utm_source=github&utm_campaign=laravel-ffmpeg)
+
+Laravel FFmpeg is free and open source. To support our work, check out [Inertia UI](https://inertiaui.com/?utm_source=github&utm_campaign=laravel-ffmpeg), our Laravel-first components for Inertia.js apps with Vue 3 and React 19. Inertia Table and Inertia Forms are premium packages, and Inertia Modal and Inertia Notifications are free:
+
+- [Inertia Table](https://inertiaui.com/inertia-table?utm_source=github&utm_campaign=laravel-ffmpeg) defines the query, sorting, filters, exports, saved views, and bulk actions of a table in one PHP class.
+- [Inertia Forms](https://inertiaui.com/inertia-forms?utm_source=github&utm_campaign=laravel-ffmpeg) builds forms with over 30 field types, validation, uploads, model binding, and wizards from one PHP class.
+- [Inertia Modal](https://inertiaui.com/inertia-modal/docs/introduction?utm_source=github&utm_campaign=laravel-ffmpeg) opens any route in a modal or slideover without changes to your routes or controllers.
+- [Inertia Notifications](https://inertiaui.com/inertia-notifications?utm_source=github&utm_campaign=laravel-ffmpeg) adds toasts, a notification inbox, and preferences that users set themselves.
+
+You may also sponsor the development through [GitHub Sponsors](https://github.com/sponsors/pascalbaljet).
 
 <a name="getting-started"></a>
 ## Getting Started
@@ -1846,13 +1860,6 @@ Real-media tests are skipped unless `FFMPEG_9_FFPROBE` points to FFprobe 9.0 or 
 
 <a name="community"></a>
 ## Community
-
-<a name="sponsor-us"></a>
-### Sponsor Us
-
-[<img src="https://inertiaui.com/visit-card.jpg" alt="Inertia Table" />](https://inertiaui.com/inertia-table?utm_source=github&utm_campaign=laravel-ffmpeg)
-
-Support maintenance through [GitHub Sponsors](https://github.com/sponsors/pascalbaljet), and see [Inertia Table](https://inertiaui.com/inertia-table?utm_source=github&utm_campaign=laravel-ffmpeg).
 
 <a name="contributing-and-security"></a>
 ### Contributing and Security
