@@ -1219,6 +1219,26 @@ $result->files()
 
 Each rendition needs one explicit map of its type and its variants' clip. Audio renditions are encoded once and replace muxed audio in their group's variants. Subtitle renditions are one WebVTT segment, so they need a known duration, no complex timing graph, and aligned variant clocks. fMP4 writes one init file per audio and video playlist plus `.m4s` segments, both published before playlists. Encryption is rejected with fMP4 or alternate subtitles. [Dynamic responses](#customize-raw-hls-responses) rewrite init references through `mediaUrlsUsing` and traverse alternate playlists through `playlistUrlsUsing`.
 
+A subtitle rendition may also come from a separate file, such as an SRT file, which you add with the `addInput` method:
+
+```php
+$export = $media->hls();
+
+$captions = $export->addInput(FFMpeg::disk('subtitles')->open('lesson.en.srt'));
+
+$export->variant('720p', fn (HlsVariant $variant) => $variant
+        ->map('0:v:0')
+        ->map('0:a:0')
+        ->subtitleGroup('captions'))
+    ->subtitleRendition('captions', 'English', fn (HlsVariant $rendition) => $rendition
+        ->map("{$captions}:s:0"), language: 'en', default: true)
+    ->metadataFrom(0)
+    ->chaptersFrom(0)
+    ->save('lesson/master.m3u8');
+```
+
+Subtitle files have no duration of their own, so the rendition spans the video and audio inputs.
+
 <a name="dash-and-shared-hls-segments"></a>
 ### DASH and Shared HLS Segments
 

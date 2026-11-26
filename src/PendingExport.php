@@ -856,12 +856,16 @@ class PendingExport implements Exportable
             return $metadata[0]->duration();
         }
 
+        // Subtitle files such as SRT carry no container duration, so only inputs with
+        // video or audio decide how long the output will be.
+        $timed = array_filter($metadata, fn ($item): bool => $item->hasVideo() || $item->hasAudio()) ?: $metadata;
+
         // A complex graph can change timing arbitrarily, so we will report no duration
         // rather than invent a progress percentage.
-        if ($this->filterGraph() !== null || array_any($metadata, fn ($item): bool => $item->duration() === null)) {
+        if ($this->filterGraph() !== null || array_any($timed, fn ($item): bool => $item->duration() === null)) {
             return null;
         }
 
-        return max(array_map(fn ($item) => $item->duration(), $metadata));
+        return max(array_map(fn ($item) => $item->duration(), $timed));
     }
 }
