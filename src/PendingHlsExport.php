@@ -145,7 +145,7 @@ class PendingHlsExport implements Exportable, MeasuresDuration, PackagesArtifact
     }
 
     /**
-     * Set the complex filter graph of the export.
+     * Add chains to the complex filter graph of the export.
      */
     public function filterComplex(string $expression): static
     {

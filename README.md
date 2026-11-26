@@ -1056,7 +1056,7 @@ $result = $export
     ->save();
 ```
 
-Each output needs explicit maps and a metadata and chapter policy, and each label may be consumed once, so branch with `split` or `asplit`. Declare files with `resource('look', $media)` and use the placeholder as the whole value, as in `lut3d=file={{look}}`.
+Each output needs explicit maps and a metadata and chapter policy, and each label may be consumed once, so branch with `split` or `asplit`. Every `filterComplex` call appends its chains to the same graph, separated by a semicolon, so you may build a graph in a loop. Declare files with `resource('look', $media)` and use the placeholder as the whole value, as in `lut3d=file={{look}}`.
 
 <a name="streaming"></a>
 ## Streaming

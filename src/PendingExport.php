@@ -362,18 +362,16 @@ class PendingExport implements Exportable
     }
 
     /**
-     * Set the complex filter graph of the export.
+     * Add chains to the complex filter graph of the export.
+     *
+     * Every call appends to the same graph, so chains may be built up in a loop.
      */
     public function filterComplex(string $expression): static
     {
         $this->assertMutable();
         FilterGraph::validateExpression($expression);
 
-        if ($this->graph !== null) {
-            throw new InvalidArgumentException('Declare one complex graph per export.');
-        }
-
-        $this->graph = $expression;
+        $this->graph = $this->graph === null ? $expression : FilterGraph::append($this->graph, $expression);
 
         return $this;
     }
