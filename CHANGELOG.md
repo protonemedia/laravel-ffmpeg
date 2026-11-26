@@ -2,6 +2,11 @@
 
 All Notable changes to `pbmedia/laravel-ffmpeg` will be documented in this file
 
+## 9.0.3 - 2026-11-26
+
+* Allow external subtitle files, such as SRT files added with `addInput()`, in HLS subtitle renditions
+* Let repeated `filterComplex()` calls append their chains to one graph instead of throwing
+
 ## 9.0.2 - 2026-11-26
 
 * Delete each plaintext HLS segment once it is encrypted, so encrypted exports no longer need twice the segment space in the workspace
